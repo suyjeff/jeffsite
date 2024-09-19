@@ -1,0 +1,44 @@
+@font-face {
+  font-family: 'Lars';
+  src: url('/fonts/Lars-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Lars';
+  src: url('/fonts/Lars-Medium.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Lars';
+  src: url('/fonts/Lars-MediumItalic.ttf') format('truetype');
+  font-weight: normal;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Lars';
+  src: url('/fonts/Lars-BoldItalic.ttf') format('truetype');
+  font-weight: bold;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+    font-family: 'Lars';
+    src: url('/fonts/Lars-Light.ttf') format('truetype');
+    font-weight: light;
+    font-style: normal;
+    font-display: swap; 
+}
+
+
+body {
+  font-family: 'Lars', sans-serif;
+}

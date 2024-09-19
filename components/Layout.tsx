@@ -14,9 +14,14 @@ export default function Layout({ children, title = 'Portfolio' }: LayoutProps) {
       <Head>
         <title>{title}</title>
         <link rel="icon" href="/favicon.ico" />
+        <link rel="preload" href="/fonts/Lars-Regular.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/Lars-Medium.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/Lars-MediumItalic.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/Lars-BoldItalic.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/Lars-Light.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
       </Head>
 
-      <nav className="bg-white shadow-md">
+      {/* <nav className="bg-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
@@ -34,17 +39,18 @@ export default function Layout({ children, title = 'Portfolio' }: LayoutProps) {
             </div>
           </div>
         </div>
-      </nav>
+      </nav> */}
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-xl mx-auto pt-16 text-left">
         {children}
       </main>
 
-      <footer className="bg-white">
+      {/* <footer className="bg-white">
         <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
           <p className="text-center text-gray-500">© 2023 Your Name. All rights reserved.</p>
         </div>
-      </footer>
+      </footer> */}
+      
     </div>
   )
 }
