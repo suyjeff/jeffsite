@@ -29,8 +29,8 @@ export default function Home() {
           <h2 className="text-lg tracking-tight font-bold mb-4">Read</h2>
           <ul className="space-y-4 text-lg tracking-tight">
             {[
-              { title: 'The Future of Data Explorer', company: 'MongoDB', year: 2022 },
-              { title: 'Improving Anypoint Productivity', company: 'Salesforce', year: 2021 }
+              { title: '...', company: 'MongoDB', year: 2022 },
+              { title: '...', company: 'Salesforce', year: 2021 }
             ].map((study, index) => (
               <li key={index} className={`opacity-0 animate-fade-in animation-delay-${600 + index * 200}`}>
                 <p className="underline">{study.title}</p>
