@@ -8,7 +8,8 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # This line grants write permission
+      contents: write
+      pages: write
 
     steps:
       - name: Checkout
@@ -28,5 +29,5 @@ jobs:
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
-          personal_token: ${{ secrets.PAT }} # Use PAT instead of GITHUB_TOKEN
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./out
