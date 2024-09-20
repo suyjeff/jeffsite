@@ -1,56 +1,38 @@
+import React, { ReactNode } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
-import React from 'react'
 
-
-interface LayoutProps {
-  children: React.ReactNode
+type Props = {
+  children?: ReactNode
   title?: string
 }
 
-export default function Layout({ children, title = 'Portfolio' }: LayoutProps) {
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <Head>
-        <title>{title}</title>
-        <link rel="icon" href="/favicon.ico" />
-        <link rel="preload" href="/fonts/Lars-Regular.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
-        <link rel="preload" href="/fonts/Lars-Medium.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
-        <link rel="preload" href="/fonts/Lars-MediumItalic.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
-        <link rel="preload" href="/fonts/Lars-BoldItalic.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
-        <link rel="preload" href="/fonts/Lars-Light.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
-      </Head>
+const Layout = ({ children, title = 'This is the default title' }: Props) => (
+  <div className="flex flex-col min-h-screen bg-gray-100">
+    <Head>
+      <title>{title}</title>
+      <meta charSet="utf-8" />
+      <meta name="viewport" content="initial-scale=1.0, width=device-width" />
+    </Head>
+    
+    <main className="max-w-xl mx-auto pt-24 text-left min-h-screen flex flex-col w-full px-4">
+      <div className="flex-grow">
+        {children}
+      </div>
 
-      {/* <nav className="bg-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <Link href="/" className="flex-shrink-0 flex items-center">
-                Your Name
-              </Link>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link href="/" className="text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 border-transparent hover:border-gray-300">
-                  Home
-                </Link>
-                <Link href="/case-studies" className="text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 border-transparent hover:border-gray-300">
-                  Case Studies
-                </Link>
-              </div>
-            </div>
+      <footer className="w-full bg-gray-100 border-t border-gray-200 mt-auto">
+        <div className="max-w-xl mx-auto py-4 flex justify-between items-center">
+          <div className="space-x-4">
+            <Link href="/about" className="text-gray-600 hover:text-gray-900 transition-colors duration-300 ease-in-out">About</Link>
+            <Link href="/resume" className="text-gray-600 hover:text-gray-900 transition-colors duration-300 ease-in-out">Resume</Link>
+          </div>
+          <div className="text-sm text-gray-400">
+            Last updated September 2024
           </div>
         </div>
-      </nav> */}
+      </footer>
+    </main>
+  </div>
+)
 
-      <main className="max-w-xl mx-auto pt-16 text-left">
-        {children}
-      </main>
-
-      {/* <footer className="bg-white">
-        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-gray-500">© 2023 Your Name. All rights reserved.</p>
-        </div>
-      </footer> */}
-      
-    </div>
-  )
-}
+export default Layout
