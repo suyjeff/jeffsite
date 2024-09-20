@@ -8,14 +8,11 @@ const withMDX = nextMDX({
     },
 })
 
-export default withMDX({
-    pageExtensions: ['ts', 'tsx', 'js', 'jsx', 'md', 'mdx'],
-})
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     output: 'export',
+    pageExtensions: ['ts', 'tsx', 'js', 'jsx', 'md', 'mdx'],
     // ... any other existing configurations
 }
 
-module.exports = nextConfig
+export default withMDX(nextConfig)
