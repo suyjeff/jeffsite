@@ -5,9 +5,16 @@ const AboutPage = () => {
   return (
     <Layout title="About">
       <div className="flex items-center">
-        <h1 className="text-lg tracking-tight font-lars font-medium italic text-labels opacity-0 animate-fade-in">About</h1>
+        <h1 className="relative inline-block text-lg tracking-tight font-lars font-medium italic text-labels opacity-0 animate-fade-in group">
+          <span className="block transition-opacity duration-300 ease-in group-hover:opacity-0">About</span>
+          <span
+            aria-hidden="true"
+            className="absolute inset-0 flex items-center transition-opacity duration-300 ease-in opacity-0 group-hover:opacity-100 pointer-events-none"
+          >
+            Back
+          </span>
+        </h1>
       </div>
-      <p className="mt-4 text-lg tracking-tight font-lars text-copy opacity-0 animate-fade-in animation-delay-200">About me</p>
       <div className="mt-4 opacity-0 animate-fade-in animation-delay-400">
         <p className="text-lg tracking-tight">
             I was born in Springfield, MO and now reside in New York, NY.

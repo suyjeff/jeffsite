@@ -32,19 +32,9 @@ const Layout = ({ children, title = 'This is the default title' }: Props) => {
             <div className="space-x-4">
               <Link
                 href={aboutLinkHref}
-                className="relative inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors duration-300 ease-in-out group"
+                className="text-gray-600 hover:text-gray-900 transition-colors duration-300 ease-in-out"
               >
-                <span className={`transition-opacity duration-300 ease-in ${isAboutPage ? '' : 'group-hover:opacity-0'}`}>
-                  {aboutLinkLabel}
-                </span>
-                {!isAboutPage && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0 flex items-center transition-opacity duration-300 ease-in opacity-0 group-hover:opacity-100 pointer-events-none"
-                  >
-                    Back
-                  </span>
-                )}
+                {aboutLinkLabel}
               </Link>
               <Link href="/resume" className="text-gray-600 hover:text-gray-900 transition-colors duration-300 ease-in-out">Resume</Link>
             </div>
