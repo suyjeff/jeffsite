@@ -5,7 +5,7 @@ const AboutPage = () => {
   return (
     <Layout title="About">
       <div className="flex items-center">
-        <h1 className="text-lg tracking-tight font-lars font-medium italic text-labels opacity-0 animate-fade-in">Jeff Su</h1>
+        <h1 className="text-lg tracking-tight font-lars font-medium italic text-labels opacity-0 animate-fade-in">About</h1>
       </div>
       <p className="mt-4 text-lg tracking-tight font-lars text-copy opacity-0 animate-fade-in animation-delay-200">About me</p>
       <div className="mt-4 opacity-0 animate-fade-in animation-delay-400">
