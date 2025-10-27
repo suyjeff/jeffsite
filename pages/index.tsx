@@ -5,7 +5,7 @@ export default function Home() {
   return (
     <Layout title="Jeff Su">
       <h1 className="text-lg tracking-tight font-lars font-medium italic text-labels opacity-0 animate-fade-in">Jeff Su</h1>
-      <p className="mt-4 text-lg tracking-tight font-lars text-copy opacity-0 animate-fade-in animation-delay-200">Currently, a product designer at MongoDB in New York City.</p>
+      <p className="mt-4 text-lg tracking-tight font-lars text-copy opacity-0 animate-fade-in animation-delay-200">Currently, a designer shaping the developer experience at MongoDB Atlas in New York. Focused on craft and execution above everything.</p>
       
       <div className="mt-8 grid grid-cols-2 gap-4">
         
@@ -14,9 +14,8 @@ export default function Home() {
           <ul className="space-y-4 text-lg tracking-tight">
             {[
               { company: 'MongoDB', position: 'Product Design Intern' },
+              { company: 'Andalusia Labs', position: 'Product Designer' },
               { company: 'Salesforce', position: 'UX Design Intern' },
-              { company: 'Welfie', position: 'Product Designer' },
-              { company: 'Onfocoin', position: 'Product Designer' },
             ].map((job, index) => (
               <li key={index} className={`opacity-0 animate-fade-in animation-delay-${600 + index * 200}`}>
                 <p className="underline inline-block rounded">{job.company}</p>

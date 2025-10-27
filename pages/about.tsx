@@ -1,19 +1,14 @@
 import React from 'react';
 import Layout from '../components/Layout';
-import Link from 'next/link';
 
 const AboutPage = () => {
   return (
     <Layout title="About">
-        <div className="flex items-center">
-        <Link href="/" className="mr-2 text-lg tracking-tight font-lars font-medium italic text-labels opacity-0 animate-fade-in group">
-          <span className="inline-block transform transition-transform duration-300 ease-in-out group-hover:-translate-x-1">←</span>
-        </Link>
+      <div className="flex items-center">
         <h1 className="text-lg tracking-tight font-lars font-medium italic text-labels opacity-0 animate-fade-in">Jeff Su</h1>
       </div>
       <p className="mt-4 text-lg tracking-tight font-lars text-copy opacity-0 animate-fade-in animation-delay-200">About me</p>
-      
-      <div className="mt-8 opacity-0 animate-fade-in animation-delay-400">
+      <div className="mt-4 opacity-0 animate-fade-in animation-delay-400">
         <p className="text-lg tracking-tight">
             I was born in Springfield, MO and now reside in New York, NY.
 

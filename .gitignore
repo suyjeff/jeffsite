@@ -5,3 +5,7 @@ node_modules
 /node_modules
 /.pnp
 .pnp.js
+
+# Next.js
+.next/
+out/
