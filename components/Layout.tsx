@@ -36,10 +36,15 @@ const Layout = ({ children, title = 'This is the default title' }: Props) => {
               >
                 {aboutLinkLabel}
               </Link>
-              <Link href="/resume" className="text-gray-600 hover:text-gray-900 transition-colors duration-300 ease-in-out">Resume</Link>
+              <Link
+                href="https://drive.google.com/file/d/1bhE4No95GEnwgUiuQz8lDQDCmofE-PNT/view?usp=sharing"
+                className="text-gray-600 hover:text-gray-900 transition-colors duration-300 ease-in-out"
+              >
+                Resume
+              </Link>
             </div>
             <div className="text-sm text-gray-400">
-              Last updated September 2024
+              Last updated October 2025
             </div>
           </div>
         </footer>
