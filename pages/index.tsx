@@ -110,13 +110,13 @@ export default function Home() {
                 onClick={handleProjectClick}
                 className="relative inline-block rounded-md cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4183c4]"
               >
-                <span className="relative z-10 text-[#4183c4]">Project</span>
+                <span className="relative z-10 underline text-current">Project</span>
                 <span
                   aria-hidden="true"
                   className="absolute -inset-x-1 -inset-y-0.5 bg-[#dbeaf8] rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in"
                 ></span>
               </button>
-              <p className="mt-1 text-sm text-gray-600">MongoDB, 2025</p>
+              <p className="tracking-tight">MongoDB, 2025</p>
             </li>
           </ul>
         </div>
