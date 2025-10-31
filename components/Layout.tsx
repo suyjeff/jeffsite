@@ -40,7 +40,7 @@ const Layout = ({ children, title = 'This is the default title' }: Props) => {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Resume
+                Resumé
               </a>
             </div>
             <div className="text-sm text-gray-400">
