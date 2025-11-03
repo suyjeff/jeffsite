@@ -8,10 +8,6 @@ module.exports = {
             fontFamily: {
                 sans: ['Lars', 'sans-serif'],
             },
-            colors: {
-                'labels': '#1F1F1F',
-                'copy': '#333B40',
-            },
             spacing: {
                 '128': '32rem',
             },

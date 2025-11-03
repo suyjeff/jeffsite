@@ -12,7 +12,7 @@ const AboutPage = () => {
     <Layout title="About">
       <div className="flex items-center">
         <Link href="/" className="group">
-          <h1 className="relative inline-block text-lg tracking-tight font-lars font-medium italic text-labels opacity-0 animate-fade-in hover:cursor-pointer">
+          <h1 className="relative inline-block text-lg tracking-tight font-lars font-medium italic text-stone-900 opacity-0 animate-fade-in hover:cursor-pointer">
             <span className="block transition-opacity duration-300 ease-in group-hover:opacity-0">About</span>
             <span
               aria-hidden="true"

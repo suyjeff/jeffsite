@@ -7,8 +7,8 @@ const PROJECT_URL =
 export default function Home() {
   return (
     <Layout title="Jeff Su">
-      <h1 className="text-lg tracking-tight font-lars font-medium italic text-labels opacity-0 animate-fade-in">Jeff Su</h1>
-      <p className="mt-4 text-lg tracking-tight font-lars text-copy opacity-0 animate-fade-in animation-delay-200">Currently, a designer shaping the developer experience at MongoDB Atlas in New York. Focused on craft and execution above everything.</p>
+      <h1 className="text-lg tracking-tight font-lars font-medium italic text-stone-900 opacity-0 animate-fade-in">Jeff Su</h1>
+      <p className="mt-4 text-lg tracking-tight font-lars text-stone-900 opacity-0 animate-fade-in animation-delay-200">Currently, a designer shaping the developer experience at MongoDB Atlas in New York. Focused on craft and execution above everything.</p>
       
       <div className="mt-8 grid grid-cols-2 gap-4">
         
@@ -41,7 +41,7 @@ export default function Home() {
                 <span className="relative z-10 underline text-current">Project</span>
                 <span
                   aria-hidden="true"
-                  className="absolute -inset-x-1 -inset-y-0.5 bg-gray-200 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in"
+                  className="absolute -inset-x-1 -inset-y-0.5 bg-stone-200 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in"
                 ></span>
               </a>
               <p className="tracking-tight">MongoDB, 2025</p>
