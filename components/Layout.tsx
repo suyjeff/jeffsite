@@ -21,6 +21,7 @@ const Layout = ({ children, title = 'This is the default title' }: Props) => {
         <title>{title}</title>
         <meta charSet="utf-8" />
         <meta name="viewport" content="initial-scale=1.0, width=device-width" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       </Head>
 
       <main className="max-w-xl mx-auto pt-24 text-left min-h-screen flex flex-col w-full px-4 text-stone-900">
