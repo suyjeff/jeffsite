@@ -1,7 +1,10 @@
 import React, { useEffect, useRef } from 'react'
 import Layout from '../components/Layout'
 
-const PROJECT_URL =
+const CUSTOM_ROLES_URL =
+  'https://www.figma.com/proto/TYr8ADxHB3LtvKdrt7RWW8/Portfolio-Decks?node-id=37-11813&p=f&t=VuNPngVR6CX1uItc-1&scaling=min-zoom&content-scaling=fixed&page-id=37%3A11812'
+
+const ATLAS_SQL_INTERFACE_URL =
   'https://www.figma.com/proto/TYr8ADxHB3LtvKdrt7RWW8/Portfolio-Decks?node-id=1-32831&t=aNRhBcWeTdYQkwbe-1&scaling=min-zoom&content-caling=fixed&page-id=0%3A1'
 
 export default function Home() {
@@ -140,12 +143,27 @@ export default function Home() {
           <ul className="space-y-4 text-lg tracking-tight">
             <li className="opacity-0 animate-fade-in animation-delay-600">
               <a
-                href={PROJECT_URL}
+                href={CUSTOM_ROLES_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="relative inline-block rounded-md cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4183c4]"
               >
-                <span className="relative z-10 underline text-current">Project</span>
+                <span className="relative z-10 underline text-current">Custom Roles</span>
+                <span
+                  aria-hidden="true"
+                  className="absolute -inset-x-1 -inset-y-0.5 bg-stone-200 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in"
+                ></span>
+              </a>
+              <p className="tracking-tight">MongoDB, 2025</p>
+            </li>
+            <li className="opacity-0 animate-fade-in animation-delay-600">
+              <a
+                href={ATLAS_SQL_INTERFACE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative inline-block rounded-md cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4183c4]"
+              >
+                <span className="relative z-10 underline text-current">Atlas SQL Interface</span>
                 <span
                   aria-hidden="true"
                   className="absolute -inset-x-1 -inset-y-0.5 bg-stone-200 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in"
