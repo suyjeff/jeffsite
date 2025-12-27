@@ -72,11 +72,11 @@ const AboutPage = () => {
             <h2 className="text-lg tracking-tight font-bold mb-4">Education</h2>
             <ul className="space-y-4 text-lg tracking-tight">
               {[
-                { degree: "B.S. in Computer Science", school: "Washington University in St. Louis", year: 2022 }
+                { degree: "B.S. in Computer Science", school: "Washington University in St. Louis", year: "2018-2022" }
               ].map((edu, index) => (
                 <li key={index} className={`opacity-0 animate-fade-in animation-delay-${800 + index * 200}`}>
-                  <p className="underline inline-block rounded">{edu.degree}</p>
-                  <p>{edu.school}, {edu.year}</p>
+                  <p className="underline inline-block rounded decoration-stone-400">{edu.degree}</p>
+                  <p className="text-base text-stone-400"> {edu.year} · {edu.school},</p>
                 </li>
               ))}
             </ul>
