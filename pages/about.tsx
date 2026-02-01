@@ -29,12 +29,17 @@ const AboutPage = () => {
             <p>I was born and raised in Springfield, MO, and now reside in New York, NY.</p>
             <p>
               I currently work as a Product Designer at{' '}
-              <a href="https://www.mongodb.com" target="_blank" rel="noopener noreferrer" className={linkClasses}>
+              <a href="https://www.datadoghq.com" target="_blank" rel="noopener noreferrer" className={linkClasses}>
+                <span className="relative z-10">Datadog</span>
+                <span aria-hidden="true" className={hoverBgClasses}></span>
+              </a>{' '}
+              on the Integrations Experience team, where I focus on designing scalable and lasting patterns for Datadog's 1000+ integrations.
+              Previously, I&apos;ve designed for{' '}
+              <a href="https://mongodb.com" target="_blank" rel="noopener noreferrer" className={linkClasses}>
                 <span className="relative z-10">MongoDB</span>
                 <span aria-hidden="true" className={hoverBgClasses}></span>
               </a>{' '}
-              on the Data Core team, where I focus on improving the developer experience for MongoDB&apos;s flagship
-              Atlas platform. Previously, I&apos;ve done design work for{' '}
+              ,
               <a href="https://andalusia-labs.com" target="_blank" rel="noopener noreferrer" className={linkClasses}>
                 <span className="relative z-10">Andalusia Labs</span>
                 <span aria-hidden="true" className={hoverBgClasses}></span>
@@ -48,7 +53,7 @@ const AboutPage = () => {
             </p>
             <p>
               I&apos;ve always loved beautiful interfaces and products. As a result, I&apos;m deeply interested in all of
-              the small visual details that result in a well-crafted product.
+              the small visual details that lead to a well-crafted product.
             </p>
             <p>Otherwise, I love to cook with friends, play basketball, and obsess over the NBA.</p>
             <p>
