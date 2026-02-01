@@ -81,7 +81,7 @@ const AboutPage = () => {
               ].map((edu, index) => (
                 <li key={index} className={`opacity-0 animate-fade-in animation-delay-${800 + index * 200}`}>
                   <p className="underline inline-block rounded decoration-stone-400">{edu.degree}</p>
-                  <p className="text-base text-stone-400"> {edu.year} · {edu.school},</p>
+                  <p className="text-lg text-stone-400"> {edu.year} · {edu.school},</p>
                 </li>
               ))}
             </ul>
