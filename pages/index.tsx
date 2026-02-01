@@ -127,7 +127,7 @@ export default function Home() {
             ].map((job, index) => (
               <li key={index} className={`opacity-0 animate-fade-in animation-delay-${600 + index * 200}`}>
                 <p className="underline inline-block rounded decoration-stone-400">{job.company}</p>
-                <p className="text-base text-stone-400">{job.position}</p>
+                <p className="text-lg text-stone-400">{job.position}</p>
               </li>
             ))}
           </ul>
@@ -138,11 +138,11 @@ export default function Home() {
           <ul className="space-y-4 text-lg tracking-tight">
             <li className="opacity-0 animate-fade-in animation-delay-600">
               <span className="relative inline-block rounded-md underline decoration-stone-400 text-stone-900">Custom Roles</span>
-              <p className="text-base text-stone-400 tracking-tight">2025 · MongoDB</p>
+              <p className="text-lg text-stone-400 tracking-tight">2025 · MongoDB</p>
             </li>
             <li className="opacity-0 animate-fade-in animation-delay-600">
               <span className="relative inline-block rounded-md underline decoration-stone-400 text-stone-900">Atlas SQL Schemas</span>
-              <p className="text-base text-stone-400 tracking-tight">2025 · MongoDB</p>
+              <p className="text-lg text-stone-400 tracking-tight">2025 · MongoDB</p>
             </li>
           </ul>
         </div>
