@@ -38,8 +38,8 @@ const AboutPage = () => {
               <a href="https://mongodb.com" target="_blank" rel="noopener noreferrer" className={linkClasses}>
                 <span className="relative z-10">MongoDB</span>
                 <span aria-hidden="true" className={hoverBgClasses}></span>
-              </a>{' '}
-              ,
+              </a>
+              ,{' '}
               <a href="https://andalusia-labs.com" target="_blank" rel="noopener noreferrer" className={linkClasses}>
                 <span className="relative z-10">Andalusia Labs</span>
                 <span aria-hidden="true" className={hoverBgClasses}></span>

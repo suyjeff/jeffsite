@@ -45,7 +45,7 @@ const Layout = ({ children, title = 'This is the default title' }: Props) => {
               </a>
             </div>
             <div className="text-sm text-stone-400 dark:text-stone-500">
-              Last updated January 2026
+              Last updated February 2026
             </div>
           </div>
         </footer>

@@ -112,7 +112,7 @@ export default function Home() {
           />
         </svg>
       </div>
-      <p className="mt-4 text-lg tracking-tight font-lars text-stone-900 dark:text-stone-100 opacity-0 animate-fade-in animation-delay-200">Currently a designer on Datadog’s Integrations Experience team in New York, with a focus on honing craft and execution above all else.</p>
+      <p className="mt-4 text-lg tracking-tight font-lars text-stone-900 dark:text-stone-100 opacity-0 animate-fade-in animation-delay-200">Currently, a designer on Datadog’s Integrations Experience team in New York, with a focus on honing craft and execution.</p>
       
       <div className="mt-8 grid grid-cols-2 gap-4">
         
