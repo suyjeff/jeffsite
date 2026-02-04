@@ -35,6 +35,9 @@ const Layout = ({ children, title = 'This is the default title' }: Props) => {
               <Link href={aboutLinkHref} className={navLinkClasses}>
                 {aboutLinkLabel}
               </Link>
+              <Link href="/lab" className={navLinkClasses}>
+                Lab
+              </Link>
               <a
                 href="/SuJeffResume_oct2025.pdf"
                 className={navLinkClasses}
