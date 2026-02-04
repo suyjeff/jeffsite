@@ -15,10 +15,12 @@ interface CaseStudyProps {
 
 export default function CaseStudy({ frontmatter, content }: CaseStudyProps) {
   return (
-    <div className="prose lg:prose-xl mx-auto">
-      <h1>{frontmatter.title}</h1>
-      <p>{frontmatter.date}</p>
-      <MDXRemote {...content} />
+    <div className="min-h-screen bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100 px-4 py-24">
+      <div className="prose lg:prose-xl mx-auto dark:prose-invert">
+        <h1>{frontmatter.title}</h1>
+        <p>{frontmatter.date}</p>
+        <MDXRemote {...content} />
+      </div>
     </div>
   )
 }

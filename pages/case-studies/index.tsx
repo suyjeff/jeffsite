@@ -18,18 +18,20 @@ interface CaseStudiesProps {
 
 export default function CaseStudies({ caseStudies }: CaseStudiesProps) {
   return (
-    <div className="prose lg:prose-xl mx-auto">
-      <h1>Case Studies</h1>
-      <ul>
-        {caseStudies.map((caseStudy) => (
-          <li key={caseStudy.slug}>
-            <Link href={`/case-studies/${caseStudy.slug}`}>
-              {caseStudy.frontmatter.title}
-            </Link>
-            <p>{caseStudy.frontmatter.date}</p>
-          </li>
-        ))}
-      </ul>
+    <div className="min-h-screen bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100 px-4 py-24">
+      <div className="prose lg:prose-xl mx-auto dark:prose-invert">
+        <h1>Case Studies</h1>
+        <ul>
+          {caseStudies.map((caseStudy) => (
+            <li key={caseStudy.slug}>
+              <Link href={`/case-studies/${caseStudy.slug}`}>
+                {caseStudy.frontmatter.title}
+              </Link>
+              <p>{caseStudy.frontmatter.date}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }

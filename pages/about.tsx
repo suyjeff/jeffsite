@@ -4,16 +4,16 @@ import Layout from '../components/Layout';
 
 const AboutPage = () => {
   const linkClasses =
-    'relative inline-block text-[#4183c4] rounded cursor-pointer group no-underline';
+    'relative inline-block text-[#4183c4] dark:text-sky-300 rounded cursor-pointer group no-underline';
   const hoverBgClasses =
-    'absolute -inset-x-1 -inset-y-0.5 bg-[#dbeaf8] rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in';
+    'absolute -inset-x-1 -inset-y-0.5 bg-[#dbeaf8] dark:bg-sky-900/50 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in';
 
   return (
     <Layout title="About">
       <div className="pb-24 md:pb-0">
         <div className="flex items-center">
           <Link href="/" className="group">
-            <h1 className="relative inline-block text-lg tracking-tight font-lars font-medium italic text-stone-900 opacity-0 animate-fade-in hover:cursor-pointer">
+            <h1 className="relative inline-block text-lg tracking-tight font-lars font-medium italic text-stone-900 dark:text-stone-100 opacity-0 animate-fade-in hover:cursor-pointer">
               <span className="block transition-opacity duration-300 ease-in group-hover:opacity-0">About</span>
               <span
                 aria-hidden="true"
@@ -80,8 +80,8 @@ const AboutPage = () => {
                 { degree: "B.S. in Computer Science", school: "Washington University in St. Louis", year: "2018-2022" }
               ].map((edu, index) => (
                 <li key={index} className={`opacity-0 animate-fade-in animation-delay-${800 + index * 200}`}>
-                  <p className="underline inline-block rounded decoration-stone-400">{edu.degree}</p>
-                  <p className="text-lg text-stone-400"> {edu.year} · {edu.school},</p>
+                  <p className="underline inline-block rounded decoration-stone-400 dark:decoration-stone-500">{edu.degree}</p>
+                  <p className="text-lg text-stone-400 dark:text-stone-400"> {edu.year} · {edu.school},</p>
                 </li>
               ))}
             </ul>
