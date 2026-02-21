@@ -24,7 +24,7 @@ const AboutPage = () => {
             </h1>
           </Link>
         </div>
-        <div className="mt-4 opacity-0 animate-reveal animation-delay-100">
+        <div className="mt-4 opacity-0 animate-reveal animation-delay-200">
           <div className="space-y-4 text-lg tracking-tight">
             <p>I was born and raised in Springfield, MO, and now reside in New York, NY.</p>
             <p>
@@ -72,7 +72,7 @@ const AboutPage = () => {
           </div>
         </div>
 
-        <div className="mt-8 opacity-0 animate-reveal animation-delay-200">
+        <div className="mt-8 opacity-0 animate-reveal animation-delay-400">
           <h2 className="text-lg tracking-tight font-bold mb-4">Education</h2>
           <ul className="space-y-4 text-lg tracking-tight">
             {[
