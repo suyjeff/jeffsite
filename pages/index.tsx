@@ -77,7 +77,7 @@ export default function Home() {
 
   return (
     <Layout title="Jeff Su">
-      <div className="text-lg tracking-tight font-lars font-medium italic text-stone-900 dark:text-stone-100 opacity-0 animate-fade-in">
+      <div className="text-lg tracking-tight font-lars font-medium italic text-stone-900 dark:text-stone-100 opacity-0 animate-reveal">
         <span className="sr-only">Jeff Su</span>
         <svg
           viewBox="0 0 55 42"
@@ -112,11 +112,11 @@ export default function Home() {
           />
         </svg>
       </div>
-      <p className="mt-4 text-lg tracking-tight font-lars text-stone-900 dark:text-stone-100 opacity-0 animate-fade-in animation-delay-200">Currently, a designer on Datadog’s Integrations Experience team in New York, with a focus on honing craft and execution.</p>
-      
-      <div className="mt-8 grid grid-cols-2 gap-4">
-        
-        <div className="opacity-0 animate-fade-in animation-delay-400">
+      <p className="mt-4 text-lg tracking-tight font-lars text-stone-900 dark:text-stone-100 opacity-0 animate-reveal animation-delay-100">Currently, a designer on Datadog's Integrations Experience team in New York, with a focus on honing craft and execution.</p>
+
+      <div className="mt-8 grid grid-cols-2 gap-4 opacity-0 animate-reveal animation-delay-200">
+
+        <div>
           <h2 className="text-lg tracking-tight font-bold mb-4">Previously</h2>
           <ul className="space-y-4 text-lg tracking-tight">
             {[
@@ -125,7 +125,7 @@ export default function Home() {
               { company: 'MongoDB', position: '2021 · Product Design Intern' },
               { company: 'Salesforce', position: '2020 · UX Design Intern' },
             ].map((job, index) => (
-              <li key={index} className={`opacity-0 animate-fade-in animation-delay-${600 + index * 200}`}>
+              <li key={index}>
                 <p className="underline inline-block rounded decoration-stone-400 dark:decoration-stone-500">{job.company}</p>
                 <p className="text-lg text-stone-400 dark:text-stone-400">{job.position}</p>
               </li>
@@ -133,14 +133,14 @@ export default function Home() {
           </ul>
         </div>
 
-        <div className="opacity-0 animate-fade-in animation-delay-400">
+        <div>
           <h2 className="text-lg tracking-tight font-bold mb-4">Read</h2>
           <ul className="space-y-4 text-lg tracking-tight">
-            <li className="opacity-0 animate-fade-in animation-delay-600">
+            <li>
               <span className="relative inline-block rounded-md underline decoration-stone-400 dark:decoration-stone-500 text-stone-900 dark:text-stone-100">Custom Roles</span>
               <p className="text-lg text-stone-400 dark:text-stone-400 tracking-tight">2025 · MongoDB</p>
             </li>
-            <li className="opacity-0 animate-fade-in animation-delay-600">
+            <li>
               <span className="relative inline-block rounded-md underline decoration-stone-400 dark:decoration-stone-500 text-stone-900 dark:text-stone-100">Atlas SQL Schemas</span>
               <p className="text-lg text-stone-400 dark:text-stone-400 tracking-tight">2025 · MongoDB</p>
             </li>
