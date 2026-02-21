@@ -29,7 +29,7 @@ const Layout = ({ children, title = 'This is the default title' }: Props) => {
           {children}
         </div>
 
-        <footer className="w-full bg-stone-100 border-t border-stone-200 mt-auto dark:bg-stone-950 dark:border-stone-800 opacity-0 animate-reveal animation-delay-300">
+        <footer className="w-full bg-stone-100 border-t border-stone-200 mt-auto dark:bg-stone-950 dark:border-stone-800 opacity-0 animate-reveal animation-delay-600">
           <div className="max-w-xl mx-auto py-4 flex justify-between items-center">
             <div className="space-x-4">
               <Link href={aboutLinkHref} className={navLinkClasses}>
