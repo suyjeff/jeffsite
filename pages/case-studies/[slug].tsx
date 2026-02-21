@@ -17,9 +17,11 @@ export default function CaseStudy({ frontmatter, content }: CaseStudyProps) {
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100 px-4 py-24">
       <div className="prose lg:prose-xl mx-auto dark:prose-invert">
-        <h1>{frontmatter.title}</h1>
-        <p>{frontmatter.date}</p>
-        <MDXRemote {...content} />
+        <h1 className="opacity-0 animate-reveal">{frontmatter.title}</h1>
+        <p className="opacity-0 animate-reveal animation-delay-100">{frontmatter.date}</p>
+        <div className="opacity-0 animate-reveal animation-delay-200">
+          <MDXRemote {...content} />
+        </div>
       </div>
     </div>
   )

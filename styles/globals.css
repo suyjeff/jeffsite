@@ -1,3 +1,18 @@
 @import 'tailwindcss/base';
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
+
+@layer utilities {
+  .animate-reveal {
+    will-change: opacity, filter, transform;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-reveal {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+  }
+}

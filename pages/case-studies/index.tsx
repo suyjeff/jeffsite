@@ -20,8 +20,8 @@ export default function CaseStudies({ caseStudies }: CaseStudiesProps) {
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100 px-4 py-24">
       <div className="prose lg:prose-xl mx-auto dark:prose-invert">
-        <h1>Case Studies</h1>
-        <ul>
+        <h1 className="opacity-0 animate-reveal">Case Studies</h1>
+        <ul className="opacity-0 animate-reveal animation-delay-100">
           {caseStudies.map((caseStudy) => (
             <li key={caseStudy.slug}>
               <Link href={`/case-studies/${caseStudy.slug}`}>
