@@ -120,12 +120,12 @@ export default function Home() {
           <h2 className="text-lg tracking-tight font-bold mb-4 opacity-0 animate-reveal animation-delay-400">Previously</h2>
           <ul className="space-y-4 text-lg tracking-tight">
             {[
-              { company: 'MongoDB', position: '2022-2025 · Product Designer' },
-              { company: 'Andalusia Labs', position: '2022 · Product Designer' },
-              { company: 'MongoDB', position: '2021 · Product Design Intern' },
-              { company: 'Salesforce', position: '2020 · UX Design Intern' },
+              { company: 'MongoDB', position: '2022-2025 · Product Designer', delay: 'animation-delay-600' },
+              { company: 'Andalusia Labs', position: '2022 · Product Designer', delay: 'animation-delay-800' },
+              { company: 'MongoDB', position: '2021 · Product Design Intern', delay: 'animation-delay-1000' },
+              { company: 'Salesforce', position: '2020 · UX Design Intern', delay: 'animation-delay-1200' },
             ].map((job, index) => (
-              <li key={index} className={`opacity-0 animate-reveal animation-delay-${600 + index * 200}`}>
+              <li key={index} className={`opacity-0 animate-reveal ${job.delay}`}>
                 <p className="underline inline-block rounded decoration-stone-400 dark:decoration-stone-500">{job.company}</p>
                 <p className="text-lg text-stone-400 dark:text-stone-400">{job.position}</p>
               </li>
