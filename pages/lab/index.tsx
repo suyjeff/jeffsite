@@ -1,7 +1,7 @@
 import React from 'react'
 import Link from 'next/link'
-import Layout from '../components/Layout'
-import LabHeaderExperiment01 from '../components/LabHeaderExperiment01'
+import Layout from '../../components/Layout'
+import LabHeaderExperiment01 from '../../components/LabHeaderExperiment01'
 
 const LabPage = () => (
   <Layout title="Lab">
@@ -27,6 +27,14 @@ const LabPage = () => (
           <LabHeaderExperiment01 />
         </div>
       </div>
+      <Link href="/lab/nameplate" className="block mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-400 group hover:border-stone-400 dark:hover:border-stone-600 transition-colors">
+        <div className="text-xs uppercase tracking-[0.35em] text-stone-400 dark:text-stone-500">
+          nameplate creator
+        </div>
+        <p className="mt-2 text-sm text-stone-500 dark:text-stone-400 group-hover:text-stone-700 dark:group-hover:text-stone-300 transition-colors">
+          Create a custom nameplate with themes, fonts &amp; effects, then pin it to the board.
+        </p>
+      </Link>
     </div>
   </Layout>
 )
