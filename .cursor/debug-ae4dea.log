@@ -1,1 +1,0 @@
-{"sessionId":"ae4dea","runId":"pre-fix","hypothesisId":"A","location":"next.config.mjs:3","message":"Next config loaded (bundler flags)","data":{"argv":["/usr/local/bin/node","/Users/jeffreysu/Code/jeffsite/node_modules/next/dist/server/lib/start-server.js"],"node":"v24.11.0","env":{"NODE_ENV":"development"}},"timestamp":1772503692935}
