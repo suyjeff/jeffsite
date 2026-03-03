@@ -3,7 +3,7 @@ import { NameplateData } from './types'
 const STORAGE_KEY = 'np_board'
 const TOKEN_KEY = 'np_visitor_token'
 
-function getToken(): string {
+export function getToken(): string {
   if (typeof window === 'undefined') return ''
   let token = localStorage.getItem(TOKEN_KEY)
   if (!token) {
@@ -82,6 +82,25 @@ export async function createNameplate(
   const updated = [...existing, newPlate]
   saveLocal(updated)
   return { ok: true, plate: newPlate }
+}
+
+export async function updateNameplatePosition(
+  id: string,
+  coords: { x: number; y: number; rotation: number },
+): Promise<{ ok: boolean }> {
+  const token = getToken()
+  if (!API_BASE) return { ok: false }
+
+  try {
+    const res = await fetch(`${API_BASE}/nameplates/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...coords, visitorToken: token }),
+    })
+    return { ok: res.ok }
+  } catch {
+    return { ok: false }
+  }
 }
 
 export function hasSubmitted(): boolean {

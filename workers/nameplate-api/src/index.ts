@@ -4,7 +4,7 @@ export interface Env {
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 }
 
@@ -26,7 +26,7 @@ export default {
     if (url.pathname === '/nameplates' && request.method === 'GET') {
       const limit = Math.min(Number(url.searchParams.get('limit') ?? 200), 500)
       const { results } = await env.DB.prepare(
-        'SELECT id, name, theme, font, effect, created_at AS createdAt, visitor_token AS visitorToken FROM nameplates ORDER BY created_at DESC LIMIT ?',
+        'SELECT id, name, theme, font, effect, created_at AS createdAt, visitor_token AS visitorToken, x, y, rotation FROM nameplates ORDER BY created_at DESC LIMIT ?',
       ).bind(limit).all()
 
       return json({ nameplates: results })
@@ -68,6 +68,38 @@ export default {
       return json({
         nameplate: { id, name: name.trim(), theme, font, effect, createdAt, visitorToken },
       }, 201)
+    }
+
+    const patchMatch = url.pathname.match(/^\/nameplates\/([^/]+)$/)
+    if (patchMatch && request.method === 'PATCH') {
+      const id = patchMatch[1]
+      const body = await request.json<{
+        x?: number
+        y?: number
+        rotation?: number
+        visitorToken?: string
+      }>()
+
+      if (!body.visitorToken) {
+        return json({ error: 'Missing visitorToken' }, 400)
+      }
+
+      const row = await env.DB.prepare(
+        'SELECT visitor_token FROM nameplates WHERE id = ?',
+      ).bind(id).first<{ visitor_token: string }>()
+
+      if (!row) {
+        return json({ error: 'Not found' }, 404)
+      }
+      if (row.visitor_token !== body.visitorToken) {
+        return json({ error: 'Forbidden' }, 403)
+      }
+
+      await env.DB.prepare(
+        'UPDATE nameplates SET x = ?, y = ?, rotation = ? WHERE id = ?',
+      ).bind(body.x ?? null, body.y ?? null, body.rotation ?? null, id).run()
+
+      return json({ ok: true })
     }
 
     return json({ error: 'Not found' }, 404)

@@ -10,6 +10,9 @@ export interface NameplateData {
   effect: EffectId
   createdAt: string
   visitorToken: string
+  x?: number
+  y?: number
+  rotation?: number
 }
 
 export interface ThemeConfig {

@@ -10,9 +10,10 @@ type Props = {
 
 const Layout = ({ children, title = "This is the default title" }: Props) => {
   const router = useRouter();
-  const isAboutPage = router.pathname === "/about";
-  const aboutLinkHref = isAboutPage ? "/" : "/about";
-  const aboutLinkLabel = isAboutPage ? "Home" : "About";
+  const isHomeLinkPage =
+    router.pathname === "/about" || router.pathname.startsWith("/lab");
+  const aboutLinkHref = isHomeLinkPage ? "/" : "/about";
+  const aboutLinkLabel = isHomeLinkPage ? "Home" : "About";
   const navLinkClasses =
     "text-stone-600 hover:text-stone-900 transition-colors duration-300 ease-in-out dark:text-stone-300 dark:hover:text-stone-100";
 

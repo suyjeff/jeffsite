@@ -5,7 +5,10 @@ CREATE TABLE IF NOT EXISTS nameplates (
   font TEXT NOT NULL CHECK(font IN ('default','serif','mono')),
   effect TEXT NOT NULL CHECK(effect IN ('solid','gradient','neon','toon','pop')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  visitor_token TEXT NOT NULL UNIQUE
+  visitor_token TEXT NOT NULL UNIQUE,
+  x REAL,
+  y REAL,
+  rotation REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_nameplates_created ON nameplates(created_at DESC);

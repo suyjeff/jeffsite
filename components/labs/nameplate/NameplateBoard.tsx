@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useCallback, useEffect } from 'react'
 import { NameplateData } from './types'
 import NameplatePreview from './NameplatePreview'
+import { getToken, updateNameplatePosition } from './api'
 
 interface Props {
   plates: NameplateData[]
+  frameless?: boolean
 }
 
 function seededRandom(seed: string): () => number {
@@ -67,20 +69,83 @@ function computePlacements(plates: NameplateData[], containerW: number, containe
   return results
 }
 
-const NameplateBoard: React.FC<Props> = ({ plates }) => {
+type DragState = {
+  plateId: string
+  startClientX: number
+  startClientY: number
+  startX: number
+  startY: number
+  rotation: number
+}
+
+const NameplateBoard: React.FC<Props> = ({ plates, frameless }) => {
   const containerW = 560
   const minH = 420
   const rowHeight = 64
   const dynamicH = Math.max(minH, Math.ceil(plates.length / 3) * rowHeight + 40)
 
-  const placements = useMemo(
+  const seededPlacements = useMemo(
     () => computePlacements(plates, containerW, dynamicH),
     [plates, containerW, dynamicH],
   )
 
+  const basePlacements = useMemo(
+    () =>
+      plates.map((plate, i) => {
+        const seeded = seededPlacements[i]
+        if (plate.x != null && plate.y != null) {
+          return { x: plate.x, y: plate.y, rotation: plate.rotation ?? seeded.rotation }
+        }
+        return seeded
+      }),
+    [plates, seededPlacements],
+  )
+
+  const [overrides, setOverrides] = useState<Record<string, Placement>>({})
+  const [dragging, setDragging] = useState<DragState | null>(null)
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const myToken = getToken()
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!dragging) return
+      setOverrides((prev) => ({
+        ...prev,
+        [dragging.plateId]: {
+          x: dragging.startX + (e.clientX - dragging.startClientX),
+          y: dragging.startY + (e.clientY - dragging.startClientY),
+          rotation: dragging.rotation,
+        },
+      }))
+    },
+    [dragging],
+  )
+
+  const handleMouseUp = useCallback(() => {
+    if (!dragging) return
+    const final = overrides[dragging.plateId]
+    if (final) {
+      updateNameplatePosition(dragging.plateId, final)
+    }
+    setDragging(null)
+  }, [dragging, overrides])
+
+  useEffect(() => {
+    if (!dragging) return
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [dragging, handleMouseMove, handleMouseUp])
+
   if (plates.length === 0) {
     return (
-      <div className="y2k-board flex items-center justify-center" style={{ minHeight: minH }}>
+      <div
+        className={`${frameless ? 'y2k-board-frameless' : 'y2k-board'} flex items-center justify-center`}
+        style={{ minHeight: minH }}
+      >
         <p className="text-stone-400 dark:text-stone-500 text-sm italic">
           No nameplates yet. Be the first!
         </p>
@@ -88,20 +153,70 @@ const NameplateBoard: React.FC<Props> = ({ plates }) => {
     )
   }
 
+  const boardClass = [
+    frameless ? 'y2k-board-frameless' : 'y2k-board',
+    'relative select-none overflow-visible',
+  ].join(' ')
+
   return (
-    <div className="y2k-board" style={{ height: dynamicH }}>
+    <div
+      className={boardClass}
+      style={{ height: dynamicH }}
+      data-dragging={dragging ? 'true' : undefined}
+    >
       {plates.map((plate, i) => {
-        const p = placements[i]
+        const base = basePlacements[i]
+        const override = overrides[plate.id]
+        const p = override ?? base
         if (!p) return null
+
+        const isCreator = plate.visitorToken === myToken
+        const isDragging = dragging?.plateId === plate.id
+        const isHovered = hoveredId === plate.id && isCreator
+
+        const wrapperClasses = [
+          'absolute',
+          isCreator ? 'transition-shadow duration-200 ease-out' : '',
+          isCreator ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : '',
+          isDragging
+            ? 'shadow-xl shadow-stone-400/50 dark:shadow-stone-950/60 z-10'
+            : isHovered
+              ? 'shadow-lg shadow-stone-300/70 dark:shadow-stone-900/70'
+              : '',
+        ].join(' ')
+
+        const borderOverride = isDragging
+          ? 'border-sky-300 dark:border-sky-400'
+          : isHovered
+            ? 'border-stone-200 dark:border-stone-600'
+            : undefined
+
         return (
           <div
             key={plate.id}
-            className="absolute transition-transform"
+            className={wrapperClasses}
             style={{
               left: p.x,
               top: p.y,
               transform: `rotate(${p.rotation}deg)`,
             }}
+            onMouseEnter={isCreator ? () => setHoveredId(plate.id) : undefined}
+            onMouseLeave={isCreator ? () => setHoveredId(null) : undefined}
+            onMouseDown={
+              isCreator
+                ? (e) => {
+                    e.preventDefault()
+                    setDragging({
+                      plateId: plate.id,
+                      startClientX: e.clientX,
+                      startClientY: e.clientY,
+                      startX: p.x,
+                      startY: p.y,
+                      rotation: p.rotation,
+                    })
+                  }
+                : undefined
+            }
           >
             <NameplatePreview
               name={plate.name}
@@ -109,6 +224,7 @@ const NameplateBoard: React.FC<Props> = ({ plates }) => {
               font={plate.font}
               effect={plate.effect}
               compact
+              borderOverride={borderOverride}
             />
           </div>
         )

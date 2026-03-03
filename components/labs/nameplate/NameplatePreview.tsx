@@ -10,6 +10,7 @@ interface Props {
   font: FontId
   effect: EffectId
   compact?: boolean
+  borderOverride?: string
 }
 
 function effectClass(effect: EffectId): string {
@@ -22,7 +23,7 @@ function effectClass(effect: EffectId): string {
   }
 }
 
-const NameplatePreview: React.FC<Props> = ({ name, theme, font, effect, compact }) => {
+const NameplatePreview: React.FC<Props> = ({ name, theme, font, effect, compact, borderOverride }) => {
   const t = THEMES[theme]
   const f = FONTS.find(x => x.id === font) ?? FONTS[0]
 
@@ -38,8 +39,8 @@ const NameplatePreview: React.FC<Props> = ({ name, theme, font, effect, compact 
   return (
     <div
       className={`
-        inline-block rounded-lg border-2 px-4 py-2 select-none
-        ${t.bg} ${t.border}
+        inline-block rounded-lg border-2 px-4 py-2 select-none transition-[border-color] duration-200 ease-out
+        ${t.bg} ${borderOverride ?? t.border}
         ${compact ? 'px-3 py-1.5' : 'px-5 py-3'}
       `}
     >
