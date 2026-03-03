@@ -35,9 +35,8 @@ function computePlacements(plates: NameplateData[], containerW: number, containe
 
   for (const plate of plates) {
     const rng = seededRandom(plate.id)
-    let bestX = padding
-    let bestY = padding
-    let placed = false
+    let candidateX = padding
+    let candidateY = padding
 
     for (let attempt = 0; attempt < 60; attempt++) {
       const x = padding + rng() * Math.max(0, containerW - plateW - padding * 2)
@@ -54,16 +53,17 @@ function computePlacements(plates: NameplateData[], containerW: number, containe
         }
       }
 
-      bestX = x
-      bestY = y
+      // Keep the latest sampled point as a deterministic fallback when all
+      // attempts overlap.
+      candidateX = x
+      candidateY = y
       if (!overlap) {
-        placed = true
         break
       }
     }
 
     const rotation = (seededRandom(plate.id + 'r')() - 0.5) * 6
-    results.push({ x: bestX, y: bestY, rotation })
+    results.push({ x: candidateX, y: candidateY, rotation })
   }
 
   return results

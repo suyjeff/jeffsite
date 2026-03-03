@@ -98,8 +98,19 @@ export async function updateNameplatePosition(
   id: string,
   coords: { x: number; y: number; rotation: number },
 ): Promise<{ ok: boolean }> {
+  const updateLocalPosition = (): { ok: boolean } => {
+    const existing = getLocal()
+    const index = existing.findIndex(plate => plate.id === id)
+    if (index === -1) return { ok: false }
+
+    const updated = [...existing]
+    updated[index] = { ...updated[index], ...coords }
+    saveLocal(updated)
+    return { ok: true }
+  }
+
   const token = getToken()
-  if (!API_BASE) return { ok: false }
+  if (!API_BASE) return updateLocalPosition()
 
   try {
     const res = await fetch(`${API_BASE}/nameplates/${id}`, {
