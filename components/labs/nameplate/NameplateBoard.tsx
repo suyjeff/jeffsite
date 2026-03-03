@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react'
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { NameplateData } from './types'
 import NameplatePreview from './NameplatePreview'
 import { getToken, updateNameplatePosition } from './api'
@@ -104,18 +104,23 @@ const NameplateBoard: React.FC<Props> = ({ plates, frameless }) => {
   const [overrides, setOverrides] = useState<Record<string, Placement>>({})
   const [dragging, setDragging] = useState<DragState | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const latestDragPlacementRef = useRef<Placement | null>(null)
+  const didDragRef = useRef(false)
   const myToken = getToken()
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (!dragging) return
+      const nextPlacement = {
+        x: dragging.startX + (e.clientX - dragging.startClientX),
+        y: dragging.startY + (e.clientY - dragging.startClientY),
+        rotation: dragging.rotation,
+      }
+      didDragRef.current = true
+      latestDragPlacementRef.current = nextPlacement
       setOverrides((prev) => ({
         ...prev,
-        [dragging.plateId]: {
-          x: dragging.startX + (e.clientX - dragging.startClientX),
-          y: dragging.startY + (e.clientY - dragging.startClientY),
-          rotation: dragging.rotation,
-        },
+        [dragging.plateId]: nextPlacement,
       }))
     },
     [dragging],
@@ -123,10 +128,12 @@ const NameplateBoard: React.FC<Props> = ({ plates, frameless }) => {
 
   const handleMouseUp = useCallback(() => {
     if (!dragging) return
-    const final = overrides[dragging.plateId]
-    if (final) {
+    const final = latestDragPlacementRef.current ?? overrides[dragging.plateId]
+    if (didDragRef.current && final) {
       updateNameplatePosition(dragging.plateId, final)
     }
+    didDragRef.current = false
+    latestDragPlacementRef.current = null
     setDragging(null)
   }, [dragging, overrides])
 
@@ -206,6 +213,12 @@ const NameplateBoard: React.FC<Props> = ({ plates, frameless }) => {
               isCreator
                 ? (e) => {
                     e.preventDefault()
+                    didDragRef.current = false
+                    latestDragPlacementRef.current = {
+                      x: p.x,
+                      y: p.y,
+                      rotation: p.rotation,
+                    }
                     setDragging({
                       plateId: plate.id,
                       startClientX: e.clientX,

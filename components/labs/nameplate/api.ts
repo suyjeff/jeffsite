@@ -2,6 +2,7 @@ import { NameplateData } from './types'
 
 const STORAGE_KEY = 'np_board'
 const TOKEN_KEY = 'np_visitor_token'
+const SUBMITTED_TOKEN_KEY = 'np_submitted_token'
 
 export function getToken(): string {
   if (typeof window === 'undefined') return ''
@@ -24,6 +25,11 @@ function getLocal(): NameplateData[] {
 
 function saveLocal(plates: NameplateData[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(plates))
+}
+
+function markSubmitted(token: string) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(SUBMITTED_TOKEN_KEY, token)
 }
 
 const API_BASE = typeof window !== 'undefined'
@@ -56,11 +62,14 @@ export async function createNameplate(
         body: JSON.stringify({ ...plate, visitorToken: token }),
       })
       if (res.status === 409) {
+        markSubmitted(token)
         return { ok: false, error: 'You already placed a nameplate!' }
       }
       if (res.ok) {
         const data = await res.json()
-        return { ok: true, plate: data.nameplate ?? data }
+        const createdPlate = data.nameplate ?? data
+        markSubmitted(token)
+        return { ok: true, plate: createdPlate }
       }
       return { ok: false, error: 'Something went wrong.' }
     } catch {
@@ -81,6 +90,7 @@ export async function createNameplate(
   }
   const updated = [...existing, newPlate]
   saveLocal(updated)
+  markSubmitted(token)
   return { ok: true, plate: newPlate }
 }
 
@@ -106,6 +116,8 @@ export async function updateNameplatePosition(
 export function hasSubmitted(): boolean {
   if (typeof window === 'undefined') return false
   const token = getToken()
+  const submittedToken = localStorage.getItem(SUBMITTED_TOKEN_KEY)
+  if (submittedToken === token) return true
   const existing = getLocal()
   return existing.some(p => p.visitorToken === token)
 }

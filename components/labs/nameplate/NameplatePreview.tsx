@@ -39,7 +39,7 @@ const NameplatePreview: React.FC<Props> = ({ name, theme, font, effect, compact,
   return (
     <div
       className={`
-        inline-block rounded-lg border-2 px-4 py-2 select-none transition-[border-color] duration-200 ease-out
+        inline-block rounded-lg border-2 select-none transition-[border-color] duration-200 ease-out
         ${t.bg} ${borderOverride ?? t.border}
         ${compact ? 'px-3 py-1.5' : 'px-5 py-3'}
       `}
