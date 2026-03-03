@@ -1,7 +1,7 @@
-import React from 'react'
-import Link from 'next/link'
-import Layout from '../../components/Layout'
-import LabHeaderExperiment01 from '../../components/LabHeaderExperiment01'
+import React from "react";
+import Link from "next/link";
+import Layout from "../../components/Layout";
+import LabHeaderExperiment01 from "../../components/LabHeaderExperiment01";
 
 const LabPage = () => (
   <Layout title="Lab">
@@ -9,7 +9,9 @@ const LabPage = () => (
       <div className="flex items-center">
         <Link href="/" className="group">
           <h1 className="relative inline-block text-lg tracking-tight font-lars font-medium italic text-stone-900 dark:text-stone-100 opacity-0 animate-reveal hover:cursor-pointer">
-            <span className="block transition-opacity duration-300 ease-in group-hover:opacity-0">Labs</span>
+            <span className="block transition-opacity duration-300 ease-in group-hover:opacity-0">
+              Labs
+            </span>
             <span
               aria-hidden="true"
               className="absolute inset-0 flex items-center transition-opacity duration-300 ease-in opacity-0 group-hover:opacity-100 pointer-events-none"
@@ -21,22 +23,26 @@ const LabPage = () => (
       </div>
       <div className="mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-200">
         <div className="text-xs uppercase tracking-[0.35em] text-stone-400 dark:text-stone-500">
-          header animation experiment 01
+          header experiment 01
         </div>
         <div className="mt-4">
           <LabHeaderExperiment01 />
         </div>
       </div>
-      <Link href="/lab/nameplate" className="block mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-400 group hover:border-stone-400 dark:hover:border-stone-600 transition-colors">
+      <Link
+        href="/lab/nameplate"
+        className="block mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-400 group hover:border-stone-400 dark:hover:border-stone-600 transition-colors"
+      >
         <div className="text-xs uppercase tracking-[0.35em] text-stone-400 dark:text-stone-500">
-          nameplate creator
+          visitors
         </div>
-        <p className="mt-2 text-sm text-stone-500 dark:text-stone-400 group-hover:text-stone-700 dark:group-hover:text-stone-300 transition-colors">
-          Create a custom nameplate with themes, fonts &amp; effects, then pin it to the board.
+        <p className="mt-2 text-lg text-stone-500 dark:text-stone-400 group-hover:text-stone-700 dark:group-hover:text-stone-300 transition-colors">
+          Create a custom nameplate with themes, fonts &amp; effects, then pin
+          it to the board.
         </p>
       </Link>
     </div>
   </Layout>
-)
+);
 
-export default LabPage
+export default LabPage;

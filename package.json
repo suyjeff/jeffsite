@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "export": "next export"
@@ -12,10 +12,10 @@
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.5",
     "gray-matter": "^4.0.3",
-    "next": "^14.2.32",
+    "next": "^16.1.6",
     "next-mdx-remote": "^5.0.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "typescript": "^5.5.4"
   },
   "devDependencies": {
