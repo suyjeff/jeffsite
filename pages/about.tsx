@@ -13,7 +13,7 @@ const AboutPage = () => {
       <div className="pb-24 md:pb-0">
         <div className="flex items-center">
           <Link href="/" className="group">
-            <h1 className="relative inline-block text-lg tracking-tight font-lars font-medium italic text-stone-900 dark:text-stone-100 opacity-0 animate-fade-in hover:cursor-pointer">
+            <h1 className="relative inline-block text-lg tracking-tight font-lars font-medium italic text-stone-900 dark:text-stone-100 opacity-0 animate-reveal hover:cursor-pointer">
               <span className="block transition-opacity duration-300 ease-in group-hover:opacity-0">About</span>
               <span
                 aria-hidden="true"
@@ -24,7 +24,7 @@ const AboutPage = () => {
             </h1>
           </Link>
         </div>
-        <div className="mt-4 opacity-0 animate-fade-in animation-delay-400">
+        <div className="mt-4 opacity-0 animate-reveal animation-delay-200">
           <div className="space-y-4 text-lg tracking-tight">
             <p>I was born and raised in Springfield, MO, and now reside in New York, NY.</p>
             <p>
@@ -72,20 +72,18 @@ const AboutPage = () => {
           </div>
         </div>
 
-        <div className="mt-8">
-          <div className="opacity-0 animate-fade-in animation-delay-600">
-            <h2 className="text-lg tracking-tight font-bold mb-4">Education</h2>
-            <ul className="space-y-4 text-lg tracking-tight">
-              {[
-                { degree: "B.S. in Computer Science", school: "Washington University in St. Louis", year: "2018-2022" }
-              ].map((edu, index) => (
-                <li key={index} className={`opacity-0 animate-fade-in animation-delay-${800 + index * 200}`}>
-                  <p className="underline inline-block rounded decoration-stone-400 dark:decoration-stone-500">{edu.degree}</p>
-                  <p className="text-lg text-stone-400 dark:text-stone-400"> {edu.year} · {edu.school},</p>
-                </li>
-              ))}
-            </ul>
-          </div>
+        <div className="mt-8 opacity-0 animate-reveal animation-delay-400">
+          <h2 className="text-lg tracking-tight font-bold mb-4">Education</h2>
+          <ul className="space-y-4 text-lg tracking-tight">
+            {[
+              { degree: "B.S. in Computer Science", school: "Washington University in St. Louis", year: "2018-2022" }
+            ].map((edu, index) => (
+              <li key={index}>
+                <p className="underline inline-block rounded decoration-stone-400 dark:decoration-stone-500">{edu.degree}</p>
+                <p className="text-lg text-stone-400 dark:text-stone-400"> {edu.year} · {edu.school},</p>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </Layout>

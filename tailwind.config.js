@@ -8,17 +8,32 @@ module.exports = {
         extend: {
             fontFamily: {
                 sans: ['Lars', 'sans-serif'],
+                'nameplate-serif': ['"Playfair Display"', 'Georgia', 'serif'],
+                'nameplate-mono': ['"Roboto Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
             },
             spacing: {
                 '128': '32rem',
             },
             animation: {
                 'fade-in': 'fadeIn 0.5s ease-out forwards',
+                'reveal': 'reveal 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards',
             },
             keyframes: {
                 fadeIn: {
                     '0%': { opacity: 0 },
                     '100%': { opacity: 1 },
+                },
+                reveal: {
+                    '0%': {
+                        opacity: '0',
+                        filter: 'blur(12px)',
+                        transform: 'translateY(6px)',
+                    },
+                    '100%': {
+                        opacity: '1',
+                        filter: 'blur(0px)',
+                        transform: 'translateY(0)',
+                    },
                 },
             },
         },

@@ -14,3 +14,6 @@ out/
 .next
 .next
 .next
+
+# Cursor IDE debug artifacts
+.cursor/debug-*.log
