@@ -1,7 +1,7 @@
 {
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "export": "next export",
     "test": "vitest run"
