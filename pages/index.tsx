@@ -141,7 +141,7 @@ export default function Home() {
               <p className="text-lg text-stone-400 dark:text-stone-400 tracking-tight">2025 · MongoDB</p>
             </li>
             <li className="opacity-0 animate-reveal animation-delay-800">
-              <span className="relative inline-block rounded-md underline decoration-stone-400 dark:decoration-stone-500 text-stone-900 dark:text-stone-100">Atlas SQL Schemas</span>
+              <a href="https://www.figma.com/proto/TYr8ADxHB3LtvKdrt7RWW8?node-id=1-32831&locale=en" className="relative inline-block rounded-md underline decoration-stone-400 dark:decoration-stone-500 text-stone-900 dark:text-stone-100">Atlas SQL Schemas</a>
               <p className="text-lg text-stone-400 dark:text-stone-400 tracking-tight">2025 · MongoDB</p>
             </li>
           </ul>
