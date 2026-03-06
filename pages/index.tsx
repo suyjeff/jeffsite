@@ -137,7 +137,7 @@ export default function Home() {
           <h2 className="text-lg tracking-tight font-bold mb-4 opacity-0 animate-reveal animation-delay-400">Read</h2>
           <ul className="space-y-4 text-lg tracking-tight">
             <li className="opacity-0 animate-reveal animation-delay-600">
-              <span className="relative inline-block rounded-md underline decoration-stone-400 dark:decoration-stone-500 text-stone-900 dark:text-stone-100">Custom Roles</span>
+              <a href="https://www.figma.com/proto/TYr8ADxHB3LtvKdrt7RWW8?node-id=37-11813&locale=en" className="relative inline-block rounded-md underline decoration-stone-400 dark:decoration-stone-500 text-stone-900 dark:text-stone-100">Custom Roles</a>
               <p className="text-lg text-stone-400 dark:text-stone-400 tracking-tight">2025 · MongoDB</p>
             </li>
             <li className="opacity-0 animate-reveal animation-delay-800">
