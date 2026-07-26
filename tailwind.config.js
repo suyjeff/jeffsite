@@ -8,8 +8,6 @@ module.exports = {
         extend: {
             fontFamily: {
                 sans: ['Lars', 'sans-serif'],
-                'nameplate-serif': ['"Playfair Display"', 'Georgia', 'serif'],
-                'nameplate-mono': ['"Roboto Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
             },
             spacing: {
                 '128': '32rem',
