@@ -2,22 +2,24 @@
 // which the WebGL scene uses as textures.
 
 import {
-  PAD_X,
-  PAD_Y,
+  SCRIPT_OFFSET_X,
+  SCRIPT_OFFSET_Y,
   SCRIPT_PATH,
   SCRIPT_STROKE,
   SCRIPT_VIEW_WIDTH,
   SCRIPT_WIDTH,
   STICKER_HEIGHT,
   STICKER_WIDTH,
-  blobPoints,
+  blobPathString,
 } from './stickerShape'
 
 // Texels per CSS pixel. The sticker is small and sits at the top of the page,
 // so it is worth over-sampling to keep the die-cut edge and the hairline script
 // crisp on retina displays.
 const TEXEL_SCALE = 3
-const OUTLINE_POINTS = 160
+
+/** The die-cut, shared by the fill, the edge and the shadow. */
+const BLOB = blobPathString()
 
 export type StickerPalette = {
   /** Face of the vinyl. */
@@ -49,20 +51,24 @@ export const palettes: Record<'light' | 'dark', StickerPalette> = {
   },
 }
 
-const traceBlob = (ctx: CanvasRenderingContext2D, inset: number) => {
+/** Runs `draw` with the die-cut as the current path, scaled about its centre. */
+const withBlob = (
+  ctx: CanvasRenderingContext2D,
+  inset: number,
+  draw: (path: Path2D) => void,
+) => {
   const scale = 1 - inset
   const cx = STICKER_WIDTH / 2
   const cy = STICKER_HEIGHT / 2
-  const points = blobPoints(OUTLINE_POINTS)
 
-  ctx.beginPath()
-  points.forEach((point, index) => {
-    const x = cx + (point.x - cx) * scale
-    const y = cy + (point.y - cy) * scale
-    if (index === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  })
-  ctx.closePath()
+  ctx.save()
+  if (inset !== 0) {
+    ctx.translate(cx, cy)
+    ctx.scale(scale, scale)
+    ctx.translate(-cx, -cy)
+  }
+  draw(new Path2D(BLOB))
+  ctx.restore()
 }
 
 const createSurface = (width: number, height: number) => {
@@ -81,30 +87,32 @@ export const paintSticker = (palette: StickerPalette): HTMLCanvasElement | null 
   const { canvas, ctx } = surface
 
   // The die-cut vinyl.
-  traceBlob(ctx, 0)
-  ctx.fillStyle = palette.vinyl
-  ctx.fill()
+  withBlob(ctx, 0, (path) => {
+    ctx.fillStyle = palette.vinyl
+    ctx.fill(path)
 
-  // A whisper of shading just inside the cut so the sticker reads as a
-  // material with thickness rather than a flat white shape.
-  ctx.save()
-  ctx.clip()
-  const shading = ctx.createLinearGradient(0, 0, STICKER_WIDTH * 0.35, STICKER_HEIGHT)
-  shading.addColorStop(0, 'rgba(255, 255, 255, 0)')
-  shading.addColorStop(1, 'rgba(28, 25, 23, 0.05)')
-  ctx.fillStyle = shading
-  ctx.fillRect(0, 0, STICKER_WIDTH, STICKER_HEIGHT)
-  ctx.restore()
+    // A whisper of shading just inside the cut so the sticker reads as a
+    // material with thickness rather than a flat white shape.
+    ctx.save()
+    ctx.clip(path)
+    const shading = ctx.createLinearGradient(0, 0, STICKER_WIDTH * 0.35, STICKER_HEIGHT)
+    shading.addColorStop(0, 'rgba(255, 255, 255, 0)')
+    shading.addColorStop(1, 'rgba(28, 25, 23, 0.04)')
+    ctx.fillStyle = shading
+    ctx.fillRect(0, 0, STICKER_WIDTH, STICKER_HEIGHT)
+    ctx.restore()
+  })
 
-  traceBlob(ctx, 0.006)
-  ctx.strokeStyle = 'rgba(28, 25, 23, 0.07)'
-  ctx.lineWidth = 1
-  ctx.stroke()
+  withBlob(ctx, 0.006, (path) => {
+    ctx.strokeStyle = 'rgba(28, 25, 23, 0.07)'
+    ctx.lineWidth = 1
+    ctx.stroke(path)
+  })
 
   // The lettering, drawn from the same path the written-name header used.
   const scale = SCRIPT_WIDTH / SCRIPT_VIEW_WIDTH
   ctx.save()
-  ctx.translate(PAD_X, PAD_Y)
+  ctx.translate(SCRIPT_OFFSET_X, SCRIPT_OFFSET_Y)
   ctx.scale(scale, scale)
   ctx.strokeStyle = palette.ink
   ctx.lineWidth = SCRIPT_STROKE
@@ -125,9 +133,10 @@ export const paintShadow = (): HTMLCanvasElement | null => {
   // The scene samples progressively coarser mips as the sticker lifts, which
   // is what softens the shadow on the way up.
   ctx.filter = 'blur(6px)'
-  traceBlob(ctx, 0.06)
-  ctx.fillStyle = '#000000'
-  ctx.fill()
+  withBlob(ctx, 0.06, (path) => {
+    ctx.fillStyle = '#000000'
+    ctx.fill(path)
+  })
   ctx.filter = 'none'
 
   return canvas

@@ -1,5 +1,5 @@
-// Geometry for the peelable name sticker: the cursive artwork, the soft blob
-// die-cut around it, and the edge queries the peel interaction needs.
+// Geometry for the peelable name sticker: the cursive artwork, the die-cut
+// contour around it, and the edge queries the peel interaction needs.
 
 // The signature path, lifted verbatim from the original written-name header so
 // the lettering keeps the exact same graphical style.
@@ -10,79 +10,98 @@ export const SCRIPT_VIEW_WIDTH = 55
 export const SCRIPT_VIEW_HEIGHT = 42
 export const SCRIPT_STROKE = 2.5
 
-// Drawn size of the lettering, and the vinyl margin around it. The margin is
-// what reads as the thick white sticker border.
-export const SCRIPT_WIDTH = 112
-export const SCRIPT_HEIGHT = (SCRIPT_WIDTH * SCRIPT_VIEW_HEIGHT) / SCRIPT_VIEW_WIDTH
-export const PAD_X = 34
-export const PAD_Y = 30
+// The die-cut, in the same coordinate space as the signature path.
+//
+// Generated offline rather than at runtime: the signature is rasterised, its
+// ink dilated by a fixed bleed (a fat round pen stroke is a morphological
+// dilation), interior loops filled, then the contour traced and smoothed. That
+// yields an outline that follows the shape of the name instead of a generic
+// blob, while staying chunky enough to read as vinyl. Baking the result keeps
+// the server-rendered fallback and the client canvas in exact agreement, and
+// costs nothing at runtime.
+const DIE_CUT: number[] = [
+  17.499, -5.287, 18.417, -5.308, 20.24, -5.206, 21.137, -5.081, 22.888, -4.691, 23.739, -4.435,
+  24.572, -4.148, 26.19, -3.522, 26.977, -3.209, 27.754, -2.915, 29.29, -2.439, 30.055, -2.278,
+  31.594, -2.143, 32.374, -2.17, 33.163, -2.254, 34.777, -2.558, 35.603, -2.753, 36.444, -2.962,
+  38.167, -3.369, 39.048, -3.549, 40.847, -3.828, 41.76, -3.918, 42.679, -3.974, 44.522, -3.973,
+  45.437, -3.913, 46.343, -3.812, 48.105, -3.472, 48.952, -3.227, 50.552, -2.573, 51.298, -2.162,
+  52.004, -1.693, 53.297, -0.595, 53.885, 0.027, 54.437, 0.692, 55.448, 2.125, 55.915, 2.882,
+  56.784, 4.448, 57.188, 5.251, 57.57, 6.063, 58.251, 7.708, 58.54, 8.54, 58.785, 9.377,
+  59.122, 11.065, 59.204, 11.914, 59.179, 13.616, 59.072, 14.466, 58.904, 15.31, 58.397, 16.978,
+  58.065, 17.797, 57.685, 18.603, 56.801, 20.171, 56.301, 20.93, 55.204, 22.396, 54.611, 23.103,
+  53.993, 23.793, 52.696, 25.132, 52.024, 25.784, 51.343, 26.43, 49.976, 27.716, 49.3, 28.364,
+  47.991, 29.687, 47.367, 30.368, 46.769, 31.066, 45.656, 32.515, 45.144, 33.266, 44.658, 34.034,
+  43.758, 35.608, 43.332, 36.41, 42.501, 38.018, 42.082, 38.816, 41.65, 39.602, 40.722, 41.113,
+  40.215, 41.824, 39.674, 42.498, 38.476, 43.706, 37.817, 44.229, 36.383, 45.096, 35.613, 45.437,
+  34.81, 45.717, 33.124, 46.102, 32.25, 46.216, 31.36, 46.284, 29.552, 46.294, 28.642, 46.242,
+  26.835, 46.028, 25.945, 45.865, 25.07, 45.663, 23.375, 45.139, 22.559, 44.821, 21.766, 44.47,
+  20.241, 43.709, 19.505, 43.322, 18.069, 42.61, 17.361, 42.317, 16.654, 42.083, 15.228, 41.831,
+  14.503, 41.823, 13.767, 41.89, 12.258, 42.225, 11.484, 42.469, 9.896, 43.033, 9.082, 43.323,
+  8.256, 43.596, 6.576, 44.043, 5.726, 44.196, 4.873, 44.29, 3.179, 44.282, 2.347, 44.173,
+  0.744, 43.737, -0.014, 43.411, -0.736, 43.014, -2.045, 42.021, -2.623, 41.432, -3.145, 40.788,
+  -4.007, 39.355, -4.344, 38.579, -4.826, 36.938, -4.972, 36.085, -5.057, 35.218, -5.054, 33.461,
+  -4.975, 32.579, -4.853, 31.698, -4.506, 29.948, -4.3, 29.08, -3.876, 27.357, -3.678, 26.498,
+  -3.502, 25.641, -3.244, 23.923, -3.171, 23.059, -3.135, 22.191, -3.161, 20.438, -3.209, 19.554,
+  -3.332, 17.773, -3.386, 16.877, -3.421, 15.979, -3.405, 14.186, -3.34, 13.294, -3.231, 12.408,
+  -2.873, 10.661, -2.623, 9.803, -1.984, 8.129, -1.599, 7.314, -1.173, 6.517, -0.205, 4.975,
+  0.332, 4.233, 0.902, 3.512, 2.129, 2.133, 2.782, 1.477, 4.158, 0.239, 4.877, -0.342,
+  5.615, -0.897, 7.142, -1.922, 7.929, -2.391, 8.731, -2.83, 10.382, -3.611, 11.23, -3.952,
+  12.967, -4.528, 13.856, -4.761, 14.756, -4.955, 16.58, -5.22,
+]
 
-export const STICKER_WIDTH = Math.round(SCRIPT_WIDTH + PAD_X * 2)
-export const STICKER_HEIGHT = Math.round(SCRIPT_HEIGHT + PAD_Y * 2)
+// Bounds of the die-cut in signature units.
+const CUT_MIN_X = -5.0828
+const CUT_MIN_Y = -5.3083
+const CUT_WIDTH = 64.3059
+const CUT_HEIGHT = 51.6167
+
+/** Drawn width of the lettering. The sticker is sized from this. */
+export const SCRIPT_WIDTH = 154
+export const SCRIPT_HEIGHT = (SCRIPT_WIDTH * SCRIPT_VIEW_HEIGHT) / SCRIPT_VIEW_WIDTH
+
+const SCALE = SCRIPT_WIDTH / SCRIPT_VIEW_WIDTH
+/** Breathing room so the antialiased cut is not clipped by the texture. */
+const EDGE_MARGIN = 2
+
+export const STICKER_WIDTH = Math.round(CUT_WIDTH * SCALE + EDGE_MARGIN * 2)
+export const STICKER_HEIGHT = Math.round(CUT_HEIGHT * SCALE + EDGE_MARGIN * 2)
+
+/** Where the signature's own origin sits inside the sticker box. */
+export const SCRIPT_OFFSET_X = -CUT_MIN_X * SCALE + EDGE_MARGIN
+export const SCRIPT_OFFSET_Y = -CUT_MIN_Y * SCALE + EDGE_MARGIN
 
 /** Gap kept between the sticker and the edge of its stage. */
 export const STAGE_MARGIN = 6
 
 export type Point = { x: number; y: number }
 
-// Superellipse exponent. Higher is boxier; 3 lands on a soft lozenge with
-// convex edges that are pleasant to peel from.
-const SQUARENESS = 3
-
-// Deterministic low-frequency wobble so the cut looks hand-made rather than
-// mathematically perfect. No randomness: the shape must be identical between
-// the server-rendered fallback and the client canvas.
-const WOBBLE_TERMS = [0.035, 0.022, 0.014]
-/** Largest value `wobble` can return, used to keep the cut inside its box. */
-const WOBBLE_MAX = 1 + WOBBLE_TERMS.reduce((sum, term) => sum + term, 0)
-/** Breathing room for the antialiased edge of the die-cut. */
-const EDGE_MARGIN = 1.5
-
-const wobble = (t: number) =>
-  1 +
-  WOBBLE_TERMS[0] * Math.sin(3 * t + 0.9) +
-  WOBBLE_TERMS[1] * Math.cos(5 * t - 0.4) +
-  WOBBLE_TERMS[2] * Math.sin(2 * t + 2.2)
-
-const superellipse = (t: number) => {
-  const exponent = 2 / SQUARENESS
-  const ct = Math.cos(t)
-  const st = Math.sin(t)
-  return {
-    x: Math.sign(ct) * Math.pow(Math.abs(ct), exponent),
-    y: Math.sign(st) * Math.pow(Math.abs(st), exponent),
-  }
-}
-
-// Points on the blob outline, in sticker-local pixels with the origin at the
-// top-left of the sticker box. Counter-clockwise in screen space.
-export const blobPoints = (count: number, width = STICKER_WIDTH, height = STICKER_HEIGHT): Point[] => {
-  const cx = width / 2
-  const cy = height / 2
-  // Divide out the wobble so its peaks land on the box edge rather than
-  // outside it, where the texture would clip them into straight facets.
-  const rx = (width / 2 - EDGE_MARGIN) / WOBBLE_MAX
-  const ry = (height / 2 - EDGE_MARGIN) / WOBBLE_MAX
+/**
+ * The die-cut outline in sticker-local pixels, origin at the top-left of the
+ * sticker box. `count` resamples the baked contour; it never exceeds the baked
+ * resolution.
+ */
+export const blobPoints = (count = DIE_CUT.length / 2): Point[] => {
+  const total = DIE_CUT.length / 2
+  const step = total / Math.min(count, total)
   const points: Point[] = []
 
-  for (let i = 0; i < count; i += 1) {
-    const t = (i / count) * Math.PI * 2
-    const unit = superellipse(t)
-    const scale = wobble(t)
-    points.push({ x: cx + unit.x * rx * scale, y: cy + unit.y * ry * scale })
+  for (let i = 0; i < Math.min(count, total); i += 1) {
+    const index = Math.round(i * step) % total
+    points.push({
+      x: (DIE_CUT[index * 2] - CUT_MIN_X) * SCALE + EDGE_MARGIN,
+      y: (DIE_CUT[index * 2 + 1] - CUT_MIN_Y) * SCALE + EDGE_MARGIN,
+    })
   }
 
   return points
 }
 
-// Closed Catmull-Rom spline through the sampled outline, emitted as cubic
-// beziers. Used for the SVG fallback and for the canvas fill.
-export const blobPathString = (
-  segments = 30,
-  width = STICKER_WIDTH,
-  height = STICKER_HEIGHT,
-): string => {
-  const points = blobPoints(segments, width, height)
+/**
+ * Closed Catmull-Rom spline through the outline, as cubic beziers. Shared by
+ * the canvas fill and the SVG fallback so the two cannot drift apart.
+ */
+export const blobPathString = (segments = 64): string => {
+  const points = blobPoints(segments)
   const at = (index: number) => points[(index + points.length) % points.length]
   let path = `M ${at(0).x.toFixed(2)} ${at(0).y.toFixed(2)}`
 
@@ -128,11 +147,14 @@ export type EdgeHit = {
   inside: boolean
 }
 
-// Nearest point on the outline plus the inward normal there. The peel rolls
-// along the inward normal, so this is what turns "the cursor is near this bit
-// of the edge" into a fold axis.
+/**
+ * Nearest point on the outline plus the inward normal there. The peel rolls
+ * along the inward normal, so this turns "the cursor is near this bit of the
+ * edge" into a fold axis.
+ */
 export const nearestEdge = (points: Point[], x: number, y: number): EdgeHit => {
   let best = { x: points[0].x, y: points[0].y }
+  let bestSegment = 0
   let bestDistanceSq = Infinity
 
   for (let i = 0; i < points.length; i += 1) {
@@ -149,34 +171,36 @@ export const nearestEdge = (points: Point[], x: number, y: number): EdgeHit => {
     if (distanceSq < bestDistanceSq) {
       bestDistanceSq = distanceSq
       best = { x: px, y: py }
+      bestSegment = i
     }
   }
 
-  // The blob is convex enough that pointing at the centroid is a stable,
-  // artefact-free inward normal.
-  let cx = 0
-  let cy = 0
-  for (const point of points) {
-    cx += point.x
-    cy += point.y
-  }
-  cx /= points.length
-  cy /= points.length
+  // Take the normal from the local segment rather than from the centroid: the
+  // cut follows the name, so it has concave stretches where those two disagree.
+  const a = points[bestSegment]
+  const b = points[(bestSegment + 1) % points.length]
+  const tangentX = b.x - a.x
+  const tangentY = b.y - a.y
+  const tangentLength = Math.hypot(tangentX, tangentY) || 1
+  let normalX = -tangentY / tangentLength
+  let normalY = tangentX / tangentLength
 
-  const dx = cx - best.x
-  const dy = cy - best.y
-  const length = Math.hypot(dx, dy) || 1
+  // Orient it inward by probing just off the edge.
+  const probe = 1.5
+  if (!isInsideBlob(points, best.x + normalX * probe, best.y + normalY * probe)) {
+    normalX = -normalX
+    normalY = -normalY
+  }
 
   return {
     point: best,
-    inward: { x: dx / length, y: dy / length },
+    inward: { x: normalX, y: normalY },
     distance: Math.sqrt(bestDistanceSq),
     inside: isInsideBlob(points, x, y),
   }
 }
 
-// How far the sticker extends from `origin` in direction `dir` — the travel the
-// fold line has before the whole thing is off the page.
+/** How far the sticker extends from `origin` in direction `dir`. */
 export const extentFrom = (points: Point[], origin: Point, dir: Point): number => {
   let max = 0
 

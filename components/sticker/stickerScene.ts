@@ -213,8 +213,8 @@ void main () {
   vec3 viewDir = normalize(uCamera - vWorld);
   vec3 halfway = normalize(lightDir + viewDir);
 
-  float diffuse = 0.84 + 0.16 * max(dot(normal, lightDir), 0.0);
-  float specular = pow(max(dot(normal, halfway), 0.0), 46.0) * uGloss;
+  float diffuse = 0.88 + 0.12 * max(dot(normal, lightDir), 0.0);
+  float specular = pow(max(dot(normal, halfway), 0.0), 64.0) * uGloss;
 
   vec3 color = base * diffuse + specular;
 
@@ -447,7 +447,7 @@ export const createStickerScene = (
   const offsetZ: Spring = { value: 0, velocity: 0 }
   const tiltX: Spring = { value: 0, velocity: 0 }
   const tiltY: Spring = { value: 0, velocity: 0 }
-  const gloss: Spring = { value: 0.3, velocity: 0 }
+  const gloss: Spring = { value: 0.15, velocity: 0 }
 
   let mode: Mode = 'idle'
   let grab: Point = { x: 0, y: 0 }
@@ -575,11 +575,11 @@ export const createStickerScene = (
     let targetZ = 0
     let tiltTargetX = 0
     let tiltTargetY = 0
-    let glossTarget = 0.3
+    let glossTarget = 0.15
 
     if (mode === 'peel') {
       foldTarget = updatePeel()
-      glossTarget = 0.55
+      glossTarget = 0.28
     }
 
     if (mode === 'airborne') {
@@ -590,7 +590,7 @@ export const createStickerScene = (
       // Flutter: lean into the direction of travel.
       tiltTargetY = clamp(offsetX.velocity * 0.0006, -0.4, 0.4)
       tiltTargetX = clamp(-offsetY.velocity * 0.0006, -0.4, 0.4)
-      glossTarget = 0.7
+      glossTarget = 0.36
     }
 
     if (mode === 'idle' && pointerInside) {
@@ -610,7 +610,7 @@ export const createStickerScene = (
         direction = hit.inward
         extent = Math.max(24, extentFrom(outline, hit.point, hit.inward))
         foldTarget = HINT_FOLD * proximity * proximity
-        glossTarget = 0.5
+        glossTarget = 0.24
       }
     }
 
@@ -747,7 +747,7 @@ export const createStickerScene = (
       } else if (elapsed >= start) {
         const progress = (elapsed - start) / duration
         sweep = -0.85 + progress * 1.7
-        sweepStrength = Math.sin(Math.PI * progress) * 0.5
+        sweepStrength = Math.sin(Math.PI * progress) * 0.26
       }
     }
 

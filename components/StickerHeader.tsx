@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react'
 import { palettes } from './sticker/stickerArt'
 import { createStickerScene, StickerScene } from './sticker/stickerScene'
 import {
-  PAD_X,
-  PAD_Y,
+  SCRIPT_OFFSET_X,
+  SCRIPT_OFFSET_Y,
   SCRIPT_PATH,
   SCRIPT_STROKE,
   SCRIPT_VIEW_WIDTH,
@@ -37,7 +37,11 @@ const StaticSticker = () => (
         stroke="rgba(28, 25, 23, 0.07)"
         strokeWidth={1}
       />
-      <g transform={`translate(${PAD_X} ${PAD_Y}) scale(${SCRIPT_SCALE})`}>
+      <g
+        transform={`translate(${SCRIPT_OFFSET_X.toFixed(2)} ${SCRIPT_OFFSET_Y.toFixed(
+          2,
+        )}) scale(${SCRIPT_SCALE})`}
+      >
         <path
           d={SCRIPT_PATH}
           fill="none"
