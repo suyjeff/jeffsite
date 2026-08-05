@@ -1,18 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import Link from "next/link";
 import Layout from "../../components/Layout";
 import LabHeaderExperiment01 from "../../components/LabHeaderExperiment01";
-import NameplateBoard from "../../components/labs/nameplate/NameplateBoard";
-import { fetchNameplates } from "../../components/labs/nameplate/api";
-import { NameplateData } from "../../components/labs/nameplate/types";
+import LabHeaderExperiment02 from "../../components/LabHeaderExperiment02";
 
 const LabPage = () => {
-  const [plates, setPlates] = useState<NameplateData[]>([]);
-
-  useEffect(() => {
-    fetchNameplates().then(setPlates);
-  }, []);
-
   return (
     <Layout title="Lab">
       <div className="pb-24 md:pb-0">
@@ -39,17 +31,14 @@ const LabPage = () => {
             <LabHeaderExperiment01 />
           </div>
         </div>
-        <Link
-          href="/lab/nameplate"
-          className="block mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-400 group hover:border-stone-400 dark:hover:border-stone-600 transition-colors"
-        >
+        <div className="mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-400">
           <div className="text-xs uppercase tracking-[0.35em] text-stone-400 dark:text-stone-500">
-            visitors
+            header experiment 02
           </div>
-          <div className="mt-3 h-48 rounded-md overflow-hidden pointer-events-none">
-            <NameplateBoard plates={plates} frameless />
+          <div className="mt-4">
+            <LabHeaderExperiment02 />
           </div>
-        </Link>
+        </div>
       </div>
     </Layout>
   );
