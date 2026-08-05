@@ -2,6 +2,18 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
+/*
+ * Reserve the scrollbar gutter so its presence never changes the content
+ * width. The reveal animation starts elements at translateY(6px), which counts
+ * as scrollable overflow, so a page sitting near the viewport height grows a
+ * scrollbar for the length of the animation and loses it again. Without a
+ * stable gutter that makes the centred column jump sideways and back on load —
+ * and again on any navigation between pages of different heights.
+ */
+html {
+  scrollbar-gutter: stable;
+}
+
 @layer utilities {
   .animate-reveal {
     will-change: opacity, filter, transform;
