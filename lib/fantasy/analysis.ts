@@ -9,6 +9,16 @@ import {
   type TeamSeason,
   type TeamWeek,
 } from './power'
+import {
+  averageStarter,
+  horizonValues,
+  marketValues,
+  projectedReplacement,
+  rosterCapacity,
+  teamNeeds,
+  type HorizonValues,
+  type TeamNeeds,
+} from './trades'
 import type { SleeperRoster, SleeperUser } from './types'
 import type { LeagueData } from './useLeagueData'
 import {
@@ -48,6 +58,19 @@ export type Analysis = {
   strength: Record<number, number>
   power: PowerRow[]
   powerById: Record<number, PowerRow>
+  // ---- Forward-looking layer, used by the trade finder ----
+  /** Projected points over the horizon, read both per week and per active week. */
+  horizon: HorizonValues
+  /** Replacement level per position, per active week, over the horizon. */
+  horizonReplacement: Record<string, number>
+  /** What a league-average starter at each position produces per week. */
+  horizonStarter: Record<string, number>
+  /** Points per week above replacement: what a player is worth to the league at large. */
+  market: Record<string, number>
+  /** Per-team lineup production, slot by slot, and the size of each hole. */
+  needs: Record<number, TeamNeeds>
+  /** Players a roster may hold, so uneven packages are costed honestly. */
+  capacity: number
 }
 
 export const teamDisplayName = (user: SleeperUser | undefined, rosterId: number) =>
@@ -103,6 +126,16 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
   const powerById: Record<number, PowerRow> = {}
   power.forEach((p) => (powerById[p.rosterId] = p))
 
+  const rosterPositions = league.roster_positions ?? []
+  const horizon = horizonValues(data.horizon)
+  // Replacement level and market price read per active week: a bye inside an
+  // arbitrary six-week window is not a reason to mark a player down.
+  const horizonReplacement = projectedReplacement(horizon.perActive, players, rosterPositions, numTeams, model.benchFactor)
+  const horizonStarter = averageStarter(horizon.perActive, players, rosterPositions, numTeams)
+  const market = marketValues(horizon.perActive, players, horizonReplacement)
+  const capacity = Math.max(rosterCapacity(rosterPositions), ...teams.map((t) => t.players.length))
+  const needs = teamNeeds(teams, slots, players, data.horizon, horizonStarter, rosterPositions, numTeams, horizonReplacement)
+
   return {
     slots,
     teams,
@@ -119,5 +152,11 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
     strength,
     power,
     powerById,
+    horizon,
+    horizonReplacement,
+    horizonStarter,
+    market,
+    needs,
+    capacity,
   }
 }

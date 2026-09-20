@@ -5,11 +5,11 @@ import {
   getMatchups,
   getPlayers,
   getRosters,
+  getScoredProjections,
   getState,
   getTrendingAdds,
   getUser,
   getUserLeagues,
-  getWeekProjections,
   getWeekStats,
 } from './sleeper'
 import { scoreStatLine, statLinePlayed } from './scoring'
@@ -23,9 +23,16 @@ import type {
   TrendingEntry,
   WeekStats,
 } from './types'
+import type { Horizon } from './trades'
 import type { WeekPoints } from './war'
 
 export type PointsSource = 'stats' | 'matchups' | 'proxy-stats' | 'proxy-matchups' | 'none'
+
+/** Where the forward-looking horizon came from, which changes how much to trust it. */
+export type HorizonSource = 'projections' | 'results' | 'none'
+
+/** Weeks of forward-looking projections to pull. Each is one ~650KB request. */
+export const DEFAULT_HORIZON_WEEKS = 6
 
 export type LeagueData = {
   state: SleeperState
@@ -48,11 +55,25 @@ export type LeagueData = {
   /** Projected points for the upcoming week in league scoring, when available. */
   projections: Record<string, number> | null
   projectionWeek: number | null
+  /**
+   * Per-week league-scored points for the weeks a trade made today would cover.
+   * Built from live weekly projections when the season is running, so byes and
+   * players ruled out already read as zero. Falls back to results already in
+   * the books when there is nothing left to project.
+   */
+  horizon: Horizon
+  horizonSource: HorizonSource
   trending: TrendingEntry[]
   warnings: string[]
 }
 
-export type LoadOptions = { username: string; leagueId?: string | null; season?: string | null }
+export type LoadOptions = {
+  username: string
+  leagueId?: string | null
+  season?: string | null
+  /** How many weeks ahead to project. Defaults to DEFAULT_HORIZON_WEEKS. */
+  horizonWeeks?: number
+}
 
 const MAX_WEEK = 18
 
@@ -124,8 +145,14 @@ export const loadLeagueData = async (
   const isCurrentSeason = league.season === state.season
   let currentWeek: number
   if (!isCurrentSeason || state.season_type === 'post' || league.status === 'complete') currentWeek = MAX_WEEK + 1
-  else if (state.season_type === 'regular') currentWeek = state.week
-  else currentWeek = startWeek
+  else if (state.season_type === 'regular') {
+    // `state.week` rolls over before the last games of the old week are final,
+    // so a week can be "past" while its Monday night score is still moving.
+    // `last_scored_leg` is the league's own answer to what is settled; take
+    // whichever is earlier so a half-scored week never enters the model.
+    const lastScored = league.settings?.last_scored_leg
+    currentWeek = typeof lastScored === 'number' && lastScored >= 0 ? Math.min(state.week, lastScored + 1) : state.week
+  } else currentWeek = startWeek
 
   onProgress('Loading matchups')
   const weekList = Array.from({ length: MAX_WEEK - startWeek + 1 }, (_, i) => startWeek + i)
@@ -197,29 +224,56 @@ export const loadLeagueData = async (
     else warnings.push(`Season not started: player values are based on ${prevSeason} results with this league's scoring.`)
   }
 
-  // ---- Optional extras ----
+  // ---- Forward-looking horizon ----
+  // Everything above looks backwards. A trade is a bet on the weeks still to
+  // come, so it gets its own basis: one league-scored projection per player per
+  // remaining week.
   let projections: Record<string, number> | null = null
   let projectionWeek: number | null = null
+  let horizon: Horizon = []
+  let horizonSource: HorizonSource = 'none'
   let trending: TrendingEntry[] = []
-  if (isCurrentSeason && (state.season_type === 'regular' || state.season_type === 'pre')) {
-    projectionWeek = state.season_type === 'pre' ? startWeek : state.week
-    onProgress(`Loading week ${projectionWeek} projections`)
-    const [proj, trend] = await settled<unknown>([
-      getWeekProjections(league.season, projectionWeek),
-      getTrendingAdds(24, 50),
-    ])
-    if (proj && typeof proj === 'object') {
-      projections = {}
-      const raw = proj as WeekStats
-      for (const id of Object.keys(raw)) {
-        if (!players[id]) continue
-        const pts = scoreStatLine(raw[id], league.scoring_settings)
-        if (pts) projections[id] = pts
+
+  const upcoming = state.season_type === 'pre' ? startWeek : Math.max(state.week, currentWeek)
+  const horizonLen = Math.max(1, opts.horizonWeeks ?? DEFAULT_HORIZON_WEEKS)
+  const horizonWeeks =
+    isCurrentSeason && (state.season_type === 'regular' || state.season_type === 'pre')
+      ? weekList.filter((w) => w >= upcoming && w < playoffStart).slice(0, horizonLen)
+      : []
+
+  if (horizonWeeks.length) {
+    onProgress(`Projecting weeks ${horizonWeeks[0]}–${horizonWeeks[horizonWeeks.length - 1]}`)
+    const projResults = await settled(
+      horizonWeeks.map((w) => getScoredProjections(league.league_id, league.season, w, league.scoring_settings)),
+    )
+    horizonWeeks.forEach((w, i) => {
+      const raw = projResults[i]
+      if (!raw || !Object.keys(raw).length) return
+      const pts: Record<string, number> = {}
+      for (const id of Object.keys(raw)) if (players[id]) pts[id] = raw[id]
+      if (Object.keys(pts).length) horizon.push({ week: w, pts })
+    })
+    if (horizon.length) {
+      horizonSource = 'projections'
+      projectionWeek = horizon[0].week
+      projections = horizon[0].pts
+      if (horizon.length < horizonWeeks.length) {
+        warnings.push(`Projections missing for ${horizonWeeks.length - horizon.length} of the next ${horizonWeeks.length} weeks.`)
       }
-    } else {
-      projectionWeek = null
     }
-    if (Array.isArray(trend)) trending = trend as TrendingEntry[]
+  }
+
+  if (!horizon.length && valueWeeks.length) {
+    // No projections to be had — a finished season, or the feed is down. Price
+    // trades off what already happened and say so, because it is a weaker basis.
+    horizon = valueWeeks.map((w) => ({ week: w, pts: weekPoints[w] ?? {} }))
+    horizonSource = 'results'
+    warnings.push(`Projections unavailable; trade values use ${valueSeason} results instead of the weeks ahead.`)
+  }
+
+  if (isCurrentSeason && (state.season_type === 'regular' || state.season_type === 'pre')) {
+    const [trend] = await settled([getTrendingAdds(24, 50)])
+    if (Array.isArray(trend)) trending = trend
   }
 
   return {
@@ -239,6 +293,8 @@ export const loadLeagueData = async (
     pointsSource,
     projections,
     projectionWeek,
+    horizon,
+    horizonSource,
     trending,
     warnings,
   }
@@ -271,7 +327,7 @@ export const useLeagueData = (opts: LoadOptions | null) => {
       .finally(() => {
         if (active.current === id) setLoading(false)
       })
-  }, [opts?.username, opts?.leagueId, opts?.season, nonce]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [opts?.username, opts?.leagueId, opts?.season, opts?.horizonWeeks, nonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reload = useCallback(() => setNonce((n) => n + 1), [])
   return { data, error, loading, progress, reload }

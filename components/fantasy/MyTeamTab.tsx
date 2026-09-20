@@ -72,17 +72,14 @@ const MyTeamTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis })
 
   // --- Targets ---
   const targets = useMemo(() => {
-    if (!weeks.length) return { trade: [], waiver: [] }
+    if (!weeks.length) return { waiver: [] }
     const candidates = Object.values(values)
       .filter((v) => players[v.id] && rosteredBy[v.id] !== myRosterId && v.games >= Math.min(3, weeks.length))
       .sort((a, b) => b.recentWarPerGame - a.recentWarPerGame)
       .slice(0, 160)
       .map((v) => ({ id: v.id, gain: lineupDelta(slots, data.weekPoints, weeks, players, mine, [], [v.id]).avg, owner: rosteredBy[v.id] }))
       .sort((a, b) => b.gain - a.gain)
-    return {
-      trade: candidates.filter((c) => c.owner !== undefined).slice(0, 12),
-      waiver: candidates.filter((c) => c.owner === undefined).slice(0, 10),
-    }
+    return { waiver: candidates.filter((c) => c.owner === undefined).slice(0, 10) }
   }, [values, players, rosteredBy, myRosterId, weeks, slots, data.weekPoints, mine])
 
   // --- Trade evaluator ---
@@ -179,37 +176,8 @@ const MyTeamTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis })
         </Card>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card title="Trade targets" aside="biggest lift to your lineup">
-          <Table
-            rows={targets.trade}
-            columns={[
-              { key: 'p', label: 'Player', render: (r) => <PlayerName player={players[r.id]} id={r.id} sub={teamById[r.owner!]?.name} /> },
-              { key: 'gain', label: 'To you/wk', align: 'right', sort: (r) => r.gain, render: (r) => <span className="text-emerald-700 dark:text-emerald-400">{fmtSigned(r.gain)}</span> },
-              { key: 'now', label: 'Now', align: 'right', sort: (r) => values[r.id]?.recentWarPerGame ?? 0, render: (r) => fmtSigned(values[r.id]?.recentWarPerGame, 3) },
-              {
-                key: 'go',
-                label: '',
-                render: (r) => (
-                  <button
-                    className="text-xs underline decoration-stone-400"
-                    onClick={() => {
-                      setPartnerId(r.owner!)
-                      setGet([r.id])
-                      setGive([])
-                    }}
-                  >
-                    evaluate
-                  </button>
-                ),
-              },
-            ]}
-            rowKey={(r) => r.id}
-            defaultSort="gain"
-            empty="No games played yet."
-          />
-        </Card>
-        <Card title="Waiver targets" aside="free agents">
+      <div>
+        <Card title="Waiver targets" aside={`free agents by ${data.valueSeason} results`}>
           <Table
             rows={targets.waiver}
             columns={[
@@ -222,6 +190,10 @@ const MyTeamTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis })
             defaultSort="gain"
             empty="No games played yet."
           />
+          <p className="mt-2 text-xs text-stone-400 dark:text-stone-500">
+            This looks backwards, at weeks already played. For who to trade for and what it would take, the Trades tab prices the
+            weeks ahead instead.
+          </p>
         </Card>
       </div>
 

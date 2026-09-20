@@ -1,3 +1,4 @@
+import { scoreStatLine } from './scoring'
 import type {
   PlayerMap,
   SleeperLeague,
@@ -93,14 +94,17 @@ const fetchJson = async <T>(url: string): Promise<T> => {
 const cachedGet = async <T, R = T>(
   path: string,
   ttl: number,
-  opts: { persist?: boolean; transform?: (raw: T) => R; base?: string } = {},
+  opts: { persist?: boolean; transform?: (raw: T) => R; base?: string; key?: string } = {},
 ): Promise<R> => {
   const url = (opts.base ?? BASE) + path
-  const cached = readCache<R>(url, ttl)
+  // A transform that depends on league settings needs its own key so two
+  // leagues with different scoring do not read each other's cached result.
+  const cacheKey = opts.key ?? url
+  const cached = readCache<R>(cacheKey, ttl)
   if (cached !== null) return cached
   const raw = await fetchJson<T>(url)
   const data = (opts.transform ? opts.transform(raw) : (raw as unknown)) as R
-  writeCache(url, data, opts.persist ?? true)
+  writeCache(cacheKey, data, opts.persist ?? true)
   return data
 }
 
@@ -186,7 +190,41 @@ export const getWeekStats = (season: string, week: number, isPast: boolean) =>
   cachedGet<WeekStats>(`/stats/nfl/regular/${season}/${week}`, isPast ? 24 * HOUR : 10 * MINUTE)
 
 export const getWeekProjections = (season: string, week: number) =>
-  cachedGet<WeekStats>(`/projections/nfl/regular/${season}/${week}`, 3 * HOUR)
+  cachedGet<WeekStats>(`/projections/nfl/regular/${season}/${week}`, 3 * HOUR, { persist: false })
+
+/**
+ * A week of projections reduced to one league-scored number per player.
+ *
+ * The raw payload is ~650KB of mostly-empty rows; scored and filtered it is
+ * ~20KB, which is what makes a multi-week horizon cacheable. Sleeper keeps
+ * these current: a player ruled out projects 0 for that week, and a bye week
+ * projects 0, so a horizon built from them prices availability automatically.
+ *
+ * Do not substitute `/projections/nfl/regular/{season}` (no week). That
+ * endpoint is a frozen preseason full-season projection: as of week 2 of 2026
+ * it still had Sam Darnold at 250 points while he was ruled out.
+ */
+export const getScoredProjections = (
+  leagueId: string,
+  season: string,
+  week: number,
+  scoring: Record<string, number>,
+) =>
+  cachedGet<WeekStats, Record<string, number>>(
+    `/projections/nfl/regular/${season}/${week}`,
+    3 * HOUR,
+    {
+      key: `scored-proj:${leagueId}:${season}:${week}`,
+      transform: (raw) => {
+        const out: Record<string, number> = {}
+        for (const id of Object.keys(raw)) {
+          const pts = scoreStatLine(raw[id], scoring)
+          if (pts) out[id] = pts
+        }
+        return out
+      },
+    },
+  )
 
 // ---------- Image helpers ----------
 
