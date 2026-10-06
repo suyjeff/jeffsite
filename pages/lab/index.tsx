@@ -21,9 +21,17 @@ const LabPage = () => {
             </h1>
           </Link>
         </div>
-        <p className="mt-4 text-lg tracking-tight text-stone-400 dark:text-stone-500 opacity-0 animate-reveal animation-delay-200">
-          Nothing here right now.
-        </p>
+        <div className="mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-200">
+          <div className="text-xs uppercase tracking-[0.35em] text-stone-400 dark:text-stone-500">
+            fantasy football
+          </div>
+          <p className="mt-4 text-lg tracking-tight">
+            <Link href="/fantasy" className="underline decoration-stone-400 dark:decoration-stone-500">
+              League analysis
+            </Link>
+            <span className="block text-stone-400 dark:text-stone-400">Power ranks, WAR-style player values and trade math for a Sleeper league.</span>
+          </p>
+        </div>
       </div>
     </Layout>
   );
