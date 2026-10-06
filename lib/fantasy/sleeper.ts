@@ -1,3 +1,4 @@
+import type { ScheduleGame } from './context'
 import { scoreStatLine } from './scoring'
 import type {
   PlayerMap,
@@ -13,7 +14,8 @@ import type {
 } from './types'
 
 const BASE = 'https://api.sleeper.app/v1'
-const CACHE_PREFIX = 'ff:v1:'
+// v2: trimmed players gained depth-chart and injury fields; older cached copies lack them.
+const CACHE_PREFIX = 'ff:v2:'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -58,19 +60,31 @@ const writeCache = <T>(key: string, data: T, persist = true) => {
   }
 }
 
-export const clearFantasyCache = () => {
-  memory.clear()
+const removeKeys = (match: (key: string) => boolean) => {
   if (!hasStorage()) return
   try {
     const keys: string[] = []
     for (let i = 0; i < window.localStorage.length; i++) {
       const k = window.localStorage.key(i)
-      if (k && k.startsWith(CACHE_PREFIX)) keys.push(k)
+      if (k && match(k)) keys.push(k)
     }
     keys.forEach((k) => window.localStorage.removeItem(k))
   } catch {
     // ignore
   }
+}
+
+export const clearFantasyCache = () => {
+  memory.clear()
+  removeKeys((k) => k.startsWith(CACHE_PREFIX))
+}
+
+/** Free the quota held by caches from older versions of this page. */
+let purged = false
+export const purgeStaleCache = () => {
+  if (purged) return
+  purged = true
+  removeKeys((k) => /^ff:v\d+:/.test(k) && !k.startsWith(CACHE_PREFIX))
 }
 
 export class SleeperError extends Error {
@@ -159,6 +173,8 @@ export const trimPlayer = (p: SleeperPlayer): TrimmedPlayer | null => {
     injury: p.injury_status ?? null,
     age: p.age ?? null,
     exp: p.years_exp ?? null,
+    depth: p.depth_chart_order ?? null,
+    injuryBody: p.injury_body_part ?? null,
   }
 }
 
@@ -209,10 +225,12 @@ export const getScoredProjections = (
   season: string,
   week: number,
   scoring: Record<string, number>,
+  /** The next week or two move with every injury report; later ones barely move. */
+  near = true,
 ) =>
   cachedGet<WeekStats, Record<string, number>>(
     `/projections/nfl/regular/${season}/${week}`,
-    3 * HOUR,
+    near ? 3 * HOUR : 12 * HOUR,
     {
       key: `scored-proj:${leagueId}:${season}:${week}`,
       transform: (raw) => {
@@ -225,6 +243,32 @@ export const getScoredProjections = (
       },
     },
   )
+
+/**
+ * The NFL schedule, one row per game. Not in the documented API (and not under
+ * /v1), but it is what the Sleeper app itself loads. Byes are the weeks a team
+ * is missing from it.
+ */
+export const getSchedule = (season: string) =>
+  cachedGet<ScheduleGame[]>(`/schedule/nfl/regular/${season}`, 12 * HOUR, { base: 'https://api.sleeper.app' })
+
+/**
+ * Games played per player across a whole regular season, from the season-total
+ * stat line (~1.2MB) reduced to one number per player. A finished season never
+ * changes, so it caches for a week.
+ */
+export const getSeasonGamesPlayed = (season: string) =>
+  cachedGet<WeekStats, Record<string, number>>(`/stats/nfl/regular/${season}`, 7 * 24 * HOUR, {
+    key: `season-gp:${season}`,
+    transform: (raw) => {
+      const out: Record<string, number> = {}
+      for (const id of Object.keys(raw)) {
+        const gp = raw[id]?.gp
+        if (gp) out[id] = gp
+      }
+      return out
+    },
+  })
 
 // ---------- Image helpers ----------
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { scoreStatLine, statLinePlayed } from '../scoring'
-import { optimalLineup, starterDemand, startingSlots } from '../lineup'
+import { optimalLineup, optimalLineupExact, starterDemand, startingSlots } from '../lineup'
 import { lineupDelta, normalCdf, playerValues, replacementLevels } from '../war'
 import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS } from '../power'
 import type { PlayerMap, SleeperMatchup } from '../types'
@@ -153,5 +153,42 @@ describe('power', () => {
     const pre = computePower(empty, { 1: 2, 2: 1 }, DEFAULT_POWER_WEIGHTS)
     expect(pre[0].rosterId).toBe(1)
     expect(pre[0].components.allPlay).toBe(0)
+  })
+})
+
+describe('lineup fast path', () => {
+  // Deterministic pseudo-random so a failure reproduces.
+  let seed = 7
+  const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646
+  const layouts = [
+    ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DEF', 'BN', 'BN'],
+    ['QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX', 'FLEX', 'SUPER_FLEX', 'K', 'DEF'],
+    ['QB', 'RB', 'WR', 'TE', 'REC_FLEX', 'WRRB_FLEX', 'FLEX'],
+  ]
+  const POS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
+  it('matches the assignment solver on random rosters for every layout', () => {
+    for (const layout of layouts) {
+      const slots = startingSlots(layout)
+      for (let trial = 0; trial < 400; trial++) {
+        const n = 3 + Math.floor(rand() * 16)
+        const roster = Array.from({ length: n }, (_, i) => ({
+          id: `p${i}`,
+          fpos: [POS[Math.floor(rand() * POS.length)]],
+          pts: Math.round((rand() * 30 - 2) * 100) / 100,
+        }))
+        expect(optimalLineup(slots, roster).total).toBeCloseTo(optimalLineupExact(slots, roster).total, 6)
+      }
+    }
+  })
+  it('falls back to the assignment solver for dual-position players', () => {
+    const slots = startingSlots(['RB', 'WR', 'FLEX'])
+    const roster = [
+      { id: 'hybrid', fpos: ['RB', 'WR'], pts: 20 },
+      { id: 'rb', fpos: ['RB'], pts: 15 },
+      { id: 'wr', fpos: ['WR'], pts: 5 },
+      { id: 'wr2', fpos: ['WR'], pts: 4 },
+    ]
+    // hybrid at WR, rb at RB, wr in the flex: 40. Greedy-by-first-position would get 39.
+    expect(optimalLineup(slots, roster).total).toBe(40)
   })
 })

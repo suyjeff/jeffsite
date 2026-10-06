@@ -14,13 +14,29 @@
 import { optimalLineup, starterDemand, type LineupPlayer, type Slot } from './lineup'
 import type { PlayerMap } from './types'
 
-/** Projected (or realised) league-scored points per player, one entry per week. */
-export type Horizon = { week: number; pts: Record<string, number> }[]
+/**
+ * Projected (or realised) league-scored points per player, one entry per week.
+ * `weight` lets some weeks count for more — the fantasy playoffs, usually.
+ * Missing means 1.
+ */
+export type Horizon = { week: number; pts: Record<string, number>; weight?: number }[]
 
 export type TradeTeam = { rosterId: number; players: string[] }
 
 const round2 = (x: number) => Math.round(x * 100) / 100
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
+/** Weighted mean; falls back to the plain mean when no weights are given. */
+const wmean = (xs: number[], ws?: number[]) => {
+  if (!ws) return mean(xs)
+  let num = 0
+  let den = 0
+  xs.forEach((x, i) => {
+    num += x * (ws[i] ?? 1)
+    den += ws[i] ?? 1
+  })
+  return den ? num / den : 0
+}
+export const horizonWeights = (horizon: Horizon) => horizon.map((w) => w.weight ?? 1)
 
 // ---------- Reading a horizon two ways ----------
 
@@ -45,19 +61,26 @@ export type HorizonValues = {
 export const horizonValues = (horizon: Horizon): HorizonValues => {
   const sums: Record<string, number> = {}
   const active: Record<string, number> = {}
+  const activeWeight: Record<string, number> = {}
+  let totalWeight = 0
   for (const week of horizon) {
+    const wt = week.weight ?? 1
+    totalWeight += wt
     for (const id of Object.keys(week.pts)) {
       const v = week.pts[id]
-      sums[id] = (sums[id] ?? 0) + v
-      if (v > 0) active[id] = (active[id] ?? 0) + 1
+      sums[id] = (sums[id] ?? 0) + v * wt
+      if (v > 0) {
+        active[id] = (active[id] ?? 0) + 1
+        activeWeight[id] = (activeWeight[id] ?? 0) + wt
+      }
     }
   }
   const perWeek: Record<string, number> = {}
   const perActive: Record<string, number> = {}
-  const n = horizon.length || 1
+  const n = totalWeight || 1
   for (const id of Object.keys(sums)) {
     perWeek[id] = round2(sums[id] / n)
-    perActive[id] = round2(sums[id] / (active[id] || n))
+    perActive[id] = round2(sums[id] / (activeWeight[id] || n))
   }
   return { perWeek, perActive, activeWeeks: active, weeks: horizon.length }
 }
@@ -175,8 +198,9 @@ export const makeHorizonEval = (
     cache.set(key, value)
     return value
   }
-  const total = (ids: string[]) => mean(perWeek(ids))
-  return { total, perWeek, weekly, weeks: horizon.map((w) => w.week) }
+  const weights = horizonWeights(horizon)
+  const total = (ids: string[]) => wmean(perWeek(ids), weights)
+  return { total, perWeek, weekly, weeks: horizon.map((w) => w.week), weights }
 }
 
 export type HorizonEval = ReturnType<typeof makeHorizonEval>
@@ -352,18 +376,20 @@ export const teamNeeds = (
   // Slot production, averaged across the horizon's own weekly optimal lineups.
   const perTeamSlots: Record<number, number[]> = {}
   const firstWeekStarters: Record<number, (string | null)[]> = {}
+  const totalWeight = horizon.reduce((a, w) => a + (w.weight ?? 1), 0)
   const first = makeLineupEval(slots, players, horizon[0].pts, floor)
   const weekEvals = horizon.map((w) => makeLineupEval(slots, players, w.pts, floor))
   for (const team of teams) {
     const sums = slots.map(() => 0)
     horizon.forEach((w, wi) => {
       const ev = weekEvals[wi]
+      const wt = w.weight ?? 1
       ev.assign(team.players).assignments.forEach((p, i) => {
-        sums[i] += p ? (isWaiverFill(p.id) ? p.pts : (w.pts[p.id] ?? 0)) : 0
+        sums[i] += (p ? (isWaiverFill(p.id) ? p.pts : (w.pts[p.id] ?? 0)) : 0) * wt
       })
     })
-    perTeamSlots[team.rosterId] = sums.map((s) => s / horizon.length)
-    firstWeekStarters[team.rosterId] = first.assign(team.players).assignments.map((p) => p?.id ?? null)
+    perTeamSlots[team.rosterId] = sums.map((s) => s / (totalWeight || 1))
+    firstWeekStarters[team.rosterId] = first.assign(team.players).assignments.map((p) => (p && !isWaiverFill(p.id) ? p.id : null))
   }
   const leagueAvgBySlot = slots.map((_, i) => round2(mean(teams.map((t) => perTeamSlots[t.rosterId][i] ?? 0))))
 
@@ -602,18 +628,18 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
       theirs: round2(theirAfter[i] - theirBase![i]),
     }))
     funnel.scored++
-    const myGain = round2(mean(perWeek.map((w) => w.mine)))
+    const myGain = round2(wmean(perWeek.map((w) => w.mine), exact.weights))
     if (myGain < cfg.minMyGain) {
       funnel.rejectedMyGain++
       continue
     }
-    const theirGain = round2(mean(perWeek.map((w) => w.theirs)))
+    const theirGain = round2(wmean(perWeek.map((w) => w.theirs), exact.weights))
     if (theirGain < cfg.minTheirGain) {
       funnel.rejectedTheirGain++
       continue
     }
     const myCost = round2(
-      mean(exact.perWeek(me.players.filter((id) => !cand.give.includes(id))).map((v, i) => myExactBase[i] - v)),
+      wmean(exact.perWeek(me.players.filter((id) => !cand.give.includes(id))).map((v, i) => myExactBase[i] - v), exact.weights),
     )
     ideas.push({
       partnerId: cand.partnerId,

@@ -9,7 +9,14 @@ import TradesTab from '../../components/fantasy/TradesTab'
 import { Tabs } from '../../components/fantasy/ui'
 import { analyze } from '../../lib/fantasy/analysis'
 import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../../lib/fantasy/power'
-import { DEFAULT_HORIZON_WEEKS, useLeagueData, type LoadOptions } from '../../lib/fantasy/useLeagueData'
+import { purgeStaleCache } from '../../lib/fantasy/sleeper'
+import {
+  DEFAULT_HORIZON_MODE,
+  DEFAULT_PLAYOFF_WEIGHT,
+  useLeagueData,
+  type HorizonMode,
+  type LoadOptions,
+} from '../../lib/fantasy/useLeagueData'
 import { DEFAULT_MODEL, type ModelConfig } from '../../lib/fantasy/war'
 
 type TabKey = 'power' | 'teams' | 'players' | 'me' | 'trades' | 'model'
@@ -29,13 +36,14 @@ type Prefs = {
   username: string
   leagueId: string | null
   season: string | null
-  horizonWeeks: number
+  horizon: HorizonMode
+  playoffWeight: number
   model: ModelConfig
   weights: PowerWeights
 }
 
 const loadPrefs = (): Prefs => {
-  const base: Prefs = { username: DEFAULT_USERNAME, leagueId: null, season: null, horizonWeeks: DEFAULT_HORIZON_WEEKS, model: DEFAULT_MODEL, weights: DEFAULT_POWER_WEIGHTS }
+  const base: Prefs = { username: DEFAULT_USERNAME, leagueId: null, season: null, horizon: DEFAULT_HORIZON_MODE, playoffWeight: DEFAULT_PLAYOFF_WEIGHT, model: DEFAULT_MODEL, weights: DEFAULT_POWER_WEIGHTS }
   try {
     const raw = window.localStorage.getItem(PREFS_KEY)
     if (!raw) return base
@@ -53,6 +61,7 @@ const FantasyPage = () => {
   const [teamId, setTeamId] = useState<number | null>(null)
 
   useEffect(() => {
+    purgeStaleCache()
     const p = loadPrefs()
     setPrefs(p)
     setUsernameInput(p.username)
@@ -67,8 +76,11 @@ const FantasyPage = () => {
   }, [prefs])
 
   const opts = useMemo<LoadOptions | null>(
-    () => (prefs ? { username: prefs.username, leagueId: prefs.leagueId, season: prefs.season, horizonWeeks: prefs.horizonWeeks } : null),
-    [prefs?.username, prefs?.leagueId, prefs?.season, prefs?.horizonWeeks], // eslint-disable-line react-hooks/exhaustive-deps
+    () =>
+      prefs
+        ? { username: prefs.username, leagueId: prefs.leagueId, season: prefs.season, horizon: prefs.horizon, playoffWeight: prefs.playoffWeight }
+        : null,
+    [prefs?.username, prefs?.leagueId, prefs?.season, prefs?.horizon, prefs?.playoffWeight], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const { data, error, loading, progress, reload } = useLeagueData(opts)
 
@@ -162,7 +174,16 @@ const FantasyPage = () => {
           {tab === 'teams' && <TeamsTab data={data} analysis={analysis} rosterId={selectedTeam} onSelectTeam={setTeamId} />}
           {tab === 'players' && <PlayersTab data={data} analysis={analysis} />}
           {tab === 'me' && <MyTeamTab data={data} analysis={analysis} />}
-          {tab === 'trades' && <TradesTab data={data} analysis={analysis} />}
+          {tab === 'trades' && (
+            <TradesTab
+              data={data}
+              analysis={analysis}
+              loading={loading}
+              horizon={prefs.horizon}
+              playoffWeight={prefs.playoffWeight}
+              setHorizon={(h, w) => setPrefs({ ...prefs, horizon: h, playoffWeight: w })}
+            />
+          )}
           {tab === 'model' && (
             <ModelTab data={data} analysis={analysis} model={prefs.model} setModel={(m) => setPrefs({ ...prefs, model: m })} weights={prefs.weights} setWeights={(w) => setPrefs({ ...prefs, weights: w })} reload={reload} />
           )}

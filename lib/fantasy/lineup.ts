@@ -113,11 +113,11 @@ const hungarian = (cost: number[][]): number[] => {
 export type Lineup = { total: number; assignments: (LineupPlayer | null)[] }
 
 /**
- * Exact maximum-points lineup for the given starting slots. Handles overlapping
- * flex eligibility properly (greedy fill is wrong when e.g. REC_FLEX and
- * WRRB_FLEX coexist). Players with no points still count as zero.
+ * Exact maximum-points lineup by assignment (Kuhn-Munkres). Correct for any
+ * slot layout, including flex slots whose eligibility overlaps without nesting
+ * (REC_FLEX next to WRRB_FLEX), where filling slots greedily goes wrong.
  */
-export const optimalLineup = (slots: Slot[], players: LineupPlayer[]): Lineup => {
+export const optimalLineupExact = (slots: Slot[], players: LineupPlayer[]): Lineup => {
   if (slots.length === 0) return { total: 0, assignments: [] }
   const cols = Math.max(players.length, slots.length)
   const cost: number[][] = slots.map((slot) =>
@@ -137,5 +137,88 @@ export const optimalLineup = (slots: Slot[], players: LineupPlayer[]): Lineup =>
     total += pl.pts
     return pl
   })
+  return { total: Math.round(total * 100) / 100, assignments }
+}
+
+type GreedyPlan = { dedicated: Record<string, number[]>; flex: number[] }
+const plans = new WeakMap<Slot[], GreedyPlan | null>()
+
+/**
+ * When every flex slot's eligible positions sit inside the next one's (FLEX
+ * inside SUPER_FLEX, say), filling the single-position slots with each
+ * position's best players and then the flex slots narrowest-first is optimal:
+ * any lineup that does otherwise can swap its way here without losing points.
+ * Returns null for layouts where that argument fails.
+ */
+const greedyPlan = (slots: Slot[]): GreedyPlan | null => {
+  if (plans.has(slots)) return plans.get(slots)!
+  const dedicated: Record<string, number[]> = {}
+  const flex: number[] = []
+  slots.forEach((slot, i) => {
+    if (slot.eligible.length === 1) (dedicated[slot.eligible[0]] ??= []).push(i)
+    else flex.push(i)
+  })
+  flex.sort((a, b) => slots[a].eligible.length - slots[b].eligible.length)
+  let plan: GreedyPlan | null = { dedicated, flex }
+  for (let k = 0; k + 1 < flex.length; k++) {
+    const wider = slots[flex[k + 1]].eligible
+    if (!slots[flex[k]].eligible.every((p) => wider.includes(p))) {
+      plan = null
+      break
+    }
+  }
+  plans.set(slots, plan)
+  return plan
+}
+
+/**
+ * Exact maximum-points lineup for the given starting slots. Players with no
+ * points still count as zero, and a slot nobody is eligible for stays empty.
+ *
+ * Standard layouts take a sort-and-fill path that is roughly ten times faster
+ * than the assignment solve and gives the same total; the trade search runs
+ * this tens of thousands of times per click. Anything the fast path cannot
+ * prove optimal — overlapping flex slots, or a player eligible at two
+ * positions — goes to the assignment solver.
+ */
+export const optimalLineup = (slots: Slot[], players: LineupPlayer[]): Lineup => {
+  if (slots.length === 0) return { total: 0, assignments: [] }
+  const plan = greedyPlan(slots)
+  if (!plan || players.some((p) => p.fpos.length !== 1)) return optimalLineupExact(slots, players)
+
+  const byPos: Record<string, LineupPlayer[]> = {}
+  for (const p of players) (byPos[p.fpos[0]] ??= []).push(p)
+  for (const pos of Object.keys(byPos)) byPos[pos].sort((a, b) => b.pts - a.pts)
+  const next: Record<string, number> = {}
+  const assignments: (LineupPlayer | null)[] = slots.map(() => null)
+  let total = 0
+  for (const pos of Object.keys(plan.dedicated)) {
+    const list = byPos[pos] ?? []
+    let k = 0
+    for (const i of plan.dedicated[pos]) {
+      if (k >= list.length) break
+      assignments[i] = list[k]
+      total += list[k].pts
+      k++
+    }
+    next[pos] = k
+  }
+  for (const i of plan.flex) {
+    let bestPos: string | null = null
+    let best = -Infinity
+    for (const pos of slots[i].eligible) {
+      const list = byPos[pos]
+      const k = next[pos] ?? 0
+      if (list && k < list.length && list[k].pts > best) {
+        best = list[k].pts
+        bestPos = pos
+      }
+    }
+    if (bestPos === null) continue
+    const k = next[bestPos] ?? 0
+    assignments[i] = byPos[bestPos][k]
+    next[bestPos] = k + 1
+    total += best
+  }
   return { total: Math.round(total * 100) / 100, assignments }
 }

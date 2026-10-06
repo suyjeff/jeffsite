@@ -6,6 +6,8 @@ import {
   getPlayers,
   getRosters,
   getScoredProjections,
+  getSchedule,
+  getSeasonGamesPlayed,
   getState,
   getTrendingAdds,
   getUser,
@@ -13,6 +15,7 @@ import {
   getWeekStats,
 } from './sleeper'
 import { scoreStatLine, statLinePlayed } from './scoring'
+import type { ScheduleGame } from './context'
 import type {
   PlayerMap,
   SleeperLeague,
@@ -23,6 +26,17 @@ import type {
   TrendingEntry,
   WeekStats,
 } from './types'
+import {
+  adjustHorizon,
+  availabilityRates,
+  buildSchedule,
+  usageFromStats,
+  type Availability,
+  type PlayerContext,
+  type Schedule,
+  type SeasonGames,
+  type Usage,
+} from './context'
 import type { Horizon } from './trades'
 import type { WeekPoints } from './war'
 
@@ -31,8 +45,20 @@ export type PointsSource = 'stats' | 'matchups' | 'proxy-stats' | 'proxy-matchup
 /** Where the forward-looking horizon came from, which changes how much to trust it. */
 export type HorizonSource = 'projections' | 'results' | 'none'
 
-/** Weeks of forward-looking projections to pull. Each is one ~650KB request. */
-export const DEFAULT_HORIZON_WEEKS = 6
+/**
+ * How far ahead a trade is priced. Each week is one ~650KB projection request
+ * the first time, then ~20KB from cache.
+ *   next6    the next six regular-season weeks
+ *   regular  everything left before the fantasy playoffs
+ *   playoffs everything left, fantasy playoffs included
+ */
+export type HorizonMode = 'next6' | 'regular' | 'playoffs'
+export const DEFAULT_HORIZON_MODE: HorizonMode = 'playoffs'
+/** Playoff weeks count this many times a regular-season week by default. */
+export const DEFAULT_PLAYOFF_WEIGHT = 1
+
+/** Games each NFL team plays in a regular season since 2021. */
+const TEAM_GAMES = 17
 
 export type LeagueData = {
   state: SleeperState
@@ -63,6 +89,17 @@ export type LeagueData = {
    */
   horizon: Horizon
   horizonSource: HorizonSource
+  /** The same weeks as Sleeper projected them, before injury and role adjustments. */
+  rawHorizon: Horizon
+  /** Per-player adjustments and the reasons for them: availability, role changes, schedule. */
+  context: Record<string, PlayerContext>
+  availability: Record<string, Availability>
+  usage: Record<string, Usage>
+  schedule: Schedule | null
+  horizonMode: HorizonMode
+  playoffWeight: number
+  /** Fantasy playoff weeks for this league. */
+  playoffWeeks: number[]
   trending: TrendingEntry[]
   warnings: string[]
 }
@@ -71,8 +108,8 @@ export type LoadOptions = {
   username: string
   leagueId?: string | null
   season?: string | null
-  /** How many weeks ahead to project. Defaults to DEFAULT_HORIZON_WEEKS. */
-  horizonWeeks?: number
+  horizon?: HorizonMode
+  playoffWeight?: number
 }
 
 const MAX_WEEK = 18
@@ -109,6 +146,30 @@ const pointsFromMatchups = (ms: SleeperMatchup[]): Record<string, number> => {
     for (const id of Object.keys(pp)) out[id] = pp[id]
   }
   return out
+}
+
+/**
+ * The league's playoff weeks. Each round is one week unless the settings say
+ * the championship (round type 1) or every round (type 2) runs two.
+ */
+export const fantasyPlayoffWeeks = (league: SleeperLeague): number[] => {
+  const start = league.settings?.playoff_week_start
+  const teams = Number(league.settings?.playoff_teams ?? 0)
+  if (!start || teams < 2) return []
+  const rounds = Math.ceil(Math.log2(teams))
+  const roundType = Number(league.settings?.playoff_round_type ?? 0)
+  const weeks = roundType === 2 ? rounds * 2 : roundType === 1 ? rounds + 1 : rounds
+  return Array.from({ length: weeks }, (_, i) => start + i).filter((w) => w <= MAX_WEEK)
+}
+
+/** Games played this season, against the games each team has actually played. */
+const currentSeasonGames = (weeks: { week: number; stats: WeekStats }[], schedule: Schedule | null) => {
+  if (!weeks.length || !schedule) return null
+  const gp: Record<string, number> = {}
+  for (const { stats } of weeks) for (const id of Object.keys(stats)) if (stats[id]?.gp) gp[id] = (gp[id] ?? 0) + 1
+  const teamGames: Record<string, number> = {}
+  for (const team of Object.keys(schedule.opp)) teamGames[team] = weeks.filter(({ week }) => schedule.opp[team][week]).length
+  return { gp, teamGames }
 }
 
 export const loadLeagueData = async (
@@ -174,11 +235,15 @@ export const loadLeagueData = async (
   let valueSeason = league.season
   let pointsSource: PointsSource = 'none'
 
+  const currentStats: { week: number; stats: WeekStats }[] = []
   if (playedWeeks.length) {
     onProgress('Loading player stats')
     const statResults = await settled(
       playedWeeks.map((w) => getWeekStats(league.season, w, w < currentWeek)),
     )
+    playedWeeks.forEach((w, i) => {
+      if (statResults[i]) currentStats.push({ week: w, stats: statResults[i]! })
+    })
     let statWeeks = 0
     playedWeeks.forEach((w, i) => {
       const fromMatchups = pointsFromMatchups(matchupsByWeek[w] ?? [])
@@ -227,46 +292,90 @@ export const loadLeagueData = async (
   // ---- Forward-looking horizon ----
   // Everything above looks backwards. A trade is a bet on the weeks still to
   // come, so it gets its own basis: one league-scored projection per player per
-  // remaining week.
+  // remaining week, then adjusted for what the projection leaves out.
   let projections: Record<string, number> | null = null
   let projectionWeek: number | null = null
+  let rawHorizon: Horizon = []
   let horizon: Horizon = []
   let horizonSource: HorizonSource = 'none'
   let trending: TrendingEntry[] = []
+  let context: Record<string, PlayerContext> = {}
+  let availability: Record<string, Availability> = {}
+  let usage: Record<string, Usage> = {}
+  let schedule: Schedule | null = null
 
+  const mode: HorizonMode = opts.horizon ?? DEFAULT_HORIZON_MODE
+  const playoffWeight = Math.max(0, opts.playoffWeight ?? DEFAULT_PLAYOFF_WEIGHT)
+  const playoffWeeks = fantasyPlayoffWeeks(league)
+  const lastWeek = mode === 'playoffs' ? Math.max(playoffStart - 1, ...playoffWeeks) : playoffStart - 1
   const upcoming = state.season_type === 'pre' ? startWeek : Math.max(state.week, currentWeek)
-  const horizonLen = Math.max(1, opts.horizonWeeks ?? DEFAULT_HORIZON_WEEKS)
-  const horizonWeeks =
+  let horizonWeeks =
     isCurrentSeason && (state.season_type === 'regular' || state.season_type === 'pre')
-      ? weekList.filter((w) => w >= upcoming && w < playoffStart).slice(0, horizonLen)
+      ? weekList.filter((w) => w >= upcoming && w <= lastWeek)
       : []
+  if (mode === 'next6') horizonWeeks = horizonWeeks.filter((w) => w < playoffStart).slice(0, 6)
 
   if (horizonWeeks.length) {
     onProgress(`Projecting weeks ${horizonWeeks[0]}–${horizonWeeks[horizonWeeks.length - 1]}`)
     const projResults = await settled(
-      horizonWeeks.map((w) => getScoredProjections(league.league_id, league.season, w, league.scoring_settings)),
+      horizonWeeks.map((w) =>
+        getScoredProjections(league.league_id, league.season, w, league.scoring_settings, w - upcoming <= 1),
+      ),
     )
     horizonWeeks.forEach((w, i) => {
       const raw = projResults[i]
       if (!raw || !Object.keys(raw).length) return
       const pts: Record<string, number> = {}
       for (const id of Object.keys(raw)) if (players[id]) pts[id] = raw[id]
-      if (Object.keys(pts).length) horizon.push({ week: w, pts })
+      if (Object.keys(pts).length) rawHorizon.push({ week: w, pts, weight: playoffWeeks.includes(w) ? playoffWeight : 1 })
     })
-    if (horizon.length) {
+    if (rawHorizon.length) {
       horizonSource = 'projections'
-      projectionWeek = horizon[0].week
-      projections = horizon[0].pts
-      if (horizon.length < horizonWeeks.length) {
-        warnings.push(`Projections missing for ${horizonWeeks.length - horizon.length} of the next ${horizonWeeks.length} weeks.`)
+      projectionWeek = rawHorizon[0].week
+      projections = rawHorizon[0].pts
+      if (rawHorizon.length < horizonWeeks.length) {
+        warnings.push(`Projections missing for ${horizonWeeks.length - rawHorizon.length} of ${horizonWeeks.length} weeks ahead.`)
       }
     }
+  }
+
+  if (rawHorizon.length) {
+    // What the projections leave out: injury risk, designations they disagree
+    // with, and where an absent player's work goes. None of it is essential,
+    // so a failed request costs the adjustment, not the page.
+    onProgress('Reading injury history and depth charts')
+    const season = Number(league.season)
+    const [sched, gpPrev, gpPrev2] = await settled<unknown>([
+      getSchedule(league.season),
+      getSeasonGamesPlayed(String(season - 1)),
+      getSeasonGamesPlayed(String(season - 2)),
+    ])
+    schedule = Array.isArray(sched) && sched.length ? buildSchedule(sched as ScheduleGame[]) : null
+    const seasons: SeasonGames[] = []
+    if (gpPrev && typeof gpPrev === 'object') seasons.push({ season: season - 1, gp: gpPrev as Record<string, number>, teamGames: TEAM_GAMES })
+    if (gpPrev2 && typeof gpPrev2 === 'object') seasons.push({ season: season - 2, gp: gpPrev2 as Record<string, number>, teamGames: TEAM_GAMES })
+    const current = currentSeasonGames(currentStats, schedule)
+    availability = availabilityRates(players, seasons, season, current ?? undefined)
+    usage = usageFromStats(currentStats, players)
+    const adjustedResult = adjustHorizon({
+      horizon: rawHorizon,
+      players,
+      availability,
+      schedule,
+      usage,
+      playoffStart: playoffWeeks.length ? playoffWeeks[0] : undefined,
+    })
+    horizon = adjustedResult.horizon
+    context = adjustedResult.context
+    if (!seasons.length) warnings.push('Injury history unavailable; every player is given the league-average chance of playing.')
+    if (!schedule) warnings.push('NFL schedule unavailable; byes and opponents are not shown.')
   }
 
   if (!horizon.length && valueWeeks.length) {
     // No projections to be had — a finished season, or the feed is down. Price
     // trades off what already happened and say so, because it is a weaker basis.
     horizon = valueWeeks.map((w) => ({ week: w, pts: weekPoints[w] ?? {} }))
+    rawHorizon = horizon
     horizonSource = 'results'
     warnings.push(`Projections unavailable; trade values use ${valueSeason} results instead of the weeks ahead.`)
   }
@@ -295,6 +404,14 @@ export const loadLeagueData = async (
     projectionWeek,
     horizon,
     horizonSource,
+    rawHorizon,
+    context,
+    availability,
+    usage,
+    schedule,
+    horizonMode: mode,
+    playoffWeight,
+    playoffWeeks,
     trending,
     warnings,
   }
@@ -327,7 +444,7 @@ export const useLeagueData = (opts: LoadOptions | null) => {
       .finally(() => {
         if (active.current === id) setLoading(false)
       })
-  }, [opts?.username, opts?.leagueId, opts?.season, opts?.horizonWeeks, nonce]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [opts?.username, opts?.leagueId, opts?.season, opts?.horizon, opts?.playoffWeight, nonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reload = useCallback(() => setNonce((n) => n + 1), [])
   return { data, error, loading, progress, reload }

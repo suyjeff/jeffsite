@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
-import type { LeagueData } from '../../lib/fantasy/useLeagueData'
+import type { HorizonMode, LeagueData } from '../../lib/fantasy/useLeagueData'
 import {
   DEFAULT_TRADE_CONFIG,
   findTargets,
@@ -8,6 +8,7 @@ import {
   type TradeConfig,
   type TradeIdea,
 } from '../../lib/fantasy/trades'
+import { ContextNotes, PlayoffSchedule } from './ContextNotes'
 import PlayerName from './PlayerName'
 import { Card, Meter, Muted, Pill, Sparkline, Table, fmt, fmtSigned } from './ui'
 
@@ -21,13 +22,34 @@ const Names = ({ ids, players }: { ids: string[]; players: LeagueData['players']
   </span>
 )
 
-const Gain = ({ value, digits = 2 }: { value: number; digits?: number }) => (
-  <span className={value > 0.005 ? 'text-emerald-700 dark:text-emerald-400' : value < -0.005 ? 'text-rose-700 dark:text-rose-400' : 'text-stone-400 dark:text-stone-500'}>
-    {fmtSigned(value, digits)}
-  </span>
-)
+const Gain = ({ value, digits = 2 }: { value: number; digits?: number }) => {
+  // Anything that rounds to zero at the shown precision is zero: no "-0.0".
+  const shown = Math.abs(value) < 0.5 * 10 ** -digits ? 0 : value
+  return (
+    <span className={shown > 0 ? 'text-emerald-700 dark:text-emerald-400' : shown < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-stone-400 dark:text-stone-500'}>
+      {shown === 0 ? (0).toFixed(digits) : fmtSigned(shown, digits)}
+    </span>
+  )
+}
 
-const TradesTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis }) => {
+const HORIZONS: { key: HorizonMode; label: string }[] = [
+  { key: 'playoffs', label: 'Rest of season, playoffs included' },
+  { key: 'regular', label: 'Rest of the regular season' },
+  { key: 'next6', label: 'Next six weeks' },
+]
+
+const pctFmt = (x: number | undefined) => (x == null ? '–' : `${Math.round(x * 100)}%`)
+
+type Props = {
+  data: LeagueData
+  analysis: Analysis
+  loading?: boolean
+  horizon: HorizonMode
+  playoffWeight: number
+  setHorizon: (h: HorizonMode, playoffWeight: number) => void
+}
+
+const TradesTab = ({ data, analysis, loading, horizon, playoffWeight, setHorizon }: Props) => {
   const { myRosterId, teamById, needs, slots } = analysis
   const players = data.players
   const [deep, setDeep] = useState(false)
@@ -51,6 +73,24 @@ const TradesTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis })
       .sort((a, b) => perWeek[b] - perWeek[a])
       .slice(0, 120)
   }, [analysis.horizon.perWeek, analysis.rosteredBy, players])
+
+  // Who is hurt, who is covering, and whose role is about to change, on any
+  // roster in the league plus the free agents those absences promote.
+  const situations = useMemo(() => {
+    const ctx = data.context
+    const rows = Object.keys(ctx)
+      .filter((id) => players[id])
+      .filter((id) => {
+        const kinds = ctx[id].notes.map((n) => n.kind)
+        const rostered = analysis.rosteredBy[id] !== undefined
+        const bump = ctx[id].notes.find((n) => n.kind === 'bump')
+        if (kinds.includes('returns') || kinds.includes('status') || kinds.includes('temporary')) return rostered || ctx[id].raw >= 4
+        return !!bump && bump.kind === 'bump' && bump.pts >= (rostered ? 1 : 1.5)
+      })
+      .map((id) => ({ id, owner: analysis.rosteredBy[id] ?? null }))
+    const mine = (r: { owner: number | null }) => (r.owner === myRosterId ? 0 : r.owner != null ? 1 : 2)
+    return rows.sort((a, b) => mine(a) - mine(b) || (ctx[b.id].raw - ctx[a.id].raw)).slice(0, 30)
+  }, [data.context, players, analysis.rosteredBy, myRosterId])
 
   const others = useMemo(
     () => analysis.teams.filter((t) => t.rosterId !== myRosterId).map((t) => ({ rosterId: t.rosterId, players: t.players })),
@@ -121,18 +161,54 @@ const TradesTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis })
 
   return (
     <div className="space-y-4">
-      <Card title="How this is priced" aside={basis}>
-        <div className="grid sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
+      <Card title="How this is priced" aside={loading ? 'updating…' : basis}>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-3 text-sm">
+          <label className="flex items-center gap-2">
+            <span>Price over</span>
+            <select
+              value={horizon}
+              onChange={(e) => setHorizon(e.target.value as HorizonMode, playoffWeight)}
+              className="rounded border border-stone-200 bg-transparent px-2 py-1 text-sm dark:border-stone-800"
+            >
+              {HORIZONS.map((h) => (
+                <option key={h.key} value={h.key}>
+                  {h.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {horizon === 'playoffs' && data.playoffWeeks.length > 0 && (
+            <label className="flex items-center gap-2">
+              <span className="whitespace-nowrap">Playoff weeks ({data.playoffWeeks.join(', ')}) count</span>
+              <input
+                type="range"
+                min={0}
+                max={3}
+                step={0.5}
+                value={playoffWeight}
+                onChange={(e) => setHorizon(horizon, Number(e.target.value))}
+                className="w-24 accent-[#2a78d6] dark:accent-[#3987e5]"
+              />
+              <span className="tabular-nums w-8">{playoffWeight}×</span>
+            </label>
+          )}
+        </div>
+        <div className="grid md:grid-cols-3 gap-x-8 gap-y-2 text-sm">
           <p>
-            Every number below is <b>points per week added to a team&apos;s optimal starting lineup</b>, solved separately for each of
-            the {horizonWeeks.length} weeks ahead and averaged. Byes and players ruled out already read as zero in Sleeper&apos;s weekly
-            projections, so a deal that only pays off during someone&apos;s bye shows up as exactly that.
+            Every number is <b>points per week added to a team&apos;s optimal starting lineup</b>, solved separately for each of the{' '}
+            {horizonWeeks.length} weeks ahead. Sleeper&apos;s weekly projections already carry each week&apos;s opponent, the byes, and
+            the return dates and next-man-up roles its analysts have set for injured players.
           </p>
           <p>
-            A slot nobody can fill is worth replacement level, not zero, because the waiver wire exists. That is why losing a
-            quarterback in a one-quarterback league costs so little here: the twelfth-best free agent at the position is nearly as
-            good as the tenth-best starter.{' '}
-            {data.horizonSource === 'results' && <Muted>No projections were available, so past results stand in. Treat the numbers as weaker.</Muted>}
+            On top of that, every player is counted at his <b>chance of playing</b>. A projection assumes he suits up; his own last
+            two seasons say how often he does. Where Sleeper&apos;s injury designation and its projection disagree for the next game,
+            he counts at the designation&apos;s odds instead.
+          </p>
+          <p>
+            Points a player is expected to miss <b>go to his teammates</b> at the position, mostly the next man up, at the rates
+            Sleeper itself uses when it rules a starter out. That is what gives a handcuff value. An empty lineup slot is worth a
+            waiver pickup, not zero.
+            {data.horizonSource === 'results' && <Muted> No projections were available, so past results stand in.</Muted>}
           </p>
         </div>
       </Card>
@@ -208,6 +284,17 @@ const TradesTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis })
             { key: 'p', label: 'Player', render: (t) => <PlayerName player={players[t.id]} id={t.id} sub={t.ownerId == null ? 'free agent' : teamById[t.ownerId]?.name} /> },
             { key: 'slot', label: 'Starts at', render: (t) => t.slot ?? <Muted>bench</Muted> },
             {
+              key: 'play',
+              label: 'Plays',
+              align: 'right',
+              title: 'Chance of playing in an average week of the horizon, from injury history and the current report',
+              sort: (t) => data.context[t.id]?.play ?? 1,
+              render: (t) => {
+                const play = data.context[t.id]?.play
+                return <span className={play != null && play < 0.8 ? 'text-rose-700 dark:text-rose-400' : ''}>{pctFmt(play)}</span>
+              },
+            },
+            {
               key: 'add',
               label: 'Adds to you',
               align: 'right',
@@ -232,6 +319,10 @@ const TradesTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis })
               render: (t) => (t.ownerId == null ? <Muted>–</Muted> : <Gain value={t.surplus} />),
             },
             { key: 'mkt', label: 'Value', align: 'right', title: 'Points per week above replacement at the position', sort: (t) => t.market, render: (t) => fmt(t.market, 1) },
+            ...(data.playoffWeeks.length
+              ? [{ key: 'po', label: 'Playoff opp.', title: `Opponents in weeks ${data.playoffWeeks.join(', ')}`, render: (t: (typeof targets)[number]) => <PlayoffSchedule context={data.context[t.id]} weeks={data.playoffWeeks} /> }]
+              : []),
+            { key: 'why', label: 'Context', render: (t) => <ContextNotes context={data.context[t.id]} players={players} max={3} /> },
           ]}
           rowKey={(t) => t.id}
           defaultSort="add"
@@ -281,7 +372,18 @@ const TradesTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis })
         <Table
           rows={shownIdeas}
           columns={[
-            { key: 'get', label: 'You get', render: (i) => <Names ids={i.get} players={players} /> },
+            {
+              key: 'get',
+              label: 'You get',
+              render: (i) => (
+                <span className="flex flex-col gap-1">
+                  <Names ids={i.get} players={players} />
+                  {i.get.map((id) => (
+                    <ContextNotes key={id} context={data.context[id]} players={players} max={2} />
+                  ))}
+                </span>
+              ),
+            },
             { key: 'from', label: 'From', sort: (i) => teamById[i.partnerId]?.name ?? '', render: (i) => <span className="text-xs">{teamById[i.partnerId]?.name}</span> },
             { key: 'give', label: 'You give', render: (i) => <Names ids={i.give} players={players} /> },
             {
@@ -376,6 +478,65 @@ const TradesTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis })
         </p>
       </Card>
 
+      <Card title="Injuries and role changes" aside="your players first, then the league, then free agents">
+        <Table
+          rows={situations}
+          columns={[
+            {
+              key: 'p',
+              label: 'Player',
+              render: (r) => (
+                <PlayerName
+                  player={players[r.id]}
+                  id={r.id}
+                  sub={r.owner == null ? 'free agent' : r.owner === myRosterId ? 'you' : teamById[r.owner]?.name}
+                />
+              ),
+            },
+            {
+              key: 'play',
+              label: 'Plays',
+              align: 'right',
+              sort: (r) => data.context[r.id]?.play ?? 1,
+              render: (r) => pctFmt(data.context[r.id]?.play),
+            },
+            {
+              key: 'raw',
+              label: 'Sleeper',
+              align: 'right',
+              title: "Sleeper's projection, points per week over the horizon",
+              sort: (r) => data.context[r.id]?.raw ?? 0,
+              render: (r) => fmt(data.context[r.id]?.raw),
+            },
+            {
+              key: 'adj',
+              label: 'Expected',
+              align: 'right',
+              title: 'After chance of playing and teammates\' absences: what the trade math uses',
+              sort: (r) => data.context[r.id]?.adjusted ?? 0,
+              render: (r) => fmt(data.context[r.id]?.adjusted),
+            },
+            {
+              key: 'chg',
+              label: 'Change',
+              align: 'right',
+              sort: (r) => (data.context[r.id]?.adjusted ?? 0) - (data.context[r.id]?.raw ?? 0),
+              render: (r) => {
+                const c = data.context[r.id]
+                return c ? <Gain value={c.adjusted - c.raw} digits={1} /> : null
+              },
+            },
+            { key: 'why', label: 'What changed', render: (r) => <ContextNotes context={data.context[r.id]} players={players} max={4} /> },
+          ]}
+          rowKey={(r) => r.id}
+          empty="No injuries or role changes worth flagging."
+        />
+        <p className="mt-2 text-xs text-stone-400 dark:text-stone-500">
+          Hover a label for the reasoning. A player covering for an injured starter is worth the most to whoever holds him before
+          the news settles; one whose bigger role ends on a known date is worth the least after it does.
+        </p>
+      </Card>
+
       {myNeeds && (
         <Card title="Your lineup, slot by slot" aside={`starters shown for week ${horizonWeeks[0]}`}>
           <Table
@@ -384,6 +545,8 @@ const TradesTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis })
               { key: 'slot', label: 'Slot', render: (s) => s.slot },
               { key: 'who', label: 'Week ' + horizonWeeks[0], render: (s) => (s.starter ? <PlayerName player={players[s.starter]} id={s.starter} /> : <Muted>nobody — waiver fill</Muted>) },
               { key: 'pts', label: 'Pts/wk', align: 'right', sort: (s) => s.pts, render: (s) => fmt(s.pts) },
+              { key: 'play', label: 'Plays', align: 'right', render: (s) => (s.starter ? pctFmt(data.context[s.starter]?.play) : <Muted>–</Muted>) },
+              { key: 'why', label: 'Context', render: (s) => (s.starter ? <ContextNotes context={data.context[s.starter]} players={players} max={3} /> : null) },
               { key: 'lg', label: 'League', align: 'right', sort: (s) => s.leagueAvg, render: (s) => fmt(s.leagueAvg) },
               { key: 'gap', label: 'Gap', align: 'right', sort: (s) => s.gap, render: (s) => <Gain value={s.gap} digits={1} /> },
             ]}
