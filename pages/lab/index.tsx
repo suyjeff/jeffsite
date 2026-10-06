@@ -1,8 +1,6 @@
 import React from "react";
 import Link from "next/link";
 import Layout from "../../components/Layout";
-import LabHeaderExperiment01 from "../../components/LabHeaderExperiment01";
-import LabHeaderExperiment02 from "../../components/LabHeaderExperiment02";
 
 const LabPage = () => {
   return (
@@ -23,22 +21,9 @@ const LabPage = () => {
             </h1>
           </Link>
         </div>
-        <div className="mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-200">
-          <div className="text-xs uppercase tracking-[0.35em] text-stone-400 dark:text-stone-500">
-            header experiment 01
-          </div>
-          <div className="mt-4">
-            <LabHeaderExperiment01 />
-          </div>
-        </div>
-        <div className="mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-400">
-          <div className="text-xs uppercase tracking-[0.35em] text-stone-400 dark:text-stone-500">
-            header experiment 02
-          </div>
-          <div className="mt-4">
-            <LabHeaderExperiment02 />
-          </div>
-        </div>
+        <p className="mt-4 text-lg tracking-tight text-stone-400 dark:text-stone-500 opacity-0 animate-reveal animation-delay-200">
+          Nothing here right now.
+        </p>
       </div>
     </Layout>
   );

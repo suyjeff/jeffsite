@@ -73,6 +73,16 @@ export const SCRIPT_OFFSET_Y = -CUT_MIN_Y * SCALE + EDGE_MARGIN
 /** Gap kept between the sticker and the edge of its stage. */
 export const STAGE_MARGIN = 6
 
+/**
+ * How far the canvas overhangs the stage on every side. The stage bounds where
+ * the sticker can be dragged; the bleed gives a sticker that is lifted, tilted
+ * or curling right at that boundary room to be drawn instead of clipped.
+ */
+export const CANVAS_BLEED = 72
+
+/** Distance from the outline at which the peel affordance starts to show. */
+export const GRAB_BAND = 34
+
 export type Point = { x: number; y: number }
 
 /**
