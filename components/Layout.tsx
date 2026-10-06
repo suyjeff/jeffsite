@@ -18,7 +18,7 @@ const Layout = ({ children, title = "This is the default title" }: Props) => {
     "text-stone-600 hover:text-stone-900 transition-colors duration-300 ease-in-out dark:text-stone-300 dark:hover:text-stone-100";
 
   return (
-    <div className="flex flex-col min-h-screen bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
+    <div className="flex flex-col min-h-screen overflow-x-clip bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
       <Head>
         <title>{title}</title>
         <meta charSet="utf-8" />
@@ -48,7 +48,7 @@ const Layout = ({ children, title = "This is the default title" }: Props) => {
               </a>
             </div>
             <div className="text-sm text-stone-400 dark:text-stone-500">
-              Last updated August 2026
+              Last updated October 2026
             </div>
           </div>
         </footer>

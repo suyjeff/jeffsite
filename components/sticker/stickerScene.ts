@@ -8,7 +8,9 @@
 
 import { paintShadow, paintSticker, StickerPalette } from './stickerArt'
 import {
+  CANVAS_BLEED,
   EdgeHit,
+  GRAB_BAND,
   Point,
   STAGE_MARGIN,
   STICKER_HEIGHT,
@@ -23,8 +25,6 @@ const COLS = 60
 const ROWS = 48
 const OUTLINE_POINTS = 120
 
-/** Distance from the outline at which the peel affordance starts to show. */
-const GRAB_BAND = 34
 /** How far the free edge lifts on hover alone. */
 const HINT_FOLD = 17
 const MAX_TILT = 0.17
@@ -49,15 +49,36 @@ const PULL_RATIO = Math.hypot(
   ROLL_RATIO * (1 - Math.cos(ROLL_ANGLE)),
 )
 
+// Physics runs on a fixed step, decoupled from the display's refresh rate, so
+// the springs feel identical on 60Hz and 120Hz screens and stay stable through
+// a dropped frame.
+const STEP = 1 / 240
+const MAX_FRAME = 0.05
+
+// Spring tunings as [stiffness, damping]. The ones driven directly by the
+// pointer sit just under critical damping, so the sticker keeps up with the
+// cursor without wobbling; the return home stays deliberately soft.
+const FOLD_DRAG: [number, number] = [1400, 66]
+const FOLD_REST: [number, number] = [260, 30]
+const FOLLOW_DRAG: [number, number] = [1000, 56]
+const LIFT_DRAG: [number, number] = [160, 24]
+const FOLLOW_HOME: [number, number] = [88, 12.5]
+const LIFT_HOME: [number, number] = [52, 11]
+const TILT: [number, number] = [380, 35]
+const GLOSS: [number, number] = [90, 16]
+
 type Mode = 'idle' | 'peel' | 'airborne' | 'settle'
 
 type Spring = { value: number; velocity: number }
 
-const spring = (state: Spring, target: number, stiffness: number, damping: number, dt: number) => {
+const spring = (state: Spring, target: number, [stiffness, damping]: [number, number], dt: number) => {
   const acceleration = (target - state.value) * stiffness - state.velocity * damping
   state.velocity += acceleration * dt
   state.value += state.velocity * dt
 }
+
+const settledAt = (state: Spring, target: number, tolerance: number) =>
+  Math.abs(state.value - target) < tolerance && Math.abs(state.velocity) < tolerance * 10
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
@@ -350,6 +371,7 @@ const toRgb = (hex: string): [number, number, number] => {
 
 export const createStickerScene = (
   canvas: HTMLCanvasElement,
+  hitArea: HTMLElement,
   options: Options,
 ): StickerScene | null => {
   const gl = canvas.getContext('webgl2', {
@@ -434,12 +456,24 @@ export const createStickerScene = (
 
   const model = identity()
   const viewProj = identity()
+  const size = new Float32Array([STICKER_WIDTH, STICKER_HEIGHT])
+  const stage = canvas.parentElement ?? canvas
 
-  // --- state ---
+  // --- layout ---------------------------------------------------------------
+  //
+  // The stage is the layout box the sticker sits in and is clamped to. The
+  // canvas is not the size of the stage: it is the sticker plus CANVAS_BLEED of
+  // headroom on every side, and it travels with the sticker. Lift, tilt and
+  // curl therefore always have room to be drawn wherever the sticker is, and
+  // the GPU only ever clears and composites a sticker-sized surface.
+  let stageLeft = 0
+  let stageTop = 0
+  let stageRectStale = true
   let stageWidth = 1
   let stageHeight = 1
   let anchorX = 0
   let anchorY = 0
+  let dpr = 1
 
   const fold: Spring = { value: 0, velocity: 0 }
   const offsetX: Spring = { value: 0, velocity: 0 }
@@ -448,6 +482,22 @@ export const createStickerScene = (
   const tiltX: Spring = { value: 0, velocity: 0 }
   const tiltY: Spring = { value: 0, velocity: 0 }
   const gloss: Spring = { value: 0.15, velocity: 0 }
+
+  // Where each spring is heading. Worked out once per frame from the pointer,
+  // then integrated over however many fixed steps the frame needs.
+  let foldTarget = 0
+  let targetX = 0
+  let targetY = 0
+  let targetZ = 0
+  let tiltTargetX = 0
+  let tiltTargetY = 0
+  let glossTarget = 0.15
+
+  // Hover response, computed when the pointer moves rather than every frame.
+  let hoverTiltX = 0
+  let hoverTiltY = 0
+  let hoverFold = 0
+  let hoverGloss = 0.15
 
   let mode: Mode = 'idle'
   let grab: Point = { x: 0, y: 0 }
@@ -462,6 +512,7 @@ export const createStickerScene = (
   let sweepStrength = 0
   let sweepDone = false
   let elapsed = 0
+  let accumulator = 0
   let frame = 0
   let running = false
   let destroyed = false
@@ -477,14 +528,11 @@ export const createStickerScene = (
     y: stageY - (anchorY - offsetY.value),
   })
 
-  /** Local (y down) to shader space (origin at sticker centre, y up). */
-  const toCentered = (point: Point): Point => ({
-    x: point.x - STICKER_WIDTH / 2,
-    y: STICKER_HEIGHT / 2 - point.y,
-  })
-
   const setLayout = () => {
-    const rect = canvas.getBoundingClientRect()
+    const rect = stage.getBoundingClientRect()
+    stageLeft = rect.left
+    stageTop = rect.top
+    stageRectStale = false
     stageWidth = Math.max(1, rect.width)
     stageHeight = Math.max(1, rect.height)
     // Flush with the text column; the die-cut's own inset supplies the optical
@@ -492,19 +540,36 @@ export const createStickerScene = (
     anchorX = 0
     anchorY = Math.max(STAGE_MARGIN, (stageHeight - STICKER_HEIGHT) / 2)
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    const width = Math.round(stageWidth * dpr)
-    const height = Math.round(stageHeight * dpr)
+    const canvasWidth = STICKER_WIDTH + CANVAS_BLEED * 2
+    const canvasHeight = STICKER_HEIGHT + CANVAS_BLEED * 2
+    dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const width = Math.round(canvasWidth * dpr)
+    const height = Math.round(canvasHeight * dpr)
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width
       canvas.height = height
     }
+    canvas.style.left = `${anchorX - CANVAS_BLEED}px`
+    canvas.style.top = `${anchorY - CANVAS_BLEED}px`
+    canvas.style.width = `${canvasWidth}px`
+    canvas.style.height = `${canvasHeight}px`
+    canvasX = NaN
+    canvasY = NaN
 
-    const fovY = 2 * Math.atan(stageHeight / 2 / CAMERA_DISTANCE)
-    const projection = perspective(fovY, stageWidth / stageHeight, 1, 4000)
+    const fovY = 2 * Math.atan(canvasHeight / 2 / CAMERA_DISTANCE)
+    const projection = perspective(fovY, canvasWidth / canvasHeight, 1, 4000)
     const view = identity()
     view[14] = -CAMERA_DISTANCE
     multiply(projection, view, viewProj)
+
+    // The hit area covers the sticker plus its grab band, and stops at the
+    // bottom of the stage so it never sits over the text below.
+    const top = anchorY - GRAB_BAND
+    const bottom = Math.min(stageHeight, anchorY + STICKER_HEIGHT + GRAB_BAND)
+    hitArea.style.left = `${anchorX - GRAB_BAND}px`
+    hitArea.style.top = `${top}px`
+    hitArea.style.width = `${STICKER_WIDTH + GRAB_BAND * 2}px`
+    hitArea.style.height = `${bottom - top}px`
   }
 
   const clampOffset = () => {
@@ -516,15 +581,36 @@ export const createStickerScene = (
     offsetY.value = clamp(offsetY.value, Math.min(minY, 0), Math.max(maxY, 0))
   }
 
-  const startPeel = (hit: EdgeHit) => {
+  const aimAt = (hit: EdgeHit) => {
     grab = hit.point
     inward = hit.inward
     direction = hit.inward
     extent = Math.max(24, extentFrom(outline, hit.point, hit.inward))
-    mode = 'peel'
   }
 
-  const updatePeel = () => {
+  const updateHover = () => {
+    hoverTiltX = 0
+    hoverTiltY = 0
+    hoverFold = 0
+    hoverGloss = 0.15
+    if (mode !== 'idle' || !pointerInside) return
+
+    const centreX = anchorX + offsetX.value + STICKER_WIDTH / 2
+    const centreY = anchorY - offsetY.value + STICKER_HEIGHT / 2
+    hoverTiltY = -clamp((pointer.x - centreX) / (STICKER_WIDTH * 0.75), -1, 1) * MAX_TILT
+    hoverTiltX = -clamp((pointer.y - centreY) / (STICKER_HEIGHT * 0.75), -1, 1) * MAX_TILT
+
+    const local = toLocal(pointer.x, pointer.y)
+    const hit = nearestEdge(outline, local.x, local.y)
+    if (hit.distance < GRAB_BAND) {
+      const proximity = 1 - hit.distance / GRAB_BAND
+      aimAt(hit)
+      hoverFold = HINT_FOLD * proximity * proximity
+      hoverGloss = 0.24
+    }
+  }
+
+  const peelTarget = () => {
     const dragX = pointer.x - dragStart.x
     const dragY = -(pointer.y - dragStart.y)
     // Outward normal in shader space (y up). `inward` is stored in local space
@@ -557,28 +643,36 @@ export const createStickerScene = (
     }
 
     const target = clamp(pull / PULL_RATIO, 0, extent * 1.04)
-    if (target > extent * DETACH_AT) {
-      mode = 'airborne'
-    }
+    if (target > extent * DETACH_AT) mode = 'airborne'
     return target
   }
 
-  const release = () => {
-    mode = 'settle'
-    pointerId = null
-  }
+  const updateTargets = () => {
+    if (mode === 'settle') {
+      const home =
+        Math.abs(fold.value) < 0.35 &&
+        Math.abs(offsetX.value) < 0.35 &&
+        Math.abs(offsetY.value) < 0.35 &&
+        Math.abs(offsetZ.value) < 0.35 &&
+        Math.abs(fold.velocity) < 6 &&
+        Math.abs(offsetX.velocity) < 6 &&
+        Math.abs(offsetY.velocity) < 6
+      if (home) {
+        mode = 'idle'
+        updateHover()
+      }
+    }
 
-  const targets = (dt: number) => {
-    let foldTarget = 0
-    let targetX = 0
-    let targetY = 0
-    let targetZ = 0
-    let tiltTargetX = 0
-    let tiltTargetY = 0
-    let glossTarget = 0.15
+    foldTarget = 0
+    targetX = 0
+    targetY = 0
+    targetZ = 0
+    tiltTargetX = 0
+    tiltTargetY = 0
+    glossTarget = 0.15
 
     if (mode === 'peel') {
-      foldTarget = updatePeel()
+      foldTarget = peelTarget()
       glossTarget = 0.28
     }
 
@@ -588,79 +682,64 @@ export const createStickerScene = (
       targetY = -(pointer.y - dragStart.y)
       targetZ = AIRBORNE_LIFT
       // Flutter: lean into the direction of travel.
-      tiltTargetY = clamp(offsetX.velocity * 0.0006, -0.4, 0.4)
-      tiltTargetX = clamp(-offsetY.velocity * 0.0006, -0.4, 0.4)
+      tiltTargetY = clamp(offsetX.velocity * 0.0005, -0.4, 0.4)
+      tiltTargetX = clamp(-offsetY.velocity * 0.0005, -0.4, 0.4)
       glossTarget = 0.36
     }
 
-    if (mode === 'idle' && pointerInside) {
-      const local = toLocal(pointer.x, pointer.y)
-      const centreX = anchorX + offsetX.value + STICKER_WIDTH / 2
-      const centreY = anchorY - offsetY.value + STICKER_HEIGHT / 2
-      const nx = clamp((pointer.x - centreX) / (STICKER_WIDTH * 0.75), -1, 1)
-      const ny = clamp((pointer.y - centreY) / (STICKER_HEIGHT * 0.75), -1, 1)
-      tiltTargetY = -nx * MAX_TILT
-      tiltTargetX = -ny * MAX_TILT
-
-      const hit = nearestEdge(outline, local.x, local.y)
-      if (hit.distance < GRAB_BAND) {
-        const proximity = 1 - hit.distance / GRAB_BAND
-        grab = hit.point
-        inward = hit.inward
-        direction = hit.inward
-        extent = Math.max(24, extentFrom(outline, hit.point, hit.inward))
-        foldTarget = HINT_FOLD * proximity * proximity
-        glossTarget = 0.24
-      }
+    if (mode === 'idle') {
+      foldTarget = hoverFold
+      tiltTargetX = hoverTiltX
+      tiltTargetY = hoverTiltY
+      glossTarget = hoverGloss
     }
+  }
 
-    if (mode === 'settle') {
-      const settled =
-        Math.abs(fold.value) < 0.35 &&
-        Math.abs(offsetX.value) < 0.35 &&
-        Math.abs(offsetY.value) < 0.35 &&
-        Math.abs(offsetZ.value) < 0.35 &&
-        Math.abs(fold.velocity) < 6 &&
-        Math.abs(offsetX.velocity) < 6 &&
-        Math.abs(offsetY.velocity) < 6
-      if (settled) mode = 'idle'
-    }
-
-    const foldStiffness = mode === 'peel' || mode === 'airborne' ? 260 : 190
-    const foldDamping = mode === 'peel' || mode === 'airborne' ? 26 : 24
-    spring(fold, foldTarget, foldStiffness, foldDamping, dt)
+  const integrate = (dt: number) => {
+    const dragging = mode === 'peel' || mode === 'airborne'
+    spring(fold, foldTarget, dragging ? FOLD_DRAG : FOLD_REST, dt)
     fold.value = Math.max(0, fold.value)
 
     if (mode === 'airborne') {
-      spring(offsetX, targetX, 190, 22, dt)
-      spring(offsetY, targetY, 190, 22, dt)
-      spring(offsetZ, targetZ, 120, 20, dt)
+      spring(offsetX, targetX, FOLLOW_DRAG, dt)
+      spring(offsetY, targetY, FOLLOW_DRAG, dt)
+      spring(offsetZ, targetZ, LIFT_DRAG, dt)
     } else {
-      // Softer springs on the way home so it floats back down rather than
-      // snapping.
-      spring(offsetX, targetX, 88, 12.5, dt)
-      spring(offsetY, targetY, 88, 12.5, dt)
-      spring(offsetZ, targetZ, 52, 11, dt)
+      // Softer on the way home so it floats back down rather than snapping.
+      spring(offsetX, targetX, FOLLOW_HOME, dt)
+      spring(offsetY, targetY, FOLLOW_HOME, dt)
+      spring(offsetZ, targetZ, LIFT_HOME, dt)
     }
 
-    spring(tiltX, tiltTargetX, 140, 18, dt)
-    spring(tiltY, tiltTargetY, 140, 18, dt)
-    spring(gloss, glossTarget, 90, 16, dt)
+    spring(tiltX, tiltTargetX, TILT, dt)
+    spring(tiltY, tiltTargetY, TILT, dt)
+    spring(gloss, glossTarget, GLOSS, dt)
     clampOffset()
   }
 
+  const springs: [Spring, () => number, number][] = [
+    [fold, () => foldTarget, 0.05],
+    [offsetX, () => targetX, 0.05],
+    [offsetY, () => targetY, 0.05],
+    [offsetZ, () => targetZ, 0.05],
+    [tiltX, () => tiltTargetX, 0.0005],
+    [tiltY, () => tiltTargetY, 0.0005],
+    [gloss, () => glossTarget, 0.002],
+  ]
+
+  // At rest means nothing would visibly change on the next frame. A pointer
+  // resting on the sticker no longer keeps the loop alive; the next move
+  // wakes it.
   const atRest = () =>
     mode === 'idle' &&
-    !pointerInside &&
     pointerId === null &&
     sweepDone &&
-    Math.abs(fold.value) < 0.2 &&
-    Math.abs(fold.velocity) < 1 &&
-    Math.abs(offsetX.value) < 0.2 &&
-    Math.abs(offsetY.value) < 0.2 &&
-    Math.abs(offsetZ.value) < 0.2 &&
-    Math.abs(tiltX.value) < 0.002 &&
-    Math.abs(tiltY.value) < 0.002
+    springs.every(([state, target, tolerance]) => settledAt(state, target(), tolerance))
+
+  let hitX = NaN
+  let hitY = NaN
+  let canvasX = NaN
+  let canvasY = NaN
 
   const draw = () => {
     gl.viewport(0, 0, canvas.width, canvas.height)
@@ -670,19 +749,29 @@ export const createStickerScene = (
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
     gl.disable(gl.CULL_FACE)
 
-    const centreX = anchorX + offsetX.value + STICKER_WIDTH / 2
-    const centreY = anchorY - offsetY.value + STICKER_HEIGHT / 2
+    // The canvas follows the sticker in whole device pixels, so the browser
+    // never resamples it; the sub-pixel remainder goes into the model matrix.
+    const screenX = offsetX.value
+    const screenY = -offsetY.value
+    const snappedX = Math.round(screenX * dpr) / dpr
+    const snappedY = Math.round(screenY * dpr) / dpr
+    if (snappedX !== canvasX || snappedY !== canvasY) {
+      canvasX = snappedX
+      canvasY = snappedY
+      canvas.style.transform = `translate3d(${snappedX}px, ${snappedY}px, 0)`
+    }
     composeModel(
       model,
-      centreX - stageWidth / 2,
-      stageHeight / 2 - centreY,
+      screenX - snappedX,
+      -(screenY - snappedY),
       offsetZ.value,
       tiltX.value,
       tiltY.value,
     )
 
-    const grabCentred = toCentered(grab)
-    const size = new Float32Array([STICKER_WIDTH, STICKER_HEIGHT])
+    // Grab point in shader space: origin at the sticker centre, y up.
+    const grabX = grab.x - STICKER_WIDTH / 2
+    const grabY = STICKER_HEIGHT / 2 - grab.y
 
     gl.bindVertexArray(vao)
 
@@ -694,7 +783,7 @@ export const createStickerScene = (
       gl.bindTexture(gl.TEXTURE_2D, shadowTexture)
       gl.uniform1i(shadowUniforms.uTexture ?? null, 0)
       gl.uniform2fv(shadowUniforms.uSize ?? null, size)
-      gl.uniform2f(shadowUniforms.uGrab ?? null, grabCentred.x, grabCentred.y)
+      gl.uniform2f(shadowUniforms.uGrab ?? null, grabX, grabY)
       gl.uniform2f(shadowUniforms.uDir ?? null, direction.x, -direction.y)
       gl.uniform1f(shadowUniforms.uFold ?? null, fold.value)
       gl.uniformMatrix4fv(shadowUniforms.uModel ?? null, false, model)
@@ -715,7 +804,7 @@ export const createStickerScene = (
       gl.bindTexture(gl.TEXTURE_2D, stickerTexture)
       gl.uniform1i(stickerUniforms.uTexture ?? null, 0)
       gl.uniform2fv(stickerUniforms.uSize ?? null, size)
-      gl.uniform2f(stickerUniforms.uGrab ?? null, grabCentred.x, grabCentred.y)
+      gl.uniform2f(stickerUniforms.uGrab ?? null, grabX, grabY)
       gl.uniform2f(stickerUniforms.uDir ?? null, direction.x, -direction.y)
       gl.uniform1f(stickerUniforms.uFold ?? null, fold.value)
       gl.uniformMatrix4fv(stickerUniforms.uModel ?? null, false, model)
@@ -729,11 +818,21 @@ export const createStickerScene = (
     }
 
     gl.bindVertexArray(null)
+
+    // Keep the hit area over the sticker as it travels, so a sticker still
+    // floating home can be caught again where it is.
+    const x = Math.round(offsetX.value)
+    const y = Math.round(-offsetY.value)
+    if (x !== hitX || y !== hitY) {
+      hitX = x
+      hitY = y
+      hitArea.style.transform = `translate3d(${x}px, ${y}px, 0)`
+    }
   }
 
   const tick = (time: number) => {
     if (destroyed) return
-    const dt = Math.min(0.032, (time - lastTime) / 1000) || 0.016
+    const dt = Math.min(MAX_FRAME, Math.max(0, (time - lastTime) / 1000))
     lastTime = time
     elapsed += dt
 
@@ -751,31 +850,53 @@ export const createStickerScene = (
       }
     }
 
-    // Two half-steps keep the stiffer springs stable on long frames.
-    targets(dt / 2)
-    targets(dt / 2)
-
-    draw()
+    updateTargets()
+    accumulator += dt
+    while (accumulator >= STEP) {
+      integrate(STEP)
+      accumulator -= STEP
+    }
 
     if (atRest()) {
+      // Land exactly on target so the resting frame is pixel-stable.
+      for (const [state, target] of springs) {
+        state.value = target()
+        state.velocity = 0
+      }
+      draw()
       running = false
       return
     }
+
+    draw()
     frame = window.requestAnimationFrame(tick)
   }
 
   const wake = () => {
     if (destroyed || running) return
     running = true
+    accumulator = 0
     lastTime = performance.now()
     frame = window.requestAnimationFrame(tick)
   }
 
   // --- pointer --------------------------------------------------------------
 
+  const markStageRectStale = () => {
+    stageRectStale = true
+  }
+
   const stagePoint = (event: PointerEvent): Point => {
-    const rect = canvas.getBoundingClientRect()
-    return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    // Reading layout on every pointer event forces style recalculation while
+    // the page reveal is still animating; read it once and refresh only after
+    // a scroll or resize.
+    if (stageRectStale) {
+      const rect = stage.getBoundingClientRect()
+      stageLeft = rect.left
+      stageTop = rect.top
+      stageRectStale = false
+    }
+    return { x: event.clientX - stageLeft, y: event.clientY - stageTop }
   }
 
   const canGrab = (point: Point) => {
@@ -786,9 +907,10 @@ export const createStickerScene = (
 
   const onPointerMove = (event: PointerEvent) => {
     pointer = stagePoint(event)
-    pointerInside = true
     if (pointerId === null) {
-      canvas.style.cursor = canGrab(pointer) ? 'grab' : 'default'
+      pointerInside = true
+      hitArea.style.cursor = canGrab(pointer) ? 'grab' : 'default'
+      updateHover()
     }
     wake()
   }
@@ -801,15 +923,16 @@ export const createStickerScene = (
     dragStart = point
     pointerInside = true
     pointerId = event.pointerId
-    canvas.style.cursor = 'grabbing'
+    hitArea.style.cursor = 'grabbing'
 
     const local = toLocal(point.x, point.y)
-    startPeel(nearestEdge(outline, local.x, local.y))
+    aimAt(nearestEdge(outline, local.x, local.y))
+    mode = 'peel'
 
     try {
-      canvas.setPointerCapture(event.pointerId)
+      hitArea.setPointerCapture(event.pointerId)
     } catch {
-      // Pointer capture is best-effort; the window listeners still work.
+      // Pointer capture is best-effort.
     }
     event.preventDefault()
     wake()
@@ -818,28 +941,38 @@ export const createStickerScene = (
   const onPointerUp = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return
     try {
-      canvas.releasePointerCapture(event.pointerId)
+      hitArea.releasePointerCapture(event.pointerId)
     } catch {
       // Already released.
     }
-    release()
-    canvas.style.cursor = canGrab(stagePoint(event)) ? 'grab' : 'default'
+    mode = 'settle'
+    pointerId = null
+    // Touch pointers cease to exist on release; a mouse is still hovering.
+    pointerInside = event.pointerType === 'mouse'
+    hitArea.style.cursor = pointerInside && canGrab(stagePoint(event)) ? 'grab' : 'default'
     wake()
   }
 
   const onPointerLeave = () => {
     if (pointerId !== null) return
     pointerInside = false
-    canvas.style.cursor = 'default'
+    hitArea.style.cursor = 'default'
+    updateHover()
     wake()
   }
 
-  canvas.addEventListener('pointermove', onPointerMove)
-  canvas.addEventListener('pointerenter', onPointerMove)
-  canvas.addEventListener('pointerdown', onPointerDown)
-  canvas.addEventListener('pointerup', onPointerUp)
-  canvas.addEventListener('pointercancel', onPointerUp)
-  canvas.addEventListener('pointerleave', onPointerLeave)
+  hitArea.style.pointerEvents = 'auto'
+  // The sticker owns every gesture that starts on it, so a peel works in any
+  // direction on touch screens; the rest of the header still scrolls the page.
+  hitArea.style.touchAction = 'none'
+  hitArea.addEventListener('pointermove', onPointerMove)
+  hitArea.addEventListener('pointerenter', onPointerMove)
+  hitArea.addEventListener('pointerdown', onPointerDown)
+  hitArea.addEventListener('pointerup', onPointerUp)
+  hitArea.addEventListener('pointercancel', onPointerUp)
+  hitArea.addEventListener('pointerleave', onPointerLeave)
+  window.addEventListener('scroll', markStageRectStale, { capture: true, passive: true })
+  window.addEventListener('resize', markStageRectStale, { passive: true })
 
   const onContextLost = (event: Event) => {
     event.preventDefault()
@@ -849,6 +982,9 @@ export const createStickerScene = (
   canvas.addEventListener('webglcontextlost', onContextLost)
 
   setLayout()
+  // Paint once now, before the canvas is revealed, so the hand-off from the
+  // static fallback never shows an empty frame.
+  draw()
   wake()
 
   return {
@@ -857,23 +993,30 @@ export const createStickerScene = (
       backingRgb = toRgb(next.backing)
       shadowRgb = toRgb(next.shadow)
       buildStickerTexture()
+      draw()
       wake()
     },
     resize() {
       setLayout()
       clampOffset()
+      draw()
       wake()
     },
     destroy() {
       destroyed = true
       running = false
       window.cancelAnimationFrame(frame)
-      canvas.removeEventListener('pointermove', onPointerMove)
-      canvas.removeEventListener('pointerenter', onPointerMove)
-      canvas.removeEventListener('pointerdown', onPointerDown)
-      canvas.removeEventListener('pointerup', onPointerUp)
-      canvas.removeEventListener('pointercancel', onPointerUp)
-      canvas.removeEventListener('pointerleave', onPointerLeave)
+      hitArea.removeEventListener('pointermove', onPointerMove)
+      hitArea.removeEventListener('pointerenter', onPointerMove)
+      hitArea.removeEventListener('pointerdown', onPointerDown)
+      hitArea.removeEventListener('pointerup', onPointerUp)
+      hitArea.removeEventListener('pointercancel', onPointerUp)
+      hitArea.removeEventListener('pointerleave', onPointerLeave)
+      hitArea.style.pointerEvents = 'none'
+      hitArea.style.touchAction = ''
+      hitArea.style.cursor = ''
+      window.removeEventListener('scroll', markStageRectStale, true)
+      window.removeEventListener('resize', markStageRectStale)
       canvas.removeEventListener('webglcontextlost', onContextLost)
       if (stickerTexture) gl.deleteTexture(stickerTexture)
       if (shadowTexture) gl.deleteTexture(shadowTexture)

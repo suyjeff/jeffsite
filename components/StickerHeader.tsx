@@ -58,6 +58,7 @@ const StaticSticker = () => (
 const StickerHeader = () => {
   const stageRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const hitRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<StickerScene | null>(null)
   const [live, setLive] = useState(false)
   const [motionKey, setMotionKey] = useState(0)
@@ -73,16 +74,17 @@ const StickerHeader = () => {
 
     const canvas = canvasRef.current
     const stage = stageRef.current
+    const hitArea = hitRef.current
 
     // Reduced motion keeps the sticker, drops the physics.
-    if (motionQuery.matches || !canvas || !stage) {
+    if (motionQuery.matches || !canvas || !stage || !hitArea) {
       return () => motionQuery.removeEventListener('change', onMotionChange)
     }
 
     const schemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const paletteFor = () => (schemeQuery.matches ? palettes.dark : palettes.light)
 
-    const scene = createStickerScene(canvas, { palette: paletteFor() })
+    const scene = createStickerScene(canvas, hitArea, { palette: paletteFor() })
     if (!scene) {
       return () => motionQuery.removeEventListener('change', onMotionChange)
     }
@@ -110,13 +112,20 @@ const StickerHeader = () => {
     <div className="-mt-6 sm:-mt-8 opacity-0 animate-reveal">
       <h1 className="sr-only">Jeff Su</h1>
       <div ref={stageRef} className="relative w-full h-44 sm:h-52 select-none">
+        {/* Sized and positioned by the scene: the sticker plus headroom, moving
+            with it, so a sticker lifted or curling at the edge of where it can
+            be dragged is still drawn in full. Never interactive: input goes
+            through the hit area, so it can pass over the text below without
+            blocking it. */}
         <canvas
           ref={canvasRef}
           aria-hidden="true"
-          className="absolute inset-0 w-full h-full"
-          style={{ touchAction: 'pan-y', opacity: live ? 1 : 0 }}
+          className="absolute"
+          style={{ pointerEvents: 'none', willChange: 'transform', opacity: live ? 1 : 0 }}
         />
         {live ? null : <StaticSticker />}
+        {/* Positioned over the sticker by the scene. */}
+        <div ref={hitRef} aria-hidden="true" className="absolute" style={{ pointerEvents: 'none' }} />
       </div>
     </div>
   )
