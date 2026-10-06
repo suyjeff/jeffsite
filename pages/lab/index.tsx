@@ -1,8 +1,6 @@
 import React from "react";
 import Link from "next/link";
 import Layout from "../../components/Layout";
-import LabHeaderExperiment01 from "../../components/LabHeaderExperiment01";
-import LabHeaderExperiment02 from "../../components/LabHeaderExperiment02";
 
 const LabPage = () => {
   return (
@@ -25,14 +23,6 @@ const LabPage = () => {
         </div>
         <div className="mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-200">
           <div className="text-xs uppercase tracking-[0.35em] text-stone-400 dark:text-stone-500">
-            header experiment 01
-          </div>
-          <div className="mt-4">
-            <LabHeaderExperiment01 />
-          </div>
-        </div>
-        <div className="mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-300">
-          <div className="text-xs uppercase tracking-[0.35em] text-stone-400 dark:text-stone-500">
             fantasy football
           </div>
           <p className="mt-4 text-lg tracking-tight">
@@ -41,14 +31,6 @@ const LabPage = () => {
             </Link>
             <span className="block text-stone-400 dark:text-stone-400">Power ranks, WAR-style player values and trade math for a Sleeper league.</span>
           </p>
-        </div>
-        <div className="mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 opacity-0 animate-reveal animation-delay-400">
-          <div className="text-xs uppercase tracking-[0.35em] text-stone-400 dark:text-stone-500">
-            header experiment 02
-          </div>
-          <div className="mt-4">
-            <LabHeaderExperiment02 />
-          </div>
         </div>
       </div>
     </Layout>
