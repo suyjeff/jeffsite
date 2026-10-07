@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Shell, { SECTION_KEYS, type SectionKey } from '../../components/fantasy/Shell'
-import { Label, Segmented, cx } from '../../components/fantasy/ui'
+import { FantasyProvider } from '../../components/fantasy/FantasyContext'
+import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../../components/fantasy/Shell'
+import { Label, Segmented, Select, cx } from '../../components/fantasy/ui'
+import DashboardView from '../../components/fantasy/views/DashboardView'
 import MeView from '../../components/fantasy/views/MeView'
 import ModelView from '../../components/fantasy/views/ModelView'
 import PlayersView from '../../components/fantasy/views/PlayersView'
@@ -8,6 +10,7 @@ import PowerView from '../../components/fantasy/views/PowerView'
 import TeamsView from '../../components/fantasy/views/TeamsView'
 import TradesView from '../../components/fantasy/views/TradesView'
 import { analyze } from '../../lib/fantasy/analysis'
+import { buildModels } from '../../lib/fantasy/models'
 import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../../lib/fantasy/power'
 import { purgeStaleCache } from '../../lib/fantasy/sleeper'
 import {
@@ -56,7 +59,7 @@ const loadPrefs = (): Prefs => {
 const FantasyPage = () => {
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const [usernameInput, setUsernameInput] = useState(DEFAULT_USERNAME)
-  const route = useRoute(SECTION_KEYS, 'trades')
+  const route = useRoute(SECTION_KEYS, 'dash')
 
   useEffect(() => {
     purgeStaleCache()
@@ -82,6 +85,8 @@ const FantasyPage = () => {
   )
   const { data, error, loading, progress, reload } = useLeagueData(opts)
   const analysis = useMemo(() => (data && prefs ? analyze(data, prefs.model, prefs.weights) : null), [data, prefs?.model, prefs?.weights]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Ratings, simulation, backtest and behaviour: rebuilt only when the analysis is.
+  const models = useMemo(() => (data && analysis ? buildModels(data, analysis) : null), [data, analysis])
 
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   useEffect(() => {
@@ -99,6 +104,7 @@ const FantasyPage = () => {
   const myTeam = analysis && analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
   const mySeason = myTeam ? analysis!.seasonById[myTeam.rosterId] : null
   const myPower = myTeam ? analysis!.powerById[myTeam.rosterId] : null
+  const myOdds = myTeam && models?.forecast ? models.forecast.sim[myTeam.rosterId]?.playoffs : null
   const horizonWeeks = data?.horizon.map((h) => h.week) ?? []
 
   const controls = prefs && (
@@ -126,10 +132,11 @@ const FantasyPage = () => {
       </div>
       {prefs.horizon === 'playoffs' && (data?.playoffWeeks.length ?? 0) > 0 && (
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[12px] text-ff-text2">
-            Playoff weeks count <span className="num text-ff-muted">({data!.playoffWeeks.join(', ')})</span>
+          <span className="min-w-0 leading-tight">
+            <span className="block text-[12px] text-ff-text2">Playoff weight</span>
+            <span className="num block text-[10px] text-ff-muted">wk {data!.playoffWeeks.join(' ')}</span>
           </span>
-          <span className="flex items-center rounded-md border border-ff-line bg-ff-sunken">
+          <span className="flex items-center border border-ff-line bg-ff-panel">
             {(
               [
                 ['−', -0.5],
@@ -163,26 +170,32 @@ const FantasyPage = () => {
           onChange={(e) => setUsernameInput(e.target.value)}
           aria-label="Sleeper username"
           spellCheck={false}
-          className="h-7 min-w-0 flex-1 rounded-md border border-ff-line bg-ff-sunken px-2 font-mono text-[11.5px] text-ff-text outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40"
+          className="h-8 min-w-0 flex-1 border border-ff-line bg-ff-panel px-2 font-mono text-[11.5px] text-ff-text outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40"
         />
-        <select
-          aria-label="Season"
+        <Select
+          label="Season"
           value={prefs.season ?? seasonOptions[0]}
-          onChange={(e) => update({ season: e.target.value === seasonOptions[0] ? null : e.target.value, leagueId: null })}
-          className="h-7 rounded-md border border-ff-line bg-ff-sunken px-1.5 font-mono text-[11.5px] text-ff-text"
+          onChange={(v) => update({ season: v === seasonOptions[0] ? null : v, leagueId: null })}
+          className="w-[74px] shrink-0 font-mono text-[11.5px]"
         >
           {seasonOptions.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
-        </select>
+        </Select>
       </form>
     </>
   )
 
   const section = route.section as SectionKey
-  const title = data ? `${route.section === 'me' ? 'My team' : route.section[0].toUpperCase() + route.section.slice(1)} · ${data.league.name}` : 'Fantasy'
+  const title = data ? `${SECTIONS.find((s) => s.key === route.section)?.label ?? 'Fantasy'} · ${data.league.name}` : 'Fantasy'
+  const status = [
+    data?.state.season_type === 'regular' ? `WK ${String(data.state.week).padStart(2, '0')}` : null,
+    models?.forecast ? `SIM ${models.forecast.sims}` : null,
+    models?.forecast ? `σ ${models.forecast.sigma.toFixed(1)}` : null,
+    data?.consensus ? 'ECR ✓' : null,
+  ].filter((x): x is string => !!x)
 
   return (
     <Shell
@@ -193,28 +206,31 @@ const FantasyPage = () => {
       leagueId={data?.league.league_id ?? null}
       onLeague={(id) => update({ leagueId: id })}
       leagueMeta={data ? `${data.league.season} · ${data.league.total_rosters} teams${data.state.season_type === 'regular' && data.league.season === data.state.season ? ` · wk ${data.state.week}` : ''}` : undefined}
-      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${myPower ? ` · power #${myPower.rank} of ${analysis!.teams.length}` : ''}` } : null}
+      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${myOdds != null ? ` · ${Math.round(myOdds * 100)}% playoffs` : myPower ? ` · power #${myPower.rank} of ${analysis!.teams.length}` : ''}` } : null}
       controls={controls}
       loading={loading}
       progress={progress}
       onRefresh={reload}
       loadedAt={loadedAt}
+      status={status}
     >
       {error && (
-        <div className="mt-4 rounded-lg border border-ff-neg/40 bg-ff-neg/10 px-3 py-2.5 text-[13px] text-ff-neg">{error}</div>
+        <div className="mt-4 border border-ff-neg/40 bg-ff-neg/10 px-3 py-2.5 font-mono text-[12px] text-ff-neg">ERR · {error}</div>
       )}
       {data && data.warnings.length > 0 && (
         <div className="mt-3 space-y-0.5">
           {data.warnings.map((w) => (
-            <div key={w} className="text-[11.5px] text-ff-warn">
-              {w}
+            <div key={w} className="font-mono text-[11px] text-ff-warn">
+              ! {w}
             </div>
           ))}
         </div>
       )}
 
-      {data && analysis && prefs ? (
+      {data && analysis && models && prefs ? (
+        <FantasyProvider value={{ data, analysis, models, go: (s, sub) => route.go(s, sub ?? undefined) }}>
         <div key={data.league.league_id} className={cx(loading && 'opacity-60 transition-opacity')}>
+          {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'me' && <MeView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'power' && (
@@ -236,16 +252,17 @@ const FantasyPage = () => {
             />
           )}
         </div>
+        </FantasyProvider>
       ) : (
         !error && (
           <div className="mt-6 space-y-3">
             <div className="flex items-center gap-2 font-mono text-[11.5px] text-ff-muted">
-              <span className="ff-pulse h-1.5 w-1.5 rounded-full bg-ff-warn" />
-              {loading ? `${progress}…` : 'Starting…'}
+              <span className="ff-pulse h-1.5 w-1.5 bg-ff-warn" />
+              <span className="ff-caret">{loading ? progress : 'starting'}</span>
             </div>
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid gap-px border border-ff-line bg-ff-line lg:grid-cols-2">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-56 animate-pulse rounded-lg border border-ff-line bg-ff-panel" />
+                <div key={i} className="h-56 animate-pulse bg-ff-panel" />
               ))}
             </div>
           </div>

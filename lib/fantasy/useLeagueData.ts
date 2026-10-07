@@ -5,10 +5,12 @@ import {
   getMatchups,
   getPlayers,
   getRosters,
+  getConsensusCsv,
   getScoredProjections,
   getSchedule,
   getSeasonGamesPlayed,
   getState,
+  getTransactions,
   getTrendingAdds,
   getUser,
   getUserLeagues,
@@ -22,6 +24,7 @@ import type {
   SleeperMatchup,
   SleeperRoster,
   SleeperState,
+  SleeperTransaction,
   SleeperUser,
   TrendingEntry,
   WeekStats,
@@ -37,6 +40,7 @@ import {
   type SeasonGames,
   type Usage,
 } from './context'
+import { matchConsensus, reduceConsensusCsv, type Consensus } from './consensus'
 import type { Horizon } from './trades'
 import type { WeekPoints } from './war'
 
@@ -101,7 +105,30 @@ export type LeagueData = {
   /** Fantasy playoff weeks for this league. */
   playoffWeeks: number[]
   trending: TrendingEntry[]
+  /** This season's transactions, every type. */
+  transactions: SleeperTransaction[]
+  /**
+   * Last season of the same league, when Sleeper links one: results seed the
+   * rating model's prior and lengthen its backtest; trades lengthen the
+   * behaviour record. Roster ids are remapped onto this season's by owner.
+   */
+  history: LeagueHistory | null
+  /** Sleeper's own projection for each completed week, for the backtest. */
+  pastProjections: Record<number, Record<string, number>>
+  /** FantasyPros consensus, when the mirror could be read. */
+  consensus: Consensus | null
   warnings: string[]
+}
+
+export type LeagueHistory = {
+  league: SleeperLeague
+  season: string
+  matchupsByWeek: Record<number, SleeperMatchup[]>
+  /** Completed regular-season weeks. */
+  weeks: number[]
+  transactions: SleeperTransaction[]
+  /** Last season's roster id -> this season's roster id with the same owner. */
+  rosterMap: Record<number, number>
 }
 
 export type LoadOptions = {
@@ -385,6 +412,58 @@ export const loadLeagueData = async (
     if (Array.isArray(trend)) trending = trend
   }
 
+  // ---- League history and outside opinion ----
+  // All optional: each one sharpens a model, none of them is needed to draw the page.
+  onProgress('Reading league history')
+  const txWeeks = weekList.filter((w) => w <= Math.min(currentWeek, MAX_WEEK))
+  const [txResults, projResults, consensusRows] = await Promise.all([
+    settled(txWeeks.map((w) => getTransactions(league.league_id, w, w < currentWeek))),
+    settled(regularWeeks.map((w) => getScoredProjections(league.league_id, league.season, w, league.scoring_settings, false))),
+    isCurrentSeason ? settled([getConsensusCsv(reduceConsensusCsv)]).then((r) => r[0]) : Promise.resolve(null),
+  ])
+  const transactions = txResults.flatMap((r) => r ?? [])
+  const pastProjections: Record<number, Record<string, number>> = {}
+  regularWeeks.forEach((w, i) => {
+    if (projResults[i] && Object.keys(projResults[i]!).length) pastProjections[w] = projResults[i]!
+  })
+  let consensus: Consensus | null = null
+  if (consensusRows?.length) consensus = matchConsensus(consensusRows, players)
+  else if (isCurrentSeason) warnings.push('FantasyPros consensus unavailable right now; consensus columns are hidden.')
+
+  let history: LeagueHistory | null = null
+  if (league.previous_league_id && league.previous_league_id !== '0') {
+    const prevId = league.previous_league_id
+    const [prevLeague, prevRosters] = await settled<unknown>([getLeague(prevId), getRosters(prevId)])
+    if (prevLeague && Array.isArray(prevRosters)) {
+      const pl = prevLeague as SleeperLeague
+      const prevStart = pl.settings?.start_week ?? 1
+      const prevPlayoff = pl.settings?.playoff_week_start ?? 15
+      const prevWeeks = Array.from({ length: prevPlayoff - prevStart }, (_, i) => prevStart + i)
+      const [prevMatchups, prevTx] = await Promise.all([
+        settled(prevWeeks.map((w) => getMatchups(prevId, w, true))),
+        settled(Array.from({ length: MAX_WEEK }, (_, i) => getTransactions(prevId, i + 1, true))),
+      ])
+      const byOwner = new Map(rosters.filter((r) => r.owner_id).map((r) => [r.owner_id!, r.roster_id]))
+      const rosterMap: Record<number, number> = {}
+      for (const r of prevRosters as SleeperRoster[]) {
+        const now = r.owner_id ? byOwner.get(r.owner_id) : undefined
+        if (now != null) rosterMap[r.roster_id] = now
+      }
+      const mbw: Record<number, SleeperMatchup[]> = {}
+      prevWeeks.forEach((w, i) => {
+        if (weekHasScores(prevMatchups[i])) mbw[w] = prevMatchups[i]!
+      })
+      history = {
+        league: pl,
+        season: pl.season,
+        matchupsByWeek: mbw,
+        weeks: Object.keys(mbw).map(Number).sort((a, b) => a - b),
+        transactions: prevTx.flatMap((r) => r ?? []),
+        rosterMap,
+      }
+    }
+  }
+
   return {
     state,
     me,
@@ -413,6 +492,10 @@ export const loadLeagueData = async (
     playoffWeight,
     playoffWeeks,
     trending,
+    transactions,
+    history,
+    pastProjections,
+    consensus,
     warnings,
   }
 }

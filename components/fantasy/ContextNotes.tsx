@@ -27,13 +27,13 @@ export const describeNote = (note: ContextNote, players: PlayerMap): { tone: Ton
       return {
         tone: 'warn',
         label: `${note.status} · ${Math.round(note.play * 100)}% wk ${note.week}`,
-        title: `Sleeper lists him ${note.status}, but his week ${note.week} projection assumes he plays. Counted at a ${Math.round(note.play * 100)}% chance, with the rest going to his teammates.`,
+        title: `Sleeper lists this player ${note.status}, but the week ${note.week} projection assumes they play. Counted at a ${Math.round(note.play * 100)}% chance, with the rest going to his teammates.`,
       }
     case 'history':
       return {
         tone: 'bad',
         label: `played ${note.played}/${note.games}`,
-        title: `Suited up for ${note.played} of his teams' last ${note.games} games. Expected to play ${Math.round(note.rate * 100)}% of future games, against ${Math.round(BASE_AVAILABILITY * 100)}% for a typical starter.`,
+        title: `Suited up for ${note.played} of their teams' last ${note.games} games. Expected to play ${Math.round(note.rate * 100)}% of future games, against ${Math.round(BASE_AVAILABILITY * 100)}% for a typical starter.`,
       }
     case 'bump': {
       const who = note.from.map((id) => last(players[id]?.name, id)).join(', ')
@@ -48,7 +48,7 @@ export const describeNote = (note: ContextNote, players: PlayerMap): { tone: Ton
       return {
         tone: 'warn',
         label: `bigger role ${weekRange(note.weeks)} only`,
-        title: `Projected for ${note.during.toFixed(1)} a week while ${who} is out (${weekRange(note.weeks)}), then about ${note.after.toFixed(1)}. Sell-high territory if someone prices him on the short-term number.`,
+        title: `Projected for ${note.during.toFixed(1)} a week while ${who} is out (${weekRange(note.weeks)}), then about ${note.after.toFixed(1)}. Sell-high territory if someone prices this player on the short-term number.`,
       }
     }
     case 'returns':
@@ -60,14 +60,14 @@ export const describeNote = (note: ContextNote, players: PlayerMap): { tone: Ton
       return {
         tone: up ? 'good' : 'warn',
         label: `snaps ${Math.round(note.snaps * 100)}→${Math.round(note.recentSnaps * 100)}%`,
-        title: `Offensive snap share: ${Math.round(note.snaps * 100)}% on the season, ${Math.round(note.recentSnaps * 100)}% over his last two games. Projections catch up to role changes slowly.`,
+        title: `Offensive snap share: ${Math.round(note.snaps * 100)}% on the season, ${Math.round(note.recentSnaps * 100)}% over their last two games. Projections catch up to role changes slowly.`,
       }
     }
     case 'playoffs':
       return {
         tone: note.vsNormal > 0 ? 'good' : 'warn',
         label: `playoffs ${note.vsNormal > 0 ? '+' : ''}${Math.round(note.vsNormal * 100)}%`,
-        title: `Projected ${Math.abs(Math.round(note.vsNormal * 100))}% ${note.vsNormal > 0 ? 'above' : 'below'} his usual week across ${weekRange(note.weeks)}, from the matchups Sleeper expects.`,
+        title: `Projected ${Math.abs(Math.round(note.vsNormal * 100))}% ${note.vsNormal > 0 ? 'above' : 'below'} their usual week across ${weekRange(note.weeks)}, from the matchups Sleeper expects.`,
       }
   }
 }
@@ -82,7 +82,7 @@ export const ContextNotes = ({ context, players, max = 4 }: { context?: PlayerCo
       {notes.map((n, i) => {
         const d = describeNote(n, players)
         return (
-          <span key={i} title={d.title} className={`inline-block cursor-help whitespace-nowrap rounded px-1.5 py-[1px] text-[10.5px] font-medium leading-[16px] ${TONES[d.tone]}`}>
+          <span key={i} title={d.title} className={`inline-block cursor-help whitespace-nowrap rounded-sm px-1.5 py-[1px] text-[10.5px] font-medium leading-[16px] ${TONES[d.tone]}`}>
             {d.label}
           </span>
         )

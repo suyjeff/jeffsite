@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { cx, fmt, fmtSigned } from './ui'
 
 // Small SVG charts for the fantasy app. One axis each, hairline grid, thin
-// marks with rounded data ends, a 2px surface gap between touching marks, and
+// marks with rounded-sm data ends, a 2px surface gap between touching marks, and
 // a hover readout on every mark. Text stays in ink; color rides the marks.
 
 /** Categorical slots in fixed order (validated palette, stepped per mode in fantasy.css). */
@@ -26,7 +26,7 @@ const useWidth = (initial: number) => {
 
 const Tip = ({ x, y, children, width }: { x: number; y: number; children: React.ReactNode; width: number }) => (
   <span
-    className="pointer-events-none absolute z-30 whitespace-nowrap rounded bg-ff-text px-1.5 py-0.5 font-mono text-[10.5px] text-ff-panel"
+    className="pointer-events-none absolute z-30 whitespace-nowrap rounded-sm bg-ff-text px-1.5 py-0.5 font-mono text-[10.5px] text-ff-panel"
     style={{ left: Math.max(0, Math.min(x, width - 120)), top: Math.max(0, y - 24) }}
   >
     {children}
@@ -204,11 +204,11 @@ export const MiniLines = ({
         ))}
       </svg>
       {hover !== null && (
-        <span className="pointer-events-none absolute z-30 rounded bg-ff-text px-2 py-1 font-mono text-[10.5px] leading-relaxed text-ff-panel" style={{ left: Math.min(x(hover) + 8, w - 150), top: pad.t }}>
+        <span className="pointer-events-none absolute z-30 rounded-sm bg-ff-text px-2 py-1 font-mono text-[10.5px] leading-relaxed text-ff-panel" style={{ left: Math.min(x(hover) + 8, w - 150), top: pad.t }}>
           <span className="block opacity-70">{xLabel(xs[hover])}</span>
           {series.map((s) => (
             <span key={s.label} className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: fill(s.slot) }} />
+              <span className="h-1.5 w-1.5 " style={{ background: fill(s.slot) }} />
               {s.label} {yFormat(s.values[hover])}
             </span>
           ))}

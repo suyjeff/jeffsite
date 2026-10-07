@@ -21,6 +21,7 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
   return (
     <>
       <PageHeader
+        code="05"
         title={
           <span className="flex items-center gap-2.5">
             <Avatar src={team.avatar} name={team.name} size={28} />
@@ -37,7 +38,7 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
                   key={t.rosterId}
                   onClick={() => onTeam(t.rosterId)}
                   className={cx(
-                    'flex shrink-0 items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2.5 text-[12px] transition-colors',
+                    'flex shrink-0 items-center gap-1.5  border py-0.5 pl-0.5 pr-2.5 text-[12px] transition-colors',
                     t.rosterId === rosterId ? 'border-ff-accent bg-ff-accent/10 text-ff-text' : 'border-ff-line bg-ff-panel text-ff-text2 hover:border-ff-line2',
                   )}
                 >

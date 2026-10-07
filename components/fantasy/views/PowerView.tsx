@@ -3,10 +3,12 @@ import type { Analysis } from '../../../lib/fantasy/analysis'
 import { opponentsByWeek, type PowerWeights } from '../../../lib/fantasy/power'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DivergingStacks, Legend } from '../charts'
+import { useFantasy } from '../FantasyContext'
 import { Avatar, Badge, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, type Column } from '../ui'
 
-type Sub = 'rankings' | 'standings' | 'schedule'
-const SUBS: Sub[] = ['rankings', 'standings', 'schedule']
+type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
+const SUBS: Sub[] = ['rankings', 'odds', 'standings', 'schedule']
+type RankModel = 'forecast' | 'composite' | 'elo'
 
 export const COMPONENTS: { key: keyof PowerWeights; label: string; slot: string }[] = [
   { key: 'allPlay', label: 'All-play', slot: 's1' },
@@ -46,6 +48,9 @@ const PowerView = ({
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'rankings'
   const [view, setView] = useState<'table' | 'breakdown'>('table')
+  const { models } = useFantasy()
+  const forecast = models.forecast
+  const [rankModel, setRankModel] = useState<RankModel>(forecast ? 'forecast' : 'composite')
   const { seasonById, powerById, strength, myRosterId, teams } = analysis
   const played = data.regularWeeks.length
   const maxStrength = Math.max(...Object.values(strength), 0.0001)
@@ -68,6 +73,69 @@ const PowerView = ({
 
   const weightSum = COMPONENTS.reduce((a, c) => a + Math.max(0, weights[c.key]), 0) || 1
   const me = myRosterId != null ? { season: seasonById[myRosterId], power: powerById[myRosterId] } : null
+  const forecastOrder = useMemo(() => (forecast ? [...forecast.ratings].sort((a, b) => b.rating - a.rating).map((r) => r.rosterId) : []), [forecast])
+  const eloOrder = useMemo(() => [...teams].sort((a, b) => (models.elo.final[b.rosterId] ?? 0) - (models.elo.final[a.rosterId] ?? 0)).map((t) => t.rosterId), [teams, models.elo])
+  const rankIn = (order: number[], id: number) => order.indexOf(id) + 1
+  const ratingMax = forecast ? Math.max(...forecast.ratings.map((r) => r.rating)) : 1
+  const ratingMin = forecast ? Math.min(...forecast.ratings.map((r) => r.rating)) : 0
+
+  const forecastColumns: Column<{ rosterId: number }>[] = [
+    { key: 'rank', label: '#', sort: (r) => -rankIn(forecastOrder, r.rosterId), render: (r) => <span className="num text-ff-muted">{rankIn(forecastOrder, r.rosterId)}</span> },
+    { key: 'team', label: 'Team', sticky: true, sort: (r) => analysis.teamById[r.rosterId].name, render: (r) => <TeamCell analysis={analysis} rosterId={r.rosterId} /> },
+    {
+      key: 'rating',
+      label: 'Rating',
+      align: 'right',
+      title: 'Expected points per week ahead: projected optimal lineup (injury odds and byes priced in) × lineup efficiency',
+      sort: (r) => forecast!.byId[r.rosterId].rating,
+      render: (r) => (
+        <span className="inline-flex items-center justify-end gap-2">
+          <Meter value={forecast!.byId[r.rosterId].rating - ratingMin + 1} max={ratingMax - ratingMin + 1} width={56} />
+          <span className="w-10 text-ff-text">{fmt(forecast!.byId[r.rosterId].rating)}</span>
+        </span>
+      ),
+    },
+    { key: 'proj', label: 'Lineup', align: 'right', title: 'Projected optimal lineup per week, before lineup efficiency', sort: (r) => forecast!.byId[r.rosterId].projected, render: (r) => fmt(forecast!.byId[r.rosterId].projected) },
+    { key: 'eff', label: 'Eff', align: 'right', title: 'Share of the optimum this manager starts, shrunk toward the league', sort: (r) => forecast!.byId[r.rosterId].efficiency, render: (r) => pct(forecast!.byId[r.rosterId].efficiency, 1) },
+    {
+      key: 'form',
+      label: 'Form',
+      align: 'right',
+      hideBelow: 'md',
+      title: 'Points per week beyond its own projections, shrunk. Shown, not counted: the backtest finds it adds noise.',
+      sort: (r) => forecast!.byId[r.rosterId].form,
+      render: (r) => <span className="text-ff-muted">{fmtSigned(forecast!.byId[r.rosterId].form)}</span>,
+    },
+    {
+      key: 'record',
+      label: 'W-L',
+      align: 'right',
+      sort: (r) => seasonById[r.rosterId].wins + seasonById[r.rosterId].ties / 2,
+      render: (r) => `${seasonById[r.rosterId].wins}-${seasonById[r.rosterId].losses}`,
+    },
+    { key: 'xw', label: 'Proj W', align: 'right', hideBelow: 'sm', title: 'Mean simulated wins at season end', sort: (r) => forecast!.sim[r.rosterId].wins, render: (r) => fmt(forecast!.sim[r.rosterId].wins) },
+    { key: 'po', label: 'Playoffs', align: 'right', sort: (r) => forecast!.sim[r.rosterId].playoffs, render: (r) => <span className={forecast!.sim[r.rosterId].playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted'}>{pct(forecast!.sim[r.rosterId].playoffs)}</span> },
+    { key: 'title', label: 'Title', align: 'right', sort: (r) => forecast!.sim[r.rosterId].title, render: (r) => pct(forecast!.sim[r.rosterId].title, forecast!.sim[r.rosterId].title < 0.1 ? 1 : 0) },
+    { key: 'elo', label: 'Elo', align: 'right', hideBelow: 'lg', sort: (r) => models.elo.final[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-muted">{Math.round(models.elo.final[r.rosterId] ?? 1500)}</span> },
+  ]
+
+  const eloColumns: Column<{ rosterId: number }>[] = [
+    { key: 'rank', label: '#', sort: (r) => -rankIn(eloOrder, r.rosterId), render: (r) => <span className="num text-ff-muted">{rankIn(eloOrder, r.rosterId)}</span> },
+    { key: 'team', label: 'Team', sticky: true, render: (r) => <TeamCell analysis={analysis} rosterId={r.rosterId} /> },
+    { key: 'elo', label: 'Elo', align: 'right', sort: (r) => models.elo.final[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-text">{Math.round(models.elo.final[r.rosterId] ?? 1500)}</span> },
+    {
+      key: 'prior',
+      label: 'Preseason',
+      align: 'right',
+      title: "Last season's closing Elo, regressed a third of the way to 1500 (1500 when there is no last season)",
+      sort: (r) => models.eloPrior[r.rosterId] ?? 1500,
+      render: (r) => <span className="text-ff-muted">{Math.round(models.eloPrior[r.rosterId] ?? 1500)}</span>,
+    },
+    { key: 'delta', label: 'Season Δ', align: 'right', sort: (r) => (models.elo.final[r.rosterId] ?? 1500) - (models.eloPrior[r.rosterId] ?? 1500), render: (r) => <Num value={(models.elo.final[r.rosterId] ?? 1500) - (models.eloPrior[r.rosterId] ?? 1500)} signed digits={0} /> },
+    { key: 'record', label: 'W-L', align: 'right', render: (r) => `${seasonById[r.rosterId].wins}-${seasonById[r.rosterId].losses}` },
+    { key: 'pf', label: 'PF/G', align: 'right', render: (r) => fmt(seasonById[r.rosterId].ppg) },
+  ]
+  const order = rankModel === 'forecast' ? forecastOrder : rankModel === 'elo' ? eloOrder : analysis.power.map((p) => p.rosterId)
   const standingRank = myRosterId != null ? standings.findIndex((t) => t.rosterId === myRosterId) + 1 : null
 
   const powerColumns: Column<{ rosterId: number }>[] = [
@@ -137,10 +205,12 @@ const PowerView = ({
   return (
     <>
       <PageHeader
+        code="04"
         title="Power"
         meta={
           <>
-            <span className="num">{played}</span> week{played === 1 ? '' : 's'} played · composite of all-play, scoring, form, roster and efficiency
+            <span className="num">{played}</span> wk played · ranking by {rankModel === 'forecast' ? 'forecast (expected pts/wk)' : rankModel === 'elo' ? 'Elo (results only)' : 'composite (results-weighted)'}
+            {forecast && <> · {forecast.sims.toLocaleString()} simulated seasons</>}
           </>
         }
         tabs={
@@ -149,6 +219,7 @@ const PowerView = ({
             onChange={onSub}
             items={[
               { key: 'rankings', label: 'Rankings' },
+              ...(forecast ? [{ key: 'odds' as const, label: 'Playoff odds' }] : []),
               { key: 'standings', label: 'Standings' },
               { key: 'schedule', label: 'Remaining schedule' },
             ]}
@@ -158,32 +229,52 @@ const PowerView = ({
       <div className="mt-4 space-y-3">
         {me && (
           <StatGrid>
-            <Stat label="Your power rank" value={`#${me.power.rank}`} sub={`score ${fmt(me.power.score, 0)} of 100`} />
+            <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.elo.final[myRosterId!] ?? 1500)}` : `score ${fmt(me.power.score, 0)} of 100`} />
+            {forecast && <Stat label="Playoff odds" value={pct(forecast.sim[myRosterId!].playoffs)} sub={`title ${pct(forecast.sim[myRosterId!].title, 1)} · bye ${pct(forecast.sim[myRosterId!].bye)}`} />}
             <Stat label="Standing" value={standingRank ? `#${standingRank}` : '–'} sub={playoffTeams ? `top ${playoffTeams} make the playoffs` : undefined} />
             <Stat label="Record" value={`${me.season.wins}-${me.season.losses}${me.season.ties ? `-${me.season.ties}` : ''}`} sub={`all-play ${pct(me.season.allPlayPct)}`} />
             <Stat label="Points per game" value={fmt(me.season.ppg)} delta={<Num value={me.season.ppg - leagueAvgPpg} signed />} sub="vs league average" />
-            <Stat label="Luck" value={fmtSigned(me.season.luck, 1)} sub="wins above all-play expectation" />
+            {!forecast && <Stat label="Luck" value={fmtSigned(me.season.luck, 1)} sub="wins above all-play expectation" />}
             <Stat label="Schedule ahead" value={fmt(me.power.sos, 0)} sub="avg power of remaining opponents" />
           </StatGrid>
         )}
 
         {tab === 'rankings' && (
           <Panel
-            title={view === 'table' ? 'Power rankings' : 'Where each score comes from'}
-            pad={view === 'breakdown'}
+            title={rankModel !== 'composite' ? 'Power rankings' : view === 'table' ? 'Power rankings' : 'Where each score comes from'}
+            pad={rankModel === 'composite' && view === 'breakdown'}
             actions={
-              <Segmented
-                size="sm"
-                value={view}
-                onChange={setView}
-                options={[
-                  { key: 'table', label: 'Table' },
-                  { key: 'breakdown', label: 'Breakdown' },
-                ]}
-              />
+              <>
+                <Segmented<RankModel>
+                  size="sm"
+                  label="Ranking model"
+                  value={rankModel}
+                  onChange={setRankModel}
+                  options={[
+                    ...(forecast ? [{ key: 'forecast' as const, label: 'Forecast', title: 'Expected points per week: projected lineup × lineup efficiency. Best calibrated in the backtest.' }] : []),
+                    { key: 'composite', label: 'Composite', title: 'Weighted z-scores of all-play, scoring, form, roster and efficiency' },
+                    { key: 'elo', label: 'Elo', title: 'Results-only Elo with a carried-over prior' },
+                  ]}
+                />
+                {rankModel === 'composite' && (
+                  <Segmented
+                    size="sm"
+                    value={view}
+                    onChange={setView}
+                    options={[
+                      { key: 'table', label: 'Table' },
+                      { key: 'breakdown', label: 'Breakdown' },
+                    ]}
+                  />
+                )}
+              </>
             }
           >
-            {view === 'table' ? (
+            {rankModel === 'forecast' && forecast ? (
+              <Table rows={forecastOrder.map((rosterId) => ({ rosterId }))} columns={forecastColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
+            ) : rankModel === 'elo' ? (
+              <Table rows={eloOrder.map((rosterId) => ({ rosterId }))} columns={eloColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
+            ) : view === 'table' ? (
               <Table
                 rows={analysis.power.map((p) => ({ rosterId: p.rosterId }))}
                 columns={powerColumns}
@@ -216,6 +307,8 @@ const PowerView = ({
             )}
           </Panel>
         )}
+
+        {tab === 'odds' && forecast && <OddsGrid onTeam={onTeam} />}
 
         {tab === 'standings' && (
           <Panel title="Standings" pad={false} actions={playoffTeams ? <span>playoff line after #{playoffTeams}</span> : null}>
@@ -259,6 +352,73 @@ const PowerView = ({
   )
 }
 
+/** Seed probabilities from the season simulation, one row per team, plus the odds that matter. */
+const OddsGrid = ({ onTeam }: { onTeam: (id: number) => void }) => {
+  const { models, analysis, data } = useFantasy()
+  const f = models.forecast!
+  const n = analysis.teams.length
+  const cut = Number(data.league.settings?.playoff_teams ?? 0)
+  const rows = [...analysis.teams]
+    .map((t) => ({ id: t.rosterId, mean: f.sim[t.rosterId].seeds.reduce((a, p, i) => a + p * i, 0) }))
+    .sort((a, b) => a.mean - b.mean)
+  return (
+    <Panel title="Seed distribution" pad={false} actions={<span>{f.sims.toLocaleString()} sims · shade = probability</span>}>
+      <div className="ff-scroll overflow-x-auto">
+        <table className="w-full border-separate border-spacing-0 text-[12px]">
+          <thead>
+            <tr>
+              <th className="ff-label sticky left-0 z-10 h-8 border-b border-ff-line bg-ff-panel px-3 text-left font-normal">team</th>
+              {Array.from({ length: n }, (_, i) => (
+                <th key={i} className={cx('ff-label h-8 w-11 border-b border-ff-line text-center font-normal', i + 1 === cut && 'border-r border-r-ff-line2')}>
+                  {i + 1}
+                </th>
+              ))}
+              {['wins', 'playoffs', 'bye', 'final', 'title'].map((k) => (
+                <th key={k} className="ff-label h-8 border-b border-ff-line px-2 text-right font-normal">
+                  {k}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ id }) => {
+              const s = f.sim[id]
+              return (
+                <tr key={id} onClick={() => onTeam(id)} className="cursor-pointer hover:bg-ff-raised">
+                  <td className="sticky left-0 z-[1] h-8 border-b border-ff-line/60 bg-ff-panel px-3">
+                    <span className={cx('block max-w-[160px] truncate', id === analysis.myRosterId ? 'font-medium text-ff-accent' : 'text-ff-text')}>{analysis.teamById[id].name}</span>
+                  </td>
+                  {Array.from({ length: n }, (_, i) => {
+                    const p = s.seeds[i + 1] ?? 0
+                    return (
+                      <td
+                        key={i}
+                        title={`${analysis.teamById[id].name}: ${pct(p, 1)} to finish ${i + 1}`}
+                        className={cx('num h-8 border-b border-ff-line/60 text-center text-[10.5px]', p >= 0.25 ? 'text-ff-panel' : p >= 0.02 ? 'text-ff-text2' : 'text-ff-muted/50', i + 1 === cut && 'border-r border-r-ff-line2')}
+                        style={{ background: p > 0.005 ? `rgb(var(--ff-accent) / ${Math.min(0.95, 0.08 + p * 1.6).toFixed(2)})` : undefined }}
+                      >
+                        {p >= 0.005 ? Math.round(p * 100) : '·'}
+                      </td>
+                    )
+                  })}
+                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{fmt(s.wins)}</td>
+                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text">{pct(s.playoffs)}</td>
+                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{pct(s.bye)}</td>
+                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{pct(s.final)}</td>
+                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text">{pct(s.title, 1)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="border-t border-ff-line px-3 py-2 font-mono text-[10.5px] text-ff-muted">
+        Each season plays out week by week: weekly scores ~ N(rating, σ={fmt(f.sigma)}) around a team level drawn once per season (τ={fmt(f.tau)}), then the bracket. The rule after seed {cut} is the playoff line.
+      </p>
+    </Panel>
+  )
+}
+
 /** Remaining regular-season opponents, shaded by how strong each one is. */
 const ScheduleGrid = ({ data, analysis, onTeam }: { data: LeagueData; analysis: Analysis; onTeam: (id: number) => void }) => {
   const { teams, powerById, myRosterId, teamById } = analysis
@@ -295,13 +455,13 @@ const ScheduleGrid = ({ data, analysis, onTeam }: { data: LeagueData; analysis: 
                   <td className="num px-1 text-center text-ff-text">{fmt(powerById[t.rosterId].sos, 0)}</td>
                   {weeks.map((w) => {
                     const opp = opps[w]
-                    if (opp == null) return <td key={w} className="h-8 rounded-[4px] bg-ff-sunken text-center text-ff-muted">–</td>
+                    if (opp == null) return <td key={w} className="h-8 rounded-[1px] bg-ff-sunken text-center text-ff-muted">–</td>
                     const score = powerById[opp]?.score ?? 50
                     return (
                       <td
                         key={w}
                         title={`Week ${w}: ${teamById[opp]?.name} (power ${fmt(score, 0)})`}
-                        className={cx('h-8 min-w-[64px] rounded-[4px] px-1 text-center', opp === myRosterId ? 'font-medium text-ff-accent ring-1 ring-inset ring-ff-accent/60' : 'text-ff-text')}
+                        className={cx('h-8 min-w-[64px] rounded-[1px] px-1 text-center', opp === myRosterId ? 'font-medium text-ff-accent ring-1 ring-inset ring-ff-accent/60' : 'text-ff-text')}
                         style={{ background: `rgb(var(--ff-accent) / ${(0.06 + (score / 100) * 0.55).toFixed(2)})` }}
                       >
                         {short(teamById[opp]?.name ?? '?')}
@@ -316,7 +476,7 @@ const ScheduleGrid = ({ data, analysis, onTeam }: { data: LeagueData; analysis: 
       </div>
       <div className="flex items-center gap-2 border-t border-ff-line px-3 py-2 text-[11px] text-ff-muted">
         weaker
-        <span className="h-2 w-28 rounded-full" style={{ background: 'linear-gradient(to right, rgb(var(--ff-accent) / 0.06), rgb(var(--ff-accent) / 0.61))' }} />
+        <span className="h-2 w-28 " style={{ background: 'linear-gradient(to right, rgb(var(--ff-accent) / 0.06), rgb(var(--ff-accent) / 0.61))' }} />
         stronger
         <Badge className="ml-2">SOS = average opponent power</Badge>
       </div>

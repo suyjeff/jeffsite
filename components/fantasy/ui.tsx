@@ -50,12 +50,15 @@ export const Num = ({
   )
 }
 
-export const Label = ({ children, className }: { children: ReactNode; className?: string }) => (
-  <span className={cx('font-mono text-[10.5px] uppercase tracking-[0.08em] text-ff-muted', className)}>{children}</span>
-)
+export const Label = ({ children, className }: { children: ReactNode; className?: string }) => <span className={cx('ff-label', className)}>{children}</span>
 
 // ---------- Containers ----------
 
+/**
+ * The unit of every page: a hairline box with an instrument label. `index`
+ * prints a two-digit register number before the title, the way a terminal
+ * numbers its panes.
+ */
 export const Panel = ({
   title,
   actions,
@@ -64,6 +67,7 @@ export const Panel = ({
   bodyClassName,
   pad = true,
   id,
+  index,
 }: {
   title?: ReactNode
   actions?: ReactNode
@@ -72,12 +76,16 @@ export const Panel = ({
   bodyClassName?: string
   pad?: boolean
   id?: string
+  index?: number
 }) => (
-  <section id={id} className={cx('rounded-lg border border-ff-line bg-ff-panel min-w-0', className)}>
+  <section id={id} className={cx('min-w-0 border border-ff-line bg-ff-panel', className)}>
     {(title || actions) && (
-      <header className="flex min-h-[36px] items-center justify-between gap-3 border-b border-ff-line px-3 py-1.5">
-        {title ? <Label className="truncate">{title}</Label> : <span />}
-        {actions && <div className="flex shrink-0 items-center gap-2 text-xs text-ff-muted">{actions}</div>}
+      <header className="flex h-8 items-center justify-between gap-3 border-b border-ff-line px-3">
+        <span className="flex min-w-0 items-baseline gap-2">
+          {index != null && <span className="num text-[10px] text-ff-muted/70">{String(index).padStart(2, '0')}</span>}
+          {title ? <Label className="truncate text-ff-text2">{title}</Label> : null}
+        </span>
+        {actions && <div className="flex shrink-0 items-center gap-2 font-mono text-[10.5px] text-ff-muted">{actions}</div>}
       </header>
     )}
     <div className={cx(pad && 'p-3', bodyClassName)}>{children}</div>
@@ -85,13 +93,16 @@ export const Panel = ({
 )
 
 /** Page title row plus the page's tabs. Sticks under the mobile top bar. */
-export const PageHeader = ({ title, meta, actions, tabs }: { title: ReactNode; meta?: ReactNode; actions?: ReactNode; tabs?: ReactNode }) => (
-  <div className="sticky top-12 md:top-0 z-20 -mx-3 md:-mx-6 px-3 md:px-6 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/75">
-    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 pb-1.5 pt-2.5 md:pb-2 md:pt-5">
+export const PageHeader = ({ title, meta, actions, tabs, code }: { title: ReactNode; meta?: ReactNode; actions?: ReactNode; tabs?: ReactNode; code?: string }) => (
+  <div className="sticky top-12 z-20 -mx-3 bg-ff-bg/90 px-3 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-0 md:-mx-5 md:px-5">
+    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 pb-1.5 pt-2.5 md:pb-2 md:pt-4">
       <div className="min-w-0">
         {/* On phones the top bar already names the section. */}
-        <h1 className="hidden text-[22px] font-medium leading-tight tracking-tight text-ff-text md:block">{title}</h1>
-        {meta && <div className="text-[11.5px] text-ff-muted md:mt-0.5 md:text-xs">{meta}</div>}
+        <div className="hidden items-baseline gap-2.5 md:flex">
+          {code && <span className="num text-[11px] text-ff-muted">{code}</span>}
+          <h1 className="text-[20px] font-medium leading-tight tracking-[-0.01em] text-ff-text">{title}</h1>
+        </div>
+        {meta && <div className="font-mono text-[11px] text-ff-muted md:mt-1">{meta}</div>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>
@@ -113,11 +124,11 @@ export const Tabs = <K extends string>({ items, value, onChange }: { items: TabI
           role="tab"
           aria-selected={active}
           onClick={() => onChange(t.key)}
-          className={cx('relative h-10 shrink-0 px-3 text-[13px] tracking-tight transition-colors', active ? 'text-ff-text' : 'text-ff-muted hover:text-ff-text')}
+          className={cx('relative h-9 shrink-0 px-3 text-[13px] transition-colors first:pl-0.5', active ? 'text-ff-text' : 'text-ff-muted hover:text-ff-text')}
         >
           {t.label}
-          {t.count != null && <span className="num ml-1.5 text-[11px] text-ff-muted">{t.count}</span>}
-          {active && <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-ff-accent" />}
+          {t.count != null && <span className="num ml-1.5 text-[10.5px] text-ff-muted">{t.count}</span>}
+          {active && <span className="absolute inset-x-0 -bottom-px h-[2px] bg-ff-text" />}
         </button>
       )
     })}
@@ -140,7 +151,7 @@ export const Segmented = <K extends string>({
   size?: 'sm' | 'md'
   label?: string
 }) => (
-  <div role="radiogroup" aria-label={label} className="inline-flex max-w-full overflow-x-auto no-scrollbar rounded-md border border-ff-line bg-ff-sunken p-0.5">
+  <div role="radiogroup" aria-label={label} className="no-scrollbar inline-flex max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel">
     {options.map((o) => {
       const active = o.key === value
       return (
@@ -151,9 +162,9 @@ export const Segmented = <K extends string>({
           title={o.title}
           onClick={() => onChange(o.key)}
           className={cx(
-            'shrink-0 whitespace-nowrap rounded-[5px] font-medium transition-colors',
-            size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-xs',
-            active ? 'bg-ff-panel text-ff-text shadow-sm ring-1 ring-ff-line' : 'text-ff-muted hover:text-ff-text',
+            'shrink-0 whitespace-nowrap border-r border-ff-line transition-colors last:border-r-0',
+            size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[12px]',
+            active ? 'bg-ff-text text-ff-panel' : 'text-ff-text2 hover:bg-ff-raised hover:text-ff-text',
           )}
         >
           {o.label}
@@ -163,15 +174,36 @@ export const Segmented = <K extends string>({
   </div>
 )
 
-export const Select = ({ value, onChange, children, className, label }: { value: string | number; onChange: (v: string) => void; children: ReactNode; className?: string; label: string }) => (
-  <select
-    aria-label={label}
-    value={value}
-    onChange={(e) => onChange(e.target.value)}
-    className={cx('h-8 rounded-md border border-ff-line bg-ff-panel px-2 pr-7 text-[13px] text-ff-text outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40', className)}
-  >
-    {children}
-  </select>
+/**
+ * A native select (keyboard, screen readers and the phone picker all work)
+ * with the browser's own arrow removed, so it can never crowd or clip the
+ * text. The caret is a glyph in a reserved gutter.
+ */
+export const Select = ({
+  value,
+  onChange,
+  children,
+  className,
+  label,
+  prefix,
+}: {
+  value: string | number
+  onChange: (v: string) => void
+  children: ReactNode
+  className?: string
+  label: string
+  /** A small mono key shown inside the control, e.g. "TEAM". */
+  prefix?: string
+}) => (
+  <label className={cx('relative inline-flex h-8 min-w-0 max-w-full items-center border border-ff-line bg-ff-panel text-[12.5px] text-ff-text focus-within:ring-2 focus-within:ring-ff-accent/40 hover:border-ff-line2', className)}>
+    {prefix && <span className="ff-label pointer-events-none shrink-0 pl-2.5">{prefix}</span>}
+    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="h-full w-full min-w-0 cursor-pointer appearance-none truncate bg-transparent pl-2.5 pr-8 outline-none">
+      {children}
+    </select>
+    <span aria-hidden className="pointer-events-none absolute right-0 top-0 flex h-full w-7 items-center justify-center border-l border-ff-line font-mono text-[10px] text-ff-muted">
+      ▾
+    </span>
+  </label>
 )
 
 export const Button = ({
@@ -199,11 +231,11 @@ export const Button = ({
     disabled={disabled}
     onClick={onClick}
     className={cx(
-      'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40',
-      size === 'sm' ? 'h-7 px-2 text-xs' : 'h-8 px-3 text-[13px]',
-      variant === 'primary' && 'bg-ff-accent text-white hover:bg-ff-accent/90',
-      variant === 'outline' && 'border border-ff-line bg-ff-panel text-ff-text hover:bg-ff-raised',
-      variant === 'ghost' && 'text-ff-muted hover:text-ff-text hover:bg-ff-raised',
+      'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40',
+      size === 'sm' ? 'h-7 px-2 text-[11.5px]' : 'h-8 px-3 text-[12.5px]',
+      variant === 'primary' && 'bg-ff-text text-ff-panel hover:bg-ff-text/85',
+      variant === 'outline' && 'border border-ff-line bg-ff-panel text-ff-text hover:border-ff-line2 hover:bg-ff-raised',
+      variant === 'ghost' && 'text-ff-muted hover:bg-ff-raised hover:text-ff-text',
       className,
     )}
   >
@@ -214,10 +246,10 @@ export const Button = ({
 // ---------- Figures ----------
 
 export const Stat = ({ label, value, delta, sub, className }: { label: ReactNode; value: ReactNode; delta?: ReactNode; sub?: ReactNode; className?: string }) => (
-  <div className={cx('min-w-0 rounded-lg border border-ff-line bg-ff-panel px-2.5 py-2 sm:px-3 sm:py-2.5', className)}>
-    <div className="truncate text-[10.5px] text-ff-muted sm:text-[11px]">{label}</div>
-    <div className="mt-1 flex min-w-0 items-baseline gap-1.5 sm:gap-2">
-      <span className="num truncate text-[16px] font-medium leading-none text-ff-text sm:text-[19px]">{value}</span>
+  <div className={cx('min-w-0 border border-ff-line bg-ff-panel px-2.5 py-2 sm:px-3', className)}>
+    <div className="ff-label truncate">{label}</div>
+    <div className="mt-1.5 flex min-w-0 items-baseline gap-1.5 sm:gap-2">
+      <span className="num truncate text-[17px] leading-none text-ff-text sm:text-[20px]">{value}</span>
       {delta && <span className="text-[11px] sm:text-xs">{delta}</span>}
     </div>
     {sub && <div className="mt-1 truncate text-[10.5px] text-ff-muted sm:text-[11px]">{sub}</div>}
@@ -227,7 +259,7 @@ export const Stat = ({ label, value, delta, sub, className }: { label: ReactNode
 /** KPI row. Phones get three across when the count divides by three, two otherwise. */
 export const StatGrid = ({ children, className }: { children: ReactNode; className?: string }) => {
   const n = Children.toArray(children).filter(Boolean).length
-  return <div className={cx('grid gap-1.5 sm:gap-2', n % 3 === 0 ? 'grid-cols-3' : 'grid-cols-2', 'sm:grid-cols-3 xl:grid-cols-6', className)}>{children}</div>
+  return <div className={cx('grid gap-px border border-ff-line bg-ff-line [&>*]:border-0', n % 3 === 0 ? 'grid-cols-3' : 'grid-cols-2', 'sm:grid-cols-3 xl:grid-cols-6', className)}>{children}</div>
 }
 
 type Tone = 'neutral' | 'pos' | 'neg' | 'warn' | 'accent'
@@ -240,7 +272,7 @@ const TONE: Record<Tone, string> = {
 }
 
 export const Badge = ({ children, tone = 'neutral', title, className }: { children: ReactNode; tone?: Tone; title?: string; className?: string }) => (
-  <span title={title} className={cx('inline-flex items-center whitespace-nowrap rounded px-1.5 py-[1px] text-[11px] font-medium leading-[18px]', TONE[tone], title && 'cursor-help', className)}>
+  <span title={title} className={cx('inline-flex items-center whitespace-nowrap px-1.5 font-mono text-[10.5px] leading-[18px]', TONE[tone], title && 'cursor-help', className)}>
     {children}
   </span>
 )
@@ -261,7 +293,7 @@ const POS_TINT: Record<string, string> = {
 export const PosTag = ({ pos, className }: { pos: string; className?: string }) => (
   <span
     className={cx(
-      'inline-flex h-[18px] w-[30px] shrink-0 items-center justify-center rounded-[4px] font-mono text-[10px] font-semibold text-ff-text ring-1 ring-inset',
+      'inline-flex h-[18px] w-[30px] shrink-0 items-center justify-center rounded-[1px] font-mono text-[10px] font-semibold text-ff-text ring-1 ring-inset',
       POS_TINT[pos] ?? 'bg-ff-sunken ring-ff-line',
       className,
     )}
@@ -301,7 +333,7 @@ const Img = ({ src, alt, size, className, fallback }: { src: string | null; alt:
 }
 
 export const Avatar = ({ src, name, size = 24 }: { src: string | null; name: string; size?: number }) => (
-  <Img src={src} alt="" size={size} className="rounded-full" fallback={initials(name).slice(0, 1)} />
+  <Img src={src} alt="" size={size} className="rounded-[2px]" fallback={initials(name).slice(0, 1)} />
 )
 
 export const playerImage = (id: string, player?: TrimmedPlayer) =>
@@ -309,16 +341,16 @@ export const playerImage = (id: string, player?: TrimmedPlayer) =>
 
 /** Headshot, or the team logo for a defense. */
 export const PlayerAvatar = ({ id, player, size = 28, className }: { id: string; player?: TrimmedPlayer; size?: number; className?: string }) => (
-  <Img src={playerImage(id, player)} alt="" size={size} className={cx(player?.pos === 'DEF' ? 'rounded-md bg-transparent' : 'rounded-full', className)} fallback={initials(player?.name ?? id)} />
+  <Img src={playerImage(id, player)} alt="" size={size} className={cx('rounded-[2px]', player?.pos === 'DEF' && 'bg-transparent', className)} fallback={initials(player?.name ?? id)} />
 )
 
 // ---------- Small charts ----------
 
 /** Horizontal meter. The track is a lighter step of the fill's own hue. */
 export const Meter = ({ value, max, width = 64, tone = 'accent' }: { value: number; max: number; width?: number; tone?: 'accent' | 'neg' | 'pos' }) => (
-  <span className={cx('inline-block h-1.5 shrink-0 rounded-full align-middle', tone === 'accent' ? 'bg-ff-accent/15' : tone === 'neg' ? 'bg-ff-neg/15' : 'bg-ff-pos/15')} style={{ width }}>
+  <span className={cx('inline-block h-1.5 shrink-0  align-middle', tone === 'accent' ? 'bg-ff-accent/15' : tone === 'neg' ? 'bg-ff-neg/15' : 'bg-ff-pos/15')} style={{ width }}>
     <span
-      className={cx('block h-1.5 rounded-full', tone === 'accent' ? 'bg-ff-accent' : tone === 'neg' ? 'bg-ff-neg' : 'bg-ff-pos')}
+      className={cx('block h-1.5 ', tone === 'accent' ? 'bg-ff-accent' : tone === 'neg' ? 'bg-ff-neg' : 'bg-ff-pos')}
       style={{ width: `${Math.max(0, Math.min(1, max ? value / max : 0)) * 100}%` }}
     />
   </span>
@@ -346,7 +378,7 @@ export const Sparkline = ({ points, baseline, width = 96, height = 24, labels }:
         {hover !== null && <circle cx={x(hover)} cy={y(points[hover])} r={4} fill="currentColor" className="stroke-ff-panel" strokeWidth={2} />}
       </svg>
       {hover !== null && (
-        <span className="pointer-events-none absolute -top-6 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded bg-ff-text px-1.5 py-0.5 font-mono text-[10.5px] text-ff-panel">
+        <span className="pointer-events-none absolute -top-6 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ff-text px-1.5 py-0.5 font-mono text-[10.5px] text-ff-panel">
           {labels?.[hover] ?? `Wk ${hover + 1}`} · {points[hover].toFixed(1)}
         </span>
       )}
@@ -403,7 +435,7 @@ export const WeekBars = ({
       </svg>
       {hover !== null && (
         <span
-          className="pointer-events-none absolute -top-6 z-30 whitespace-nowrap rounded bg-ff-text px-1.5 py-0.5 font-mono text-[10.5px] text-ff-panel"
+          className="pointer-events-none absolute -top-6 z-30 whitespace-nowrap rounded-sm bg-ff-text px-1.5 py-0.5 font-mono text-[10.5px] text-ff-panel"
           style={{ left: Math.min(hover * step, width - 70) }}
         >
           Wk {weeks[hover].week} · {fmtSigned(weeks[hover].value, 1)}
@@ -544,7 +576,7 @@ export function Table<T>({
                 onClick={() => toggle(c)}
                 aria-sort={sortKey === c.key ? (desc ? 'descending' : 'ascending') : undefined}
                 className={cx(
-                  'h-8 whitespace-nowrap border-b border-ff-line bg-ff-panel px-2 font-mono text-[10.5px] font-normal uppercase tracking-[0.06em] text-ff-muted first:pl-3 last:pr-3',
+                  'ff-label h-8 whitespace-nowrap border-b border-ff-line bg-ff-panel px-2 font-normal first:pl-3 last:pr-3',
                   align(c),
                   c.sort && 'cursor-pointer select-none hover:text-ff-text',
                   c.sticky && 'sticky left-0 z-20',
@@ -553,7 +585,7 @@ export function Table<T>({
                 )}
               >
                 {c.label}
-                {sortKey === c.key && <span className="ml-0.5 text-ff-accent">{desc ? '↓' : '↑'}</span>}
+                {sortKey === c.key && <span className="ml-0.5 text-ff-text">{desc ? '▾' : '▴'}</span>}
               </th>
             ))}
           </tr>
@@ -570,13 +602,13 @@ export function Table<T>({
             <tr
               key={rowKey(row)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
-              className={cx('group border-b border-ff-line/70 last:border-0', onRowClick && 'cursor-pointer', 'hover:bg-ff-raised', rowClass?.(row))}
+              className={cx('group border-b border-ff-line/60 last:border-0', onRowClick && 'cursor-pointer', 'hover:bg-ff-raised', rowClass?.(row))}
             >
               {columns.map((c) => (
                 <td
                   key={c.key}
                   className={cx(
-                    dense ? 'h-8' : 'h-10',
+                    dense ? 'h-8' : 'h-[38px]',
                     'whitespace-nowrap px-2 align-middle first:pl-3 last:pr-3',
                     align(c),
                     c.align === 'right' && 'num',
@@ -597,7 +629,7 @@ export function Table<T>({
 }
 
 export const Empty = ({ title, children }: { title: ReactNode; children?: ReactNode }) => (
-  <div className="rounded-lg border border-dashed border-ff-line2 px-4 py-10 text-center">
+  <div className="border border-dashed border-ff-line2 px-4 py-10 text-center">
     <div className="text-sm text-ff-text">{title}</div>
     {children && <div className="mx-auto mt-1 max-w-md text-[13px] text-ff-muted">{children}</div>}
   </div>

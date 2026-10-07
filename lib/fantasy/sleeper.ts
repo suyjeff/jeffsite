@@ -7,6 +7,7 @@ import type {
   SleeperPlayer,
   SleeperRoster,
   SleeperState,
+  SleeperTransaction,
   SleeperUser,
   TrendingEntry,
   TrimmedPlayer,
@@ -95,10 +96,10 @@ export class SleeperError extends Error {
   }
 }
 
-const fetchJson = async <T>(url: string): Promise<T> => {
-  const res = await fetch(url, { headers: { accept: 'application/json' } })
+const fetchJson = async <T>(url: string, text = false): Promise<T> => {
+  const res = await fetch(url, { headers: { accept: text ? 'text/csv,text/plain' : 'application/json' } })
   if (!res.ok) throw new SleeperError(`${res.status} ${res.statusText} for ${url}`, res.status)
-  return (await res.json()) as T
+  return (text ? await res.text() : await res.json()) as T
 }
 
 /**
@@ -108,7 +109,7 @@ const fetchJson = async <T>(url: string): Promise<T> => {
 const cachedGet = async <T, R = T>(
   path: string,
   ttl: number,
-  opts: { persist?: boolean; transform?: (raw: T) => R; base?: string; key?: string } = {},
+  opts: { persist?: boolean; transform?: (raw: T) => R; base?: string; key?: string; text?: boolean } = {},
 ): Promise<R> => {
   const url = (opts.base ?? BASE) + path
   // A transform that depends on league settings needs its own key so two
@@ -116,7 +117,7 @@ const cachedGet = async <T, R = T>(
   const cacheKey = opts.key ?? url
   const cached = readCache<R>(cacheKey, ttl)
   if (cached !== null) return cached
-  const raw = await fetchJson<T>(url)
+  const raw = await fetchJson<T>(url, opts.text)
   const data = (opts.transform ? opts.transform(raw) : (raw as unknown)) as R
   writeCache(cacheKey, data, opts.persist ?? true)
   return data
@@ -269,6 +270,50 @@ export const getSeasonGamesPlayed = (season: string) =>
       return out
     },
   })
+
+type RawTransaction = {
+  type: string
+  status: string
+  roster_ids?: number[] | null
+  adds?: Record<string, number> | null
+  drops?: Record<string, number> | null
+  draft_picks?: unknown[] | null
+  created?: number
+  leg?: number
+}
+
+/**
+ * One week's transactions: trades, waiver claims, free-agent pickups. Small,
+ * and a finished week never changes, so past weeks cache for a day.
+ */
+export const getTransactions = (leagueId: string, week: number, isPast: boolean) =>
+  cachedGet<RawTransaction[], SleeperTransaction[]>(`/league/${leagueId}/transactions/${week}`, isPast ? 24 * HOUR : 10 * MINUTE, {
+    key: `tx:${leagueId}:${week}`,
+    transform: (raw) =>
+      (Array.isArray(raw) ? raw : []).map((t) => ({
+        type: t.type,
+        status: t.status,
+        roster_ids: t.roster_ids ?? [],
+        adds: t.adds ?? null,
+        drops: t.drops ?? null,
+        picks: t.draft_picks?.length ?? 0,
+        created: t.created ?? 0,
+        leg: t.leg ?? week,
+      })),
+  })
+
+// ---------- Outside rankings ----------
+
+/**
+ * FantasyPros expert consensus rankings (ECR), as mirrored weekly by the
+ * open-source DynastyProcess data repo on GitHub. One ~900KB CSV a day, read
+ * from GitHub's raw CDN (CORS-open, no key, generous limits), reduced to the
+ * redraft and weekly offensive pages and cached for twelve hours. Nothing here
+ * calls FantasyPros itself, so there is no scraping and nothing to get blocked.
+ */
+export const CONSENSUS_URL = 'https://raw.githubusercontent.com/dynastyprocess/data/master/files/db_fpecr_latest.csv'
+export const getConsensusCsv = <R>(transform: (csv: string) => R) =>
+  cachedGet<string, R>('', 12 * HOUR, { base: CONSENSUS_URL, key: 'consensus:fpecr', text: true, transform })
 
 // ---------- Image helpers ----------
 

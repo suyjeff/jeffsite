@@ -2,36 +2,27 @@ import React, { useEffect, useState, type ReactNode } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { Avatar, cx } from './ui'
-import {
-  IconBack,
-  IconChevron,
-  IconClose,
-  IconMe,
-  IconMenu,
-  IconModel,
-  IconPlayers,
-  IconPower,
-  IconRefresh,
-  IconTeams,
-  IconTrades,
-} from './icons'
 
-export const SECTION_KEYS = ['trades', 'me', 'power', 'teams', 'players', 'model'] as const
+export const SECTION_KEYS = ['dash', 'trades', 'me', 'power', 'teams', 'players', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
-type Section = { key: SectionKey; label: string; group: 'Your team' | 'League' | 'Engine'; Icon: (p: { size?: number; className?: string }) => JSX.Element }
+type Group = 'Overview' | 'Your team' | 'League' | 'Engine'
+type Section = { key: SectionKey; label: string; short: string; group: Group }
 
+/** Order is the register: the number beside each entry is also its keyboard shortcut. */
 export const SECTIONS: Section[] = [
-  { key: 'trades', label: 'Trades', group: 'Your team', Icon: IconTrades },
-  { key: 'me', label: 'My team', group: 'Your team', Icon: IconMe },
-  { key: 'power', label: 'Power', group: 'League', Icon: IconPower },
-  { key: 'teams', label: 'Teams', group: 'League', Icon: IconTeams },
-  { key: 'players', label: 'Players', group: 'League', Icon: IconPlayers },
-  { key: 'model', label: 'Model', group: 'Engine', Icon: IconModel },
+  { key: 'dash', label: 'Dashboard', short: 'Dash', group: 'Overview' },
+  { key: 'trades', label: 'Trades', short: 'Trades', group: 'Your team' },
+  { key: 'me', label: 'My team', short: 'Team', group: 'Your team' },
+  { key: 'power', label: 'Power', short: 'Power', group: 'League' },
+  { key: 'teams', label: 'Teams', short: 'Teams', group: 'League' },
+  { key: 'players', label: 'Players', short: 'Players', group: 'League' },
+  { key: 'model', label: 'Model', short: 'Model', group: 'Engine' },
 ]
+const GROUPS: Group[] = ['Overview', 'Your team', 'League', 'Engine']
 
 /** What the phone's bottom bar carries; everything else lives in the drawer. */
-const TAB_BAR: SectionKey[] = ['trades', 'me', 'power', 'players']
+const TAB_BAR: SectionKey[] = ['dash', 'trades', 'me', 'power']
 
 export type ShellProps = {
   section: SectionKey
@@ -48,7 +39,11 @@ export type ShellProps = {
   progress: string
   onRefresh: () => void
   loadedAt: Date | null
+  /** Short status readouts for the footer, e.g. ["WK 05", "SIM 4000"]. */
+  status?: string[]
 }
+
+const clock = (d: Date | null) => (d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--')
 
 const SidebarBody = ({
   section,
@@ -63,100 +58,104 @@ const SidebarBody = ({
   progress,
   onRefresh,
   loadedAt,
+  status,
   onClose,
-}: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void }) => {
-  const groups = ['Your team', 'League', 'Engine'] as const
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-ff-line px-3">
-        <Link href="/lab" className="group flex items-center gap-1 text-ff-muted hover:text-ff-text" title="Back to the Lab">
-          <IconBack size={16} />
-          <span className="text-[15px] font-medium italic tracking-tight text-ff-text">Fantasy</span>
-        </Link>
-        <span className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-wider text-ff-muted" title={loading ? progress : 'Live from Sleeper'}>
-            <span className={cx('h-1.5 w-1.5 rounded-full', loading ? 'ff-pulse bg-ff-warn' : 'bg-ff-pos')} />
-            {loading ? 'sync' : 'live'}
-          </span>
-          {onClose && (
-            <button onClick={onClose} className="-mr-1.5 rounded-md p-1.5 text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close menu">
-              <IconClose size={18} />
-            </button>
-          )}
+}: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void }) => (
+  <div className="flex h-full flex-col">
+    <div className="flex h-11 shrink-0 items-center justify-between border-b border-ff-line pl-3 pr-2">
+      <Link href="/lab" className="group flex items-baseline gap-2" title="Back to the Lab">
+        <span className="font-mono text-[10px] text-ff-muted group-hover:text-ff-text">‹ LAB</span>
+        <span className="text-[14px] font-semibold tracking-[-0.01em] text-ff-text">Fantasy</span>
+        <span className="font-mono text-[10px] text-ff-muted">/term</span>
+      </Link>
+      <span className="flex items-center gap-1">
+        <span className="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-[0.12em] text-ff-muted" title={loading ? progress : 'Live from Sleeper'}>
+          <span className={cx('h-1.5 w-1.5', loading ? 'ff-pulse bg-ff-warn' : 'bg-ff-pos')} />
+          {loading ? 'sync' : 'live'}
         </span>
-      </div>
-
-      <div className="shrink-0 space-y-2 border-b border-ff-line p-3">
-        <label className="relative block">
-          <span className="sr-only">League</span>
-          <select
-            value={leagueId ?? ''}
-            onChange={(e) => onLeague(e.target.value)}
-            className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0"
-          >
-            {leagues.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-          <span className="flex items-center justify-between gap-2 rounded-md border border-ff-line bg-ff-raised px-2.5 py-1.5 peer-hover:border-ff-line2 peer-focus-visible:ring-2 peer-focus-visible:ring-ff-accent/40">
-            <span className="min-w-0">
-              <span className="block truncate text-[13px] font-medium text-ff-text">{leagues.find((l) => l.id === leagueId)?.name ?? 'League'}</span>
-              {leagueMeta && <span className="block truncate font-mono text-[10.5px] text-ff-muted">{leagueMeta}</span>}
-            </span>
-            <IconChevron size={14} className="shrink-0 text-ff-muted" />
-          </span>
-        </label>
-        {me && (
-          <div className="flex items-center gap-2 px-0.5">
-            <Avatar src={me.avatar} name={me.name} size={22} />
-            <span className="min-w-0 leading-tight">
-              <span className="block truncate text-[12.5px] text-ff-text">{me.name}</span>
-              <span className="block truncate font-mono text-[10.5px] text-ff-muted">{me.line}</span>
-            </span>
-          </div>
+        {onClose && (
+          <button onClick={onClose} className="h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close menu">
+            ESC
+          </button>
         )}
-      </div>
+      </span>
+    </div>
 
-      <nav className="ff-scroll flex-1 overflow-y-auto px-2 py-2" aria-label="Sections">
-        {groups.map((g) => (
-          <div key={g} className="mb-2">
-            <div className="px-2 pb-1 pt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-ff-muted">{g}</div>
-            {SECTIONS.filter((s) => s.group === g).map(({ key, label, Icon }) => {
-              const active = key === section
-              return (
-                <button
-                  key={key}
-                  onClick={() => onNavigate(key)}
-                  aria-current={active ? 'page' : undefined}
-                  className={cx(
-                    'relative flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-[13px] transition-colors',
-                    active ? 'bg-ff-raised text-ff-text' : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
-                  )}
-                >
-                  {active && <span className="absolute -left-2 top-1.5 bottom-1.5 w-[2px] rounded-full bg-ff-accent" />}
-                  <Icon size={17} className={active ? 'text-ff-accent' : 'text-ff-muted'} />
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-        ))}
-      </nav>
-
-      {controls && <div className="shrink-0 space-y-3 border-t border-ff-line p-3">{controls}</div>}
-
-      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-ff-line px-3 py-2">
-        <span className="min-w-0 truncate font-mono text-[10.5px] text-ff-muted">
-          {loading ? `${progress}…` : loadedAt ? `updated ${loadedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}
+    <div className="shrink-0 border-b border-ff-line">
+      <label className="group relative block">
+        <span className="sr-only">League</span>
+        <select value={leagueId ?? ''} onChange={(e) => onLeague(e.target.value)} className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0">
+          {leagues.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+        <span className="flex items-center justify-between gap-2 px-3 py-2.5 peer-hover:bg-ff-raised peer-focus-visible:ring-2 peer-focus-visible:ring-inset peer-focus-visible:ring-ff-accent/40">
+          <span className="min-w-0">
+            <span className="ff-label block">League</span>
+            <span className="mt-0.5 block truncate text-[13px] font-medium text-ff-text">{leagues.find((l) => l.id === leagueId)?.name ?? '—'}</span>
+            {leagueMeta && <span className="block truncate font-mono text-[10.5px] text-ff-muted">{leagueMeta}</span>}
+          </span>
+          <span className="shrink-0 font-mono text-[10px] text-ff-muted">▾</span>
         </span>
-        <button onClick={onRefresh} className="rounded p-1 text-ff-muted hover:bg-ff-raised hover:text-ff-text" title="Reload from Sleeper" aria-label="Reload from Sleeper">
-          <IconRefresh size={15} className={loading ? 'animate-spin' : ''} />
+      </label>
+      {me && (
+        <div className="flex items-center gap-2 border-t border-ff-line px-3 py-2">
+          <Avatar src={me.avatar} name={me.name} size={22} />
+          <span className="min-w-0 leading-tight">
+            <span className="block truncate text-[12.5px] text-ff-text">{me.name}</span>
+            <span className="block truncate font-mono text-[10.5px] text-ff-muted">{me.line}</span>
+          </span>
+        </div>
+      )}
+    </div>
+
+    <nav className="ff-scroll flex-1 overflow-y-auto py-1.5" aria-label="Sections">
+      {GROUPS.map((g) => (
+        <div key={g} className="pb-1.5">
+          <div className="ff-label px-3 pb-1 pt-2">{g}</div>
+          {SECTIONS.filter((s) => s.group === g).map(({ key, label }) => {
+            const i = SECTIONS.findIndex((s) => s.key === key) + 1
+            const active = key === section
+            return (
+              <button
+                key={key}
+                onClick={() => onNavigate(key)}
+                aria-current={active ? 'page' : undefined}
+                aria-keyshortcuts={String(i)}
+                className={cx(
+                  'group flex h-8 w-full items-center gap-3 px-3 text-left text-[13px] transition-colors',
+                  active ? 'bg-ff-raised text-ff-text' : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
+                )}
+              >
+                <span className={cx('num w-4 text-[10.5px]', active ? 'text-ff-text' : 'text-ff-muted/70')}>{String(i).padStart(2, '0')}</span>
+                <span className={cx('flex-1', active && 'font-medium')}>{label}</span>
+                <kbd className="hidden h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 font-mono text-[10px] text-ff-muted group-hover:inline-flex md:inline-flex md:opacity-0 md:group-hover:opacity-100">{i}</kbd>
+              </button>
+            )
+          })}
+        </div>
+      ))}
+    </nav>
+
+    {controls && <div className="shrink-0 space-y-3 border-t border-ff-line p-3">{controls}</div>}
+
+    <div className="shrink-0 border-t border-ff-line px-3 py-2 font-mono text-[10px] leading-[15px] text-ff-muted">
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate">{loading ? `${progress.toLowerCase()}` : `SYNC ${clock(loadedAt)}`}</span>
+        <button onClick={onRefresh} className="shrink-0 px-1 text-ff-text2 hover:text-ff-text" title="Reload from Sleeper" aria-label="Reload from Sleeper">
+          {loading ? '···' : 'R↻'}
         </button>
       </div>
+      {status && status.length > 0 && <div className="truncate">{status.join(' · ')}</div>}
     </div>
-  )
+  </div>
+)
+
+const typing = (e: KeyboardEvent) => {
+  const t = e.target as HTMLElement | null
+  return !!t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
 }
 
 const Shell = (props: ShellProps) => {
@@ -174,52 +173,71 @@ const Shell = (props: ShellProps) => {
     }
   }, [drawer])
 
+  // Number keys jump between sections; R reloads.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || typing(e)) return
+      const n = Number(e.key)
+      if (n >= 1 && n <= SECTIONS.length) {
+        e.preventDefault()
+        onNavigate(SECTIONS[n - 1].key)
+        window.scrollTo({ top: 0 })
+      } else if (e.key === 'r' || e.key === 'R') onRefresh()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onNavigate, onRefresh])
+
   const navigate = (s: SectionKey) => {
     setDrawer(false)
     onNavigate(s)
     window.scrollTo({ top: 0 })
   }
   const current = SECTIONS.find((s) => s.key === section)
+  const index = SECTIONS.findIndex((s) => s.key === section) + 1
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
 
   return (
-    <div className="ff min-h-screen bg-ff-bg font-sans text-ff-text antialiased">
+    <div className="ff min-h-screen bg-ff-bg text-ff-text antialiased">
       <Head>
         <title>{title}</title>
         <meta name="viewport" content="initial-scale=1.0, width=device-width, viewport-fit=cover" />
         <meta name="robots" content="noindex" />
-        <meta name="theme-color" content="#08090d" media="(prefers-color-scheme: dark)" />
-        <meta name="theme-color" content="#eff1f4" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#060709" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#eceef1" media="(prefers-color-scheme: light)" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       </Head>
 
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[232px] border-r border-ff-line bg-ff-panel md:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[220px] border-r border-ff-line bg-ff-panel md:block">
         <SidebarBody {...props} onNavigate={navigate} />
       </aside>
 
       {/* Phone top bar */}
-      <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center gap-1 border-b border-ff-line bg-ff-panel/95 px-1.5 backdrop-blur md:hidden">
-        <button onClick={() => setDrawer(true)} className="rounded-md p-2 text-ff-text2 hover:bg-ff-raised" aria-label="Open menu">
-          <IconMenu size={20} />
+      <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center border-b border-ff-line bg-ff-panel/95 backdrop-blur md:hidden">
+        <button onClick={() => setDrawer(true)} className="flex h-full items-center gap-2 border-r border-ff-line px-3 font-mono text-[11px] tracking-[0.1em] text-ff-text2" aria-label="Open menu">
+          MENU
         </button>
-        <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-[15px] font-medium tracking-tight">{current?.label}</div>
+        <div className="min-w-0 flex-1 px-3 leading-tight">
+          <div className="flex items-baseline gap-2">
+            <span className="num text-[10.5px] text-ff-muted">{String(index).padStart(2, '0')}</span>
+            <span className="truncate text-[15px] font-medium">{current?.label}</span>
+          </div>
           {leagueName && <div className="truncate font-mono text-[10.5px] text-ff-muted">{leagueName}</div>}
         </div>
-        <button onClick={onRefresh} className="rounded-md p-2 text-ff-muted hover:bg-ff-raised" aria-label="Reload from Sleeper">
-          <IconRefresh size={18} className={loading ? 'animate-spin' : ''} />
+        <button onClick={onRefresh} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] text-ff-text2" aria-label="Reload from Sleeper">
+          {loading ? <span className="ff-pulse">SYNC</span> : '↻'}
         </button>
       </header>
 
       {/* Phone drawer */}
       <div className={cx('fixed inset-0 z-40 md:hidden', drawer ? 'pointer-events-auto' : 'pointer-events-none')} aria-hidden={!drawer}>
-        <div onClick={() => setDrawer(false)} className={cx('absolute inset-0 bg-black/50 transition-opacity duration-200', drawer ? 'opacity-100' : 'opacity-0')} />
+        <div onClick={() => setDrawer(false)} className={cx('absolute inset-0 bg-black/60 transition-opacity duration-150', drawer ? 'opacity-100' : 'opacity-0')} />
         <div
           role="dialog"
           aria-label="Menu"
           className={cx(
-            'absolute inset-y-0 left-0 w-[86vw] max-w-[320px] border-r border-ff-line bg-ff-panel shadow-2xl transition-transform duration-200 ease-out',
+            'absolute inset-y-0 left-0 w-[86vw] max-w-[320px] border-r border-ff-line bg-ff-panel transition-transform duration-150 ease-out',
             drawer ? 'translate-x-0' : '-translate-x-full',
           )}
         >
@@ -227,27 +245,29 @@ const Shell = (props: ShellProps) => {
         </div>
       </div>
 
-      <main className="pt-12 md:pl-[232px] md:pt-0">
-        <div className="mx-auto max-w-[1400px] px-3 pb-28 md:px-6 md:pb-14">{children}</div>
+      <main className="pt-12 md:pl-[220px] md:pt-0">
+        <div className={cx('mx-auto px-3 pb-24 md:px-5 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
       </main>
 
-      {/* Phone tab bar */}
-      <nav
-        aria-label="Sections"
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-ff-line bg-ff-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
-      >
+      {/* Phone tab bar: words, not pictures. */}
+      <nav aria-label="Sections" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-ff-line bg-ff-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {TAB_BAR.map((key) => {
           const s = SECTIONS.find((x) => x.key === key)!
           const active = key === section
           return (
-            <button key={key} onClick={() => navigate(key)} aria-current={active ? 'page' : undefined} className={cx('flex h-14 flex-col items-center justify-center gap-0.5 text-[10.5px]', active ? 'text-ff-accent' : 'text-ff-muted')}>
-              <s.Icon size={20} />
-              {s.label}
+            <button
+              key={key}
+              onClick={() => navigate(key)}
+              aria-current={active ? 'page' : undefined}
+              className={cx('flex h-12 flex-col items-center justify-center gap-0.5 border-r border-ff-line text-[11.5px]', active ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted')}
+            >
+              <span className="num text-[9.5px] opacity-70">{String(SECTIONS.findIndex((x) => x.key === key) + 1).padStart(2, '0')}</span>
+              {s.short}
             </button>
           )
         })}
-        <button onClick={() => setDrawer(true)} className={cx('flex h-14 flex-col items-center justify-center gap-0.5 text-[10.5px]', !TAB_BAR.includes(section) ? 'text-ff-accent' : 'text-ff-muted')}>
-          <IconMenu size={20} />
+        <button onClick={() => setDrawer(true)} className={cx('flex h-12 flex-col items-center justify-center gap-0.5 text-[11.5px]', !TAB_BAR.includes(section) ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted')}>
+          <span className="num text-[9.5px] opacity-70">··</span>
           More
         </button>
       </nav>
