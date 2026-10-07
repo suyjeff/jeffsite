@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import Head from 'next/head'
-import Link from 'next/link'
-import { getUser } from '../../lib/fantasy/sleeper'
+import { getUser, SleeperError } from '../../lib/fantasy/sleeper'
+import { Brand, FantasyHead } from './Shell'
 import { Button, cx } from './ui'
 
 /**
@@ -14,6 +13,10 @@ const Onboarding = ({ initial, onDone, onCancel }: { initial: string; onDone: (u
   const [state, setState] = useState<{ kind: 'idle' } | { kind: 'checking' } | { kind: 'error'; msg: string }>({ kind: 'idle' })
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => input.current?.focus(), [])
+  // The field is disabled while checking, which drops focus; give it back on an error so a typo is one tap from fixed.
+  useEffect(() => {
+    if (state.kind === 'error') input.current?.focus()
+  }, [state.kind])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,25 +28,18 @@ const Onboarding = ({ initial, onDone, onCancel }: { initial: string; onDone: (u
       if (!user?.user_id) return setState({ kind: 'error', msg: `No Sleeper user named “${u}”. Usernames are not display names; find yours under Settings › Account in the Sleeper app.` })
       onDone(user.username ?? u)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setState({ kind: 'error', msg: /fetch|network/i.test(msg) ? 'Could not reach Sleeper. Check your connection and try again.' : msg })
+      if (err instanceof SleeperError && err.status === 404) return setState({ kind: 'error', msg: `No Sleeper user named “${u}”.` })
+      if (err instanceof SleeperError) return setState({ kind: 'error', msg: `Sleeper isn't answering right now (${err.status}). Try again in a minute.` })
+      setState({ kind: 'error', msg: 'Could not reach Sleeper. Check your connection and try again.' })
     }
   }
 
   const checking = state.kind === 'checking'
   return (
     <div className="ff ff-canvas flex min-h-screen flex-col bg-ff-bg text-ff-text antialiased">
-      <Head>
-        <title>Fantasy · connect Sleeper</title>
-        <meta name="viewport" content="initial-scale=1.0, width=device-width, viewport-fit=cover" />
-        <meta name="robots" content="noindex" />
-      </Head>
+      <FantasyHead title="Fantasy · connect Sleeper" />
       <header className="flex h-11 items-center justify-between border-b border-ff-line bg-ff-panel px-3">
-        <Link href="/lab" className="group flex items-baseline gap-2">
-          <span className="font-mono text-[10px] text-ff-muted group-hover:text-ff-text">‹ LAB</span>
-          <span className="text-[14px] font-semibold tracking-[-0.01em]">Fantasy</span>
-          <span className="font-mono text-[10px] text-ff-muted">/term</span>
-        </Link>
+        <Brand />
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ff-muted">setup</span>
       </header>
       <main className="flex flex-1 items-start justify-center px-4 pt-[12vh] sm:items-center sm:pt-0">

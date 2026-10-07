@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { Children, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
 
 // ---------- Formatting ----------
@@ -206,7 +206,7 @@ export const Select = ({
       aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-full w-full min-w-0 cursor-pointer appearance-none truncate bg-transparent pl-2.5 pr-8 outline-none max-sm:text-[16px]"
+      className="h-full w-full min-w-0 cursor-pointer appearance-none truncate bg-transparent pl-2.5 pr-8 outline-none"
     >
       {children}
     </select>
@@ -266,10 +266,16 @@ export const Stat = ({ label, value, delta, sub, className }: { label: ReactNode
   </div>
 )
 
-/** KPI row: two across on phones, so labels and notes wrap rather than cut off. */
-export const StatGrid = ({ children, className }: { children: ReactNode; className?: string }) => (
-  <div className={cx('grid grid-cols-2 gap-px border border-ff-line bg-ff-line sm:grid-cols-3 xl:grid-cols-6 [&>*]:border-0', className)}>{children}</div>
-)
+/**
+ * KPI row: two across on phones so labels wrap rather than cut off, and a
+ * column count that divides the tiles at every width, so the hairline grid
+ * never shows an empty cell. An odd tile out on phones spans the row.
+ */
+export const StatGrid = ({ children, className }: { children: ReactNode; className?: string }) => {
+  const n = Children.toArray(children).filter(Boolean).length
+  const cols = n % 3 === 0 ? (n >= 6 ? 'sm:grid-cols-3 xl:grid-cols-6' : 'sm:grid-cols-3') : n === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'
+  return <div className={cx('grid grid-cols-2 gap-px border border-ff-line bg-ff-line [&>*]:border-0', n % 2 === 1 && 'max-sm:[&>*:last-child]:col-span-2', cols, className)}>{children}</div>
+}
 
 type Tone = 'neutral' | 'pos' | 'neg' | 'warn' | 'accent'
 const TONE: Record<Tone, string> = {
@@ -563,6 +569,8 @@ export function Table<T>({
     check()
     const ro = new ResizeObserver(check)
     ro.observe(el)
+    // The table can widen without the scroller resizing (new numbers, late fonts); watch it too.
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
     el.addEventListener('scroll', check, { passive: true })
     return () => {
       ro.disconnect()
@@ -639,7 +647,7 @@ export function Table<T>({
                       'whitespace-nowrap px-1.5 align-middle first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
                       align(c),
                       c.align === 'right' && 'num',
-                      c.sticky && 'sticky left-0 z-[1] bg-ff-panel group-hover:bg-ff-raised',
+                      c.sticky && 'sticky left-0 z-[1] max-w-[170px] overflow-hidden bg-ff-panel group-hover:bg-ff-raised sm:max-w-[300px]',
                       c.hideBelow && HIDE[c.hideBelow],
                       c.className,
                     )}

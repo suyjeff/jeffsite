@@ -194,3 +194,13 @@
 /* Dragging a dashboard widget. */
 .ff .ff-drop-before { box-shadow: inset 3px 0 0 rgb(var(--ff-accent)); }
 .ff .ff-dragging { opacity: 0.45; }
+
+/* iOS zooms into any text field under 16px on focus. On touch devices, of any
+   width, fields get 16px; the layout is built to take it. */
+@media (pointer: coarse) {
+  .ff input:not([type='range']):not([type='checkbox']),
+  .ff select,
+  .ff textarea {
+    font-size: 16px;
+  }
+}

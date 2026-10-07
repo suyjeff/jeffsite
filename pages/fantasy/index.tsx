@@ -78,13 +78,19 @@ const FantasyPage = () => {
     }
   }, [prefs])
 
-  // Nothing loads until the username is confirmed.
+  // Nothing loads until a username is confirmed. Once one has been this
+  // session, reopening the form (switch) keeps the current data live, so
+  // backing out of it costs nothing.
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    if (prefs?.onboarded) setReady(true)
+  }, [prefs?.onboarded])
   const opts = useMemo<LoadOptions | null>(
     () =>
-      prefs?.onboarded
+      prefs && ready
         ? { username: prefs.username, leagueId: prefs.leagueId, season: prefs.season, horizon: prefs.horizon, playoffWeight: prefs.playoffWeight }
         : null,
-    [prefs?.onboarded, prefs?.username, prefs?.leagueId, prefs?.season, prefs?.horizon, prefs?.playoffWeight], // eslint-disable-line react-hooks/exhaustive-deps
+    [ready, prefs?.username, prefs?.leagueId, prefs?.season, prefs?.horizon, prefs?.playoffWeight], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const { data, error, loading, progress, reload } = useLeagueData(opts)
   // Everything but the composite ranking depends on the data and the value model;
@@ -206,7 +212,10 @@ const FantasyPage = () => {
     return (
       <Onboarding
         initial={prefs.username}
-        onDone={(username) => update({ onboarded: true, username, leagueId: username === prefs.username ? prefs.leagueId : null, season: username === prefs.username ? prefs.season : null })}
+        onDone={(username) => {
+          const same = username.toLowerCase() === prefs.username.trim().toLowerCase()
+          update({ onboarded: true, username, leagueId: same ? prefs.leagueId : null, season: same ? prefs.season : null })
+        }}
         onCancel={prefs.username ? () => update({ onboarded: true }) : undefined}
       />
     )

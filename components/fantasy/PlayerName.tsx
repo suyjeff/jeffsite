@@ -27,8 +27,7 @@ const PlayerName = ({
   if (!player) return <span className="text-ff-muted">{id}</span>
   const tone = injuryTone(player.injury)
   return (
-    // Capped on phones so a long name truncates instead of pushing a table's last column off screen.
-    <span className={cx('flex min-w-0 max-w-[150px] items-center gap-2 sm:max-w-[260px]', className)}>
+    <span className={cx('flex min-w-0 items-center gap-2', className)}>
       {avatar ? <PlayerAvatar id={id} player={player} size={size} /> : <PosTag pos={player.pos} />}
       <span className="min-w-0 leading-tight">
         <span className="flex items-center gap-1.5">

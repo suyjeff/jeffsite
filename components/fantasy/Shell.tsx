@@ -43,6 +43,27 @@ export type ShellProps = {
   status?: string[]
 }
 
+/** The wordmark, linking back to the Lab. Shared by the shell and onboarding. */
+export const Brand = () => (
+  <Link href="/lab" className="group flex items-baseline gap-2" title="Back to the Lab">
+    <span className="font-mono text-[10px] text-ff-muted group-hover:text-ff-text">‹ LAB</span>
+    <span className="text-[14px] font-semibold tracking-[-0.01em] text-ff-text">Fantasy</span>
+    <span className="font-mono text-[10px] text-ff-muted">/term</span>
+  </Link>
+)
+
+/** Document head for every fantasy screen. */
+export const FantasyHead = ({ title }: { title: string }) => (
+  <Head>
+    <title>{title}</title>
+    <meta name="viewport" content="initial-scale=1.0, width=device-width, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#060709" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#eceef1" media="(prefers-color-scheme: light)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </Head>
+)
+
 const clock = (d: Date | null) => (d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--')
 
 const SidebarBody = ({
@@ -63,11 +84,7 @@ const SidebarBody = ({
 }: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void }) => (
   <div className="flex h-full flex-col">
     <div className="flex h-11 shrink-0 items-center justify-between border-b border-ff-line pl-3 pr-2">
-      <Link href="/lab" className="group flex items-baseline gap-2" title="Back to the Lab">
-        <span className="font-mono text-[10px] text-ff-muted group-hover:text-ff-text">‹ LAB</span>
-        <span className="text-[14px] font-semibold tracking-[-0.01em] text-ff-text">Fantasy</span>
-        <span className="font-mono text-[10px] text-ff-muted">/term</span>
-      </Link>
+      <Brand />
       <span className="flex items-center gap-1">
         <span className="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-[0.12em] text-ff-muted" title={loading ? progress : 'Live from Sleeper'}>
           <span className={cx('h-1.5 w-1.5', loading ? 'ff-pulse bg-ff-warn' : 'bg-ff-pos')} />
@@ -84,7 +101,7 @@ const SidebarBody = ({
     <div className="shrink-0 border-b border-ff-line">
       <label className="group relative block">
         <span className="sr-only">League</span>
-        <select value={leagueId ?? ''} onChange={(e) => onLeague(e.target.value)} className="peer absolute inset-0 h-full w-full cursor-pointer text-[16px] opacity-0">
+        <select value={leagueId ?? ''} onChange={(e) => onLeague(e.target.value)} className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0">
           {leagues.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}
@@ -199,14 +216,7 @@ const Shell = (props: ShellProps) => {
 
   return (
     <div className="ff min-h-screen bg-ff-bg text-ff-text antialiased">
-      <Head>
-        <title>{title}</title>
-        <meta name="viewport" content="initial-scale=1.0, width=device-width, viewport-fit=cover" />
-        <meta name="robots" content="noindex" />
-        <meta name="theme-color" content="#060709" media="(prefers-color-scheme: dark)" />
-        <meta name="theme-color" content="#eceef1" media="(prefers-color-scheme: light)" />
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-      </Head>
+      <FantasyHead title={title} />
 
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[220px] border-r border-ff-line bg-ff-panel md:block">

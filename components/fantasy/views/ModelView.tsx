@@ -328,7 +328,7 @@ Value  = perActive − repl_horizon(pos)`}</Code>
       </div>
 
       <div className="min-w-0 space-y-3">
-        <StatGrid className="xl:grid-cols-4">
+        <StatGrid>
           <Stat
             label="Above replacement"
             value={above}
@@ -525,7 +525,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
 
   return (
     <div className="space-y-3">
-      <StatGrid className="xl:grid-cols-4">
+      <StatGrid>
         <Stat label="League prior" value={pct(BASE_AVAILABILITY)} sub="share of games suited up" />
         <Stat label="Rostered median" value={rates.length ? pct([...rates].sort((a, b) => a - b)[Math.floor(rates.length / 2)]) : '–'} sub={`${rates.length} skill players`} />
         <Stat label="Pts/wk removed" value={fmt(totalLost)} sub="injury risk, league-wide" />
@@ -646,7 +646,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
 
   return (
     <div className="space-y-3">
-      <StatGrid className="xl:grid-cols-4">
+      <StatGrid>
         <Stat label="Pricing horizon" value={`${data.horizon.length} wk`} sub={modeLabel} />
         <Stat
           label="Playoff weight"
@@ -778,7 +778,7 @@ const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analy
   ]
   return (
     <div className="space-y-3">
-      <StatGrid className="xl:grid-cols-4">
+      <StatGrid>
         <Stat label="Week" value={data.state.week ?? '–'} sub={`${data.state.season} ${data.state.season_type}`} />
         <Stat label="Points source" value={<span className="text-[15px]">{data.pointsSource}</span>} sub="for player value" />
         <Stat label="Horizon source" value={<span className="text-[15px]">{data.horizonSource}</span>} sub="for trade pricing" />
