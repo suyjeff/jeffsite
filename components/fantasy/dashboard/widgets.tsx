@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { acceptRead } from '../../../lib/fantasy/behavior'
 import { isWaiverFill, findTargets, makeLineupEval } from '../../../lib/fantasy/trades'
+import { PROP_LABEL } from '../../../lib/fantasy/lines'
 import { searchTrades, tradeBase } from '../../../lib/fantasy/search'
 import { describeNote } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
@@ -25,6 +26,7 @@ export type WidgetKind =
   | 'team'
   | 'consensus'
   | 'activity'
+  | 'props'
 
 type Meta = { title: string; blurb: string; w: number; h: number; Body: (p: WidgetProps) => JSX.Element; reads?: 'team' | 'player' }
 
@@ -511,6 +513,7 @@ const PlayerCard = ({ sel }: WidgetProps) => {
             </div>
           </div>
         )}
+        {data.market?.byId[id] && <LinesBlock id={id} />}
         {c?.notes.length ? (
           <div className="space-y-0.5">
             {c.notes.map((n, i) => {
@@ -634,7 +637,7 @@ const Consensus = ({ sel, select }: WidgetProps) => {
           </span>
           <span className="num w-10 text-right text-ff-text">{r.model}</span>
           <span className="num w-10 text-right text-ff-text2">{Math.round(r.ecr)}</span>
-          <span className={cx('w-16 text-right font-mono text-[10.5px]', r.gap > 0 ? 'text-ff-pos' : 'text-ff-neg')} title={r.gap > 0 ? 'The model ranks this player higher than the experts: cheaper to buy than they are worth to you.' : 'The experts rank this player higher than the model: worth more in a trade than in your lineup.'}>
+          <span className={cx('w-16 text-right font-mono text-[10.5px]', r.gap > 0 ? 'text-ff-pos' : 'text-ff-neg')} title={r.gap > 0 ? 'The model ranks this player higher than the experts: cheaper to buy than he is worth to you.' : 'The experts rank this player higher than the model: worth more in a trade than in your lineup.'}>
             {r.gap > 0 ? `buy +${Math.round(r.gap)}` : `sell ${Math.round(r.gap)}`}
           </span>
         </Row>
@@ -686,6 +689,104 @@ const Activity = ({ select }: WidgetProps) => {
   )
 }
 
+/** One player's prop lines: the line, the de-vigged chance of the over, and what it implies. */
+const LinesBlock = ({ id }: { id: string }) => {
+  const { data } = useFantasy()
+  const m = data.market!.byId[id]
+  return (
+    <div>
+      <div className="ff-label mb-1 flex justify-between">
+        <span>lines · wk {data.market!.week}</span>
+        <span className="normal-case tracking-normal">
+          <span className="text-ff-text">{fmt(m.pts)}</span> vs sleeper {fmt(m.sleeper)}
+        </span>
+      </div>
+      <div className="border border-ff-line">
+        {m.props.map((p) => (
+          <div key={p.stat} className="flex items-center gap-2 border-b border-ff-line/60 px-2 py-0.5 font-mono text-[10.5px] last:border-0">
+            <span className="flex-1 truncate text-ff-text2">{PROP_LABEL[p.stat] ?? p.stat}</span>
+            <span className="w-10 text-right text-ff-text">{p.stat === 'anytime_touchdowns' ? '' : p.line}</span>
+            <span className="w-9 text-right text-ff-muted" title="Chance of the over, margin removed">
+              {p.stat === 'anytime_touchdowns' ? '' : 'o'}
+              {Math.round(p.pOver * 100)}%
+            </span>
+            <span className="w-14 shrink-0 whitespace-nowrap text-right text-ff-text2" title="Implied expected value">
+              {p.stat === 'anytime_touchdowns' ? `${p.mean.toFixed(2)} td` : `≈${p.mean.toFixed(p.mean < 10 ? 1 : 0)}`}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** The week's prop board, read as fantasy points next to Sleeper's projection. */
+const Props = ({ sel, select }: WidgetProps) => {
+  const { data, analysis, models } = useFantasy()
+  const [scope, setScope] = useState<'mine' | 'opp' | 'league'>('mine')
+  const m = data.market
+  const opp = useMemo(() => {
+    const g = models.forecast?.nextWeek.find((x) => x.a === analysis.myRosterId || x.b === analysis.myRosterId)
+    return g ? (g.a === analysis.myRosterId ? g.b : g.a) : null
+  }, [models.forecast, analysis.myRosterId])
+  const rows = useMemo(() => {
+    if (!m) return []
+    return Object.keys(m.byId)
+      .filter((id) => {
+        const owner = analysis.rosteredBy[id]
+        return scope === 'mine' ? owner === analysis.myRosterId : scope === 'opp' ? owner === opp : true
+      })
+      .map((id) => ({ id, ...m.byId[id], gap: m.byId[id].pts - m.byId[id].sleeper }))
+      .sort((a, b) => (scope === 'league' ? Math.abs(b.gap) - Math.abs(a.gap) : b.pts - a.pts))
+      .slice(0, 40)
+  }, [m, scope, analysis, opp])
+  if (!m) return <Empty title="No lines yet">The prop board fills in during the week before kickoff.</Empty>
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 border-b border-ff-line px-3 py-1.5">
+        <Segmented<'mine' | 'opp' | 'league'>
+          size="sm"
+          label="Scope"
+          value={scope}
+          onChange={setScope}
+          options={[
+            { key: 'mine', label: 'Mine' },
+            ...(opp != null ? [{ key: 'opp' as const, label: 'Opponent' }] : []),
+            { key: 'league', label: 'Biggest gaps' },
+          ]}
+        />
+        <span className="font-mono text-[10px] text-ff-muted">
+          wk {m.week} · {m.players} priced
+        </span>
+      </div>
+      <Th>
+        <span className="flex-1">player</span>
+        <span className="w-11 text-right" title="Fantasy points implied by the prop lines, league scoring">
+          lines
+        </span>
+        <span className="w-11 text-right">sleeper</span>
+        <span className="w-11 text-right">Δ</span>
+        <span className="hidden w-11 text-right sm:inline" title="Chance of a rushing or receiving TD, margin removed">
+          td%
+        </span>
+      </Th>
+      {rows.length === 0 && <div className="px-3 py-6 text-center text-[12px] text-ff-muted">Nobody here has lines yet.</div>}
+      {rows.map((r) => (
+        <Row key={r.id} onClick={() => select({ player: r.id })} active={sel.player === r.id}>
+          <span className="min-w-0 flex-1">
+            <PlayerName player={data.players[r.id]} id={r.id} size={18} avatar={false} />
+          </span>
+          <span className="num w-11 text-right text-ff-text">{fmt(r.pts)}</span>
+          <span className="num w-11 text-right text-ff-muted">{fmt(r.sleeper)}</span>
+          <Num value={r.gap} signed className="w-11 text-right" />
+          <span className="num hidden w-11 text-right text-ff-text2 sm:inline">{r.anytimeTd != null ? pct(r.anytimeTd) : ''}</span>
+        </Row>
+      ))}
+      <div className="px-3 py-1.5 font-mono text-[10px] text-ff-muted">lines = prop medians and prices read as expected stats, scored with your league&apos;s settings</div>
+    </div>
+  )
+}
+
 export const WIDGETS: Record<WidgetKind, Meta> = {
   matchup: { title: 'My matchup', blurb: 'Next week, both lineups, and your chance to win.', w: 4, h: 11, Body: Matchup },
   odds: { title: 'Playoff odds', blurb: 'Simulated seasons: wins, playoff, bye and title odds.', w: 5, h: 11, Body: Odds },
@@ -700,4 +801,5 @@ export const WIDGETS: Record<WidgetKind, Meta> = {
   team: { title: 'Team', blurb: 'One roster with its rating and odds. Follows its channel.', w: 5, h: 9, Body: TeamCard, reads: 'team' },
   consensus: { title: 'Model vs consensus', blurb: 'Where FantasyPros and the model disagree: buys and sells.', w: 4, h: 9, Body: Consensus },
   activity: { title: 'League activity', blurb: 'Trades, claims and pickups as they happen.', w: 4, h: 9, Body: Activity },
+  props: { title: 'Prop board', blurb: 'Betting lines read as fantasy points, against Sleeper.', w: 4, h: 9, Body: Props },
 }

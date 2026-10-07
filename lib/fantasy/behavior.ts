@@ -182,7 +182,7 @@ export const acceptRead = (idea: TradeIdea, me: number, behavior: LeagueBehavior
   if (team) {
     x += 0.8 * (team.engagement - 0.5)
     if (team.engagement >= 0.75) reasons.push('one of the most active managers')
-    else if (team.engagement <= 0.25) reasons.push('rarely touches their roster')
+    else if (team.engagement <= 0.25) reasons.push('rarely touches his roster')
     const history = team.trades + 0.5 * team.tradesLast
     x += 0.25 * Math.min(3, history)
     if (team.trades + team.tradesLast > 0) reasons.push(`${team.trades + team.tradesLast} trade${team.trades + team.tradesLast === 1 ? '' : 's'} on record`)

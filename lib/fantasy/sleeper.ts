@@ -302,6 +302,16 @@ export const getTransactions = (leagueId: string, week: number, isPast: boolean)
       })),
   })
 
+// ---------- Market lines ----------
+
+/**
+ * Sleeper's prop board for the NFL, reduced to two-sided player props before
+ * caching. About 100KB gzipped; Sleeper's CDN caches it for 30 seconds, and
+ * this page reads it at most every 20 minutes.
+ */
+export const getLines = <R>(transform: (raw: unknown) => R) =>
+  cachedGet<unknown, R>('/lines/available?sports%5B%5D=nfl', 20 * MINUTE, { base: 'https://api.sleeper.app', key: 'lines:nfl', transform })
+
 // ---------- Outside rankings ----------
 
 /**

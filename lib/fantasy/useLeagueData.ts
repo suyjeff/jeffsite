@@ -6,6 +6,7 @@ import {
   getPlayers,
   getRosters,
   getConsensusCsv,
+  getLines,
   getScoredProjections,
   getSchedule,
   getSeasonGamesPlayed,
@@ -14,6 +15,7 @@ import {
   getTrendingAdds,
   getUser,
   getUserLeagues,
+  getWeekProjections,
   getWeekStats,
 } from './sleeper'
 import { scoreStatLine, statLinePlayed } from './scoring'
@@ -41,6 +43,7 @@ import {
   type Usage,
 } from './context'
 import { matchConsensus, reduceConsensusCsv, type Consensus } from './consensus'
+import { blendWeek, marketWeek, reduceLines, saveSnapshot, type MarketWeek } from './lines'
 import type { Horizon } from './trades'
 import type { WeekPoints } from './war'
 
@@ -117,6 +120,8 @@ export type LeagueData = {
   pastProjections: Record<number, Record<string, number>>
   /** FantasyPros consensus, when the mirror could be read. */
   consensus: Consensus | null
+  /** Prop lines for the coming week, read as expected stats and points, when the board has them. */
+  market: MarketWeek | null
   warnings: string[]
 }
 
@@ -330,6 +335,7 @@ export const loadLeagueData = async (
   let availability: Record<string, Availability> = {}
   let usage: Record<string, Usage> = {}
   let schedule: Schedule | null = null
+  let market: MarketWeek | null = null
 
   const mode: HorizonMode = opts.horizon ?? DEFAULT_HORIZON_MODE
   const playoffWeight = Math.max(0, opts.playoffWeight ?? DEFAULT_PLAYOFF_WEIGHT)
@@ -378,14 +384,29 @@ export const loadLeagueData = async (
       getSeasonGamesPlayed(String(season - 2)),
     ])
     schedule = Array.isArray(sched) && sched.length ? buildSchedule(sched as ScheduleGame[]) : null
+
+    // Betting-market props for the coming week. They come as medians and
+    // prices; marketWeek turns them into expected stats scored with this
+    // league's settings, and the week's projection becomes an even blend of
+    // that and Sleeper's. Optional like everything else here.
+    const gameWeek: Record<string, number> = {}
+    if (Array.isArray(sched)) for (const g of sched as (ScheduleGame & { game_id?: string })[]) if (g.game_id) gameWeek[String(g.game_id)] = g.week
+    const lineWeek = rawHorizon[0].week
+    const [lineRows, rawProj] = await settled<unknown>([getLines(reduceLines), getWeekProjections(league.season, lineWeek)])
+    if (Array.isArray(lineRows) && lineRows.length && rawProj && typeof rawProj === 'object') {
+      market = marketWeek({ rows: lineRows as ReturnType<typeof reduceLines>, gameWeek, week: lineWeek, projections: rawProj as WeekStats, scoring: league.scoring_settings, players })
+      if (market.players) saveSnapshot(league.season, market)
+      else market = null
+    }
     const seasons: SeasonGames[] = []
     if (gpPrev && typeof gpPrev === 'object') seasons.push({ season: season - 1, gp: gpPrev as Record<string, number>, teamGames: TEAM_GAMES })
     if (gpPrev2 && typeof gpPrev2 === 'object') seasons.push({ season: season - 2, gp: gpPrev2 as Record<string, number>, teamGames: TEAM_GAMES })
     const current = currentSeasonGames(currentStats, schedule)
     availability = availabilityRates(players, seasons, season, current ?? undefined)
     usage = usageFromStats(currentStats, players)
+    const priced = market ? rawHorizon.map((h) => (h.week === market!.week ? { ...h, pts: blendWeek(h.pts, market!) } : h)) : rawHorizon
     const adjustedResult = adjustHorizon({
-      horizon: rawHorizon,
+      horizon: priced,
       players,
       availability,
       schedule,
@@ -496,6 +517,7 @@ export const loadLeagueData = async (
     history,
     pastProjections,
     consensus,
+    market,
     warnings,
   }
 }
