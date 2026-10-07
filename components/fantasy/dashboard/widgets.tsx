@@ -734,6 +734,8 @@ const Props = ({ sel, select }: WidgetProps) => {
     return Object.keys(m.byId)
       .filter((id) => {
         const owner = analysis.rosteredBy[id]
+        // Gaps only mean something where Sleeper has the player playing; its zeros are left out of the blend too.
+        if (scope === 'league' && !(m.byId[id].sleeper > 0)) return false
         return scope === 'mine' ? owner === analysis.myRosterId : scope === 'opp' ? owner === opp : true
       })
       .map((id) => ({ id, ...m.byId[id], gap: m.byId[id].pts - m.byId[id].sleeper }))

@@ -15,7 +15,7 @@ import {
   getTrendingAdds,
   getUser,
   getUserLeagues,
-  getWeekProjections,
+  getWeekStatLines,
   getWeekStats,
 } from './sleeper'
 import { scoreStatLine, statLinePlayed } from './scoring'
@@ -43,7 +43,7 @@ import {
   type Usage,
 } from './context'
 import { matchConsensus, reduceConsensusCsv, type Consensus } from './consensus'
-import { blendWeek, marketWeek, reduceLines, saveSnapshot, type MarketWeek } from './lines'
+import { blendWeek, marketWeek, reduceLines, saveSnapshot, type LineRow, type MarketWeek } from './lines'
 import type { Horizon } from './trades'
 import type { WeekPoints } from './war'
 
@@ -96,7 +96,7 @@ export type LeagueData = {
    */
   horizon: Horizon
   horizonSource: HorizonSource
-  /** The same weeks as Sleeper projected them, before injury and role adjustments. */
+  /** The same weeks before injury and role adjustments: Sleeper's projection, with the coming week blended with prop lines when there are any. */
   rawHorizon: Horizon
   /** Per-player adjustments and the reasons for them: availability, role changes, schedule. */
   context: Record<string, PlayerContext>
@@ -378,10 +378,11 @@ export const loadLeagueData = async (
     // so a failed request costs the adjustment, not the page.
     onProgress('Reading injury history and depth charts')
     const season = Number(league.season)
-    const [sched, gpPrev, gpPrev2] = await settled<unknown>([
+    const [sched, gpPrev, gpPrev2, lineRows] = await settled<unknown>([
       getSchedule(league.season),
       getSeasonGamesPlayed(String(season - 1)),
       getSeasonGamesPlayed(String(season - 2)),
+      getLines(reduceLines),
     ])
     schedule = Array.isArray(sched) && sched.length ? buildSchedule(sched as ScheduleGame[]) : null
 
@@ -392,11 +393,15 @@ export const loadLeagueData = async (
     const gameWeek: Record<string, number> = {}
     if (Array.isArray(sched)) for (const g of sched as (ScheduleGame & { game_id?: string })[]) if (g.game_id) gameWeek[String(g.game_id)] = g.week
     const lineWeek = rawHorizon[0].week
-    const [lineRows, rawProj] = await settled<unknown>([getLines(reduceLines), getWeekProjections(league.season, lineWeek)])
-    if (Array.isArray(lineRows) && lineRows.length && rawProj && typeof rawProj === 'object') {
-      market = marketWeek({ rows: lineRows as ReturnType<typeof reduceLines>, gameWeek, week: lineWeek, projections: rawProj as WeekStats, scoring: league.scoring_settings, players })
-      if (market.players) saveSnapshot(league.season, market)
-      else market = null
+    const rows = Array.isArray(lineRows) ? (lineRows as LineRow[]) : []
+    // Only lines whose game the schedule places in the coming week; without a schedule there is no way to tell, so none.
+    if (rows.some((r) => gameWeek[r.game] === lineWeek)) {
+      const [statLines] = await settled([getWeekStatLines(league.season, lineWeek)])
+      if (statLines) {
+        market = marketWeek({ rows, gameWeek, week: lineWeek, projections: statLines, scoring: league.scoring_settings, players })
+        if (market.players) saveSnapshot(league.season, market)
+        else market = null
+      }
     }
     const seasons: SeasonGames[] = []
     if (gpPrev && typeof gpPrev === 'object') seasons.push({ season: season - 1, gp: gpPrev as Record<string, number>, teamGames: TEAM_GAMES })
@@ -404,7 +409,11 @@ export const loadLeagueData = async (
     const current = currentSeasonGames(currentStats, schedule)
     availability = availabilityRates(players, seasons, season, current ?? undefined)
     usage = usageFromStats(currentStats, players)
-    const priced = market ? rawHorizon.map((h) => (h.week === market!.week ? { ...h, pts: blendWeek(h.pts, market!) } : h)) : rawHorizon
+    // From here on the base projection is the blended one, so every later
+    // comparison (injury drag, raw vs adjusted) isolates the injury and role
+    // adjustments rather than picking up the lines.
+    if (market) rawHorizon = rawHorizon.map((h) => (h.week === market!.week ? { ...h, pts: blendWeek(h.pts, market!) } : h))
+    const priced = rawHorizon
     const adjustedResult = adjustHorizon({
       horizon: priced,
       players,

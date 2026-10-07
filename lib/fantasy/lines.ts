@@ -50,7 +50,7 @@ export const MARKET_WEIGHT = 0.5
 export const MEDIAN_TO_MEAN: Record<string, number> = { rec_yd: 1.15, rush_yd: 1.09, pass_yd: 1.0 }
 
 /** Spread of each stat around its median, as a share of it, for reading a price off the line. */
-const CV: Record<string, number> = { rec_yd: 0.6, rush_yd: 0.55, pass_yd: 0.25, rec: 0.45, rush_att: 0.35, pass_att: 0.18, pass_cmp: 0.2, kicking_points: 0.45 }
+const CV: Record<string, number> = { rec_yd: 0.6, rush_yd: 0.55, rush_rec_yd: 0.5, pass_yd: 0.25, rec: 0.45, rush_att: 0.35, pass_att: 0.18, pass_cmp: 0.2, kicking_points: 0.45 }
 
 /** Sleeper prop types and the stat key each one prices. */
 const STAT: Record<string, string> = {
@@ -93,23 +93,29 @@ type RawLine = {
   options?: { outcome?: string; outcome_value?: number; payout_multiplier?: string | number }[]
 }
 
+export const devig = (over: number, under: number) => 1 / over / (1 / over + 1 / under)
+
 /** The board reduced to two-sided NFL player props, before caching. */
 export const reduceLines = (raw: unknown): LineRow[] => {
   const out: LineRow[] = []
   for (const x of (Array.isArray(raw) ? raw : []) as RawLine[]) {
     if (x.sport !== 'nfl' || x.subject_type !== 'player' || !x.subject_id || !x.wager_type) continue
     if (x.game_status && x.game_status !== 'pre_game') continue
-    const over = x.options?.find((o) => o.outcome === 'over')
-    const under = x.options?.find((o) => o.outcome === 'under')
-    const mo = Number(over?.payout_multiplier)
-    const mu = Number(under?.payout_multiplier)
-    if (!over || !under || !(mo > 1) || !(mu > 1) || typeof over.outcome_value !== 'number') continue
-    out.push({ id: x.subject_id, game: x.game_id ?? '', stat: x.wager_type, line: over.outcome_value, over: mo, under: mu })
+    // Pair each over with the under at the same number; with alternate lines on offer, the main line is the most balanced pair.
+    let best: LineRow | null = null
+    for (const over of x.options ?? []) {
+      if (over.outcome !== 'over' || typeof over.outcome_value !== 'number') continue
+      const under = x.options?.find((o) => o.outcome === 'under' && o.outcome_value === over.outcome_value)
+      const mo = Number(over.payout_multiplier)
+      const mu = Number(under?.payout_multiplier)
+      if (!(mo > 1) || !(mu > 1)) continue
+      const row = { id: x.subject_id, game: x.game_id ?? '', stat: x.wager_type, line: over.outcome_value, over: mo, under: mu }
+      if (!best || Math.abs(devig(mo, mu) - 0.5) < Math.abs(devig(best.over, best.under) - 0.5)) best = row
+    }
+    if (best) out.push(best)
   }
   return out
 }
-
-export const devig = (over: number, under: number) => 1 / over / (1 / over + 1 / under)
 
 /** Inverse standard normal (Acklam's rational approximation, relative error < 1.2e-9). */
 export const invPhi = (p: number) => {
@@ -155,13 +161,13 @@ export const poissonRate = (line: number, pOver: number) => {
   return (lo + hi) / 2
 }
 
+/** The median a line and its price imply: when the over is favoured, the line sits z spreads below it. */
+export const impliedMedian = (stat: string, line: number, pOver: number) => line / Math.max(0.25, 1 - (CV[stat] ?? 0.4) * invPhi(pOver))
+
 /** Expected value of a stat from its line and de-vigged over probability. */
 export const impliedMean = (stat: string, line: number, pOver: number) => {
   if (POISSON.has(stat)) return poissonRate(line, pOver)
-  const cv = CV[stat] ?? 0.4
-  // Median from the price: the line sits z standard deviations below it when the over is favoured.
-  const median = line / Math.max(0.25, 1 - cv * invPhi(pOver))
-  return median * (MEDIAN_TO_MEAN[stat] ?? 1)
+  return impliedMedian(stat, line, pOver) * (MEDIAN_TO_MEAN[stat] ?? 1)
 }
 
 const share = (a: number | undefined, b: number | undefined, fallbackA: number) => {
@@ -179,11 +185,14 @@ const share = (a: number | undefined, b: number | undefined, fallbackA: number) 
  */
 export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, number>; week: number; projections: WeekStats; scoring: Record<string, number>; players: PlayerMap }): MarketWeek => {
   const { rows, gameWeek, week, projections, scoring, players } = input
+  // Only games the schedule places in this week, and one row per player and stat: the most balanced, if the board lists several.
   const grouped: Record<string, LineRow[]> = {}
   for (const r of rows) {
-    if (gameWeek[r.game] !== undefined && gameWeek[r.game] !== week) continue
-    if (!players[r.id]) continue
-    ;(grouped[r.id] ??= []).push(r)
+    if (gameWeek[r.game] !== week || !players[r.id]) continue
+    const list = (grouped[r.id] ??= [])
+    const i = list.findIndex((x) => x.stat === r.stat)
+    if (i < 0) list.push(r)
+    else if (Math.abs(devig(r.over, r.under) - 0.5) < Math.abs(devig(list[i].over, list[i].under) - 0.5)) list[i] = r
   }
   const byId: Record<string, MarketPlayer> = {}
   let props = 0
@@ -193,7 +202,7 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
     const reads: PropRead[] = []
     let anytimeTd: number | null = null
     let kicking: number | null = null
-    const combos: { stat: string; mean: number }[] = []
+    const combos: { stat: string; median: number }[] = []
     for (const r of grouped[id]) {
       const p = devig(r.over, r.under)
       const key = STAT[r.stat]
@@ -205,12 +214,16 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
         anytimeTd = p
         // Scoring at least once with probability p means a rate of −ln(1 − p) under Poisson.
         reads.push({ stat: r.stat, line: r.line, pOver: p, mean: -Math.log(1 - Math.min(0.97, p)) })
-      } else if (r.stat === 'rushing_and_receiving_yards' || r.stat === 'passing_and_rushing_yards' || r.stat === 'kicking_points') {
-        const key2 = r.stat === 'kicking_points' ? 'kicking_points' : r.stat === 'passing_and_rushing_yards' ? 'pass_yd' : 'rec_yd'
-        const mean = impliedMean(key2, r.line, p)
-        reads.push({ stat: r.stat, line: r.line, pOver: p, mean })
-        if (r.stat === 'kicking_points') kicking = mean
-        else combos.push({ stat: r.stat, mean })
+      } else if (r.stat === 'kicking_points') {
+        kicking = impliedMean('kicking_points', r.line, p)
+        reads.push({ stat: r.stat, line: r.line, pOver: p, mean: kicking })
+      } else if (r.stat === 'rushing_and_receiving_yards' || r.stat === 'passing_and_rushing_yards') {
+        // A combined line is a median of the sum; each part gets its own mean/median factor once split.
+        const median = impliedMedian(r.stat === 'passing_and_rushing_yards' ? 'pass_yd' : 'rush_rec_yd', r.line, p)
+        combos.push({ stat: r.stat, median })
+        const parts = r.stat === 'passing_and_rushing_yards' ? ['pass_yd', 'rush_yd'] : ['rush_yd', 'rec_yd']
+        const a = share(base[parts[0]], base[parts[1]], r.stat === 'passing_and_rushing_yards' ? 0.9 : players[id].pos === 'RB' ? 0.7 : 0.1)
+        reads.push({ stat: r.stat, line: r.line, pOver: p, mean: median * (a * (MEDIAN_TO_MEAN[parts[0]] ?? 1) + (1 - a) * (MEDIAN_TO_MEAN[parts[1]] ?? 1)) })
       } else continue
       props++
     }
@@ -218,13 +231,13 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
     for (const c of combos) {
       if (c.stat === 'rushing_and_receiving_yards' && stats.rush_yd === undefined && stats.rec_yd === undefined) {
         const r = share(base.rush_yd, base.rec_yd, players[id].pos === 'RB' ? 0.7 : 0.1)
-        stats.rush_yd = c.mean * r
-        stats.rec_yd = c.mean * (1 - r)
+        stats.rush_yd = c.median * r * MEDIAN_TO_MEAN.rush_yd
+        stats.rec_yd = c.median * (1 - r) * MEDIAN_TO_MEAN.rec_yd
       }
       if (c.stat === 'passing_and_rushing_yards' && stats.pass_yd === undefined && stats.rush_yd === undefined) {
         const r = share(base.pass_yd, base.rush_yd, 0.9)
-        stats.pass_yd = c.mean * r
-        stats.rush_yd = c.mean * (1 - r)
+        stats.pass_yd = c.median * r * MEDIAN_TO_MEAN.pass_yd
+        stats.rush_yd = c.median * (1 - r) * MEDIAN_TO_MEAN.rush_yd
       }
     }
     if (anytimeTd != null) {
@@ -235,8 +248,10 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
     }
     const merged: StatLine = { ...base, ...stats }
     const sleeper = scoreStatLine(base, scoring)
-    // A kicker's line is already in points; a kicker's other categories are noise next to it.
-    const pts = kicking != null && players[id].pos === 'K' ? kicking : scoreStatLine(merged, scoring)
+    // A kicking-points line counts 3 a field goal and 1 an extra point. League scoring may pay by distance,
+    // so the line scales Sleeper's league-scored kicker projection rather than replacing it.
+    const standard = 3 * (base.fgm ?? 0) + (base.xpm ?? 0)
+    const pts = kicking != null && players[id].pos === 'K' ? (standard > 0 ? sleeper * (kicking / standard) : kicking) : scoreStatLine(merged, scoring)
     byId[id] = { props: reads, stats, pts: Math.round(pts * 100) / 100, sleeper: Math.round(sleeper * 100) / 100, anytimeTd }
   }
   return { week, byId, players: Object.keys(byId).length, props }
@@ -308,7 +323,8 @@ export const gradeSnapshots = (snaps: Record<number, Snapshot>, weekPoints: Reco
     let used = false
     for (const [id, [sl, mk]] of Object.entries(snaps[w])) {
       const a = actual[id]
-      if (a === undefined) continue
+      // League matchups list rostered scratches at exactly 0; a real zero-point game is rare enough to drop with them.
+      if (a === undefined || a === 0) continue
       n++
       used = true
       s += Math.abs(a - sl)

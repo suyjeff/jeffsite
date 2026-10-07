@@ -77,3 +77,26 @@ describe('gradeSnapshots', () => {
     expect(g.weeks).toEqual([5])
   })
 })
+
+describe('line hygiene', () => {
+  const opt = (outcome: string, v: number, m: number) => ({ outcome, outcome_value: v, payout_multiplier: String(m) })
+  it('pairs each over with the under at the same number and keeps the main line', () => {
+    const rows = reduceLines([
+      { sport: 'nfl', subject_type: 'player', subject_id: 'a', game_id: 'g', wager_type: 'receiving_yards', options: [opt('over', 60.5, 1.8), opt('over', 70.5, 2.4), opt('under', 60.5, 2.0), opt('under', 70.5, 1.5)] },
+    ])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ line: 60.5, over: 1.8, under: 2.0 })
+  })
+  it('ignores lines whose game the schedule does not place in the week', () => {
+    const rows = [{ id: 'a', game: 'unknown', stat: 'receptions', line: 4.5, over: 1.8, under: 1.8 }]
+    expect(marketWeek({ rows, gameWeek: {}, week: 5, projections: {}, scoring: { rec: 1 }, players: { a: P('a', 'WR') } }).players).toBe(0)
+  })
+  it('scales a kicker through league scoring instead of replacing it', () => {
+    const rows = [{ id: 'k', game: 'g', stat: 'kicking_points', line: 9.5, over: 1.8, under: 1.8 }]
+    const scoring = { fgm_40_49: 4, xpm: 1, fgm_0_19: 3 }
+    const m = marketWeek({ rows, gameWeek: { g: 5 }, week: 5, projections: { k: { fgm: 2, fgm_40_49: 2, xpm: 2 } }, scoring, players: { k: P('k', 'K') } })
+    // Sleeper's league-scored 10, standard 8; the line's 9.5 (even) moves it to 10 × 9.5/8.
+    expect(m.byId.k.sleeper).toBeCloseTo(10)
+    expect(m.byId.k.pts).toBeCloseTo(10 * (9.5 / 8), 1)
+  })
+})

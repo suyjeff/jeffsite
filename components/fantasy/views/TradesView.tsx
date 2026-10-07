@@ -482,7 +482,7 @@ const TradesView = ({
                   ),
                 },
                 { key: 'play', label: 'Plays', align: 'right', sort: (r) => data.context[r.id]?.play ?? 1, render: (r) => pct(data.context[r.id]?.play) },
-                { key: 'raw', label: 'Sleeper', align: 'right', hideBelow: 'sm', title: "Sleeper's projection, points per week", sort: (r) => data.context[r.id]?.raw ?? 0, render: (r) => fmt(data.context[r.id]?.raw) },
+                { key: 'raw', label: 'Base', align: 'right', hideBelow: 'sm', title: 'Points per week before injury and role adjustments (Sleeper, coming week blended with prop lines)', sort: (r) => data.context[r.id]?.raw ?? 0, render: (r) => fmt(data.context[r.id]?.raw) },
                 { key: 'adj', label: 'Expected', align: 'right', title: 'After chance of playing and teammates’ absences', sort: (r) => data.context[r.id]?.adjusted ?? 0, render: (r) => fmt(data.context[r.id]?.adjusted) },
                 {
                   key: 'chg',

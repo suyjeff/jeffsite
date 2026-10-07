@@ -104,7 +104,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       sort: (id) => perWeek[id] ?? 0,
       render: (id) => <span className="text-ff-text">{fmt(perWeek[id])}</span>,
     },
-    { key: 'raw', label: 'Sleeper', align: 'right', hideBelow: 'sm', sort: (id) => data.context[id]?.raw ?? perWeek[id] ?? 0, render: (id) => fmt(data.context[id]?.raw ?? perWeek[id]) },
+    { key: 'raw', label: 'Base', align: 'right', hideBelow: 'sm', title: 'Per week before injury and role adjustments: Sleeper, with the coming week blended with prop lines', sort: (id) => data.context[id]?.raw ?? perWeek[id] ?? 0, render: (id) => fmt(data.context[id]?.raw ?? perWeek[id]) },
     ...(data.market
       ? [
           {

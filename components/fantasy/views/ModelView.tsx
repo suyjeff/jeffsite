@@ -584,7 +584,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
           defaultSort="net"
           columns={[
             { key: 'p', label: 'Player', sticky: true, sort: (r) => players[r.id]?.name ?? '', render: (r) => <PlayerName player={players[r.id]} id={r.id} size={22} sub={owner(r.id)} /> },
-            { key: 'raw', label: 'Sleeper', align: 'right', sort: (r) => r.c.raw, render: (r) => fmt(r.c.raw) },
+            { key: 'raw', label: 'Base', align: 'right', title: 'Before injury and role adjustments', sort: (r) => r.c.raw, render: (r) => fmt(r.c.raw) },
             { key: 'adj', label: 'Exp', align: 'right', sort: (r) => r.c.adjusted, render: (r) => <span className="text-ff-text">{fmt(r.c.adjusted)}</span> },
             {
               key: 'lost',
