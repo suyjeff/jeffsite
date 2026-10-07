@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { optimalLineup, type LineupPlayer } from '../../../lib/fantasy/lineup'
+import { tradeBase } from '../../../lib/fantasy/search'
 import { findTargets, makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes } from '../ContextNotes'
@@ -96,21 +97,9 @@ const MeView = ({
       .filter((id) => players[id] && analysis.rosteredBy[id] === undefined)
       .sort((a, b) => perWeek[b] - perWeek[a])
       .slice(0, 150)
-    return findTargets({
-      slots,
-      players,
-      horizon: data.horizon,
-      pts: perWeek,
-      me: { rosterId: me.rosterId, players: me.players },
-      others: [],
-      rosteredBy: analysis.rosteredBy,
-      freeAgents: fa,
-      capacity: analysis.capacity,
-      market: analysis.market,
-      floor: analysis.horizonReplacement,
-      limit: 40,
-    })
-  }, [me, data.horizon, analysis, players, slots])
+    const base = tradeBase(data, analysis)
+    return base ? findTargets({ ...base, others: [], rosteredBy: analysis.rosteredBy, freeAgents: fa, limit: 40 }) : []
+  }, [me, data, analysis, players])
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
 
   if (!me) {

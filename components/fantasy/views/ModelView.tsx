@@ -1,5 +1,5 @@
 import React, { useMemo, type ReactNode } from 'react'
-import { analyze, type Analysis } from '../../../lib/fantasy/analysis'
+import { analyze, withWeights, type Analysis } from '../../../lib/fantasy/analysis'
 import { AVAILABILITY_PRIOR_GAMES, BASE_AVAILABILITY, HEALTHY_DECAY, NEXT_MAN_SHARE, SKILL_POSITIONS, STATUS_PLAY, TRANSFER, playProbability } from '../../../lib/fantasy/context'
 import { starterDemand } from '../../../lib/fantasy/lineup'
 import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../../../lib/fantasy/power'
@@ -155,8 +155,10 @@ const ModelView = ({ data, analysis, sub, onSub, model, setModel, weights, setWe
   const changed = diffList(model, weights)
 
   // The same league run at the defaults, so every readout can show what your settings moved.
+  // Weights alone only re-rank, so that case skips the full re-analysis.
+  const modelChanged = changed.some((k) => !k.startsWith('w.'))
   const baseline = useMemo(
-    () => (changed.length ? analyze(data, DEFAULT_MODEL, DEFAULT_POWER_WEIGHTS) : analysis),
+    () => (!changed.length ? analysis : modelChanged ? analyze(data, DEFAULT_MODEL, DEFAULT_POWER_WEIGHTS) : withWeights(analysis, DEFAULT_POWER_WEIGHTS)),
     [data, changed.join(','), analysis], // eslint-disable-line react-hooks/exhaustive-deps
   )
 

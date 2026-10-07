@@ -68,6 +68,13 @@ describe('simulateSeason', () => {
     expect(a[1].title).toBeGreaterThan(0.4)
     expect(a).toEqual(b)
   })
+  it('counts both finalists in a two-team bracket', () => {
+    const out = simulateSeason({ ...base, playoffTeams: 2, mean: () => 100 })
+    const finals = teams.reduce((a, t) => a + out[t].final, 0)
+    const titles = teams.reduce((a, t) => a + out[t].title, 0)
+    expect(finals).toBeCloseTo(2, 2)
+    expect(titles).toBeCloseTo(1, 2)
+  })
   it('hands byes to the top seeds when the bracket is not a power of two', () => {
     const out = simulateSeason({ ...base, playoffTeams: 3, mean: (t: number) => 100 + t })
     const byes = teams.reduce((a, t) => a + out[t].bye, 0)

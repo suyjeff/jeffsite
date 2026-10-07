@@ -3,10 +3,12 @@
 // Trades page asking for the same thing should pay for it once.
 
 import type { Analysis } from './analysis'
-import { findTrades, SUGGESTED_TRADE_CONFIG, type TradeConfig, type TradeIdea } from './trades'
+import { DEFAULT_TRADE_CONFIG, findTrades, SUGGESTED_TRADE_CONFIG, type TradeConfig, type TradeIdea } from './trades'
 import type { LeagueData } from './useLeagueData'
 
-const cache = new WeakMap<Analysis, Map<string, { ideas: TradeIdea[]; ms: number }>>()
+// Keyed on the market-value table, which keeps its identity across composite
+// weight changes (see withWeights) but is rebuilt whenever prices can move.
+const cache = new WeakMap<Record<string, number>, Map<string, { ideas: TradeIdea[]; ms: number }>>()
 
 export const tradeBase = (data: LeagueData, analysis: Analysis) => {
   const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
@@ -24,10 +26,11 @@ export const tradeBase = (data: LeagueData, analysis: Analysis) => {
 }
 
 export const searchTrades = (data: LeagueData, analysis: Analysis, config: Partial<TradeConfig> = {}) => {
-  const full = { ...SUGGESTED_TRADE_CONFIG, ...config }
+  // The full effective config, so callers that spell out a default share the entry.
+  const full: TradeConfig = { ...DEFAULT_TRADE_CONFIG, ...SUGGESTED_TRADE_CONFIG, ...config }
   const key = JSON.stringify(full)
-  let byConfig = cache.get(analysis)
-  if (!byConfig) cache.set(analysis, (byConfig = new Map()))
+  let byConfig = cache.get(analysis.market)
+  if (!byConfig) cache.set(analysis.market, (byConfig = new Map()))
   const hit = byConfig.get(key)
   if (hit) return hit
   const base = tradeBase(data, analysis)

@@ -86,7 +86,7 @@ const PowerView = ({
       key: 'rating',
       label: 'Rating',
       align: 'right',
-      title: 'Expected points per week ahead: projected optimal lineup (injury odds and byes priced in) × lineup efficiency',
+      title: 'Expected points per week ahead: projected optimal lineup (injury odds and byes priced in) × efficiency (points per projected point)',
       sort: (r) => forecast!.byId[r.rosterId].rating,
       render: (r) => (
         <span className="inline-flex items-center justify-end gap-2">
@@ -96,7 +96,7 @@ const PowerView = ({
       ),
     },
     { key: 'proj', label: 'Lineup', align: 'right', title: 'Projected optimal lineup per week, before lineup efficiency', sort: (r) => forecast!.byId[r.rosterId].projected, render: (r) => fmt(forecast!.byId[r.rosterId].projected) },
-    { key: 'eff', label: 'Eff', align: 'right', title: 'Share of the optimum this manager starts, shrunk toward the league', sort: (r) => forecast!.byId[r.rosterId].efficiency, render: (r) => pct(forecast!.byId[r.rosterId].efficiency, 1) },
+    { key: 'eff', label: 'Eff', align: 'right', title: 'Points scored per point of projected optimal lineup, shrunk toward the league. Captures lineup calls and how a roster runs against its projections.', sort: (r) => forecast!.byId[r.rosterId].efficiency, render: (r) => pct(forecast!.byId[r.rosterId].efficiency, 1) },
     {
       key: 'form',
       label: 'Form',

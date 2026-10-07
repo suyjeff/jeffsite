@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { acceptRead } from '../../../lib/fantasy/behavior'
-import { searchTrades } from '../../../lib/fantasy/search'
+import { searchTrades, tradeBase } from '../../../lib/fantasy/search'
 import { DEFAULT_TRADE_CONFIG, findTargets, scoreTrade, type TradeIdea, type TradeShape } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule } from '../ContextNotes'
@@ -67,22 +67,7 @@ const TradesView = ({
     () => analysis.teams.filter((t) => t.rosterId !== myRosterId).map((t) => ({ rosterId: t.rosterId, players: t.players })),
     [analysis.teams, myRosterId],
   )
-  const base = useMemo(
-    () =>
-      me
-        ? {
-            slots,
-            players,
-            horizon: data.horizon,
-            pts: analysis.horizon.perWeek,
-            me: { rosterId: me.rosterId, players: me.players },
-            capacity: analysis.capacity,
-            market: analysis.market,
-            floor: analysis.horizonReplacement,
-          }
-        : null,
-    [me, slots, players, data.horizon, analysis],
-  )
+  const base = useMemo(() => tradeBase(data, analysis), [data, analysis])
 
   const { models } = useFantasy()
   const search = useMemo(() => searchTrades(data, analysis, { minTheirGain, maxValueAsk }), [data, analysis, minTheirGain, maxValueAsk])

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { acceptRead } from '../../../lib/fantasy/behavior'
 import { isWaiverFill, findTargets, makeLineupEval } from '../../../lib/fantasy/trades'
-import { searchTrades } from '../../../lib/fantasy/search'
+import { searchTrades, tradeBase } from '../../../lib/fantasy/search'
 import { describeNote } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
@@ -74,33 +74,37 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
   const week = f.nextWeek[0].week
   const live = data.matchupsByWeek[week] ?? []
   const pts = (rid: number) => live.find((m) => m.roster_id === rid)?.points ?? 0
+  // Once the week has started, every row shows live points; before, every row shows expectations. Never a mix.
+  const started = live.some((m) => (m.points ?? 0) > 0)
   return (
     <div>
       <Th>
         <span className="w-full">wk {week}</span>
-        <span className="shrink-0">exp</span>
-        <span className="w-16 shrink-0 text-center">win</span>
-        <span className="shrink-0">exp</span>
+        <span className="shrink-0">{started ? 'live' : 'exp'}</span>
+        <span className="w-16 shrink-0 text-center" title={started ? 'Pre-game win probability' : undefined}>
+          {started ? 'pre' : 'win'}
+        </span>
+        <span className="shrink-0">{started ? 'live' : 'exp'}</span>
       </Th>
       {f.nextWeek.map((g) => (
         <Row key={`${g.a}-${g.b}`} active={sel.team === g.a || sel.team === g.b}>
           <button onClick={() => select({ team: g.a })} className="min-w-0 flex-1 text-left">
             <TeamTag id={g.a} />
           </button>
-          <span className="num w-10 shrink-0 text-right text-ff-text">{fmt(pts(g.a) || g.muA)}</span>
+          <span className="num w-10 shrink-0 text-right text-ff-text">{fmt(started ? pts(g.a) : g.muA)}</span>
           <span className="flex w-16 shrink-0 items-center gap-1">
             <span className="num w-7 text-right text-[10.5px] text-ff-text2">{Math.round(g.pA * 100)}</span>
             <span className="flex h-[6px] flex-1 bg-ff-s2/60">
               <span className="h-full bg-ff-s1" style={{ width: `${g.pA * 100}%` }} />
             </span>
           </span>
-          <span className="num w-10 shrink-0 text-ff-text">{fmt(pts(g.b) || g.muB)}</span>
+          <span className="num w-10 shrink-0 text-ff-text">{fmt(started ? pts(g.b) : g.muB)}</span>
           <button onClick={() => select({ team: g.b })} className="flex min-w-0 flex-1 justify-end text-right">
             <TeamTag id={g.b} />
           </button>
         </Row>
       ))}
-      <div className="px-3 py-1.5 font-mono text-[10px] text-ff-muted">bar = left team&apos;s chance · live points replace the expectation once games start</div>
+      <div className="px-3 py-1.5 font-mono text-[10px] text-ff-muted">bar = left team&apos;s pre-game chance · {started ? 'scores are live' : 'scores are expectations'}</div>
     </div>
   )
 }
@@ -417,20 +421,8 @@ const Waivers = ({ sel, select }: WidgetProps) => {
       .filter((id) => data.players[id] && analysis.rosteredBy[id] === undefined)
       .sort((a, b) => perWeek[b] - perWeek[a])
       .slice(0, 120)
-    return findTargets({
-      slots: analysis.slots,
-      players: data.players,
-      horizon: data.horizon,
-      pts: perWeek,
-      me: { rosterId: me.rosterId, players: me.players },
-      others: [],
-      rosteredBy: analysis.rosteredBy,
-      freeAgents: fa,
-      capacity: analysis.capacity,
-      market: analysis.market,
-      floor: analysis.horizonReplacement,
-      limit: 15,
-    })
+    const base = tradeBase(data, analysis)
+    return base ? findTargets({ ...base, others: [], rosteredBy: analysis.rosteredBy, freeAgents: fa, limit: 15 }) : []
   }, [me, data, analysis])
   if (!rows.length) return <Empty title="Nobody on waivers helps">Your lineup beats every free agent at every slot.</Empty>
   return (

@@ -99,7 +99,9 @@ export const buildModels = (data: LeagueData, analysis: Analysis): Models => {
     players: data.players,
     market: analysis.market,
   })
-  const perceived = data.consensus ? perceivedValues(data.consensus, analysis.market) : null
+  // A player the consensus does not rank (or the matcher missed) is read at the
+  // model's own value rather than zero, so a miss never looks like a free player.
+  const perceived = data.consensus ? { ...Object.fromEntries(Object.entries(analysis.market).map(([id, v]) => [id, Math.max(0, v)])), ...perceivedValues(data.consensus, analysis.market) } : null
 
   return { forecast, forecastInput, elo, eloPrior, lastSeasonGames, backtest: bt, behavior, perceived }
 }

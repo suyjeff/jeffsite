@@ -86,7 +86,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
     { id: 'market', col: 2, label: 'Market value', stat: `${Object.keys(analysis.market).length} priced`, tab: 'value', note: 'Points per week above positional replacement.' },
     { id: 'war', col: 2, label: 'WAR (to date)', stat: `σ ${fmt(analysis.sigma)}`, tab: 'value', note: 'Points above replacement converted to wins.' },
     { id: 'trades', col: 3, label: 'Trade search', stat: `${analysis.teams.length - 1} partners`, tab: 'engine', note: 'Beam search over packages, scored week by week.' },
-    { id: 'rating', col: 3, label: 'Forecast rating', stat: f ? `eff ${pct(f.leagueEff)} · form ×${FORM_WEIGHT}` : 'off', tab: 'forecast', note: 'Projected lineup × lineup efficiency (ELWAY’s lineup weights).' },
+    { id: 'rating', col: 3, label: 'Forecast rating', stat: f ? `eff ${pct(f.leagueEff)} · form ×${FORM_WEIGHT}` : 'off', tab: 'forecast', note: 'Projected lineup × efficiency: points per projected point (ELWAY’s lineup weights).' },
     { id: 'elo', col: 3, label: 'Elo', stat: `K ${ELO.k} · prior ${models.lastSeasonGames ? 'carried' : 'flat'}`, tab: 'forecast', note: 'Results only, margin-aware, regressed between seasons.' },
     { id: 'composite', col: 3, label: 'Composite', stat: 'weighted z', tab: 'power', note: 'All-play, scoring, form, roster, efficiency.' },
     { id: 'sim', col: 3, label: 'Season sim', stat: f ? `${f.sims.toLocaleString()} × σ ${fmt(f.sigma)}` : 'off', tab: 'forecast', note: 'Week-by-week seasons with a persistent team level, then the bracket.' },
@@ -223,7 +223,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
         </Panel>
         <Panel title="What was decided by evidence" index={3}>
           <p className="text-[12.5px] leading-relaxed text-ff-text2">
-            Form is computed but weighted ×{FORM_WEIGHT}: in both leagues tested when it was built, it made next-week predictions worse.{' '}
+            Form is computed but weighted ×{FORM_WEIGHT}: in both leagues tested when it was built, it made next-week predictions worse. Per-manager efficiency is shrunk with a {EFFICIENCY_PRIOR_GAMES}-game prior for the same reason.{' '}
             {(() => {
               const results = models.backtest.scores.filter((s) => ['ppg', 'allplay', 'power', 'elo'].includes(s.model))
               const worse = results.filter((s) => s.skill < 0).map((s) => MODEL_LABEL[s.model])
@@ -249,7 +249,7 @@ export const ForecastTab = () => {
       <StatGrid>
         <Stat label="Weekly σ" value={fmt(f.sigma)} sub={f.noiseN ? `measured, ${f.noiseN} team-weeks` : 'fallback'} />
         <Stat label="Season τ" value={fmt(f.tau)} sub={`${SIM.tauShare} × σ`} />
-        <Stat label="League eff" value={pct(f.leagueEff, 1)} sub="actual / optimal" />
+        <Stat label="League eff" value={pct(f.leagueEff, 1)} sub="actual / projected optimum" />
         <Stat label="Simulations" value={f.sims.toLocaleString()} sub="seasons + bracket" />
         <Stat label="Elo K" value={ELO.k} sub={`regress ${Math.round(ELO.regress * 100)}% / summer`} />
         <Stat label="Form weight" value={`×${FORM_WEIGHT}`} sub="by backtest" />
@@ -278,10 +278,10 @@ export const ForecastTab = () => {
         <div className="grid gap-4 text-[12.5px] leading-relaxed text-ff-text2 lg:grid-cols-2">
           <p>
             ELWAY rates NFL teams with Elo-style results, then adjusts for who is actually playing, the quarterback above all. Fantasy inverts the balance: nobody plays defense, so a team&apos;s score is almost entirely the lineup it fields, and that lineup is
-            projected in advance. The rating is therefore the projected optimal lineup for each week, with injury odds and byes priced in, times how much of the optimum this manager actually starts.
+            projected in advance. The rating is therefore the projected optimal lineup for each week, with injury odds and byes priced in, times efficiency: the points this team has actually scored per point its lineup was projected for, shrunk toward the league. That folds in lineup calls and any systematic gap between a roster and its projections.
           </p>
           <p>
-            Results still matter twice: they set lineup efficiency, and they measure the weekly noise σ the simulation uses. Elo, the pure-results benchmark, uses 538&apos;s margin multiplier and carries last season&apos;s rating forward,
+            Results still matter twice: they set efficiency, and they measure the weekly noise σ the simulation uses. Elo, the pure-results benchmark, uses 538&apos;s margin multiplier and carries last season&apos;s rating forward,
             regressed a third of the way to 1500. A season simulation draws one level per team per season (τ) on top of weekly noise, so a team the projections misjudge stays misjudged all year, as it would in reality.
           </p>
         </div>

@@ -9,7 +9,7 @@ import PlayersView from '../../components/fantasy/views/PlayersView'
 import PowerView from '../../components/fantasy/views/PowerView'
 import TeamsView from '../../components/fantasy/views/TeamsView'
 import TradesView from '../../components/fantasy/views/TradesView'
-import { analyze } from '../../lib/fantasy/analysis'
+import { analyze, withWeights } from '../../lib/fantasy/analysis'
 import { buildModels } from '../../lib/fantasy/models'
 import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../../lib/fantasy/power'
 import { purgeStaleCache } from '../../lib/fantasy/sleeper'
@@ -84,9 +84,12 @@ const FantasyPage = () => {
     [prefs?.username, prefs?.leagueId, prefs?.season, prefs?.horizon, prefs?.playoffWeight], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const { data, error, loading, progress, reload } = useLeagueData(opts)
-  const analysis = useMemo(() => (data && prefs ? analyze(data, prefs.model, prefs.weights) : null), [data, prefs?.model, prefs?.weights]) // eslint-disable-line react-hooks/exhaustive-deps
-  // Ratings, simulation, backtest and behaviour: rebuilt only when the analysis is.
-  const models = useMemo(() => (data && analysis ? buildModels(data, analysis) : null), [data, analysis])
+  // Everything but the composite ranking depends on the data and the value model;
+  // weights only re-rank. Models and the trade search key on the core, so moving
+  // a weight slider never reruns the season simulation or the backtest.
+  const core = useMemo(() => (data && prefs ? analyze(data, prefs.model, DEFAULT_POWER_WEIGHTS) : null), [data, prefs?.model]) // eslint-disable-line react-hooks/exhaustive-deps
+  const analysis = useMemo(() => (core && prefs ? withWeights(core, prefs.weights) : null), [core, prefs?.weights]) // eslint-disable-line react-hooks/exhaustive-deps
+  const models = useMemo(() => (data && core ? buildModels(data, core) : null), [data, core])
 
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   useEffect(() => {

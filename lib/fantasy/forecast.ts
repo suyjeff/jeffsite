@@ -143,8 +143,14 @@ export const preseasonElo = (lastSeason: Record<number, number>) => {
 
 // ---------- Lineup ratings ----------
 
-/** Prior strength, in games, for a manager's lineup efficiency and scoring form. */
-export const EFFICIENCY_PRIOR_GAMES = 8
+/**
+ * Prior strength, in games, for a manager's efficiency (points per projected
+ * point). Heavy on the evidence: at 8 games, per-manager efficiency graded
+ * slightly worse than the raw projection in both leagues tested (Brier 0.213
+ * vs 0.192 on 15 games; 0.247 vs 0.242 on 18), so a manager needs most of a
+ * season before their own number carries half the weight.
+ */
+export const EFFICIENCY_PRIOR_GAMES = 24
 export const FORM_PRIOR_GAMES = 8
 /**
  * How much form counts in the rating. Zero, on the evidence: in both leagues
@@ -190,22 +196,29 @@ export type ForecastInput = {
   sigmaFallback: number
 }
 
-/** A team's projected optimal lineup in a past week, from the roster it had then. */
-const pastProjected = (input: Pick<ForecastInput, 'slots' | 'players' | 'floor'>, pts: Record<string, number>, roster: string[]) =>
-  makeLineupEval(input.slots, input.players, pts, input.floor).total(roster)
+/** Each team's projected optimal lineup in every completed week that has projections, from the roster it had then. */
+export const pastByWeek = (input: Pick<ForecastInput, 'slots' | 'players' | 'floor' | 'playedWeeks' | 'pastProjections' | 'teamWeeks'>) => {
+  const out: Record<number, Record<number, number>> = {}
+  for (const w of input.playedWeeks) {
+    const pts = input.pastProjections[w]
+    if (!pts) continue
+    const ev = makeLineupEval(input.slots, input.players, pts, input.floor)
+    out[w] = {}
+    for (const t of input.teamWeeks[w] ?? []) out[w][t.rosterId] = ev.total(t.players)
+  }
+  return out
+}
 
 /**
  * Weekly noise around a team's expectation: the spread of (actual − projected
  * × efficiency) across every team-week we can measure. Falls back to a share
  * of the league's score spread before any week has both.
  */
-export const measureNoise = (input: ForecastInput, efficiency: Record<number, number>) => {
+export const measureNoise = (input: ForecastInput, efficiency: Record<number, number>, past = pastByWeek(input)) => {
   const resid: number[] = []
-  for (const w of input.playedWeeks) {
-    const pts = input.pastProjections[w]
-    if (!pts) continue
+  for (const w of Object.keys(past).map(Number)) {
     for (const t of input.teamWeeks[w] ?? []) {
-      const proj = pastProjected(input, pts, t.players)
+      const proj = past[w][t.rosterId]
       if (proj > 0) resid.push(t.points - proj * (efficiency[t.rosterId] ?? 1))
     }
   }
@@ -218,40 +231,46 @@ export const measureNoise = (input: ForecastInput, efficiency: Record<number, nu
 export const teamRatings = (input: ForecastInput) => {
   const { teams, teamWeeks, playedWeeks } = input
   const evalH = input.horizon.length ? makeHorizonEval(input.slots, input.players, input.horizon, input.floor) : null
-  // League efficiency, then each manager's, shrunk toward it.
+  // Efficiency is measured against the same thing it scales: points scored per
+  // point of *projected* optimal lineup. (Against the hindsight optimum it would
+  // count the projection's own shortfall twice.) League first, then each
+  // manager, shrunk toward it.
+  const past = pastByWeek(input)
   let actualAll = 0
-  let optimalAll = 0
-  const games: Record<number, { actual: number; optimal: number; n: number }> = {}
-  for (const w of playedWeeks) {
+  let projAll = 0
+  const games: Record<number, { actual: number; proj: number; n: number }> = {}
+  for (const w of Object.keys(past).map(Number)) {
     for (const t of teamWeeks[w] ?? []) {
-      const g = (games[t.rosterId] ??= { actual: 0, optimal: 0, n: 0 })
+      const proj = past[w][t.rosterId]
+      if (!(proj > 0)) continue
+      const g = (games[t.rosterId] ??= { actual: 0, proj: 0, n: 0 })
       g.actual += t.points
-      g.optimal += t.optimalPoints
+      g.proj += proj
       g.n++
       actualAll += t.points
-      optimalAll += t.optimalPoints
+      projAll += proj
     }
   }
-  const leagueEff = optimalAll ? actualAll / optimalAll : 0.9
+  const leagueEff = projAll ? actualAll / projAll : 1
   const efficiency: Record<number, number> = {}
   for (const t of teams) {
     const g = games[t.rosterId]
-    const own = g && g.optimal ? g.actual / g.optimal : leagueEff
+    const own = g && g.proj ? g.actual / g.proj : leagueEff
     const n = g?.n ?? 0
     efficiency[t.rosterId] = (n * own + EFFICIENCY_PRIOR_GAMES * leagueEff) / (n + EFFICIENCY_PRIOR_GAMES)
   }
-  const noise = measureNoise(input, efficiency)
+  const noise = measureNoise(input, efficiency, past)
 
   // Form: points beyond the team's own projection, per game, shrunk hard.
   const form: Record<number, number> = {}
   for (const t of teams) {
     let sum = 0
     let n = 0
-    for (const w of playedWeeks) {
-      const pts = input.pastProjections[w]
+    for (const w of Object.keys(past).map(Number)) {
       const tw = (teamWeeks[w] ?? []).find((x) => x.rosterId === t.rosterId)
-      if (!pts || !tw) continue
-      sum += tw.points - pastProjected(input, pts, tw.players) * efficiency[t.rosterId] - noise.bias
+      const proj = past[w][t.rosterId]
+      if (!tw || !(proj > 0)) continue
+      sum += tw.points - proj * efficiency[t.rosterId] - noise.bias
       n++
     }
     form[t.rosterId] = n ? sum / (n + FORM_PRIOR_GAMES) : 0
@@ -367,6 +386,8 @@ export const simulateSeason = (input: SimInput): Record<number, SimTeam> => {
     for (let i = 0; i < byes; i++) out[teams[standings[i]]].bye++
     let round = 0
     while (alive.length > 1) {
+      // The last two standing are the finalists, whatever the bracket size.
+      if (alive.length === 2) for (const f of alive) if (f !== null) out[teams[f]].final++
       const week = playoffWeeks[Math.min(round, playoffWeeks.length - 1)] ?? 0
       const next: (number | null)[] = []
       for (let m = 0; m < alive.length; m += 2) {
@@ -380,7 +401,6 @@ export const simulateSeason = (input: SimInput): Record<number, SimTeam> => {
         const sy = mean(teams[y], week) + level[y] + sigma * z()
         next.push(sx >= sy ? x : y)
       }
-      if (next.length === 2) for (const f of next) if (f !== null) out[teams[f]].final++
       alive = next
       round++
     }
@@ -451,24 +471,14 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims): Forecast =
  * the same random draws, before and after, so the difference is the trade and
  * not the dice.
  */
-export const tradeLeverage = (
-  input: ForecastInput,
-  base: Forecast,
-  trade: { me: number; partner: number; myRoster: string[]; theirRoster: string[] },
-  sims = 2000,
-) => {
-  const evalH = input.horizon.length ? makeHorizonEval(input.slots, input.players, input.horizon, input.floor) : null
-  if (!evalH) return null
+const LEVERAGE_SIMS = 2000
+const leverageCache = new WeakMap<Forecast, { evalH: ReturnType<typeof makeHorizonEval>; before: Record<number, SimTeam> }>()
+
+export const tradeLeverage = (input: ForecastInput, base: Forecast, trade: { me: number; partner: number; myRoster: string[]; theirRoster: string[] }) => {
+  if (!input.horizon.length) return null
+  const sims = LEVERAGE_SIMS
   const after: Record<number, Record<number, number>> = {}
-  for (const [rid, roster] of [
-    [trade.me, trade.myRoster],
-    [trade.partner, trade.theirRoster],
-  ] as [number, string[]][]) {
-    const r = base.byId[rid]
-    const perWeek = evalH.perWeek(roster)
-    after[rid] = {}
-    input.horizon.forEach((h, i) => (after[rid][h.week] = perWeek[i] * r.efficiency + FORM_WEIGHT * r.form))
-  }
+  const afterRating: Record<number, number> = {}
   const common = {
     teams: input.teams.map((t) => t.rosterId),
     record: input.record,
@@ -480,8 +490,26 @@ export const tradeLeverage = (
     sims,
     seed: 777,
   }
-  const before = simulateSeason({ ...common, mean: base.mean })
-  const post = simulateSeason({ ...common, mean: (t, w) => after[t]?.[w] ?? base.mean(t, w) })
+  // The baseline and the lineup evaluator are the same for every trade; build them once per forecast.
+  let cached = leverageCache.get(base)
+  if (!cached) {
+    cached = { evalH: makeHorizonEval(input.slots, input.players, input.horizon, input.floor), before: simulateSeason({ ...common, mean: base.mean }) }
+    leverageCache.set(base, cached)
+  }
+  const { evalH, before } = cached
+  for (const [rid, roster] of [
+    [trade.me, trade.myRoster],
+    [trade.partner, trade.theirRoster],
+  ] as [number, string[]][]) {
+    const r = base.byId[rid]
+    const perWeek = evalH.perWeek(roster)
+    after[rid] = {}
+    input.horizon.forEach((h, i) => (after[rid][h.week] = perWeek[i] * r.efficiency + FORM_WEIGHT * r.form))
+    const xs = Object.values(after[rid])
+    afterRating[rid] = xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
+  }
+  // Weeks the horizon does not cover (the playoffs, in the shorter modes) use the post-trade rating too.
+  const post = simulateSeason({ ...common, mean: (t, w) => (after[t] ? (after[t][w] ?? afterRating[t]) : base.mean(t, w)) })
   const delta = (rid: number) => ({
     playoffs: round3(post[rid].playoffs - before[rid].playoffs),
     title: round3(post[rid].title - before[rid].title),
@@ -564,7 +592,6 @@ export const backtest = (
       const prior = s.weeks.slice(0, wi)
       const pts: Record<number, number[]> = {}
       const ap: Record<number, { w: number; g: number }> = {}
-      const eff: Record<number, { a: number; o: number }> = {}
       for (const w of prior) {
         const tws = s.teamWeeks[w] ?? []
         for (const t of tws) {
@@ -574,24 +601,25 @@ export const backtest = (
             a.w += t.points > o.points ? 1 : t.points === o.points ? 0.5 : 0
             a.g++
           }
-          const e = (eff[t.rosterId] ??= { a: 0, o: 0 })
-          e.a += t.points
-          e.o += t.optimalPoints
         }
       }
       const mean = (xs: number[] | undefined) => (xs?.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
       const power = ctx.powerScore(s.teamWeeks, prior)
       const proj = s.pastProjections?.[week]
-      // Form going into the week: scoring beyond each roster's own projection in earlier weeks.
-      const formSum: Record<number, { sum: number; n: number }> = {}
+      // Efficiency and form going into the week, both against each roster's own projection in earlier weeks.
+      const formSum: Record<number, { sum: number; n: number; actual: number; proj: number }> = {}
       for (const w of prior) {
         const pw = s.pastProjections?.[w]
         if (!pw) continue
         const lineup = makeLineupEval(ctx.slots, ctx.players, pw, ctx.floor)
         for (const t of s.teamWeeks[w] ?? []) {
-          const f = (formSum[t.rosterId] ??= { sum: 0, n: 0 })
-          f.sum += t.points - lineup.total(t.players)
+          const proj = lineup.total(t.players)
+          if (!(proj > 0)) continue
+          const f = (formSum[t.rosterId] ??= { sum: 0, n: 0, actual: 0, proj: 0 })
+          f.sum += t.points - proj
           f.n++
+          f.actual += t.points
+          f.proj += proj
         }
       }
       const formAll = Object.values(formSum)
@@ -601,9 +629,8 @@ export const backtest = (
         return f ? (f.sum - f.n * formBias) / (f.n + FORM_PRIOR_GAMES) : 0
       }
       const leagueEff = (() => {
-        const all = Object.values(eff)
-        const o = all.reduce((a, e) => a + e.o, 0)
-        return o ? all.reduce((a, e) => a + e.a, 0) / o : 0.9
+        const p = formAll.reduce((a, f) => a + f.proj, 0)
+        return p ? formAll.reduce((a, f) => a + f.actual, 0) / p : 1
       })()
       for (const g of games.filter((x) => x.week === week)) {
         const p: Partial<Record<BacktestModel, number>> = { coin: 0.5 }
@@ -632,13 +659,14 @@ export const backtest = (
             if (pa > 0 && pb > 0) {
               p.projection = winProb(pa, pb, ctx.sigma)
               const k = EFFICIENCY_PRIOR_GAMES
-              const shrink = (e: { a: number; o: number } | undefined) => {
-                const n = prior.length
-                const own = e && e.o ? e.a / e.o : leagueEff
+              const shrink = (rid: number) => {
+                const f = formSum[rid]
+                const n = f?.n ?? 0
+                const own = f && f.proj ? f.actual / f.proj : leagueEff
                 return (n * own + k * leagueEff) / (n + k)
               }
-              p.forecast = winProb(pa * shrink(eff[g.a]), pb * shrink(eff[g.b]), ctx.sigma)
-              p.form = winProb(pa * shrink(eff[g.a]) + form(g.a), pb * shrink(eff[g.b]) + form(g.b), ctx.sigma)
+              p.forecast = winProb(pa * shrink(g.a), pb * shrink(g.b), ctx.sigma)
+              p.form = winProb(pa * shrink(g.a) + form(g.a), pb * shrink(g.b) + form(g.b), ctx.sigma)
             }
           }
         }

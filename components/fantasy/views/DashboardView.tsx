@@ -71,7 +71,12 @@ const ChannelChip = ({ ch, onClick }: { ch: number; onClick: () => void }) => (
 const Menu = ({ widget, onChange, onRemove, onMove, close }: { widget: Widget; onChange: (p: Partial<Widget>) => void; onRemove: () => void; onMove: (d: -1 | 1) => void; close: () => void }) => {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && close()
+    // A press on this widget's own toggle is left to the toggle, so clicking it closes the menu instead of reopening it.
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Element | null
+      if (ref.current?.contains(t as Node) || t?.closest?.(`[data-menu-toggle="${widget.id}"]`)) return
+      close()
+    }
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
     window.addEventListener('mousedown', onDown)
     window.addEventListener('keydown', onKey)
@@ -79,7 +84,7 @@ const Menu = ({ widget, onChange, onRemove, onMove, close }: { widget: Widget; o
       window.removeEventListener('mousedown', onDown)
       window.removeEventListener('keydown', onKey)
     }
-  }, [close])
+  }, [close, widget.id])
   const cell = (active: boolean) => cx('h-6 min-w-[26px] border border-ff-line px-1 font-mono text-[10.5px]', active ? 'bg-ff-text text-ff-panel' : 'text-ff-text2 hover:bg-ff-raised')
   return (
     <div ref={ref} role="menu" className="absolute right-0 top-full z-40 w-[232px] border border-ff-line2 bg-ff-panel p-2 shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
@@ -271,6 +276,7 @@ const DashboardView = () => {
                   </span>
                   <span className="relative flex">
                     <button
+                      data-menu-toggle={w.id}
                       onClick={() => setMenu(menu === w.id ? null : w.id)}
                       aria-haspopup="menu"
                       aria-expanded={menu === w.id}
