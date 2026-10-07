@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { scoreStatLine, statLinePlayed } from '../scoring'
 import { optimalLineup, optimalLineupExact, starterDemand, startingSlots } from '../lineup'
 import { lineupDelta, normalCdf, playerValues, replacementLevels } from '../war'
-import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS } from '../power'
+import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, opponentsByWeek } from '../power'
 import type { PlayerMap, SleeperMatchup } from '../types'
 
 const P = (id: string, pos: string, fpos = [pos]): PlayerMap[string] => ({
@@ -190,5 +190,14 @@ describe('lineup fast path', () => {
     ]
     // hybrid at WR, rb at RB, wr in the flex: 40. Greedy-by-first-position would get 39.
     expect(optimalLineup(slots, roster).total).toBe(40)
+  })
+})
+
+describe('opponentsByWeek', () => {
+  const m = (roster_id: number, matchup_id: number | null): SleeperMatchup => ({ roster_id, matchup_id, points: 0, players: [], starters: [] })
+  it('keys opponents by week, so a week without a matchup stays a gap', () => {
+    const out = opponentsByWeek({ 9: [m(1, 1), m(2, 1)], 10: [m(1, null), m(2, null)], 11: [m(1, 4), m(2, 4)] }, [9, 10, 11])
+    expect(out[1]).toEqual({ 9: 2, 11: 2 })
+    expect(out[2]).toEqual({ 9: 1, 11: 1 })
   })
 })

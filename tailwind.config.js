@@ -8,6 +8,16 @@ module.exports = {
         extend: {
             fontFamily: {
                 sans: ['Lars', 'sans-serif'],
+                mono: ['"JetBrains Mono Variable"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+            },
+            // Fantasy app tokens. Values live in styles/fantasy.css as RGB
+            // triplets so alpha modifiers (bg-ff-accent/10) work.
+            colors: {
+                ff: Object.fromEntries(
+                    ['bg', 'panel', 'raised', 'sunken', 'line', 'line2', 'text', 'text2', 'muted', 'accent', 'accent2', 'pos', 'neg', 'warn', 's1', 's2', 's3', 's4', 's5'].map(
+                        (k) => [k, `rgb(var(--ff-${k}) / <alpha-value>)`],
+                    ),
+                ),
             },
             spacing: {
                 '128': '32rem',

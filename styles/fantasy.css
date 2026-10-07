@@ -1,0 +1,156 @@
+/*
+ * Fantasy app tokens. Dense, technical, high-contrast: a near-black workspace
+ * in dark mode, cool paper in light. Every ink was checked for WCAG contrast
+ * against the panel and page surfaces it sits on (text >= 4.5:1, including
+ * muted labels and the gain/loss colors). The series colors are the validated
+ * reference categorical palette, stepped separately for each mode.
+ */
+.ff {
+  color-scheme: light;
+  --ff-bg: 239 241 244;
+  --ff-panel: 255 255 255;
+  --ff-raised: 246 247 249;
+  --ff-sunken: 233 236 240;
+  --ff-line: 226 229 234;
+  --ff-line2: 205 210 217;
+  --ff-text: 13 17 23;
+  --ff-text2: 71 80 91;
+  --ff-muted: 100 110 123;
+  --ff-accent: 31 111 208;
+  --ff-accent2: 205 226 251;
+  --ff-pos: 11 125 60;
+  --ff-neg: 201 52 52;
+  --ff-warn: 154 99 0;
+  --ff-s1: 42 120 214;
+  --ff-s2: 235 104 52;
+  --ff-s3: 27 175 122;
+  --ff-s4: 237 161 0;
+  --ff-s5: 232 123 164;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ff {
+    color-scheme: dark;
+    --ff-bg: 8 10 13;
+    --ff-panel: 16 19 23;
+    --ff-raised: 22 26 32;
+    --ff-sunken: 11 13 17;
+    --ff-line: 33 38 46;
+    --ff-line2: 48 55 66;
+    --ff-text: 231 233 236;
+    --ff-text2: 169 176 186;
+    --ff-muted: 122 130 142;
+    --ff-accent: 76 148 236;
+    --ff-accent2: 23 41 66;
+    --ff-pos: 47 192 110;
+    --ff-neg: 242 100 100;
+    --ff-warn: 229 169 58;
+    --ff-s1: 57 135 229;
+    --ff-s2: 217 89 38;
+    --ff-s3: 25 158 112;
+    --ff-s4: 201 133 0;
+    --ff-s5: 213 81 129;
+  }
+}
+
+/* Numbers align in columns and read as data. */
+.ff .num {
+  font-family: theme('fontFamily.mono');
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'zero' 0;
+  letter-spacing: -0.01em;
+}
+
+.ff ::selection {
+  background: rgb(var(--ff-accent) / 0.25);
+}
+
+/* Thin, quiet scrollbars for dense panes. */
+.ff .ff-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--ff-line2)) transparent;
+}
+.ff .ff-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.ff .ff-scroll::-webkit-scrollbar-thumb {
+  background: rgb(var(--ff-line2));
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.ff .no-scrollbar {
+  scrollbar-width: none;
+}
+.ff .no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Range inputs: a thin track and a square-ish thumb, accent-filled to the value. */
+.ff input[type='range'].ff-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+.ff input[type='range'].ff-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    rgb(var(--ff-accent)) 0,
+    rgb(var(--ff-accent)) var(--fill, 0%),
+    rgb(var(--ff-sunken)) var(--fill, 0%)
+  );
+}
+.ff input[type='range'].ff-range::-moz-range-track {
+  height: 4px;
+  border-radius: 4px;
+  background: rgb(var(--ff-sunken));
+}
+.ff input[type='range'].ff-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 4px;
+  background: rgb(var(--ff-accent));
+}
+.ff input[type='range'].ff-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  margin-top: -5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: rgb(var(--ff-panel));
+  border: 2px solid rgb(var(--ff-accent));
+}
+.ff input[type='range'].ff-range::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 4px;
+  background: rgb(var(--ff-panel));
+  border: 2px solid rgb(var(--ff-accent));
+}
+.ff input[type='range'].ff-range:focus-visible {
+  outline: none;
+}
+.ff input[type='range'].ff-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgb(var(--ff-accent) / 0.35);
+}
+
+@keyframes ff-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.ff .ff-pulse {
+  animation: ff-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-pulse { animation: none; }
+}
+
+/* Your rows in shared tables. A background image layers over each cell's own
+   background colour, so a pinned (sticky) cell takes the same tint. */
+.ff tr.ff-mine > td {
+  background-image: linear-gradient(rgb(var(--ff-accent) / 0.07), rgb(var(--ff-accent) / 0.07));
+}
