@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { acceptRead, leagueBehavior } from '../behavior'
 import { matchConsensus, normName, parseCsv, perceivedValues, reduceConsensusCsv } from '../consensus'
-import { startingSlots } from '../lineup'
+import { deadStarters, startingSlots } from '../lineup'
 import type { TeamWeek } from '../power'
-import { backtest, bracketOrder, eloWinProb, gamesFrom, phi, preseasonElo, runElo, simulateSeason, ELO } from '../forecast'
+import { backtest, bracketOrder, eloWinProb, gamesFrom, managedPoints, phi, preseasonElo, runElo, simulateSeason, ELO } from '../forecast'
 import type { TradeIdea } from '../trades'
 import type { PlayerMap, SleeperTransaction } from '../types'
 
@@ -98,7 +98,7 @@ describe('backtest', () => {
   const teamWeeks: Record<number, TeamWeek[]> = {}
   // Team 1 always scores 130, team 2 always 90.
   for (const w of [1, 2, 3, 4]) teamWeeks[w] = [tw(w, 1, 130, 2, 90), tw(w, 2, 90, 1, 130)]
-  const ctx = { slots: startingSlots(['QB']), players: {}, floor: {}, sigma: 20, powerScore: () => ({}) }
+  const ctx = { slots: startingSlots(['QB']), players: {}, floor: {}, sigma: 20, powerMargin: () => ({}) }
   it('never grades a model on a week it has seen', () => {
     const a = backtest([{ season: '2026', teamWeeks, weeks: [1, 2, 3, 4] }], ctx)
     const flipped = { ...teamWeeks, 4: [tw(4, 1, 50, 2, 160), tw(4, 2, 160, 1, 50)] }
@@ -173,5 +173,25 @@ describe('behavior', () => {
     const overpay = acceptRead(idea, 2, b, { t: 8, g: 1 })
     expect(overpay.index).toBeLessThan(active.index)
     expect(overpay.perceivedAsk).toBe(7)
+  })
+})
+
+describe('unset lineups', () => {
+  const slots = startingSlots(['QB', 'RB', 'FLEX'])
+  it('finds empty slots and starters who cannot score', () => {
+    const dead = deadStarters(slots, ['q', '0', 'r'], { q: 20, r: 0 }, { r: 0 })
+    expect(dead.map((d) => [d.slot.name, d.id])).toEqual([
+      ['RB', null],
+      ['FLEX', 'r'],
+    ])
+    // A starter projected for nothing who scored anyway was not dead.
+    expect(deadStarters(slots, ['q', 'b', 'r'], { q: 20, b: 10 }, { r: 6 })).toEqual([])
+  })
+  it('gives a forgotten bye a replacement body when measuring efficiency', () => {
+    const tw = { week: 1, rosterId: 1, points: 30, slotted: ['q', '0', 'r'], playersPoints: { q: 30 } } as unknown as TeamWeek
+    // RB floor 8; FLEX takes the best of RB/WR/TE floors (9).
+    expect(managedPoints(tw, slots, { q: 20 }, { RB: 8, WR: 9, TE: 5 })).toBe(30 + 8 + 9)
+    // No projections for the week: nothing to judge by, points stand.
+    expect(managedPoints(tw, slots, undefined, { RB: 8 })).toBe(30)
   })
 })

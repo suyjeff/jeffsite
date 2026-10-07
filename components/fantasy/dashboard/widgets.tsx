@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react'
 import { acceptRead } from '../../../lib/fantasy/behavior'
+import { pastProjection } from '../../../lib/fantasy/analysis'
+import { deadStarters } from '../../../lib/fantasy/lineup'
 import { isWaiverFill, findTargets, makeLineupEval } from '../../../lib/fantasy/trades'
 import { PROP_LABEL } from '../../../lib/fantasy/lines'
 import { searchTrades, tradeBase } from '../../../lib/fantasy/search'
 import { describeNote } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, compact, cx, fmt, fmtSigned, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, compact, cx, fmt, fmtSigned, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -57,7 +59,7 @@ const TeamTag = ({ id, me }: { id: number; me?: boolean }) => {
   const { analysis } = useFantasy()
   const t = analysis.teamById[id]
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span className="flex min-w-0 max-w-full items-center gap-1.5">
       <Avatar src={t?.avatar ?? null} name={t?.name ?? '?'} size={16} />
       <span className={cx('truncate', me || id === analysis.myRosterId ? 'font-medium text-ff-accent' : 'text-ff-text')}>{t?.name ?? `#${id}`}</span>
     </span>
@@ -68,10 +70,35 @@ const NoForecast = () => <Empty title="No forecast">Needs Sleeper projections fo
 
 // ---------- Widgets ----------
 
+/**
+ * Teams whose lineup in Sleeper has a starter who cannot score this week (bye,
+ * out, or an empty slot), with what that lineup projects as set. The forecast
+ * already assumes the best lineup, so this only explains a gap with Sleeper.
+ */
+const useUnsetLineups = (week: number | null) => {
+  const { data, analysis } = useFantasy()
+  return useMemo(() => {
+    const out: Record<number, { names: string[]; asSet: number }> = {}
+    const h = week != null ? data.horizon.find((x) => x.week === week) : null
+    if (!h) return out
+    for (const m of data.matchupsByWeek[week!] ?? []) {
+      const dead = deadStarters(analysis.slots, m.starters ?? undefined, h.pts)
+      if (!dead.length) continue
+      const asSet = (m.starters ?? []).reduce((a, id) => a + (id && id !== '0' ? (h.pts[id] ?? 0) : 0), 0)
+      out[m.roster_id] = { names: dead.map((d) => (d.id ? (data.players[d.id]?.name ?? d.id) : `empty ${d.slot.name}`)), asSet }
+    }
+    return out
+  }, [week, data, analysis.slots])
+}
+
+const unsetNote = (u: { names: string[]; asSet: number }) =>
+  `Lineup not set: ${u.names.join(', ')} can't score this week. As set in Sleeper it projects ${fmt(u.asSet)}; this assumes the manager swaps in the best option.`
+
 /** This week's pairings with each side's expectation and win probability. */
 const Scoreboard = ({ sel, select }: WidgetProps) => {
   const { models, data } = useFantasy()
   const f = models.forecast
+  const unset = useUnsetLineups(f?.nextWeek[0]?.week ?? null)
   if (!f || !f.nextWeek.length) return <NoForecast />
   const week = f.nextWeek[0].week
   const live = data.matchupsByWeek[week] ?? []
@@ -93,20 +120,29 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
           <button onClick={() => select({ team: g.a })} className="min-w-0 flex-1 text-left">
             <TeamTag id={g.a} />
           </button>
-          <span className="num w-10 shrink-0 text-right text-ff-text">{fmt(started ? pts(g.a) : g.muA)}</span>
+          <span className="num w-10 shrink-0 text-right text-ff-text" title={!started && unset[g.a] ? unsetNote(unset[g.a]) : undefined}>
+            {!started && unset[g.a] && <span className="text-ff-warn">*</span>}
+            {fmt(started ? pts(g.a) : g.muA)}
+          </span>
           <span className="flex w-16 shrink-0 items-center gap-1">
             <span className="num w-7 text-right text-[10.5px] text-ff-text2">{Math.round(g.pA * 100)}</span>
             <span className="flex h-[6px] flex-1 bg-ff-s2/60">
               <span className="h-full bg-ff-s1" style={{ width: `${g.pA * 100}%` }} />
             </span>
           </span>
-          <span className="num w-10 shrink-0 text-ff-text">{fmt(started ? pts(g.b) : g.muB)}</span>
+          <span className="num w-10 shrink-0 text-ff-text" title={!started && unset[g.b] ? unsetNote(unset[g.b]) : undefined}>
+            {fmt(started ? pts(g.b) : g.muB)}
+            {!started && unset[g.b] && <span className="text-ff-warn">*</span>}
+          </span>
           <button onClick={() => select({ team: g.b })} className="flex min-w-0 flex-1 justify-end text-right">
             <TeamTag id={g.b} />
           </button>
         </Row>
       ))}
-      <div className="px-3 py-1.5 font-mono text-[10px] text-ff-muted">bar = left team&apos;s pre-game chance · {started ? 'scores are live' : 'scores are expectations'}</div>
+      <div className="px-3 py-1.5 font-mono text-[10px] text-ff-muted">
+        bar = left team&apos;s pre-game chance · {started ? 'scores are live' : 'scores are expectations'}
+        {!started && Object.keys(unset).length > 0 && <> · <span className="text-ff-warn">*</span> lineup has a bye/out starter; expectation assumes the swap</>}
+      </div>
     </div>
   )
 }
@@ -184,13 +220,14 @@ const Matchup = ({ select }: WidgetProps) => {
   const opp = game ? (flip ? game.a : game.b) : null
   const left = useWeekLineup(mine, game?.week ?? null)
   const right = useWeekLineup(opp, game?.week ?? null)
+  const unset = useUnsetLineups(game?.week ?? null)
   if (!f || !game || mine == null || opp == null) return <NoForecast />
   const p = flip ? 1 - game.pA : game.pA
   const muMe = flip ? game.muB : game.muA
   const muOpp = flip ? game.muA : game.muB
   return (
     <div className="flex h-full flex-col">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3 border-b border-ff-line px-3 py-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-3 border-b border-ff-line px-3 py-3">
         <div className="min-w-0">
           <TeamTag id={mine} />
           <div className="num mt-1 text-[26px] leading-none text-ff-text">{fmt(muMe)}</div>
@@ -208,6 +245,14 @@ const Matchup = ({ select }: WidgetProps) => {
         <span className="h-full bg-ff-s1" style={{ width: `${p * 100}%` }} />
         <span className="h-full flex-1 bg-ff-s2/70" />
       </div>
+      {[mine, opp].map((rid) =>
+        unset[rid] ? (
+          <div key={rid} className="border-b border-ff-line px-3 py-1.5 text-[11.5px] leading-snug text-ff-text2">
+            <span className="text-ff-warn">{rid === mine ? 'Your' : `${analysis.teamById[rid].name}'s`} lineup isn&apos;t set</span>: {unset[rid].names.join(', ')} can&apos;t score. As set it projects{' '}
+            <span className="num">{fmt(unset[rid].asSet)}</span>; the {fmt(rid === mine ? muMe : muOpp)} assumes {rid === mine ? 'you swap' : 'they swap'}.
+          </div>
+        ) : null,
+      )}
       <div className="grid flex-1 grid-cols-2 divide-x divide-ff-line">
         {[left, right].map((side, k) => (
           <div key={k}>
@@ -307,8 +352,9 @@ const Power = ({ sel, select }: WidgetProps) => {
     return { id: t.rosterId, v }
   })
   rows.sort((a, b) => b.v - a.v)
-  const lo = Math.min(...rows.map((r) => r.v))
-  const hi = Math.max(...rows.map((r) => r.v))
+  // Bars grow from the league average, so a gap reads at its true size instead of stretched end to end.
+  const mid = m === 'composite' ? 50 : m === 'elo' ? 1500 : rows.reduce((a, r) => a + r.v, 0) / (rows.length || 1)
+  const reach = Math.max(...rows.map((r) => Math.abs(r.v - mid)), m === 'composite' ? 25 : m === 'elo' ? 150 : 15)
   return (
     <div>
       <div className="flex items-center justify-between gap-2 border-b border-ff-line px-3 py-1.5">
@@ -323,7 +369,7 @@ const Power = ({ sel, select }: WidgetProps) => {
             { key: 'elo', label: 'Elo', title: 'Results-only Elo with a carried-over prior' },
           ]}
         />
-        <span className="font-mono text-[10px] text-ff-muted">{m === 'forecast' ? 'pts/wk' : m === 'elo' ? 'elo' : '0–100'}</span>
+        <span className="font-mono text-[10px] text-ff-muted">{m === 'forecast' ? 'pts/wk' : m === 'elo' ? 'elo' : 'win % vs avg'}</span>
       </div>
       {rows.map((r, i) => (
         <Row key={r.id} onClick={() => select({ team: r.id })} active={sel.team === r.id}>
@@ -331,7 +377,7 @@ const Power = ({ sel, select }: WidgetProps) => {
           <span className="min-w-0 flex-1">
             <TeamTag id={r.id} />
           </span>
-          <Bar value={r.v - lo} max={hi - lo || 1} width={56} slot="s1" />
+          <CenterMeter value={(r.v - mid) / reach} width={56} />
           <span className="num w-12 text-right text-ff-text">{m === 'elo' ? Math.round(r.v) : fmt(r.v, m === 'forecast' ? 1 : 0)}</span>
         </Row>
       ))}
@@ -497,8 +543,8 @@ const PlayerCard = ({ sel }: WidgetProps) => {
       <div className="flex-1 space-y-2 overflow-auto p-3">
         {v && v.weekly.length > 0 && (
           <div>
-            <div className="ff-label mb-1">weekly · {v.games} g · ppg {fmt(v.ppg)}</div>
-            <Sparkline points={v.weekly.map((w) => w.pts)} labels={v.weekly.map((w) => `Wk ${w.week}`)} width={220} height={36} />
+            <div className="ff-label mb-1">weekly · {v.games} g · ppg {fmt(v.ppg)} · faded = projected</div>
+            <Sparkline points={v.weekly.map((w) => w.pts)} projected={pastProjection(data, id, v.weekly.map((w) => w.week))} labels={v.weekly.map((w) => `Wk ${w.week}`)} width={220} height={36} />
           </div>
         )}
         {c?.schedule && c.schedule.length > 0 && (

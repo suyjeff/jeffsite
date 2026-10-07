@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
-import { opponentsByWeek, type PowerWeights } from '../../../lib/fantasy/power'
+import { opponentsByWeek, RESULTS_PRIOR_GAMES, type PowerWeights } from '../../../lib/fantasy/power'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DivergingStacks, Legend } from '../charts'
 import { useFantasy } from '../FantasyContext'
-import { Avatar, Badge, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, type Column } from '../ui'
+import { sectionCode } from '../Shell'
+import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, type Column } from '../ui'
 
 type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'odds', 'standings', 'schedule']
@@ -76,8 +77,9 @@ const PowerView = ({
   const forecastOrder = useMemo(() => (forecast ? [...forecast.ratings].sort((a, b) => b.rating - a.rating).map((r) => r.rosterId) : []), [forecast])
   const eloOrder = useMemo(() => [...teams].sort((a, b) => (models.elo.final[b.rosterId] ?? 0) - (models.elo.final[a.rosterId] ?? 0)).map((t) => t.rosterId), [teams, models.elo])
   const rankIn = (order: number[], id: number) => order.indexOf(id) + 1
-  const ratingMax = forecast ? Math.max(...forecast.ratings.map((r) => r.rating)) : 1
-  const ratingMin = forecast ? Math.min(...forecast.ratings.map((r) => r.rating)) : 0
+  // Rating bars grow from the league average, so a gap shows at its real size rather than stretched end to end.
+  const ratingAvg = forecast ? forecast.ratings.reduce((a, r) => a + r.rating, 0) / (forecast.ratings.length || 1) : 0
+  const ratingReach = forecast ? Math.max(15, ...forecast.ratings.map((r) => Math.abs(r.rating - ratingAvg))) : 1
 
   const forecastColumns: Column<{ rosterId: number }>[] = [
     { key: 'rank', label: '#', sort: (r) => -rankIn(forecastOrder, r.rosterId), render: (r) => <span className="num text-ff-muted">{rankIn(forecastOrder, r.rosterId)}</span> },
@@ -90,7 +92,7 @@ const PowerView = ({
       sort: (r) => forecast!.byId[r.rosterId].rating,
       render: (r) => (
         <span className="inline-flex items-center justify-end gap-2">
-          <Meter value={forecast!.byId[r.rosterId].rating - ratingMin + 1} max={ratingMax - ratingMin + 1} width={56} />
+          <CenterMeter value={(forecast!.byId[r.rosterId].rating - ratingAvg) / ratingReach} width={48} />
           <span className="w-10 text-ff-text">{fmt(forecast!.byId[r.rosterId].rating)}</span>
         </span>
       ),
@@ -145,14 +147,23 @@ const PowerView = ({
       key: 'score',
       label: 'Power',
       align: 'right',
-      title: 'Composite of all-play record, scoring, recent form, roster strength and lineup efficiency, scaled 0–100',
+      title: 'Chance to beat a league-average team in a given week. 50 is average. Blends all-play record, scoring, recent form, roster strength and lineup efficiency, with results regressed toward average while the sample is small',
       sort: (r) => powerById[r.rosterId].score,
       render: (r) => (
         <span className="inline-flex items-center justify-end gap-2">
-          <Meter value={powerById[r.rosterId].score} max={100} width={56} />
+          <CenterMeter value={(powerById[r.rosterId].score - 50) / 30} width={48} />
           <span className="w-7 text-ff-text">{fmt(powerById[r.rosterId].score, 0)}</span>
         </span>
       ),
+    },
+    {
+      key: 'margin',
+      label: 'vs avg',
+      align: 'right',
+      hideBelow: 'sm',
+      title: 'Points per week above or below a league-average team, after regression',
+      sort: (r) => powerById[r.rosterId].margin,
+      render: (r) => <Num value={powerById[r.rosterId].margin} signed digits={1} />,
     },
     {
       key: 'record',
@@ -197,7 +208,7 @@ const PowerView = ({
       hideBelow: 'sm',
       render: (r) => {
         const s = seasonById[r.rosterId]
-        return <Sparkline points={s.weeks.map((w) => w.points)} labels={s.weeks.map((w) => `Wk ${w.week}`)} width={84} />
+        return <Sparkline points={s.weeks.map((w) => w.points)} projected={s.weeks.map((w) => models.expectedPast[r.rosterId]?.[w.week])} labels={s.weeks.map((w) => `Wk ${w.week}`)} width={84} />
       },
     },
   ]
@@ -205,7 +216,7 @@ const PowerView = ({
   return (
     <>
       <PageHeader
-        code="04"
+        code={sectionCode('power')}
         title="Power"
         meta={
           <>
@@ -229,7 +240,7 @@ const PowerView = ({
       <div className="mt-4 space-y-3">
         {me && (
           <StatGrid>
-            <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.elo.final[myRosterId!] ?? 1500)}` : `score ${fmt(me.power.score, 0)} of 100`} />
+            <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.elo.final[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />
             {forecast && <Stat label="Playoff odds" value={pct(forecast.sim[myRosterId!].playoffs)} sub={`title ${pct(forecast.sim[myRosterId!].title, 1)} · bye ${pct(forecast.sim[myRosterId!].bye)}`} />}
             <Stat label="Standing" value={standingRank ? `#${standingRank}` : '–'} sub={playoffTeams ? `top ${playoffTeams} make the playoffs` : undefined} />
             <Stat label="Record" value={`${me.season.wins}-${me.season.losses}${me.season.ties ? `-${me.season.ties}` : ''}`} sub={`all-play ${pct(me.season.allPlayPct)}`} />
@@ -301,7 +312,7 @@ const PowerView = ({
                   label={(score) => fmt(score, 0)}
                 />
                 <p className="text-[11.5px] text-ff-muted">
-                  Each component is a z-score across the league times its weight; right of the line helps, left hurts. The number is the final 0–100 score. Weights live in Model.
+                  Each bar is a component&apos;s z-score times its weight, with results pulled toward average by sample size ({played} {played === 1 ? 'game counts' : 'games count'} for {Math.round((played / (played + RESULTS_PRIOR_GAMES)) * 100)}%; roster strength is never regressed). Right of the line helps, left hurts. The number is the chance to beat an average team in a week, so 50 is average. Weights live in Model.
                 </p>
               </div>
             )}

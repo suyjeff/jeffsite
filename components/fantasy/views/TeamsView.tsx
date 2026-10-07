@@ -1,8 +1,11 @@
 import React, { useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
+import { ProjectionChart } from '../charts'
+import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct } from '../ui'
+import { sectionCode } from '../Shell'
+import { Avatar, Badge, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Inner = 'roster' | 'results' | 'slots'
@@ -17,11 +20,16 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
   const [inner, setInner] = useState<Inner>('roster')
   const [basis, setBasis] = useState<Basis>('ahead')
   const players = data.players
+  const { models } = useFantasy()
+  const expected = models.expectedPast[rosterId] ?? {}
+  const ahead = models.forecast?.byId[rosterId]?.byWeek ?? {}
+  const chartWeeks = [...data.regularWeeks, ...data.futureWeeks.filter((w) => ahead[w] != null)]
+  const scored: Record<number, number> = Object.fromEntries(season.weeks.map((w) => [w.week, w.points]))
 
   return (
     <>
       <PageHeader
-        code="05"
+        code={sectionCode('teams')}
         title={
           <span className="flex items-center gap-2.5">
             <Avatar src={team.avatar} name={team.name} size={28} />
@@ -61,7 +69,7 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
       />
       <div className="mt-4 space-y-3">
         <StatGrid>
-          <Stat label="Power" value={`#${power.rank}`} sub={`score ${fmt(power.score, 0)}`} />
+          <Stat label="Power" value={`#${power.rank}`} sub={`${fmt(power.score, 0)}% vs avg team`} />
           <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`all-play ${fmt(season.allPlayWins, 0)}-${fmt(season.allPlayLosses, 0)}`} />
           <Stat label="Points per game" value={fmt(season.ppg)} sub={`last 3: ${fmt(season.recentPpg)}`} />
           <Stat label="Luck" value={fmtSigned(season.luck, 1)} sub="wins vs all-play" />
@@ -90,7 +98,16 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
         )}
 
         {inner === 'results' && (
-          <Panel title="Weekly results" pad={false} actions={<Sparkline points={season.weeks.map((w) => w.points)} labels={season.weeks.map((w) => `Wk ${w.week}`)} width={120} />}>
+          <Panel title="Weekly results" pad={false} actions={<span>scored vs projected</span>}>
+            {chartWeeks.length > 0 && (
+              <div className="border-b border-ff-line px-2 pb-2 pt-3">
+                <ProjectionChart weeks={chartWeeks} actual={chartWeeks.map((w) => scored[w] ?? null)} projected={chartWeeks.map((w) => expected[w] ?? ahead[w] ?? null)} />
+                <p className="mt-1.5 px-1 text-[11px] leading-snug text-ff-muted">
+                  Projected is the best lineup this roster could have started, on Sleeper&apos;s pre-game projections, times the manager&apos;s efficiency; a bye left in the lineup is
+                  assumed swapped. Dashed weeks are still to come.
+                </p>
+              </div>
+            )}
             <Table
               rows={season.weeks}
               rowKey={(w) => w.week}
@@ -106,6 +123,15 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
                 },
                 { key: 'opp', label: 'Opponent', sticky: true, render: (w) => (w.opponentId != null ? <span className="truncate text-ff-text">{teamById[w.opponentId]?.name}</span> : <span className="text-ff-muted">bye</span>) },
                 { key: 'score', label: 'Score', align: 'right', render: (w) => `${fmt(w.points)} – ${fmt(w.opponentPoints)}` },
+                {
+                  key: 'proj',
+                  label: 'vs proj',
+                  align: 'right',
+                  hideBelow: 'sm',
+                  title: 'Points scored against the pre-game projection',
+                  sort: (w) => (expected[w.week] != null ? w.points - expected[w.week] : -999),
+                  render: (w) => (expected[w.week] != null ? <Num value={w.points - expected[w.week]} signed /> : <span className="text-ff-muted">–</span>),
+                },
                 { key: 'margin', label: 'Margin', align: 'right', sort: (w) => w.points - (w.opponentPoints ?? 0), render: (w) => <Num value={w.points - (w.opponentPoints ?? 0)} signed /> },
                 { key: 'opt', label: 'Optimal', align: 'right', hideBelow: 'sm', title: 'Best lineup that could have been started', render: (w) => fmt(w.optimalPoints) },
                 { key: 'left', label: 'Benched', align: 'right', hideBelow: 'sm', title: 'Points left on the bench', render: (w) => <span className={w.optimalPoints - w.points > 10 ? 'text-ff-warn' : ''}>{fmt(w.optimalPoints - w.points)}</span> },

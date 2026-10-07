@@ -45,22 +45,27 @@ export type Schedule = {
   opp: Record<string, Record<number, string>>
   /** team -> bye weeks within the season. */
   byes: Record<string, number[]>
+  /** team -> week -> true when at home. */
+  home?: Record<string, Record<number, boolean>>
   weeks: number[]
 }
 
 export const buildSchedule = (games: ScheduleGame[]): Schedule => {
   const opp: Record<string, Record<number, string>> = {}
+  const home: Record<string, Record<number, boolean>> = {}
   const weekSet = new Set<number>()
   for (const g of games) {
     if (!g?.home || !g?.away || typeof g.week !== 'number') continue
     ;(opp[g.home] ??= {})[g.week] = g.away
     ;(opp[g.away] ??= {})[g.week] = g.home
+    ;(home[g.home] ??= {})[g.week] = true
+    ;(home[g.away] ??= {})[g.week] = false
     weekSet.add(g.week)
   }
   const weeks = [...weekSet].sort((a, b) => a - b)
   const byes: Record<string, number[]> = {}
   for (const team of Object.keys(opp)) byes[team] = weeks.filter((w) => !opp[team][w])
-  return { opp, byes, weeks }
+  return { opp, byes, home, weeks }
 }
 
 // ---------- Availability from injury history ----------

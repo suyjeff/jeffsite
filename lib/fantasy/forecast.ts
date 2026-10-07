@@ -24,7 +24,7 @@
 // trust is a measured answer, not a choice of taste.
 
 import { makeLineupEval, makeHorizonEval, type Horizon, type TradeTeam, type WaiverFloor } from './trades'
-import type { Slot } from './lineup'
+import { deadSlotFill, deadStarters, type Slot } from './lineup'
 import type { TeamWeek } from './power'
 import type { PlayerMap } from './types'
 
@@ -210,6 +210,16 @@ export const pastByWeek = (input: Pick<ForecastInput, 'slots' | 'players' | 'flo
 }
 
 /**
+ * Points scored, plus a replacement-level body for every slot left dead (empty,
+ * or a starter on bye or ruled out). Efficiency should measure how a manager
+ * picks between real options, not punish a week they forgot to swap out a bye:
+ * that is rare, and it says little about the weeks ahead, where the model
+ * already assumes the best lineup available.
+ */
+export const managedPoints = (tw: TeamWeek, slots: Slot[], proj: Record<string, number> | undefined, floor: WaiverFloor) =>
+  proj ? tw.points + deadSlotFill(deadStarters(slots, tw.slotted, proj, tw.playersPoints), floor) : tw.points
+
+/**
  * Weekly noise around a team's expectation: the spread of (actual − projected
  * × efficiency) across every team-week we can measure. Falls back to a share
  * of the league's score spread before any week has both.
@@ -219,7 +229,7 @@ export const measureNoise = (input: ForecastInput, efficiency: Record<number, nu
   for (const w of Object.keys(past).map(Number)) {
     for (const t of input.teamWeeks[w] ?? []) {
       const proj = past[w][t.rosterId]
-      if (proj > 0) resid.push(t.points - proj * (efficiency[t.rosterId] ?? 1))
+      if (proj > 0) resid.push(managedPoints(t, input.slots, input.pastProjections[w], input.floor) - proj * (efficiency[t.rosterId] ?? 1))
     }
   }
   if (resid.length < 8) return { sigma: input.sigmaFallback, n: resid.length, bias: 0 }
@@ -228,14 +238,13 @@ export const measureNoise = (input: ForecastInput, efficiency: Record<number, nu
   return { sigma: sd, n: resid.length, bias: m }
 }
 
-export const teamRatings = (input: ForecastInput) => {
+export const teamRatings = (input: ForecastInput, past = pastByWeek(input)) => {
   const { teams, teamWeeks, playedWeeks } = input
   const evalH = input.horizon.length ? makeHorizonEval(input.slots, input.players, input.horizon, input.floor) : null
   // Efficiency is measured against the same thing it scales: points scored per
   // point of *projected* optimal lineup. (Against the hindsight optimum it would
   // count the projection's own shortfall twice.) League first, then each
   // manager, shrunk toward it.
-  const past = pastByWeek(input)
   let actualAll = 0
   let projAll = 0
   const games: Record<number, { actual: number; proj: number; n: number }> = {}
@@ -244,10 +253,11 @@ export const teamRatings = (input: ForecastInput) => {
       const proj = past[w][t.rosterId]
       if (!(proj > 0)) continue
       const g = (games[t.rosterId] ??= { actual: 0, proj: 0, n: 0 })
-      g.actual += t.points
+      const pts = managedPoints(t, input.slots, input.pastProjections[w], input.floor)
+      g.actual += pts
       g.proj += proj
       g.n++
-      actualAll += t.points
+      actualAll += pts
       projAll += proj
     }
   }
@@ -270,7 +280,7 @@ export const teamRatings = (input: ForecastInput) => {
       const tw = (teamWeeks[w] ?? []).find((x) => x.rosterId === t.rosterId)
       const proj = past[w][t.rosterId]
       if (!tw || !(proj > 0)) continue
-      sum += tw.points - proj * efficiency[t.rosterId] - noise.bias
+      sum += managedPoints(tw, input.slots, input.pastProjections[w], input.floor) - proj * efficiency[t.rosterId] - noise.bias
       n++
     }
     form[t.rosterId] = n ? sum / (n + FORM_PRIOR_GAMES) : 0
@@ -439,8 +449,8 @@ export type Forecast = {
   mean: (rosterId: number, week: number) => number
 }
 
-export const buildForecast = (input: ForecastInput, sims = SIM.sims): Forecast => {
-  const { ratings, noise, leagueEff } = teamRatings(input)
+export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = pastByWeek(input)): Forecast => {
+  const { ratings, noise, leagueEff } = teamRatings(input, past)
   const byId = Object.fromEntries(ratings.map((r) => [r.rosterId, r])) as Record<number, TeamRating>
   const mean = (t: number, w: number) => byId[t]?.byWeek[w] ?? byId[t]?.rating ?? 0
   const tau = SIM.tauShare * noise.sigma
@@ -573,13 +583,13 @@ export type BacktestSeason = {
  * Walk each season forward a week at a time. Every prediction for week w uses
  * only weeks before w, so no model sees the game it is graded on.
  *
- * The composite power score is on a 0–100 scale with no natural probability;
- * it is turned into one with a fixed slope (a 35-point gap ≈ 84%), chosen
- * before looking at these games.
+ * The composite power ranking is graded on its margin (points per week over
+ * an average team), turned into a probability with the same weekly σ as the
+ * other point-based models.
  */
 export const backtest = (
   seasons: BacktestSeason[],
-  ctx: { slots: Slot[]; players: PlayerMap; floor: WaiverFloor; sigma: number; powerScore: (teamWeeks: Record<number, TeamWeek[]>, weeks: number[]) => Record<number, number> },
+  ctx: { slots: Slot[]; players: PlayerMap; floor: WaiverFloor; sigma: number; powerMargin: (teamWeeks: Record<number, TeamWeek[]>, weeks: number[]) => Record<number, number> },
 ) => {
   const preds: BacktestPrediction[] = []
   for (const s of seasons) {
@@ -604,7 +614,7 @@ export const backtest = (
         }
       }
       const mean = (xs: number[] | undefined) => (xs?.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
-      const power = ctx.powerScore(s.teamWeeks, prior)
+      const power = ctx.powerMargin(s.teamWeeks, prior)
       const proj = s.pastProjections?.[week]
       // Efficiency and form going into the week, both against each roster's own projection in earlier weeks.
       const formSum: Record<number, { sum: number; n: number; actual: number; proj: number }> = {}
@@ -616,9 +626,10 @@ export const backtest = (
           const proj = lineup.total(t.players)
           if (!(proj > 0)) continue
           const f = (formSum[t.rosterId] ??= { sum: 0, n: 0, actual: 0, proj: 0 })
-          f.sum += t.points - proj
+          const pts = managedPoints(t, ctx.slots, pw, ctx.floor)
+          f.sum += pts - proj
           f.n++
-          f.actual += t.points
+          f.actual += pts
           f.proj += proj
         }
       }
@@ -648,7 +659,7 @@ export const backtest = (
         const ea = elo.before[week]?.[g.a]
         const eb = elo.before[week]?.[g.b]
         if (ea != null && eb != null) p.elo = eloWinProb(ea - eb)
-        if (power[g.a] != null && power[g.b] != null) p.power = phi((power[g.a] - power[g.b]) / 35)
+        if (power[g.a] != null && power[g.b] != null) p.power = winProb(power[g.a], power[g.b], ctx.sigma)
         if (proj) {
           const twA = (s.teamWeeks[week] ?? []).find((t) => t.rosterId === g.a)
           const twB = (s.teamWeeks[week] ?? []).find((t) => t.rosterId === g.b)

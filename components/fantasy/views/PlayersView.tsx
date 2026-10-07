@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import type { Analysis } from '../../../lib/fantasy/analysis'
+import { pastProjection, type Analysis } from '../../../lib/fantasy/analysis'
 import { applyTrade, makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule } from '../ContextNotes'
 import PlayerName from '../PlayerName'
+import { sectionCode } from '../Shell'
 import { Badge, Button, Num, PageHeader, Panel, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, type Column } from '../ui'
 
 const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
@@ -225,13 +226,13 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       sort: (id) => values[id].recentWarPerGame,
       render: (id) => fmtSigned(values[id].recentWarPerGame, 3),
     },
-    { key: 'spark', label: 'Weekly', hideBelow: 'sm', render: (id) => <Sparkline points={values[id].weekly.map((w) => w.pts)} labels={values[id].weekly.map((w) => `Wk ${w.week}`)} width={84} /> },
+    { key: 'spark', label: 'Weekly', hideBelow: 'sm', render: (id) => <Sparkline points={values[id].weekly.map((w) => w.pts)} projected={pastProjection(data, id, values[id].weekly.map((w) => w.week))} labels={values[id].weekly.map((w) => `Wk ${w.week}`)} width={84} /> },
   ]
 
   return (
     <>
       <PageHeader
-        code="06"
+        code={sectionCode('players')}
         title="Players"
         meta={
           basis === 'ahead' ? (

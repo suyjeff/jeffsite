@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { WIDGETS, type Selection, type WidgetKind } from '../dashboard/widgets'
 import { useFantasy } from '../FantasyContext'
+import { sectionCode } from '../Shell'
 import { Button, PageHeader, cx } from '../ui'
 
 // A modular board in the manner of a trading terminal: widgets on a 12-column
@@ -197,7 +198,7 @@ const DashboardView = () => {
   return (
     <>
       <PageHeader
-        code="01"
+        code={sectionCode('dash')}
         title="Dashboard"
         meta={meta}
         actions={

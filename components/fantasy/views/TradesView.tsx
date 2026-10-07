@@ -8,6 +8,7 @@ import { ContextNotes, PlayoffSchedule } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import TradeCard, { SHAPE_LABEL } from '../TradeCard'
 import { useFantasy } from '../FantasyContext'
+import { sectionCode } from '../Shell'
 import {
   Avatar,
   Badge,
@@ -178,7 +179,7 @@ const TradesView = ({
   if (!me) {
     return (
       <>
-        <PageHeader code="02" title="Trades" />
+        <PageHeader code={sectionCode('trades')} title="Trades" />
         <div className="mt-4">
           <Empty title="No roster of yours in this league">Pick a league you are in from the menu.</Empty>
         </div>
@@ -188,7 +189,7 @@ const TradesView = ({
   if (!data.horizon.length) {
     return (
       <>
-        <PageHeader code="02" title="Trades" />
+        <PageHeader code={sectionCode('trades')} title="Trades" />
         <div className="mt-4">
           <Empty title="Nothing left to project">Trades are priced over the weeks still to be played, and this season has none left.</Empty>
         </div>
@@ -242,7 +243,7 @@ const TradesView = ({
   return (
     <>
       <PageHeader
-        code="02"
+        code={sectionCode('trades')}
         title="Trades"
         meta={meta}
         tabs={

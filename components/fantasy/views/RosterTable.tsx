@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import type { Analysis } from '../../../lib/fantasy/analysis'
+import { pastProjection, type Analysis } from '../../../lib/fantasy/analysis'
 import { makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule } from '../ContextNotes'
@@ -82,7 +82,14 @@ const RosterTable = ({ data, analysis, rosterId, basis }: { data: LeagueData; an
       key: 'spark',
       label: 'Weekly',
       hideBelow: 'sm',
-      render: (r) => <Sparkline points={values[r.id]?.weekly.map((w) => w.pts) ?? []} labels={values[r.id]?.weekly.map((w) => `Wk ${w.week}`)} width={84} />,
+      render: (r) => (
+        <Sparkline
+          points={values[r.id]?.weekly.map((w) => w.pts) ?? []}
+          projected={pastProjection(data, r.id, values[r.id]?.weekly.map((w) => w.week) ?? [])}
+          labels={values[r.id]?.weekly.map((w) => `Wk ${w.week}`)}
+          width={84}
+        />
+      ),
     },
   ]
 

@@ -81,6 +81,8 @@ export const PROP_LABEL: Record<string, string> = {
   rushing_and_receiving_yards: 'Rush+rec yds',
   passing_and_rushing_yards: 'Pass+rush yds',
   kicking_points: 'Kicking pts',
+  extra_point_made: 'XP made',
+  field_goal_made: 'FG made',
 }
 
 type RawLine = {
@@ -214,6 +216,10 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
         anytimeTd = p
         // Scoring at least once with probability p means a rate of −ln(1 − p) under Poisson.
         reads.push({ stat: r.stat, line: r.line, pOver: p, mean: -Math.log(1 - Math.min(0.97, p)) })
+      } else if (r.stat === 'extra_point_made' || r.stat === 'field_goal_made') {
+        // Read for the team's implied total (see waivers.ts); kicking points already price the kicker himself.
+        reads.push({ stat: r.stat, line: r.line, pOver: p, mean: poissonRate(r.line, p) })
+        continue
       } else if (r.stat === 'kicking_points') {
         kicking = impliedMean('kicking_points', r.line, p)
         reads.push({ stat: r.stat, line: r.line, pOver: p, mean: kicking })

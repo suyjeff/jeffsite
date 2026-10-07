@@ -1,5 +1,6 @@
 // Standings, all-play records, luck, and a composite power ranking.
 
+import { phi } from './forecast'
 import { optimalLineup, type LineupPlayer, type Slot } from './lineup'
 import type { PlayerMap, SleeperMatchup } from './types'
 
@@ -12,6 +13,8 @@ export type TeamWeek = {
   result: 'W' | 'L' | 'T' | null
   optimalPoints: number
   starters: string[]
+  /** Starters exactly as Sleeper has them, aligned to the league's slots, with '0' for an empty slot. */
+  slotted?: string[]
   players: string[]
   playersPoints: Record<string, number>
 }
@@ -77,6 +80,7 @@ export const buildTeamWeeks = (
         result,
         optimalPoints: Math.max(optimal, points),
         starters: (m.starters ?? []).filter((s) => s && s !== '0'),
+        slotted: m.starters ?? [],
         players: m.players ?? [],
         playersPoints,
       })
@@ -214,10 +218,30 @@ export const DEFAULT_POWER_WEIGHTS: PowerWeights = {
 export type PowerRow = {
   rosterId: number
   rank: number
+  /**
+   * Chance to beat a league-average team in a given week, 0–100. 50 is
+   * average; the gap between two scores reads directly as a matchup edge.
+   */
   score: number
-  components: Record<keyof PowerWeights, number> // z-scores
+  /** Points per week above (or below) a league-average team, after regression. */
+  margin: number
+  /** Each component's z-score after regression toward the league mean. */
+  components: Record<keyof PowerWeights, number>
   sos: number | null
 }
+
+/**
+ * Games of results that carry as much weight as the league mean. Weekly
+ * fantasy scores are mostly noise: a team's own week-to-week spread is about
+ * three times the spread in true strength between teams, which puts the
+ * break-even near ten games. So four weeks in, a team's results count for
+ * 4 / (4 + 10) ≈ 30% and the rest is pulled back to average; by week 14 it is
+ * nearly 60%. Roster strength is a current read, not a sample, and is never
+ * regressed.
+ */
+export const RESULTS_PRIOR_GAMES = 10
+/** Persistent team-level spread as a share of weekly score σ, the same prior the season simulation uses. */
+export const TALENT_SHARE = 0.3
 
 const zscores = (xs: number[]) => {
   const n = xs.length
@@ -227,15 +251,32 @@ const zscores = (xs: number[]) => {
   return xs.map((x) => (sd ? (x - m) / sd : 0))
 }
 
+const stdev = (xs: number[]) => {
+  if (xs.length < 2) return 0
+  const m = xs.reduce((a, b) => a + b, 0) / xs.length
+  return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / xs.length)
+}
+
 /**
- * Composite ranking: z-score each component across the league, weight, then
- * min-max to 0-100. Components with no data (e.g. preseason) are dropped and
- * the remaining weights renormalized, so the ranking still works in week 0.
+ * Composite ranking in three steps.
+ *
+ *   1. z-score each component across the league, and regress the results-based
+ *      ones toward zero by sample size (see RESULTS_PRIOR_GAMES).
+ *   2. Weight and sum. Components with no data (preseason) drop out and the
+ *      rest renormalize, so the ranking still works in week 0.
+ *   3. Put it in points: one composite unit is one league standard deviation
+ *      of points per game, so `margin` is points per week over an average
+ *      team; then `score` is the chance that margin wins a week, given the
+ *      league's weekly σ.
+ *
+ * The old version min-maxed the composite to 0–100, which pinned the best
+ * team at 100 and the worst at 0 whatever the actual gaps were.
  */
 export const computePower = (
   teams: TeamSeason[],
   rosterStrength: Record<number, number>,
   weights: PowerWeights,
+  sigma = 25,
 ): PowerRow[] => {
   const hasGames = teams.some((t) => t.games > 0)
   const hasRoster = Object.values(rosterStrength).some((v) => v !== 0)
@@ -252,29 +293,34 @@ export const computePower = (
     return hasGames
   })
   const weightSum = active.reduce((a, k) => a + weights[k], 0) || 1
-  const z: Record<keyof PowerWeights, number[]> = {
-    allPlay: zscores(raw.allPlay),
-    points: zscores(raw.points),
-    recent: zscores(raw.recent),
-    roster: zscores(raw.roster),
-    efficiency: zscores(raw.efficiency),
+  const reliability = (n: number) => n / (n + RESULTS_PRIOR_GAMES)
+  const shrink = (k: keyof PowerWeights, i: number) => {
+    if (k === 'roster') return 1
+    const n = teams[i].games
+    return reliability(k === 'recent' ? Math.min(n, 3) : n)
   }
+  const z = {} as Record<keyof PowerWeights, number[]>
+  for (const k of Object.keys(raw) as (keyof PowerWeights)[]) z[k] = zscores(raw[k]).map((v, i) => v * shrink(k, i))
   const composite = teams.map((_, i) => active.reduce((a, k) => a + (weights[k] / weightSum) * z[k][i], 0))
-  const lo = Math.min(...composite)
-  const hi = Math.max(...composite)
-  const rows = teams.map((t, i) => ({
-    rosterId: t.rosterId,
-    rank: 0,
-    score: hi > lo ? ((composite[i] - lo) / (hi - lo)) * 100 : 50,
-    components: {
-      allPlay: z.allPlay[i],
-      points: z.points[i],
-      recent: z.recent[i],
-      roster: z.roster[i],
-      efficiency: z.efficiency[i],
-    },
-    sos: null as number | null,
-  }))
+  // Observed spread of points per game; before any games, the simulation's talent prior.
+  const spread = (hasGames && stdev(raw.points)) || TALENT_SHARE * sigma
+  const rows = teams.map((t, i) => {
+    const margin = composite[i] * spread
+    return {
+      rosterId: t.rosterId,
+      rank: 0,
+      score: 100 * phi(margin / (Math.SQRT2 * Math.max(1, sigma))),
+      margin,
+      components: {
+        allPlay: z.allPlay[i],
+        points: z.points[i],
+        recent: z.recent[i],
+        roster: z.roster[i],
+        efficiency: z.efficiency[i],
+      },
+      sos: null as number | null,
+    }
+  })
   const scoreById: Record<number, number> = {}
   rows.forEach((r) => (scoreById[r.rosterId] = r.score))
   teams.forEach((t, i) => {
