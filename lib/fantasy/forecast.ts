@@ -219,17 +219,27 @@ export const pastByWeek = (input: Pick<ForecastInput, 'slots' | 'players' | 'flo
 export const managedPoints = (tw: TeamWeek, slots: Slot[], proj: Record<string, number> | undefined, floor: WaiverFloor) =>
   proj ? tw.points + deadSlotFill(deadStarters(slots, tw.slotted, proj, tw.playersPoints), floor) : tw.points
 
+/** managedPoints for every team-week that has projections, keyed week → rosterId, so it is solved once. */
+export const managedByWeek = (input: Pick<ForecastInput, 'slots' | 'floor' | 'pastProjections' | 'teamWeeks'>, past: Record<number, Record<number, number>>) => {
+  const out: Record<number, Record<number, number>> = {}
+  for (const w of Object.keys(past).map(Number)) {
+    out[w] = {}
+    for (const t of input.teamWeeks[w] ?? []) out[w][t.rosterId] = managedPoints(t, input.slots, input.pastProjections[w], input.floor)
+  }
+  return out
+}
+
 /**
  * Weekly noise around a team's expectation: the spread of (actual − projected
  * × efficiency) across every team-week we can measure. Falls back to a share
  * of the league's score spread before any week has both.
  */
-export const measureNoise = (input: ForecastInput, efficiency: Record<number, number>, past = pastByWeek(input)) => {
+export const measureNoise = (input: ForecastInput, efficiency: Record<number, number>, past = pastByWeek(input), managed = managedByWeek(input, past)) => {
   const resid: number[] = []
   for (const w of Object.keys(past).map(Number)) {
     for (const t of input.teamWeeks[w] ?? []) {
       const proj = past[w][t.rosterId]
-      if (proj > 0) resid.push(managedPoints(t, input.slots, input.pastProjections[w], input.floor) - proj * (efficiency[t.rosterId] ?? 1))
+      if (proj > 0) resid.push(managed[w][t.rosterId] - proj * (efficiency[t.rosterId] ?? 1))
     }
   }
   if (resid.length < 8) return { sigma: input.sigmaFallback, n: resid.length, bias: 0 }
@@ -245,6 +255,7 @@ export const teamRatings = (input: ForecastInput, past = pastByWeek(input)) => {
   // point of *projected* optimal lineup. (Against the hindsight optimum it would
   // count the projection's own shortfall twice.) League first, then each
   // manager, shrunk toward it.
+  const managed = managedByWeek(input, past)
   let actualAll = 0
   let projAll = 0
   const games: Record<number, { actual: number; proj: number; n: number }> = {}
@@ -253,7 +264,7 @@ export const teamRatings = (input: ForecastInput, past = pastByWeek(input)) => {
       const proj = past[w][t.rosterId]
       if (!(proj > 0)) continue
       const g = (games[t.rosterId] ??= { actual: 0, proj: 0, n: 0 })
-      const pts = managedPoints(t, input.slots, input.pastProjections[w], input.floor)
+      const pts = managed[w][t.rosterId]
       g.actual += pts
       g.proj += proj
       g.n++
@@ -269,7 +280,7 @@ export const teamRatings = (input: ForecastInput, past = pastByWeek(input)) => {
     const n = g?.n ?? 0
     efficiency[t.rosterId] = (n * own + EFFICIENCY_PRIOR_GAMES * leagueEff) / (n + EFFICIENCY_PRIOR_GAMES)
   }
-  const noise = measureNoise(input, efficiency, past)
+  const noise = measureNoise(input, efficiency, past, managed)
 
   // Form: points beyond the team's own projection, per game, shrunk hard.
   const form: Record<number, number> = {}
@@ -277,10 +288,10 @@ export const teamRatings = (input: ForecastInput, past = pastByWeek(input)) => {
     let sum = 0
     let n = 0
     for (const w of Object.keys(past).map(Number)) {
-      const tw = (teamWeeks[w] ?? []).find((x) => x.rosterId === t.rosterId)
+      const pts = managed[w][t.rosterId]
       const proj = past[w][t.rosterId]
-      if (!tw || !(proj > 0)) continue
-      sum += managedPoints(tw, input.slots, input.pastProjections[w], input.floor) - proj * efficiency[t.rosterId] - noise.bias
+      if (pts === undefined || !(proj > 0)) continue
+      sum += pts - proj * efficiency[t.rosterId] - noise.bias
       n++
     }
     form[t.rosterId] = n ? sum / (n + FORM_PRIOR_GAMES) : 0

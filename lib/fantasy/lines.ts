@@ -41,7 +41,14 @@ export type MarketPlayer = {
   anytimeTd: number | null
 }
 
-export type MarketWeek = { week: number; byId: Record<string, MarketPlayer>; players: number; props: number }
+export type MarketWeek = {
+  week: number
+  byId: Record<string, MarketPlayer>
+  players: number
+  props: number
+  /** Kickers' extra-point and field-goal props as expected makes: the market's read on the team's scoring, not the kicker's. */
+  kickers: Record<string, { xp: number | null; fg: number | null }>
+}
 
 /** How much of the market's number goes into the week's projection. An even blend until the tracker says otherwise. */
 export const MARKET_WEIGHT = 0.5
@@ -81,8 +88,6 @@ export const PROP_LABEL: Record<string, string> = {
   rushing_and_receiving_yards: 'Rush+rec yds',
   passing_and_rushing_yards: 'Pass+rush yds',
   kicking_points: 'Kicking pts',
-  extra_point_made: 'XP made',
-  field_goal_made: 'FG made',
 }
 
 type RawLine = {
@@ -197,6 +202,7 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
     else if (Math.abs(devig(r.over, r.under) - 0.5) < Math.abs(devig(list[i].over, list[i].under) - 0.5)) list[i] = r
   }
   const byId: Record<string, MarketPlayer> = {}
+  const kickers: MarketWeek['kickers'] = {}
   let props = 0
   for (const id of Object.keys(grouped)) {
     const base: StatLine = projections[id] ?? {}
@@ -218,7 +224,8 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
         reads.push({ stat: r.stat, line: r.line, pOver: p, mean: -Math.log(1 - Math.min(0.97, p)) })
       } else if (r.stat === 'extra_point_made' || r.stat === 'field_goal_made') {
         // Read for the team's implied total (see waivers.ts); kicking points already price the kicker himself.
-        reads.push({ stat: r.stat, line: r.line, pOver: p, mean: poissonRate(r.line, p) })
+        const k = (kickers[id] ??= { xp: null, fg: null })
+        k[r.stat === 'extra_point_made' ? 'xp' : 'fg'] = poissonRate(r.line, p)
         continue
       } else if (r.stat === 'kicking_points') {
         kicking = impliedMean('kicking_points', r.line, p)
@@ -252,6 +259,8 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
       stats.rush_td = lambda * r
       stats.rec_td = lambda * (1 - r)
     }
+    // Nothing here the market priced (only team-level or unread props): not a market projection.
+    if (!reads.length) continue
     const merged: StatLine = { ...base, ...stats }
     const sleeper = scoreStatLine(base, scoring)
     // A kicking-points line counts 3 a field goal and 1 an extra point. League scoring may pay by distance,
@@ -260,7 +269,7 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
     const pts = kicking != null && players[id].pos === 'K' ? (standard > 0 ? sleeper * (kicking / standard) : kicking) : scoreStatLine(merged, scoring)
     byId[id] = { props: reads, stats, pts: Math.round(pts * 100) / 100, sleeper: Math.round(sleeper * 100) / 100, anytimeTd }
   }
-  return { week, byId, players: Object.keys(byId).length, props }
+  return { week, byId, players: Object.keys(byId).length, props, kickers }
 }
 
 /** The week's projection with the market blended in, for players it prices. Sleeper's zeros (ruled out, on bye) stand. */

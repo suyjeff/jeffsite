@@ -2,9 +2,9 @@ import React, { useMemo, useState } from 'react'
 import { acceptRead } from '../../../lib/fantasy/behavior'
 import { pastProjection } from '../../../lib/fantasy/analysis'
 import { deadStarters } from '../../../lib/fantasy/lineup'
-import { isWaiverFill, findTargets, makeLineupEval } from '../../../lib/fantasy/trades'
+import { isWaiverFill, makeLineupEval } from '../../../lib/fantasy/trades'
 import { PROP_LABEL } from '../../../lib/fantasy/lines'
-import { searchTrades, tradeBase } from '../../../lib/fantasy/search'
+import { searchTrades, waiverTargets } from '../../../lib/fantasy/search'
 import { describeNote } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
@@ -462,16 +462,7 @@ const Waivers = ({ sel, select }: WidgetProps) => {
   const { data, analysis } = useFantasy()
   const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
-  const rows = useMemo(() => {
-    if (!me || !data.horizon.length) return []
-    const perWeek = analysis.horizon.perWeek
-    const fa = Object.keys(perWeek)
-      .filter((id) => data.players[id] && analysis.rosteredBy[id] === undefined)
-      .sort((a, b) => perWeek[b] - perWeek[a])
-      .slice(0, 120)
-    const base = tradeBase(data, analysis)
-    return base ? findTargets({ ...base, others: [], rosteredBy: analysis.rosteredBy, freeAgents: fa, limit: 15 }) : []
-  }, [me, data, analysis])
+  const rows = useMemo(() => (me ? waiverTargets(data, analysis, { pool: 120, limit: 15 }) : []), [me, data, analysis])
   if (!rows.length) return <Empty title="Nobody on waivers helps">Your lineup beats every free agent at every slot.</Empty>
   return (
     <div>

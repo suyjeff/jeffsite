@@ -258,7 +258,8 @@ export const ProjectionChart = ({
   const y = (v: number) => pad.t + ih - ((v - lo) / (hi - lo || 1)) * ih
   const ticks = [lo, (lo + hi) / 2, hi]
   const pastProj = projected.map((v, i) => (i <= Math.max(lastPlayed, 0) ? v : null))
-  const futureProj = projected.map((v, i) => (i >= lastPlayed && lastPlayed >= 0 ? v : lastPlayed < 0 ? v : null))
+  // The dashed run starts at the last played week so the two lines join.
+  const futureProj = projected.map((v, i) => (i >= lastPlayed ? v : null))
   const h = hover
   const diff = h !== null && actual[h] != null && projected[h] != null ? actual[h]! - projected[h]! : null
   return (

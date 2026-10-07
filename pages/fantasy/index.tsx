@@ -66,7 +66,7 @@ const FantasyPage = () => {
   const route = useRoute(SECTION_KEYS, 'dash')
   // Waivers moved out of My team into their own section; old links still land there.
   useEffect(() => {
-    if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds')
+    if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })
   }, [route.section, route.sub]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

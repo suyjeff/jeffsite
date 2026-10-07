@@ -473,7 +473,8 @@ const ScheduleGrid = ({ data, analysis, onTeam }: { data: LeagueData; analysis: 
                         key={w}
                         title={`Week ${w}: ${teamById[opp]?.name} (power ${fmt(score, 0)})`}
                         className={cx('h-8 min-w-[64px] rounded-[1px] px-1 text-center', opp === myRosterId ? 'font-medium text-ff-accent ring-1 ring-inset ring-ff-accent/60' : 'text-ff-text')}
-                        style={{ background: `rgb(var(--ff-accent) / ${(0.06 + (score / 100) * 0.55).toFixed(2)})` }}
+                        // Scores bunch around 50 (a coin flip against an average team), so shade the 35–65 band across the full range.
+                        style={{ background: `rgb(var(--ff-accent) / ${(0.06 + Math.max(0, Math.min(1, (score - 35) / 30)) * 0.55).toFixed(2)})` }}
                       >
                         {short(teamById[opp]?.name ?? '?')}
                       </td>

@@ -103,8 +103,8 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
               <div className="border-b border-ff-line px-2 pb-2 pt-3">
                 <ProjectionChart weeks={chartWeeks} actual={chartWeeks.map((w) => scored[w] ?? null)} projected={chartWeeks.map((w) => expected[w] ?? ahead[w] ?? null)} />
                 <p className="mt-1.5 px-1 text-[11px] leading-snug text-ff-muted">
-                  Projected is the best lineup this roster could have started, on Sleeper&apos;s pre-game projections, times the manager&apos;s efficiency; a bye left in the lineup is
-                  assumed swapped. Dashed weeks are still to come.
+                  Projected is the best lineup this roster could have started, on Sleeper&apos;s pre-game projections, times the manager&apos;s efficiency. It assumes byes get
+                  swapped out, so a week with a bye or empty slot left in the lineup shows as a miss. Dashed weeks are still to come.
                 </p>
               </div>
             )}
