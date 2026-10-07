@@ -1,5 +1,5 @@
 import React, { useMemo, type ReactNode } from 'react'
-import { analyze, type Analysis } from '../../../lib/fantasy/analysis'
+import { analyze, withWeights, type Analysis } from '../../../lib/fantasy/analysis'
 import { AVAILABILITY_PRIOR_GAMES, BASE_AVAILABILITY, HEALTHY_DECAY, NEXT_MAN_SHARE, SKILL_POSITIONS, STATUS_PLAY, TRANSFER, playProbability } from '../../../lib/fantasy/context'
 import { starterDemand } from '../../../lib/fantasy/lineup'
 import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../../../lib/fantasy/power'
@@ -10,10 +10,11 @@ import { DEFAULT_MODEL, type ModelConfig } from '../../../lib/fantasy/war'
 import { HBars, Histogram, Legend, MiniLines } from '../charts'
 import PlayerName from '../PlayerName'
 import { Avatar, Badge, Button, Num, PageHeader, Panel, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, type Column } from '../ui'
+import { BacktestTab, BehaviorTab, ForecastTab, SystemTab } from './ModelSystem'
 import { COMPONENTS } from './PowerView'
 
-type Sub = 'value' | 'power' | 'availability' | 'engine' | 'data'
-const SUBS: Sub[] = ['value', 'power', 'availability', 'engine', 'data']
+type Sub = 'system' | 'value' | 'availability' | 'engine' | 'forecast' | 'backtest' | 'behavior' | 'power' | 'data'
+const SUBS: Sub[] = ['system', 'value', 'availability', 'engine', 'forecast', 'backtest', 'behavior', 'power', 'data']
 
 const fill = (slot: string) => `rgb(var(--ff-${slot}))`
 const near = (a: number, b: number, eps: number) => Math.abs(a - b) <= eps
@@ -66,7 +67,7 @@ const Param = ({
               reset
             </button>
           )}
-          <span className={cx('num min-w-[44px] rounded bg-ff-sunken px-1.5 py-0.5 text-right text-[12.5px]', changed ? 'text-ff-accent' : 'text-ff-text')}>{format(value)}</span>
+          <span className={cx('num min-w-[44px] rounded-sm bg-ff-sunken px-1.5 py-0.5 text-right text-[12.5px]', changed ? 'text-ff-accent' : 'text-ff-text')}>{format(value)}</span>
         </div>
       </div>
       <div className="relative mt-1">
@@ -107,7 +108,7 @@ const Spec = ({ rows, stacked }: { rows: { k: string; v: ReactNode; note?: React
 )
 
 const Code = ({ children }: { children: string }) => (
-  <pre className="ff-scroll overflow-x-auto rounded-md border border-ff-line bg-ff-sunken px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-ff-text2">{children}</pre>
+  <pre className="ff-scroll overflow-x-auto rounded-sm border border-ff-line bg-ff-sunken px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-ff-text2">{children}</pre>
 )
 
 /** z-score as a bar either side of a centre line, clipped at ±2.5. */
@@ -150,18 +151,21 @@ type Props = {
 }
 
 const ModelView = ({ data, analysis, sub, onSub, model, setModel, weights, setWeights, reload }: Props) => {
-  const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'value'
+  const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'system'
   const changed = diffList(model, weights)
 
   // The same league run at the defaults, so every readout can show what your settings moved.
+  // Weights alone only re-rank, so that case skips the full re-analysis.
+  const modelChanged = changed.some((k) => !k.startsWith('w.'))
   const baseline = useMemo(
-    () => (changed.length ? analyze(data, DEFAULT_MODEL, DEFAULT_POWER_WEIGHTS) : analysis),
+    () => (!changed.length ? analysis : modelChanged ? analyze(data, DEFAULT_MODEL, DEFAULT_POWER_WEIGHTS) : withWeights(analysis, DEFAULT_POWER_WEIGHTS)),
     [data, changed.join(','), analysis], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   return (
     <>
       <PageHeader
+        code="07"
         title="Model"
         meta={
           <>
@@ -193,16 +197,24 @@ const ModelView = ({ data, analysis, sub, onSub, model, setModel, weights, setWe
             value={tab}
             onChange={onSub}
             items={[
+              { key: 'system', label: 'System' },
               { key: 'value', label: 'Player value' },
-              { key: 'power', label: 'Power' },
               { key: 'availability', label: 'Availability' },
               { key: 'engine', label: 'Trade engine' },
+              { key: 'forecast', label: 'Forecast' },
+              { key: 'backtest', label: 'Backtest' },
+              { key: 'behavior', label: 'Behaviour' },
+              { key: 'power', label: 'Composite' },
               { key: 'data', label: 'Data' },
             ]}
           />
         }
       />
       <div className="mt-4 space-y-3">
+        {tab === 'system' && <SystemTab onSub={onSub} />}
+        {tab === 'forecast' && <ForecastTab />}
+        {tab === 'backtest' && <BacktestTab />}
+        {tab === 'behavior' && <BehaviorTab />}
         {tab === 'value' && <ValueTab data={data} analysis={analysis} baseline={baseline} model={model} setModel={setModel} />}
         {tab === 'power' && <PowerTab analysis={analysis} baseline={baseline} weights={weights} setWeights={setWeights} />}
         {tab === 'availability' && <AvailabilityTab data={data} analysis={analysis} />}
@@ -560,7 +572,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
         </Panel>
         <Panel title="Points that move to teammates">
           <HBars rows={Object.entries(TRANSFER).map(([k, v]) => ({ key: k, label: k, value: v }))} format={(v) => pct(v)} max={1} slot="s2" />
-          <p className="mt-2 text-[11.5px] text-ff-muted">Measured on 2026 weeks where Sleeper zeroes a starter and later brings him back.</p>
+          <p className="mt-2 text-[11.5px] text-ff-muted">Measured on 2026 weeks where Sleeper zeroes a starter and later brings them back.</p>
         </Panel>
       </div>
 
@@ -760,6 +772,8 @@ const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analy
     { src: '/stats/nfl/regular/{s}', what: 'Season games played (history)', n: `${Object.keys(data.availability).length} players`, ttl: '7d' },
     { src: '/schedule/nfl/regular/{s}', what: 'NFL schedule', n: `${Math.round(scheduleGames)} games`, ttl: '12h' },
     { src: '/players/nfl/trending/add', what: 'Trending adds', n: data.trending.length, ttl: '1h' },
+    { src: '/league/{id}/transactions/{w}', what: `Transactions${data.history ? ` (+${data.history.season})` : ''}`, n: data.transactions.length + (data.history?.transactions.length ?? 0), ttl: 'past 24h · live 10m' },
+    { src: 'github:dynastyprocess/…/db_fpecr_latest.csv', what: `FantasyPros ECR ${data.consensus?.date ?? ''}`, n: data.consensus ? `${data.consensus.matched} matched` : 'unavailable', ttl: '12h' },
   ]
   return (
     <div className="space-y-3">
@@ -769,7 +783,7 @@ const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analy
         <Stat label="Horizon source" value={<span className="text-[15px]">{data.horizonSource}</span>} sub="for trade pricing" />
         <Stat label="Players modelled" value={Object.keys(analysis.values).length} sub={`${Object.keys(analysis.rosteredBy).length} rostered`} />
       </StatGrid>
-      <Panel title="Sources" pad={false} actions={<span className="font-mono text-[10.5px]">api.sleeper.app</span>}>
+      <Panel title="Sources" pad={false} actions={<span className="font-mono text-[10.5px]">sleeper · github raw</span>}>
         <Table
           rows={rows}
           rowKey={(r) => r.src}

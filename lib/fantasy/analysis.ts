@@ -160,3 +160,16 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
     capacity,
   }
 }
+
+/**
+ * The same analysis under different composite weights. Only the power ranking
+ * moves, so this skips everything else — and, because every other field keeps
+ * its identity, nothing keyed on them (the models, the trade-search cache) is
+ * rebuilt when a weight slider moves.
+ */
+export const withWeights = (analysis: Analysis, weights: PowerWeights): Analysis => {
+  const power = computePower(analysis.seasons, analysis.strength, weights)
+  const powerById: Record<number, PowerRow> = {}
+  power.forEach((p) => (powerById[p.rosterId] = p))
+  return { ...analysis, power, powerById }
+}

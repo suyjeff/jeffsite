@@ -114,13 +114,47 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       render: (id) => <span className={(data.context[id]?.play ?? 1) < 0.8 ? 'text-ff-neg' : ''}>{pct(data.context[id]?.play)}</span>,
     },
     { key: 'val', label: 'Value', align: 'right', title: 'Points per week above replacement at the position', sort: (id) => market[id] ?? -99, render: (id) => <Num value={market[id]} /> },
+    ...(data.consensus
+      ? [
+          {
+            key: 'ecr',
+            label: 'ECR',
+            align: 'right' as const,
+            title: 'FantasyPros expert consensus, rank at the position, rest of season',
+            sort: (id: string) => -(data.consensus!.byId[id]?.posRank ?? 999),
+            render: (id: string) => {
+              const e = data.consensus!.byId[id]
+              return e?.posRank ? (
+                <span className="text-ff-text2" title={e.sd != null ? `overall ${e.rank ?? '–'} · spread ±${e.sd} (best ${e.best}, worst ${e.worst})` : undefined}>
+                  {players[id].pos}
+                  {Math.round(e.posRank)}
+                </span>
+              ) : (
+                <span className="text-ff-muted">–</span>
+              )
+            },
+          },
+          {
+            key: 'gap',
+            label: 'vs ECR',
+            align: 'right' as const,
+            hideBelow: 'md' as const,
+            title: 'Consensus position rank minus the model’s. Positive: the model likes this player more than the experts do.',
+            sort: (id: string) => (data.consensus!.byId[id]?.posRank != null && aheadRank[id] ? data.consensus!.byId[id].posRank! - aheadRank[id] : -999),
+            render: (id: string) => {
+              const e = data.consensus!.byId[id]?.posRank
+              return e != null && aheadRank[id] ? <Num value={e - aheadRank[id]} signed digits={0} /> : <span className="text-ff-muted">–</span>
+            },
+          },
+        ]
+      : []),
     ...(myRosterId != null
       ? [
           {
             key: 'you',
             label: 'To you',
             align: 'right' as const,
-            title: 'Points per week he would add to your optimal lineup, after cutting your least useful player',
+            title: 'Points per week this player would add to your optimal lineup, after cutting your least useful player',
             sort: (id: string) => toYou[id] ?? -99,
             render: (id: string) => (rosteredBy[id] === myRosterId ? <span className="text-ff-muted">yours</span> : <Num value={toYou[id]} signed digits={2} />),
           },
@@ -174,6 +208,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   return (
     <>
       <PageHeader
+        code="06"
         title="Players"
         meta={
           basis === 'ahead' ? (
@@ -224,7 +259,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name or team"
             aria-label="Search players"
-            className="h-8 min-w-[160px] rounded-md md:max-w-[260px] md:flex-1 border border-ff-line bg-ff-panel px-2.5 text-[13px] text-ff-text outline-none placeholder:text-ff-muted focus-visible:ring-2 focus-visible:ring-ff-accent/40"
+            className="h-8 min-w-[160px] rounded-sm md:max-w-[260px] md:flex-1 border border-ff-line bg-ff-panel px-2.5 text-[13px] text-ff-text outline-none placeholder:text-ff-muted focus-visible:ring-2 focus-visible:ring-ff-accent/40"
           />
         </div>
         <Panel pad={false}>

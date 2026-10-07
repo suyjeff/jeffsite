@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { optimalLineup, type LineupPlayer } from '../../../lib/fantasy/lineup'
+import { tradeBase } from '../../../lib/fantasy/search'
 import { findTargets, makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes } from '../ContextNotes'
@@ -96,27 +97,15 @@ const MeView = ({
       .filter((id) => players[id] && analysis.rosteredBy[id] === undefined)
       .sort((a, b) => perWeek[b] - perWeek[a])
       .slice(0, 150)
-    return findTargets({
-      slots,
-      players,
-      horizon: data.horizon,
-      pts: perWeek,
-      me: { rosterId: me.rosterId, players: me.players },
-      others: [],
-      rosteredBy: analysis.rosteredBy,
-      freeAgents: fa,
-      capacity: analysis.capacity,
-      market: analysis.market,
-      floor: analysis.horizonReplacement,
-      limit: 40,
-    })
-  }, [me, data.horizon, analysis, players, slots])
+    const base = tradeBase(data, analysis)
+    return base ? findTargets({ ...base, others: [], rosteredBy: analysis.rosteredBy, freeAgents: fa, limit: 40 }) : []
+  }, [me, data, analysis, players])
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
 
   if (!me) {
     return (
       <>
-        <PageHeader title="My team" />
+        <PageHeader code="03" title="My team" />
         <div className="mt-4">
           <Empty title="No roster of yours in this league">Pick a league you are in from the menu.</Empty>
         </div>
@@ -129,6 +118,7 @@ const MeView = ({
   return (
     <>
       <PageHeader
+        code="03"
         title={me.name}
         meta={
           <>
@@ -174,7 +164,7 @@ const MeView = ({
                 <Panel title={`Week ${data.projectionWeek} lineup`} actions={<span>Sleeper projections</span>} pad={false}>
                   {lineupCheck.start.length === 0 ? (
                     <div className="flex items-center gap-2 border-b border-ff-line px-3 py-2 text-[12.5px] text-ff-pos">
-                      <span className="h-1.5 w-1.5 rounded-full bg-ff-pos" />
+                      <span className="h-1.5 w-1.5  bg-ff-pos" />
                       Your lineup matches the projected optimum.
                     </div>
                   ) : (

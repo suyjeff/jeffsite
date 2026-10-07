@@ -121,3 +121,19 @@ export type StatLine = Record<string, number>
 export type WeekStats = Record<string, StatLine>
 
 export type TrendingEntry = { player_id: string; count: number }
+
+/** A league transaction, trimmed to what the behaviour model reads. */
+export type SleeperTransaction = {
+  type: 'trade' | 'waiver' | 'free_agent' | 'commissioner' | string
+  status: 'complete' | 'failed' | string
+  roster_ids: number[]
+  /** player id -> roster id receiving him. */
+  adds: Record<string, number> | null
+  /** player id -> roster id giving him up. */
+  drops: Record<string, number> | null
+  /** Draft picks moved in a trade. */
+  picks: number
+  created: number
+  /** Week (Sleeper calls it the leg) the move was processed in. */
+  leg: number
+}

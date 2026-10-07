@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
-import { DEFAULT_TRADE_CONFIG, SUGGESTED_TRADE_CONFIG, findTargets, findTrades, scoreTrade, type TradeIdea, type TradeShape } from '../../../lib/fantasy/trades'
+import { acceptRead } from '../../../lib/fantasy/behavior'
+import { searchTrades, tradeBase } from '../../../lib/fantasy/search'
+import { DEFAULT_TRADE_CONFIG, findTargets, scoreTrade, type TradeIdea, type TradeShape } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import TradeCard, { SHAPE_LABEL } from '../TradeCard'
-import { IconFilter } from '../icons'
+import { useFantasy } from '../FantasyContext'
 import {
   Avatar,
   Badge,
@@ -65,29 +67,11 @@ const TradesView = ({
     () => analysis.teams.filter((t) => t.rosterId !== myRosterId).map((t) => ({ rosterId: t.rosterId, players: t.players })),
     [analysis.teams, myRosterId],
   )
-  const base = useMemo(
-    () =>
-      me
-        ? {
-            slots,
-            players,
-            horizon: data.horizon,
-            pts: analysis.horizon.perWeek,
-            me: { rosterId: me.rosterId, players: me.players },
-            capacity: analysis.capacity,
-            market: analysis.market,
-            floor: analysis.horizonReplacement,
-          }
-        : null,
-    [me, slots, players, data.horizon, analysis],
-  )
+  const base = useMemo(() => tradeBase(data, analysis), [data, analysis])
 
-  const search = useMemo(() => {
-    if (!base) return { ideas: [] as TradeIdea[], ms: 0 }
-    const t0 = performance.now()
-    const ideas = findTrades({ ...base, others, config: { ...SUGGESTED_TRADE_CONFIG, minTheirGain, maxValueAsk } })
-    return { ideas, ms: performance.now() - t0 }
-  }, [base, others, minTheirGain, maxValueAsk])
+  const { models } = useFantasy()
+  const search = useMemo(() => searchTrades(data, analysis, { minTheirGain, maxValueAsk }), [data, analysis, minTheirGain, maxValueAsk])
+  const reads = useMemo(() => new Map(search.ideas.map((i) => [i, acceptRead(i, myRosterId ?? -1, models.behavior, models.perceived)])), [search.ideas, myRosterId, models])
 
   const shown = useMemo(() => {
     let xs = search.ideas
@@ -95,7 +79,8 @@ const TradesView = ({
     if (partner !== 'all') xs = xs.filter((i) => i.partnerId === partner)
     const key: Record<Sort, (i: TradeIdea) => number> = {
       mine: (i) => i.myGain + 0.01 * i.theirGain,
-      likely: (i) => i.theirGain + 0.25 * i.myGain,
+      // How likely they are to say yes, among deals that still help you.
+      likely: (i) => (reads.get(i)?.index ?? 0) + 4 * Math.min(1, i.myGain),
       balanced: (i) => i.mutual + 0.05 * (i.myGain + i.theirGain),
     }
     const sorted = [...xs].sort((a, b) => key[sort](b) - key[sort](a))
@@ -108,7 +93,7 @@ const TradesView = ({
       else groups.set(k, [i])
     }
     return [...groups.values()]
-  }, [search.ideas, makeup, partner, sort])
+  }, [search.ideas, makeup, partner, sort, reads])
   useEffect(() => setVisible(10), [makeup, partner, sort, minTheirGain, maxValueAsk])
 
   const tags = useMemo(() => {
@@ -193,7 +178,7 @@ const TradesView = ({
   if (!me) {
     return (
       <>
-        <PageHeader title="Trades" />
+        <PageHeader code="02" title="Trades" />
         <div className="mt-4">
           <Empty title="No roster of yours in this league">Pick a league you are in from the menu.</Empty>
         </div>
@@ -203,7 +188,7 @@ const TradesView = ({
   if (!data.horizon.length) {
     return (
       <>
-        <PageHeader title="Trades" />
+        <PageHeader code="02" title="Trades" />
         <div className="mt-4">
           <Empty title="Nothing left to project">Trades are priced over the weeks still to be played, and this season has none left.</Empty>
         </div>
@@ -257,6 +242,7 @@ const TradesView = ({
   return (
     <>
       <PageHeader
+        code="02"
         title="Trades"
         meta={meta}
         tabs={
@@ -284,7 +270,7 @@ const TradesView = ({
                 onChange={setSort}
                 options={[
                   { key: 'mine', label: 'Best for you', title: 'Most points per week added to your lineup' },
-                  { key: 'likely', label: 'Likeliest', title: 'Most points per week added to theirs, among deals that help you' },
+                  { key: 'likely', label: 'Likeliest', title: 'Highest yes-odds: their gain, how the deal looks by consensus rankings, and how active they are' },
                   { key: 'balanced', label: 'Balanced', title: 'Highest gain for the side that gains less' },
                 ]}
               />
@@ -311,8 +297,8 @@ const TradesView = ({
                   ))}
               </Select>
               <Button size="md" variant={showFilters ? 'primary' : 'outline'} onClick={() => setShowFilters((s) => !s)}>
-                <IconFilter size={14} /> Limits
-                {(minTheirGain !== DEFAULT_TRADE_CONFIG.minTheirGain || maxValueAsk !== DEFAULT_TRADE_CONFIG.maxValueAsk) && <span className="h-1.5 w-1.5 rounded-full bg-ff-warn" />}
+                Limits
+                {(minTheirGain !== DEFAULT_TRADE_CONFIG.minTheirGain || maxValueAsk !== DEFAULT_TRADE_CONFIG.maxValueAsk) && <span className="h-1.5 w-1.5  bg-ff-warn" />}
               </Button>
             </div>
             {showFilters && <Panel title="Search limits">{filterControls}</Panel>}
@@ -378,12 +364,12 @@ const TradesView = ({
                 { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} sub={t.ownerId == null ? <span className="text-ff-pos">free agent</span> : teamById[t.ownerId]?.name} /> },
                 { key: 'slot', label: 'Starts at', hideBelow: 'sm', render: (t) => <span className="font-mono text-[11.5px] text-ff-text2">{t.slot ?? '—'}</span> },
                 { key: 'add', label: 'Adds', align: 'right', title: 'Points per week added to your optimal lineup', sort: (t) => t.add, render: (t) => <Num value={t.add} digits={2} signed /> },
-                { key: 'cost', label: 'Owner loses', align: 'right', title: 'Points per week his own lineup loses without him', sort: (t) => t.ownerCost, render: (t) => (t.ownerId == null ? <span className="text-ff-muted">–</span> : <Num value={t.ownerCost} digits={2} />) },
+                { key: 'cost', label: 'Owner loses', align: 'right', title: 'Points per week the owner’s lineup loses without this player', sort: (t) => t.ownerCost, render: (t) => (t.ownerId == null ? <span className="text-ff-muted">–</span> : <Num value={t.ownerCost} digits={2} />) },
                 {
                   key: 'surplus',
                   label: 'Surplus',
                   align: 'right',
-                  title: 'Adds to you minus what his owner loses. Positive: worth more to you than to them.',
+                  title: 'Adds to you minus what the owner loses. Positive: worth more to you than to them.',
                   sort: (t) => t.surplus,
                   render: (t) => (t.ownerId == null ? <span className="text-ff-muted">–</span> : <Num value={t.surplus} digits={2} signed />),
                 },
@@ -557,7 +543,7 @@ const SlotGrid = ({ analysis }: { analysis: Analysis }) => {
                 const a = Math.min(1, Math.abs(s.gap) / maxGap)
                 const bg = s.gap >= 0 ? `rgb(var(--ff-accent) / ${0.08 + a * 0.5})` : `rgb(var(--ff-neg) / ${0.08 + a * 0.5})`
                 return (
-                  <td key={s.index} className="num h-8 min-w-[52px] rounded-[4px] px-1 text-center text-ff-text" style={{ background: Math.abs(s.gap) < 0.25 ? 'rgb(var(--ff-sunken))' : bg }} title={`${s.slot}: ${s.pts.toFixed(1)} pts/wk, league ${s.leagueAvg.toFixed(1)}`}>
+                  <td key={s.index} className="num h-8 min-w-[52px] rounded-[1px] px-1 text-center text-ff-text" style={{ background: Math.abs(s.gap) < 0.25 ? 'rgb(var(--ff-sunken))' : bg }} title={`${s.slot}: ${s.pts.toFixed(1)} pts/wk, league ${s.leagueAvg.toFixed(1)}`}>
                     {fmtSigned(s.gap, 1)}
                   </td>
                 )
@@ -604,7 +590,7 @@ const Builder = ({
       onClick={onClick}
       aria-pressed={active}
       className={cx(
-        'flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors',
+        'flex min-w-0 items-center gap-2 rounded-sm border px-2 py-1.5 text-left transition-colors',
         active ? 'border-ff-accent bg-ff-accent/10' : 'border-ff-line bg-ff-panel hover:border-ff-line2 hover:bg-ff-raised',
       )}
     >

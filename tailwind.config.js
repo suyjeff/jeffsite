@@ -8,7 +8,8 @@ module.exports = {
         extend: {
             fontFamily: {
                 sans: ['Lars', 'sans-serif'],
-                mono: ['"JetBrains Mono Variable"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+                mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+                plex: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
             },
             // Fantasy app tokens. Values live in styles/fantasy.css as RGB
             // triplets so alpha modifiers (bg-ff-accent/10) work.
