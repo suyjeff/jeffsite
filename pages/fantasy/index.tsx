@@ -3,6 +3,7 @@ import { FantasyProvider } from '../../components/fantasy/FantasyContext'
 import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../../components/fantasy/Shell'
 import { Label, Segmented, Select, cx } from '../../components/fantasy/ui'
 import DashboardView from '../../components/fantasy/views/DashboardView'
+import Onboarding from '../../components/fantasy/Onboarding'
 import MeView from '../../components/fantasy/views/MeView'
 import ModelView from '../../components/fantasy/views/ModelView'
 import PlayersView from '../../components/fantasy/views/PlayersView'
@@ -23,10 +24,11 @@ import {
 import { useRoute } from '../../lib/fantasy/useRoute'
 import { DEFAULT_MODEL, type ModelConfig } from '../../lib/fantasy/war'
 
-const DEFAULT_USERNAME = 'thejeffanator'
 const PREFS_KEY = 'ff:prefs'
 
 export type Prefs = {
+  /** True once a username has been confirmed against Sleeper; until then the page shows onboarding. */
+  onboarded: boolean
   username: string
   leagueId: string | null
   season: string | null
@@ -38,7 +40,8 @@ export type Prefs = {
 
 const loadPrefs = (): Prefs => {
   const base: Prefs = {
-    username: DEFAULT_USERNAME,
+    onboarded: false,
+    username: '',
     leagueId: null,
     season: null,
     horizon: DEFAULT_HORIZON_MODE,
@@ -50,7 +53,8 @@ const loadPrefs = (): Prefs => {
     const raw = window.localStorage.getItem(PREFS_KEY)
     if (!raw) return base
     const p = JSON.parse(raw) as Partial<Prefs>
-    return { ...base, ...p, model: { ...DEFAULT_MODEL, ...(p.model ?? {}) }, weights: { ...DEFAULT_POWER_WEIGHTS, ...(p.weights ?? {}) } }
+    // Prefs saved before onboarding existed carry a username but no flag: they get the (pre-filled) form once.
+    return { ...base, ...p, onboarded: p.onboarded === true && !!p.username, model: { ...DEFAULT_MODEL, ...(p.model ?? {}) }, weights: { ...DEFAULT_POWER_WEIGHTS, ...(p.weights ?? {}) } }
   } catch {
     return base
   }
@@ -58,14 +62,12 @@ const loadPrefs = (): Prefs => {
 
 const FantasyPage = () => {
   const [prefs, setPrefs] = useState<Prefs | null>(null)
-  const [usernameInput, setUsernameInput] = useState(DEFAULT_USERNAME)
   const route = useRoute(SECTION_KEYS, 'dash')
 
   useEffect(() => {
     purgeStaleCache()
     const p = loadPrefs()
     setPrefs(p)
-    setUsernameInput(p.username)
   }, [])
   useEffect(() => {
     if (!prefs) return
@@ -76,12 +78,13 @@ const FantasyPage = () => {
     }
   }, [prefs])
 
+  // Nothing loads until the username is confirmed.
   const opts = useMemo<LoadOptions | null>(
     () =>
-      prefs
+      prefs?.onboarded
         ? { username: prefs.username, leagueId: prefs.leagueId, season: prefs.season, horizon: prefs.horizon, playoffWeight: prefs.playoffWeight }
         : null,
-    [prefs?.username, prefs?.leagueId, prefs?.season, prefs?.horizon, prefs?.playoffWeight], // eslint-disable-line react-hooks/exhaustive-deps
+    [prefs?.onboarded, prefs?.username, prefs?.leagueId, prefs?.season, prefs?.horizon, prefs?.playoffWeight], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const { data, error, loading, progress, reload } = useLeagueData(opts)
   // Everything but the composite ranking depends on the data and the value model;
@@ -160,34 +163,31 @@ const FantasyPage = () => {
           </span>
         </div>
       )}
-      <form
-        className="flex items-center gap-1.5"
-        onSubmit={(e) => {
-          e.preventDefault()
-          const u = usernameInput.trim()
-          if (u && u !== prefs.username) update({ username: u, leagueId: null })
-        }}
-      >
-        <input
-          value={usernameInput}
-          onChange={(e) => setUsernameInput(e.target.value)}
-          aria-label="Sleeper username"
-          spellCheck={false}
-          className="h-8 min-w-0 flex-1 border border-ff-line bg-ff-panel px-2 font-mono text-[11.5px] text-ff-text outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40"
-        />
-        <Select
-          label="Season"
-          value={prefs.season ?? seasonOptions[0]}
-          onChange={(v) => update({ season: v === seasonOptions[0] ? null : v, leagueId: null })}
-          className="w-[74px] shrink-0 font-mono text-[11.5px]"
-        >
-          {seasonOptions.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </Select>
-      </form>
+      <div className="space-y-1.5">
+        <div className="flex h-8 items-center justify-between gap-2 border border-ff-line bg-ff-panel pl-2.5">
+          <span className="min-w-0 truncate font-mono text-[11.5px] text-ff-text" title="Sleeper username">
+            @{prefs.username}
+          </span>
+          <button type="button" onClick={() => update({ onboarded: false })} className="h-full shrink-0 border-l border-ff-line px-2.5 font-mono text-[10.5px] text-ff-muted hover:bg-ff-raised hover:text-ff-text">
+            switch
+          </button>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <Label>Season</Label>
+          <Select
+            label="Season"
+            value={prefs.season ?? seasonOptions[0]}
+            onChange={(v) => update({ season: v === seasonOptions[0] ? null : v, leagueId: null })}
+            className="w-[84px] shrink-0 font-mono text-[11.5px]"
+          >
+            {seasonOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
     </>
   )
 
@@ -199,6 +199,18 @@ const FantasyPage = () => {
     models?.forecast ? `σ ${models.forecast.sigma.toFixed(1)}` : null,
     data?.consensus ? 'ECR ✓' : null,
   ].filter((x): x is string => !!x)
+
+  // Until prefs are read (first client render), draw nothing rather than flash the wrong screen.
+  if (!prefs) return <div className="ff min-h-screen bg-ff-bg" />
+  if (!prefs.onboarded) {
+    return (
+      <Onboarding
+        initial={prefs.username}
+        onDone={(username) => update({ onboarded: true, username, leagueId: username === prefs.username ? prefs.leagueId : null, season: username === prefs.username ? prefs.season : null })}
+        onCancel={prefs.username ? () => update({ onboarded: true }) : undefined}
+      />
+    )
+  }
 
   return (
     <Shell

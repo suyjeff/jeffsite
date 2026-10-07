@@ -1,4 +1,4 @@
-import React, { Children, useMemo, useState, type ReactNode } from 'react'
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
 
 // ---------- Formatting ----------
@@ -195,9 +195,19 @@ export const Select = ({
   /** A small mono key shown inside the control, e.g. "TEAM". */
   prefix?: string
 }) => (
-  <label className={cx('relative inline-flex h-8 min-w-0 max-w-full items-center border border-ff-line bg-ff-panel text-[12.5px] text-ff-text focus-within:ring-2 focus-within:ring-ff-accent/40 hover:border-ff-line2', className)}>
+  <label
+    className={cx(
+      'relative inline-flex h-8 min-w-0 max-w-full items-center border border-ff-line bg-ff-panel text-[12.5px] text-ff-text focus-within:ring-2 focus-within:ring-ff-accent/40 hover:border-ff-line2',
+      className,
+    )}
+  >
     {prefix && <span className="ff-label pointer-events-none shrink-0 pl-2.5">{prefix}</span>}
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="h-full w-full min-w-0 cursor-pointer appearance-none truncate bg-transparent pl-2.5 pr-8 outline-none">
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-full w-full min-w-0 cursor-pointer appearance-none truncate bg-transparent pl-2.5 pr-8 outline-none max-sm:text-[16px]"
+    >
       {children}
     </select>
     <span aria-hidden className="pointer-events-none absolute right-0 top-0 flex h-full w-7 items-center justify-center border-l border-ff-line font-mono text-[10px] text-ff-muted">
@@ -247,20 +257,19 @@ export const Button = ({
 
 export const Stat = ({ label, value, delta, sub, className }: { label: ReactNode; value: ReactNode; delta?: ReactNode; sub?: ReactNode; className?: string }) => (
   <div className={cx('min-w-0 border border-ff-line bg-ff-panel px-2.5 py-2 sm:px-3', className)}>
-    <div className="ff-label truncate">{label}</div>
+    <div className="ff-label sm:truncate">{label}</div>
     <div className="mt-1.5 flex min-w-0 items-baseline gap-1.5 sm:gap-2">
       <span className="num truncate text-[17px] leading-none text-ff-text sm:text-[20px]">{value}</span>
       {delta && <span className="text-[11px] sm:text-xs">{delta}</span>}
     </div>
-    {sub && <div className="mt-1 truncate text-[10.5px] text-ff-muted sm:text-[11px]">{sub}</div>}
+    {sub && <div className="mt-1 text-[10.5px] leading-snug text-ff-muted sm:truncate sm:text-[11px]">{sub}</div>}
   </div>
 )
 
-/** KPI row. Phones get three across when the count divides by three, two otherwise. */
-export const StatGrid = ({ children, className }: { children: ReactNode; className?: string }) => {
-  const n = Children.toArray(children).filter(Boolean).length
-  return <div className={cx('grid gap-px border border-ff-line bg-ff-line [&>*]:border-0', n % 3 === 0 ? 'grid-cols-3' : 'grid-cols-2', 'sm:grid-cols-3 xl:grid-cols-6', className)}>{children}</div>
-}
+/** KPI row: two across on phones, so labels and notes wrap rather than cut off. */
+export const StatGrid = ({ children, className }: { children: ReactNode; className?: string }) => (
+  <div className={cx('grid grid-cols-2 gap-px border border-ff-line bg-ff-line sm:grid-cols-3 xl:grid-cols-6 [&>*]:border-0', className)}>{children}</div>
+)
 
 type Tone = 'neutral' | 'pos' | 'neg' | 'warn' | 'accent'
 const TONE: Record<Tone, string> = {
@@ -544,6 +553,22 @@ export function Table<T>({
 }) {
   const [sortKey, setSortKey] = useState<string | undefined>(defaultSort)
   const [desc, setDesc] = useState(defaultDesc)
+  // While columns hide past the right edge, a fade says so; it clears once scrolled to the end.
+  const scroller = useRef<HTMLDivElement>(null)
+  const [more, setMore] = useState(false)
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const check = () => setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    el.addEventListener('scroll', check, { passive: true })
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('scroll', check)
+    }
+  }, [rows.length, columns.length])
   const sorted = useMemo(() => {
     const col = columns.find((c) => c.key === sortKey)
     if (!col?.sort) return rows
@@ -565,65 +590,68 @@ export function Table<T>({
   }
   const align = (c: Column<T>) => (c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left')
   return (
-    <div className="ff-scroll overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
-      <table className="w-full border-collapse text-[13px]">
-        <thead className="sticky top-0 z-10">
-          <tr>
-            {columns.map((c) => (
-              <th
-                key={c.key}
-                title={c.title}
-                onClick={() => toggle(c)}
-                aria-sort={sortKey === c.key ? (desc ? 'descending' : 'ascending') : undefined}
-                className={cx(
-                  'ff-label h-8 whitespace-nowrap border-b border-ff-line bg-ff-panel px-2 font-normal first:pl-3 last:pr-3',
-                  align(c),
-                  c.sort && 'cursor-pointer select-none hover:text-ff-text',
-                  c.sticky && 'sticky left-0 z-20',
-                  c.hideBelow && HIDE[c.hideBelow],
-                  c.className,
-                )}
-              >
-                {c.label}
-                {sortKey === c.key && <span className="ml-0.5 text-ff-text">{desc ? '▾' : '▴'}</span>}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.length === 0 && (
+    <div className="relative">
+      {more && <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 z-30 w-8 bg-gradient-to-l from-ff-panel to-transparent" />}
+      <div ref={scroller} className="ff-scroll overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
+        <table className="w-full border-collapse text-[13px]">
+          <thead className="sticky top-0 z-10">
             <tr>
-              <td colSpan={columns.length} className="px-3 py-10 text-center text-[13px] text-ff-muted">
-                {empty}
-              </td>
-            </tr>
-          )}
-          {sorted.map((row) => (
-            <tr
-              key={rowKey(row)}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-              className={cx('group border-b border-ff-line/60 last:border-0', onRowClick && 'cursor-pointer', 'hover:bg-ff-raised', rowClass?.(row))}
-            >
               {columns.map((c) => (
-                <td
+                <th
                   key={c.key}
+                  title={c.title}
+                  onClick={() => toggle(c)}
+                  aria-sort={sortKey === c.key ? (desc ? 'descending' : 'ascending') : undefined}
                   className={cx(
-                    dense ? 'h-8' : 'h-[38px]',
-                    'whitespace-nowrap px-2 align-middle first:pl-3 last:pr-3',
+                    'ff-label h-8 whitespace-nowrap border-b border-ff-line bg-ff-panel px-1.5 font-normal first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
                     align(c),
-                    c.align === 'right' && 'num',
-                    c.sticky && 'sticky left-0 z-[1] bg-ff-panel group-hover:bg-ff-raised',
+                    c.sort && 'cursor-pointer select-none hover:text-ff-text',
+                    c.sticky && 'sticky left-0 z-20',
                     c.hideBelow && HIDE[c.hideBelow],
                     c.className,
                   )}
                 >
-                  {c.render(row)}
-                </td>
+                  {c.label}
+                  {sortKey === c.key && <span className="ml-0.5 text-ff-text">{desc ? '▾' : '▴'}</span>}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={columns.length} className="px-3 py-10 text-center text-[13px] text-ff-muted">
+                  {empty}
+                </td>
+              </tr>
+            )}
+            {sorted.map((row) => (
+              <tr
+                key={rowKey(row)}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={cx('group border-b border-ff-line/60 last:border-0', onRowClick && 'cursor-pointer', 'hover:bg-ff-raised', rowClass?.(row))}
+              >
+                {columns.map((c) => (
+                  <td
+                    key={c.key}
+                    className={cx(
+                      dense ? 'h-8' : 'h-[38px]',
+                      'whitespace-nowrap px-1.5 align-middle first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
+                      align(c),
+                      c.align === 'right' && 'num',
+                      c.sticky && 'sticky left-0 z-[1] bg-ff-panel group-hover:bg-ff-raised',
+                      c.hideBelow && HIDE[c.hideBelow],
+                      c.className,
+                    )}
+                  >
+                    {c.render(row)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

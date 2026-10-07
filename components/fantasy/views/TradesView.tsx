@@ -213,7 +213,7 @@ const TradesView = ({
   )
 
   const filterControls = (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <Slider
         label="They gain at least"
         value={minTheirGain}
@@ -309,7 +309,7 @@ const TradesView = ({
               </Empty>
             ) : (
               <>
-                <div className="grid items-start gap-3 lg:grid-cols-2">
+                <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
                   {shown.slice(0, visible).map((versions) => (
                     <TradeCard
                       key={`${versions[0].partnerId}:${versions[0].get.join('+')}`}
@@ -364,7 +364,7 @@ const TradesView = ({
                 { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} sub={t.ownerId == null ? <span className="text-ff-pos">free agent</span> : teamById[t.ownerId]?.name} /> },
                 { key: 'slot', label: 'Starts at', hideBelow: 'sm', render: (t) => <span className="font-mono text-[11.5px] text-ff-text2">{t.slot ?? '—'}</span> },
                 { key: 'add', label: 'Adds', align: 'right', title: 'Points per week added to your optimal lineup', sort: (t) => t.add, render: (t) => <Num value={t.add} digits={2} signed /> },
-                { key: 'cost', label: 'Owner loses', align: 'right', title: 'Points per week his own lineup loses without him', sort: (t) => t.ownerCost, render: (t) => (t.ownerId == null ? <span className="text-ff-muted">–</span> : <Num value={t.ownerCost} digits={2} />) },
+                { key: 'cost', label: 'Owner loses', align: 'right', hideBelow: 'sm', title: 'Points per week his own lineup loses without him', sort: (t) => t.ownerCost, render: (t) => (t.ownerId == null ? <span className="text-ff-muted">–</span> : <Num value={t.ownerCost} digits={2} />) },
                 {
                   key: 'surplus',
                   label: 'Surplus',
@@ -633,7 +633,7 @@ const Builder = ({
 
       {result && (
         <Panel title={`${give.length}-for-${get.length} · ${SHAPE_LABEL[result.shape]}`}>
-          <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]">
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
               <div>
                 <Label>Your lineup</Label>
@@ -685,7 +685,7 @@ const Builder = ({
         </Panel>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Panel title={`You send · ${give.length}`} actions={<span className="num">{me.name}</span>}>
           <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
             {sortIds(me.players).map((id) => (

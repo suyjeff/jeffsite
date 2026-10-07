@@ -275,7 +275,7 @@ const ValueTab = ({ data, analysis, baseline, model, setModel }: { data: LeagueD
   const top = useMemo(() => [...withGames].sort((a, b) => b.war - a.war).slice(0, 12), [withGames])
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
       <div className="space-y-3">
         <Panel title="Parameters" pad={false} actions={<span className="font-mono text-[10.5px]">war.ts</span>}>
           <Param
@@ -357,7 +357,7 @@ Value  = perActive − repl_horizon(pos)`}</Code>
           />
         </Panel>
 
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <Panel title="WAR distribution" actions={<span className="num">{withGames.length} players</span>}>
             <Histogram values={withGames.map((v) => v.war)} bins={24} marker={0} markerLabel="replacement" format={(v) => fmt(v, 1)} />
           </Panel>
@@ -460,7 +460,7 @@ const PowerTab = ({ analysis, baseline, weights, setWeights }: { analysis: Analy
           </div>
           <Legend items={shares.map((s) => ({ label: s.label, slot: s.slot, value: pct(s.share) }))} />
         </div>
-        <div className="grid sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
           {COMPONENTS.map((c) => (
             <Param
               key={c.key}
@@ -479,7 +479,7 @@ const PowerTab = ({ analysis, baseline, weights, setWeights }: { analysis: Analy
           ))}
         </div>
       </Panel>
-      <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <Panel title="Rankings at these weights" pad={false} actions={changed ? <span className="num">{moved} teams moved</span> : <span>defaults</span>}>
           <Table rows={analysis.power} rowKey={(p) => p.rosterId} columns={columns} defaultSort="rk" defaultDesc rowClass={(p) => cx(p.rosterId === analysis.myRosterId && 'ff-mine')} />
         </Panel>
@@ -532,7 +532,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
         <Stat label="Pts/wk reassigned" value={fmt(totalGained)} sub="to next men up" />
       </StatGrid>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title="P(play) for a healthy player, by weeks ahead">
           <MiniLines
             xs={weeksAhead}
@@ -554,7 +554,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
         </Panel>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Panel title="Constants" pad={false} actions={<span className="font-mono text-[10.5px]">context.ts</span>}>
           <Spec
             stacked
@@ -684,7 +684,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
         </div>
       </Panel>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title="Position pricing over the horizon" pad={false}>
           <Table
             rows={rows}
@@ -722,7 +722,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
         </Panel>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title="Search objective">
           <Code>{`objective = myGain
           + 0.30 · min(theirGain, myGain)

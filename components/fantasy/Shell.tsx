@@ -84,7 +84,7 @@ const SidebarBody = ({
     <div className="shrink-0 border-b border-ff-line">
       <label className="group relative block">
         <span className="sr-only">League</span>
-        <select value={leagueId ?? ''} onChange={(e) => onLeague(e.target.value)} className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0">
+        <select value={leagueId ?? ''} onChange={(e) => onLeague(e.target.value)} className="peer absolute inset-0 h-full w-full cursor-pointer text-[16px] opacity-0">
           {leagues.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}

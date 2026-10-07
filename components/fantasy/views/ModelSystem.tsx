@@ -178,9 +178,9 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
               })}
             </svg>
           )}
-          <div className="relative grid gap-3 lg:grid-cols-5 lg:gap-x-10">
+          <div className="relative grid grid-cols-1 gap-3 lg:grid-cols-5 lg:gap-x-10">
             {COLS.map((c, ci) => (
-              <div key={c} className="space-y-2">
+              <div key={c} className="min-w-0 space-y-2">
                 <div className="ff-label flex items-center gap-2">
                   <span className="num text-ff-muted/70">{String(ci + 1).padStart(2, '0')}</span>
                   {c}
@@ -222,7 +222,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
           </div>
         </div>
       </Panel>
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Panel title="What is measured" index={1}>
           <p className="text-[12.5px] leading-relaxed text-ff-text2">
             Weekly noise ({f ? `σ ${fmt(f.sigma)} from ${f.noiseN} team-weeks` : 'fallback'}), how often players actually suit up (two seasons of games), where an injured player’s points go (2026 projections), and how well each ranking predicts games it has not seen.
@@ -287,7 +287,7 @@ export const ForecastTab = () => {
         />
       </Panel>
       <Panel title="Method · after ELWAY and 538 NFL Elo">
-        <div className="grid gap-4 text-[12.5px] leading-relaxed text-ff-text2 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 text-[12.5px] leading-relaxed text-ff-text2 lg:grid-cols-2">
           <p>
             ELWAY rates NFL teams with Elo-style results, then adjusts for who is actually playing, the quarterback above all. Fantasy inverts the balance: nobody plays defense, so a team&apos;s score is almost entirely the lineup it fields, and that lineup is
             projected in advance. The rating is therefore the projected optimal lineup for each week, with injury odds and byes priced in, times efficiency: the points this team has actually scored per point its lineup was projected for, shrunk toward the league. That folds in lineup calls and any systematic gap between a roster and its projections.
@@ -418,7 +418,7 @@ export const BacktestTab = () => {
             { key: 'rel', label: 'Reliability', hideBelow: 'lg', render: (r) => (r.model === 'coin' ? null : <Reliability s={r} />) },
           ]}
         />
-        <div className="grid gap-4 border-t border-ff-line px-3 py-2.5 text-[12px] leading-relaxed text-ff-text2 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 border-t border-ff-line px-3 py-2.5 text-[12px] leading-relaxed text-ff-text2 lg:grid-cols-2">
           <p>
             Every prediction for week <i>w</i> uses only weeks before <i>w</i>. Projection models need Sleeper&apos;s past projections, so they cover this season only; results models also run on last season. On the{' '}
             <span className="num">{bt.commonN}</span> games every model predicted:{' '}
@@ -455,7 +455,7 @@ export const BehaviorTab = () => {
         <Stat label="Consensus" value={data.consensus ? 'on' : 'off'} sub="perceived fairness" />
         <Stat label="Personalities" value="no" sub="deliberately not modelled" />
       </StatGrid>
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Panel title="Managers" pad={false}>
           <Table
             rows={teams}
@@ -523,7 +523,7 @@ export const BehaviorTab = () => {
         </Panel>
       </div>
       <Panel title="Yes-odds weights · judgement, not fit">
-        <div className="grid gap-x-6 gap-y-1 font-mono text-[11.5px] text-ff-text2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 font-mono text-[11.5px] text-ff-text2 sm:grid-cols-2">
           {[
             ['their lineup gain', '+0.90 per pt/wk'],
             ['perceived overpay (consensus)', '−0.45 per pt/wk'],

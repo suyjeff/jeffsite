@@ -159,7 +159,7 @@ const MeView = ({
               </StatGrid>
             )}
 
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
               {lineupCheck && (
                 <Panel title={`Week ${data.projectionWeek} lineup`} actions={<span>Sleeper projections</span>} pad={false}>
                   {lineupCheck.start.length === 0 ? (
@@ -224,9 +224,9 @@ const MeView = ({
                       ? [{ key: 'who', label: `Wk ${data.horizon[0]?.week ?? ''}`, render: (r: (typeof slotRows)[number]) => (r.starter ? <PlayerName player={players[r.starter]} id={r.starter} size={22} /> : <span className="text-ff-muted">waiver fill</span>) }]
                       : []),
                     { key: 'mine', label: 'You', align: 'right', render: (r) => <span className="text-ff-text">{fmt(r.mine)}</span> },
-                    { key: 'lg', label: 'League', align: 'right', render: (r) => fmt(r.league) },
+                    { key: 'lg', label: 'League', align: 'right', hideBelow: 'sm', render: (r) => fmt(r.league) },
                     { key: 'gap', label: 'Δ', align: 'right', sort: (r) => r.mine - r.league, render: (r) => <Num value={r.mine - r.league} signed /> },
-                    { key: 'rank', label: 'Rank', align: 'right', sort: (r) => -r.rank, render: (r) => <span className={cx(r.rank <= 3 ? 'text-ff-pos' : r.rank > analysis.teams.length - 3 ? 'text-ff-neg' : 'text-ff-text2')}>{r.rank}/{analysis.teams.length}</span> },
+                    { key: 'rank', label: 'Rank', align: 'right', hideBelow: 'sm', sort: (r) => -r.rank, render: (r) => <span className={cx(r.rank <= 3 ? 'text-ff-pos' : r.rank > analysis.teams.length - 3 ? 'text-ff-neg' : 'text-ff-text2')}>{r.rank}/{analysis.teams.length}</span> },
                   ]}
                 />
                 <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
