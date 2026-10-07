@@ -1,0 +1,297 @@
+import React, { useMemo, useState } from 'react'
+import type { Analysis } from '../../../lib/fantasy/analysis'
+import { optimalLineup, type LineupPlayer } from '../../../lib/fantasy/lineup'
+import { findTargets, makeHorizonEval } from '../../../lib/fantasy/trades'
+import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
+import { ContextNotes } from '../ContextNotes'
+import PlayerName from '../PlayerName'
+import { Badge, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, compact, cx, fmt, pct } from '../ui'
+import RosterTable, { type Basis } from './RosterTable'
+
+type Sub = 'overview' | 'roster' | 'waivers'
+const SUBS: Sub[] = ['overview', 'roster', 'waivers']
+
+const MeView = ({
+  data,
+  analysis,
+  sub,
+  onSub,
+  onTeam,
+}: {
+  data: LeagueData
+  analysis: Analysis
+  sub: string | null
+  onSub: (s: string) => void
+  onTeam: (id: number) => void
+}) => {
+  const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'overview'
+  const [basis, setBasis] = useState<Basis>('ahead')
+  const [slotBasis, setSlotBasis] = useState<Basis>('ahead')
+  const { myRosterId, teamById, needs, slots } = analysis
+  const players = data.players
+  const me = myRosterId != null ? teamById[myRosterId] : null
+
+  // ---- This week's lineup against Sleeper's projections ----
+  const lineupCheck = useMemo(() => {
+    if (!me || !data.projections) return null
+    const proj = data.projections
+    const toLP = (ids: string[]): LineupPlayer[] => ids.filter((id) => players[id]).map((id) => ({ id, fpos: players[id].fpos, pts: proj[id] ?? 0 }))
+    const starters = (me.roster.starters ?? []).filter((s) => s && s !== '0')
+    const current = starters.reduce((a, id) => a + (proj[id] ?? 0), 0)
+    const best = optimalLineup(slots, toLP(me.players))
+    const bestIds = new Set(best.assignments.filter(Boolean).map((p) => p!.id))
+    const starterSet = new Set(starters)
+    return {
+      current,
+      best: best.total,
+      bench: starters.filter((id) => !bestIds.has(id)),
+      start: [...bestIds].filter((id) => !starterSet.has(id)),
+      assignments: best.assignments,
+    }
+  }, [me, data.projections, players, slots])
+
+  // ---- Headline numbers ----
+  const kpis = useMemo(() => {
+    if (!me || !data.horizon.length) return null
+    const lineups = analysis.teams.map((t) => needs[t.rosterId]?.lineup ?? 0).sort((a, b) => b - a)
+    const mine = needs[me.rosterId]?.lineup ?? 0
+    const avg = lineups.reduce((a, b) => a + b, 0) / (lineups.length || 1)
+    const raw = makeHorizonEval(slots, players, data.rawHorizon, analysis.horizonReplacement).total(me.players)
+    const adjusted = makeHorizonEval(slots, players, data.horizon, analysis.horizonReplacement).total(me.players)
+    const hole = needs[me.rosterId]?.worstPos
+    return { mine, rank: lineups.indexOf(mine) + 1, avg, drag: raw - adjusted, hole, holePts: hole ? needs[me.rosterId].byPos[hole] : 0 }
+  }, [me, data.horizon, data.rawHorizon, analysis, needs, slots, players])
+
+  // ---- Slots: ahead (horizon) or to date (results) ----
+  const slotRows = useMemo(() => {
+    if (!me) return []
+    if (slotBasis === 'ahead') {
+      return (needs[me.rosterId]?.slots ?? []).map((s) => {
+        const all = analysis.teams.map((t) => needs[t.rosterId]?.slots[s.index]?.pts ?? 0).sort((a, b) => b - a)
+        return { key: String(s.index), slot: s.slot, starter: s.starter, mine: s.pts, league: s.leagueAvg, rank: all.findIndex((v) => v <= s.pts) + 1 }
+      })
+    }
+    const weeks = data.valueWeeks
+    if (!weeks.length) return []
+    const perTeam = analysis.teams.map((t) => {
+      const sums = slots.map(() => 0)
+      for (const w of weeks) {
+        const pts = data.weekPoints[w] ?? {}
+        optimalLineup(slots, t.players.filter((id) => players[id]).map((id) => ({ id, fpos: players[id].fpos, pts: pts[id] ?? 0 }))).assignments.forEach((p, i) => (sums[i] += p?.pts ?? 0))
+      }
+      return { rosterId: t.rosterId, avg: sums.map((x) => x / weeks.length) }
+    })
+    const mineRow = perTeam.find((t) => t.rosterId === me.rosterId)!
+    return slots.map((slot, i) => {
+      const all = perTeam.map((t) => t.avg[i]).sort((a, b) => b - a)
+      return { key: String(i), slot: slot.name, starter: null as string | null, mine: mineRow.avg[i], league: all.reduce((a, b) => a + b, 0) / all.length, rank: all.findIndex((v) => v <= mineRow.avg[i]) + 1 }
+    })
+  }, [me, slotBasis, needs, analysis.teams, data.valueWeeks, data.weekPoints, slots, players])
+
+  // ---- Waivers ----
+  const waivers = useMemo(() => {
+    if (!me || !data.horizon.length) return []
+    const perWeek = analysis.horizon.perWeek
+    const fa = Object.keys(perWeek)
+      .filter((id) => players[id] && analysis.rosteredBy[id] === undefined)
+      .sort((a, b) => perWeek[b] - perWeek[a])
+      .slice(0, 150)
+    return findTargets({
+      slots,
+      players,
+      horizon: data.horizon,
+      pts: perWeek,
+      me: { rosterId: me.rosterId, players: me.players },
+      others: [],
+      rosteredBy: analysis.rosteredBy,
+      freeAgents: fa,
+      capacity: analysis.capacity,
+      market: analysis.market,
+      floor: analysis.horizonReplacement,
+      limit: 40,
+    })
+  }, [me, data.horizon, analysis, players, slots])
+  const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
+
+  if (!me) {
+    return (
+      <>
+        <PageHeader title="My team" />
+        <div className="mt-4">
+          <Empty title="No roster of yours in this league">Pick a league you are in from the menu.</Empty>
+        </div>
+      </>
+    )
+  }
+  const season = analysis.seasonById[me.rosterId]
+  const power = analysis.powerById[me.rosterId]
+
+  return (
+    <>
+      <PageHeader
+        title={me.name}
+        meta={
+          <>
+            {season.wins}-{season.losses}
+            {season.ties ? `-${season.ties}` : ''} · power #{power.rank} of {analysis.teams.length} ·{' '}
+            <button className="underline decoration-ff-line2 underline-offset-2 hover:text-ff-text" onClick={() => onTeam(me.rosterId)}>
+              team page
+            </button>
+          </>
+        }
+        tabs={
+          <Tabs<Sub>
+            value={tab}
+            onChange={onSub}
+            items={[
+              { key: 'overview', label: 'Overview' },
+              { key: 'roster', label: 'Roster', count: me.players.length },
+              { key: 'waivers', label: 'Waivers', count: waivers.length },
+            ]}
+          />
+        }
+      />
+      <div className="mt-4 space-y-3">
+        {tab === 'overview' && (
+          <>
+            {kpis && (
+              <StatGrid>
+                <Stat label="Projected lineup" value={fmt(kpis.mine)} sub={`pts/wk · #${kpis.rank} of ${analysis.teams.length}`} />
+                <Stat label="Vs league average" value={<Num value={kpis.mine - kpis.avg} signed />} sub={`league ${fmt(kpis.avg)} pts/wk`} />
+                <Stat label="Injury drag" value={<Num value={-kpis.drag} signed digits={1} />} sub="pts/wk to expected absences" />
+                <Stat label="Biggest hole" value={kpis.hole ?? '–'} sub={kpis.hole ? `an average starter adds ${fmt(kpis.holePts)}/wk` : undefined} />
+                <Stat label="All-play" value={pct(season.allPlayPct)} sub={`luck ${season.luck >= 0 ? '+' : ''}${fmt(season.luck)} wins`} />
+                {lineupCheck ? (
+                  <Stat label={`Week ${data.projectionWeek} optimal`} value={fmt(lineupCheck.best)} delta={<Num value={lineupCheck.best - lineupCheck.current} signed />} sub="vs your set lineup" />
+                ) : (
+                  <Stat label="Points per game" value={fmt(season.ppg)} />
+                )}
+              </StatGrid>
+            )}
+
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+              {lineupCheck && (
+                <Panel title={`Week ${data.projectionWeek} lineup`} actions={<span>Sleeper projections</span>} pad={false}>
+                  {lineupCheck.start.length === 0 ? (
+                    <div className="flex items-center gap-2 border-b border-ff-line px-3 py-2 text-[12.5px] text-ff-pos">
+                      <span className="h-1.5 w-1.5 rounded-full bg-ff-pos" />
+                      Your lineup matches the projected optimum.
+                    </div>
+                  ) : (
+                    <div className="space-y-1 border-b border-ff-line px-3 py-2">
+                      {lineupCheck.start.map((id, i) => (
+                        <div key={id} className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
+                          <Badge tone="warn">swap</Badge>
+                          <span className="whitespace-nowrap text-ff-text">
+                            Start {players[id]?.name} <span className="num text-ff-muted">{fmt(data.projections?.[id])}</span>
+                          </span>
+                          {lineupCheck.bench[i] && (
+                            <span className="whitespace-nowrap text-ff-text">
+                              <span className="text-ff-muted">over</span> {players[lineupCheck.bench[i]]?.name} <span className="num text-ff-muted">{fmt(data.projections?.[lineupCheck.bench[i]])}</span>
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Table
+                    dense
+                    rows={slots.map((s, i) => ({ i, slot: s.name, p: lineupCheck.assignments[i] }))}
+                    rowKey={(r) => r.i}
+                    columns={[
+                      { key: 'slot', label: 'Slot', render: (r) => <span className="font-mono text-[11px] text-ff-text2">{r.slot.replace('SUPER_FLEX', 'SF')}</span> },
+                      { key: 'p', label: 'Optimal', render: (r) => (r.p ? <PlayerName player={players[r.p.id]} id={r.p.id} size={22} /> : <span className="text-ff-muted">empty</span>) },
+                      { key: 'pts', label: 'Proj', align: 'right', render: (r) => fmt(r.p?.pts) },
+                      { key: 'ctx', label: '', hideBelow: 'sm', render: (r) => (r.p ? <ContextNotes context={data.context[r.p.id]} players={players} max={1} /> : null) },
+                    ]}
+                  />
+                </Panel>
+              )}
+
+              <Panel
+                title="Slots vs league"
+                pad={false}
+                actions={
+                  <Segmented
+                    size="sm"
+                    value={slotBasis}
+                    onChange={setSlotBasis}
+                    options={[
+                      { key: 'ahead', label: 'Ahead' },
+                      { key: 'todate', label: 'To date' },
+                    ]}
+                  />
+                }
+              >
+                <Table
+                  dense
+                  rows={slotRows}
+                  rowKey={(r) => r.key}
+                  empty="No games played yet."
+                  columns={[
+                    { key: 'slot', label: 'Slot', render: (r) => <span className="font-mono text-[11px] text-ff-text2">{r.slot.replace('SUPER_FLEX', 'SF')}</span> },
+                    ...(slotBasis === 'ahead'
+                      ? [{ key: 'who', label: `Wk ${data.horizon[0]?.week ?? ''}`, render: (r: (typeof slotRows)[number]) => (r.starter ? <PlayerName player={players[r.starter]} id={r.starter} size={22} /> : <span className="text-ff-muted">waiver fill</span>) }]
+                      : []),
+                    { key: 'mine', label: 'You', align: 'right', render: (r) => <span className="text-ff-text">{fmt(r.mine)}</span> },
+                    { key: 'lg', label: 'League', align: 'right', render: (r) => fmt(r.league) },
+                    { key: 'gap', label: 'Δ', align: 'right', sort: (r) => r.mine - r.league, render: (r) => <Num value={r.mine - r.league} signed /> },
+                    { key: 'rank', label: 'Rank', align: 'right', sort: (r) => -r.rank, render: (r) => <span className={cx(r.rank <= 3 ? 'text-ff-pos' : r.rank > analysis.teams.length - 3 ? 'text-ff-neg' : 'text-ff-text2')}>{r.rank}/{analysis.teams.length}</span> },
+                  ]}
+                />
+                <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
+                  {slotBasis === 'ahead' ? 'Points per week each slot is expected to produce over the horizon, against the league average.' : 'Average points each slot of your best possible lineup produced in weeks played.'}
+                </p>
+              </Panel>
+            </div>
+          </>
+        )}
+
+        {tab === 'roster' && (
+          <Panel
+            title="Roster"
+            pad={false}
+            actions={
+              <Segmented
+                size="sm"
+                value={basis}
+                onChange={setBasis}
+                options={[
+                  { key: 'ahead', label: 'Rest of season' },
+                  { key: 'todate', label: 'Season to date' },
+                ]}
+              />
+            }
+          >
+            <RosterTable data={data} analysis={analysis} rosterId={me.rosterId} basis={basis} />
+          </Panel>
+        )}
+
+        {tab === 'waivers' && (
+          <Panel title="Free agents who would start for you" pad={false} actions={<span>pts/wk added to your lineup</span>}>
+            <Table
+              rows={waivers}
+              rowKey={(t) => t.id}
+              defaultSort="add"
+              empty="No free agent would crack your lineup."
+              columns={[
+                { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} /> },
+                { key: 'trend', label: '', hideBelow: 'sm', render: (t) => (trending[t.id] ? <Badge tone="pos" title={`${trending[t.id].toLocaleString()} adds across Sleeper in the last 24h`}>↑{compact(trending[t.id])} adds</Badge> : null) },
+                { key: 'slot', label: 'Starts at', render: (t) => <span className="font-mono text-[11px] text-ff-text2">{t.slot ?? '—'}</span> },
+                { key: 'add', label: 'Adds', align: 'right', sort: (t) => t.add, render: (t) => <Num value={t.add} signed digits={2} /> },
+                { key: 'exp', label: 'Exp/wk', align: 'right', sort: (t) => analysis.horizon.perWeek[t.id] ?? 0, render: (t) => fmt(analysis.horizon.perWeek[t.id]) },
+                { key: 'play', label: 'Plays', align: 'right', hideBelow: 'sm', render: (t) => pct(data.context[t.id]?.play) },
+                { key: 'why', label: 'Context', hideBelow: 'md', render: (t) => <ContextNotes context={data.context[t.id]} players={players} max={3} /> },
+              ]}
+            />
+            <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
+              Adding a player means dropping your least useful one, and that cut is already in the number, so any positive value is a real upgrade.
+            </p>
+          </Panel>
+        )}
+      </div>
+    </>
+  )
+}
+
+export default MeView

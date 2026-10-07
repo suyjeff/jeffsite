@@ -12,6 +12,7 @@ import {
   marketValues,
   projectedReplacement,
   rosterCapacity,
+  scoreTrade,
   teamNeeds,
   type Horizon,
 } from '../trades'
@@ -329,8 +330,11 @@ describe('findTrades', () => {
     }
     // Each side sends what its lineup cannot use and takes back what it can.
     const top = ideas[0]
-    expect(players[top.get[0]].pos).toBe('WR')
-    expect(top.give.every((id) => players[id].pos === 'RB')).toBe(true)
+    expect(top.get.some((id) => players[id].pos === 'WR')).toBe(true)
+    expect(top.give.some((id) => players[id].pos === 'RB')).toBe(true)
+    expect(
+      ideas.some((i) => i.shape === 'one-for-one' && players[i.give[0]].pos === 'RB' && players[i.get[0]].pos === 'WR'),
+    ).toBe(true)
   })
 
   it('says which of their slots the deal plugs', () => {
@@ -380,9 +384,42 @@ describe('findTrades', () => {
     }
   })
 
-  it('never proposes taking back more players than it sends', () => {
-    for (const idea of findTrades({ ...base, config: { maxGet: 2, minTheirGain: -50 } })) {
-      expect(idea.give.length).toBeGreaterThanOrEqual(idea.get.length)
+  it('respects the size caps on each side', () => {
+    for (const idea of findTrades({ ...base, config: { maxGive: 1, maxGet: 1, minTheirGain: -50 } })) {
+      expect(idea.shape).toBe('one-for-one')
+    }
+    for (const idea of findTrades({ ...base, config: { maxGive: 3, maxGet: 2, maxPlayers: 4, minTheirGain: -50 } })) {
+      expect(idea.give.length).toBeLessThanOrEqual(3)
+      expect(idea.get.length).toBeLessThanOrEqual(2)
+      expect(idea.give.length + idea.get.length).toBeLessThanOrEqual(4)
+    }
+  })
+
+  it('grows uneven deals when the extra piece earns its place', () => {
+    // Their WR1 for your RB4 alone asks for more value than the cap allows;
+    // adding a second piece is what makes it a fair offer.
+    const shapes = new Set(findTrades({ ...base, config: { perPartner: 40 } }).map((i) => i.shape))
+    expect(shapes.has('one-for-one')).toBe(true)
+    expect(shapes.has('consolidate')).toBe(true)
+    expect(shapes.has('swap')).toBe(true)
+  })
+
+  it('names who the side taking more bodies has to cut', () => {
+    const ideas = findTrades({ ...base, config: { perPartner: 40 } })
+    for (const i of ideas) {
+      const theyTakeMore = i.give.length - i.get.length
+      expect(i.theirCuts.length).toBe(Math.max(0, theyTakeMore))
+      expect(i.myCuts.length).toBe(Math.max(0, -theyTakeMore))
+      for (const id of i.theirCuts) expect(B.players).toContain(id)
+    }
+    const uneven = ideas.find((i) => i.give.length !== i.get.length)
+    expect(uneven).toBeDefined()
+  })
+
+  it('does not pad a deal with bodies worth nothing to either side', () => {
+    // b_spare is below replacement: asking for him only games the value check.
+    for (const idea of findTrades({ ...base, config: { minTheirGain: -50 } })) {
+      expect(idea.get).not.toContain('b_spare')
     }
   })
 
@@ -415,5 +452,30 @@ describe('findTrades', () => {
     expect(seen).not.toBeNull()
     expect(seen!.combinations).toBeGreaterThan(0)
     expect(seen!.scored).toBeGreaterThan(0)
+  })
+})
+
+describe('scoreTrade', () => {
+  const { players, pts, horizon, A, B, market } = buildLeague()
+  const base = { slots: SLOTS, players, horizon, pts, me: A, partner: B, capacity: 9, market }
+  it('prices a hand-built deal the same way the search does', () => {
+    const idea = findTrades({ slots: SLOTS, players, horizon, pts, me: A, others: [B], capacity: 9, market })[0]
+    const scored = scoreTrade({ ...base, give: idea.give, get: idea.get })!
+    expect(scored.myGain).toBeCloseTo(idea.myGain, 2)
+    expect(scored.theirGain).toBeCloseTo(idea.theirGain, 2)
+    expect(scored.perWeek).toEqual(idea.perWeek)
+  })
+  it('scores lopsided offers honestly instead of filtering them', () => {
+    const scored = scoreTrade({ ...base, give: ['a_spare'], get: ['b_wr1'] })!
+    expect(scored.myGain).toBeGreaterThan(0)
+    expect(scored.theirGain).toBeLessThan(0)
+  })
+  it('names the cut when a side takes back more bodies than it sends', () => {
+    const scored = scoreTrade({ ...base, give: ['a_rb3'], get: ['b_wr3', 'b_wr4'] })!
+    expect(scored.shape).toBe('depth')
+    expect(scored.myCuts).toHaveLength(1)
+  })
+  it('returns nothing for an empty deal', () => {
+    expect(scoreTrade({ ...base, give: [], get: [] })).toBeNull()
   })
 })

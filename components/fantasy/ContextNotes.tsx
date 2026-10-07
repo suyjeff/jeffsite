@@ -14,10 +14,10 @@ const weekRange = (weeks: number[]) => {
 
 type Tone = 'warn' | 'bad' | 'good' | 'info'
 const TONES: Record<Tone, string> = {
-  warn: 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200',
-  bad: 'bg-rose-100 text-rose-900 dark:bg-rose-900/40 dark:text-rose-200',
-  good: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200',
-  info: 'bg-stone-200/70 text-stone-700 dark:bg-stone-800 dark:text-stone-300',
+  warn: 'bg-ff-warn/15 text-ff-warn',
+  bad: 'bg-ff-neg/10 text-ff-neg',
+  good: 'bg-ff-pos/10 text-ff-pos',
+  info: 'bg-ff-sunken text-ff-text2',
 }
 
 /** One note as a short label and the sentence behind it. */
@@ -82,7 +82,7 @@ export const ContextNotes = ({ context, players, max = 4 }: { context?: PlayerCo
       {notes.map((n, i) => {
         const d = describeNote(n, players)
         return (
-          <span key={i} title={d.title} className={`inline-block rounded px-1.5 py-0.5 text-[10.5px] leading-tight whitespace-nowrap cursor-help ${TONES[d.tone]}`}>
+          <span key={i} title={d.title} className={`inline-block cursor-help whitespace-nowrap rounded px-1.5 py-[1px] text-[10.5px] font-medium leading-[16px] ${TONES[d.tone]}`}>
             {d.label}
           </span>
         )
@@ -97,10 +97,10 @@ export const PlayoffSchedule = ({ context, weeks }: { context?: PlayerContext; w
   const games = weeks.map((w) => context.schedule.find((s) => s.week === w))
   if (games.every((g) => !g)) return null
   return (
-    <span className="whitespace-nowrap text-xs tabular-nums">
+    <span className="num whitespace-nowrap text-xs">
       {games.map((g, i) => (
-        <span key={weeks[i]} className={g && !g.opp ? 'text-rose-600 dark:text-rose-400' : ''}>
-          {i > 0 && <span className="text-stone-300 dark:text-stone-700"> · </span>}
+        <span key={weeks[i]} className={g && !g.opp ? 'text-ff-neg' : ''}>
+          {i > 0 && <span className="text-ff-line2"> · </span>}
           {g ? (g.opp ?? 'BYE') : '–'}
         </span>
       ))}

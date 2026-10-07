@@ -424,14 +424,16 @@ export const teamNeeds = (
 // ---------- Trade search ----------
 
 export type TradeConfig = {
-  /** Most players you are willing to send in one deal. 1 or 2. */
+  /** Most players you will send in one deal. */
   maxGive: number
-  /** Most players you are willing to take back. 1 or 2; 2 widens the search a lot. */
+  /** Most players you will take back in one deal. */
   maxGet: number
-  /** Their players to consider per team, ranked by what each would add to you. */
+  /** Most players in a deal, both sides together. */
+  maxPlayers: number
+  /** Their players to seed the search with, ranked by what each would add to you. */
   getPerTeam: number
-  /** Your players to consider, ranked by how little you would miss them. */
-  givePerTeam: number
+  /** Partial deals kept alive per partner at each step of the search. */
+  beamWidth: number
   /** Minimum points per week the deal must add to your optimal lineup. */
   minMyGain: number
   /**
@@ -445,27 +447,38 @@ export type TradeConfig = {
    * per week, before a deal is treated as a lowball and dropped.
    */
   maxValueAsk: number
-  /** Hard ceiling on exact scoring, so a pathological league cannot hang the tab. */
-  maxScored: number
+  /** Deals per partner that get the exact week-by-week scoring. */
+  scoredPerTeam: number
+  /** Most suggestions per partner in the final list, so one roster cannot crowd out the rest. */
+  perPartner: number
   limit: number
 }
 
 export const DEFAULT_TRADE_CONFIG: TradeConfig = {
-  maxGive: 2,
-  maxGet: 1,
+  maxGive: 4,
+  maxGet: 4,
+  maxPlayers: 6,
   getPerTeam: 12,
-  givePerTeam: 12,
+  beamWidth: 10,
   minMyGain: 0.1,
   minTheirGain: 0,
   maxValueAsk: 4,
-  maxScored: 6000,
+  scoredPerTeam: 90,
+  perPartner: 6,
   limit: 40,
 }
+
+/** Shape of a deal from your side: who sends more bodies. */
+export type TradeShape = 'one-for-one' | 'consolidate' | 'depth' | 'swap'
+
+export const tradeShape = (give: number, get: number): TradeShape =>
+  give === 1 && get === 1 ? 'one-for-one' : give > get ? 'consolidate' : get > give ? 'depth' : 'swap'
 
 export type TradeIdea = {
   partnerId: number
   get: string[]
   give: string[]
+  shape: TradeShape
   /** Points per week added to your optimal lineup, averaged over the horizon. */
   myGain: number
   /** Points per week added to theirs. */
@@ -482,16 +495,13 @@ export type TradeIdea = {
   weeks: number
   /** The slot on their roster the deal upgrades, and by how much. */
   fills: { slot: string; index: number; before: number; after: number } | null
+  /** Players each side would have to cut to stay under the roster limit. */
+  myCuts: string[]
+  theirCuts: string[]
   /** The weaker half of the deal, for ranking by how likely it is to land. */
   mutual: number
   /** Your gain in each horizon week. */
   perWeek: { week: number; mine: number; theirs: number }[]
-}
-
-const combinations2 = <T>(xs: T[]): [T, T][] => {
-  const out: [T, T][] = []
-  for (let i = 0; i < xs.length; i++) for (let j = i + 1; j < xs.length; j++) out.push([xs[i], xs[j]])
-  return out
 }
 
 export type TradeSearchInput = {
@@ -507,33 +517,66 @@ export type TradeSearchInput = {
   /** Replacement level per position: the lineup floor any owner can reach via waivers. */
   floor?: WaiverFloor
   config?: Partial<TradeConfig>
-  /** Optional hook for inspecting how many candidates each filter removed. */
+  /** Optional hook for inspecting the search. */
   onFunnel?: (f: TradeFunnel) => void
 }
 
-/** Why candidate deals were discarded, for tuning the filters. */
+/** What the search looked at, for tuning it. */
 export type TradeFunnel = {
+  /** Packages screened, seeds and grown deals together. */
   combinations: number
-  shortlisted: number
+  /** Deals that reached the exact week-by-week pass. */
   scored: number
   rejectedValueAsk: number
   rejectedMyGain: number
   rejectedTheirGain: number
+  /** Deals that passed every filter, before trimming to the final list. */
   kept: number
 }
 
 /**
- * Search every other roster for deals that leave both lineups better.
+ * Top `n` overall, topped up so every shape keeps its best `perShape`. Without
+ * this the single best cluster of deals — usually some two-for-two — crowds
+ * every other makeup out of both the search and the shortlist.
+ */
+const diverseTop = <T extends { give: string[]; get: string[]; objective: number }>(xs: T[], n: number, perShape: number): T[] => {
+  const sorted = [...xs].sort((a, b) => b.objective - a.objective)
+  const out = new Set(sorted.slice(0, n))
+  const counts = new Map<TradeShape, number>()
+  for (const x of out) counts.set(tradeShape(x.give.length, x.get.length), (counts.get(tradeShape(x.give.length, x.get.length)) ?? 0) + 1)
+  for (const x of sorted) {
+    const shape = tradeShape(x.give.length, x.get.length)
+    if (out.has(x) || (counts.get(shape) ?? 0) >= perShape) continue
+    out.add(x)
+    counts.set(shape, (counts.get(shape) ?? 0) + 1)
+  }
+  return [...out]
+}
+
+const dealKey = (give: string[], get: string[]) => `${[...give].sort().join(',')}>${[...get].sort().join(',')}`
+const cutBy = (before: string[], out: string[], incoming: string[], after: string[]) => {
+  const kept = new Set(after)
+  const leaving = new Set(out)
+  return before.filter((id) => !leaving.has(id) && !kept.has(id)).concat(incoming.filter((id) => !kept.has(id)))
+}
+
+/**
+ * Search every other roster for deals that leave both lineups better, in any
+ * makeup up to the size caps: one-for-one, three-for-one consolidations,
+ * one-for-three depth deals, two-for-two swaps.
  *
- * Only packages that send at least as many players as they bring back are
- * considered. Rosters in a standard league are full, so a two-for-one your way
- * is a deal the other side clears a spot for, and a one-for-two is one you
- * cannot make at all without cutting somebody first.
+ * Enumerating every combination of up to four players a side is millions of
+ * lineups per partner, so this grows deals instead. It seeds with every
+ * one-for-one that helps you, then repeatedly tries adding one player to
+ * either side — a sweetener from you when they need more, a second ask from
+ * them when there is room — and keeps a growth only when it makes the deal
+ * better. That is how people actually build offers, and it is why a
+ * three-for-one turns up only when the third piece earns its place.
  *
- * Two passes. A cheap screen on mean weekly points cuts thousands of
- * combinations down to a shortlist, deliberately keeping anything within a
- * point of the bar; the shortlist is then re-scored week by week, and only
- * those exact numbers are ever reported or filtered on.
+ * Two passes, as before. Growth is steered by a cheap screen on mean weekly
+ * points; the most promising deals per partner are then re-scored week by
+ * week, and only those exact numbers are reported or filtered on. Uneven deals
+ * cost the side taking more bodies its least useful player, and say who.
  */
 export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   const cfg = { ...DEFAULT_TRADE_CONFIG, ...(input.config ?? {}) }
@@ -543,157 +586,197 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
 
   const screen = makeLineupEval(slots, players, pts, floor)
   const exact = makeHorizonEval(slots, players, horizon, floor)
-  const screenBase = screen.total(me.players)
+  const myScreenBase = screen.total(me.players)
   const mine = me.players.filter((id) => players[id])
+  // A player below replacement has no trade value, not negative value — otherwise
+  // asking for someone's worst bench body would shave the premium you ask for.
+  const valueOf = (ids: string[]) => ids.reduce((a, id) => a + Math.max(0, market[id] ?? 0), 0)
 
-  // What each of my players costs me if they leave. The cheap ones are currency.
-  const giveRanked = mine
-    .map((id) => ({ id, cost: screenBase - screen.total(me.players.filter((x) => x !== id)) }))
-    .sort((a, b) => a.cost - b.cost)
+  const funnel: TradeFunnel = { combinations: 0, scored: 0, rejectedValueAsk: 0, rejectedMyGain: 0, rejectedTheirGain: 0, kept: 0 }
 
-  // Cheap pieces first, plus a few of my best, so a real blockbuster can surface.
-  const givePool = [...giveRanked.slice(0, cfg.givePerTeam), ...giveRanked.slice(-3)].filter(
-    (g, i, arr) => arr.findIndex((x) => x.id === g.id) === i,
-  )
-  const packages: string[][] = [
-    ...givePool.map((g) => [g.id]),
-    ...(cfg.maxGive >= 2 ? combinations2(givePool.map((g) => g.id)) : []),
-  ]
-  const packageValue = new Map(packages.map((ids) => [ids.join(','), ids.reduce((a, id) => a + (market[id] ?? 0), 0)]))
+  type State = { give: string[]; get: string[]; my: number; their: number; ask: number; objective: number }
+  /**
+   * What the search climbs. Your gain, plus credit for how much the other side
+   * gains (a deal both like is likelier to happen), minus a steep charge for
+   * every point below their bar and every point of premium above the cap, and
+   * a small charge per extra body so a piece has to earn its place.
+   */
+  const objective = (my: number, their: number, ask: number, size: number) =>
+    my +
+    0.3 * Math.min(their, my) -
+    2.5 * Math.max(0, cfg.minTheirGain - their) -
+    0.6 * Math.max(0, ask - cfg.maxValueAsk) -
+    0.15 * Math.max(0, size - 2)
 
-  // ---- Pass 1: screen ----
-  const SCREEN_SLACK = 1
-  const funnel: TradeFunnel = { combinations: 0, shortlisted: 0, scored: 0, rejectedValueAsk: 0, rejectedMyGain: 0, rejectedTheirGain: 0, kept: 0 }
-  type Candidate = { partnerId: number; get: string[]; give: string[]; screened: number }
-  const shortlist: Candidate[] = []
+  const ideas: TradeIdea[] = []
+  const myExactBase = exact.perWeek(me.players)
+
   for (const them of others) {
     const theirRoster = them.players.filter((id) => players[id])
     const theirScreenBase = screen.total(them.players)
-    const ranked = theirRoster
-      .map((id) => ({ id, add: screen.total([...me.players, id]) - screenBase }))
+    const seen = new Set<string>()
+    const pool = new Map<string, State>()
+
+    const evaluate = (give: string[], get: string[]): State | null => {
+      const key = dealKey(give, get)
+      if (seen.has(key)) return null
+      seen.add(key)
+      funnel.combinations++
+      const my = screen.total(applyTrade(me.players, give, get, capacity, pts)) - myScreenBase
+      const their = screen.total(applyTrade(them.players, get, give, capacity, pts)) - theirScreenBase
+      const ask = valueOf(get) - valueOf(give)
+      const state = { give, get, my, their, ask, objective: objective(my, their, ask, give.length + get.length) }
+      // Anything within a point of every bar goes to the exact pass: the
+      // screen misses in both directions by up to a point or so.
+      if (my >= cfg.minMyGain - 1 && their >= cfg.minTheirGain - 1 && ask <= cfg.maxValueAsk + 1) pool.set(key, state)
+      return state
+    }
+
+    // Seeds: every one-for-one with a player of theirs who would help you.
+    const targets = theirRoster
+      .map((id) => ({ id, add: screen.total([...me.players, id]) - myScreenBase }))
       .filter((c) => c.add > 0)
       .sort((a, b) => b.add - a.add)
       .slice(0, cfg.getPerTeam)
       .map((c) => c.id)
-    // Two-for-two is where depth-for-depth deals live, but pairing every target
-    // with every other squares the search, so only the best few get paired.
-    const targets: string[][] = [
-      ...ranked.map((id) => [id]),
-      ...(cfg.maxGet >= 2 ? combinations2(ranked.slice(0, 8)) : []),
-    ]
-
+    if (!targets.length) continue
+    let beam: State[] = []
     for (const get of targets) {
-      const valueIn = get.reduce((a, id) => a + (market[id] ?? 0), 0)
-      for (const give of packages) {
-        if (give.length < get.length) continue
-        if (get.some((id) => give.includes(id))) continue
-        funnel.combinations++
-        if (valueIn - (packageValue.get(give.join(',')) ?? 0) > cfg.maxValueAsk) {
-          funnel.rejectedValueAsk++
-          continue
-        }
-        const myGain = screen.total(applyTrade(me.players, give, get, capacity, pts)) - screenBase
-        if (myGain < cfg.minMyGain - SCREEN_SLACK) continue
-        const theirGain = screen.total(applyTrade(them.players, get, give, capacity, pts)) - theirScreenBase
-        if (theirGain < cfg.minTheirGain - SCREEN_SLACK) continue
-        shortlist.push({ partnerId: them.rosterId, get, give, screened: myGain })
+      for (const give of mine) {
+        const s = evaluate([give], [get])
+        if (s) beam.push(s)
       }
     }
-  }
-  // Deliberately not truncated by rank. The screen systematically overstates
-  // gains (it sets one lineup from average projections instead of solving each
-  // week), so ranking by it and keeping the top slice selects for exactly the
-  // combinations the exact pass will reject. Its only job is to throw out the
-  // hopeless; everything it lets through gets scored properly.
-  shortlist.sort((a, b) => b.screened - a.screened)
-  funnel.shortlisted = shortlist.length
+    beam = diverseTop(beam, cfg.beamWidth, 0)
 
-  // ---- Pass 2: exact, week by week ----
-  const myExactBase = exact.perWeek(me.players)
-  const theirExactBase = new Map<number, number[]>()
-  const ideas: TradeIdea[] = []
-  for (const cand of shortlist.slice(0, cfg.maxScored)) {
-    const them = others.find((t) => t.rosterId === cand.partnerId)
-    if (!them) continue
-    let theirBase = theirExactBase.get(cand.partnerId)
-    if (!theirBase) {
-      theirBase = exact.perWeek(them.players)
-      theirExactBase.set(cand.partnerId, theirBase)
+    // Growth: one player at a time, on either side, only when it helps.
+    for (let size = 3; size <= cfg.maxPlayers && beam.length; size++) {
+      const next: State[] = []
+      for (const parent of beam) {
+        const moves: [string[], string[]][] = []
+        if (parent.give.length < cfg.maxGive) {
+          for (const id of mine) if (!parent.give.includes(id)) moves.push([[...parent.give, id], parent.get])
+        }
+        if (parent.get.length < cfg.maxGet) {
+          for (const id of theirRoster) if (!parent.get.includes(id)) moves.push([parent.give, [...parent.get, id]])
+        }
+        for (const [give, get] of moves) {
+          const s = evaluate(give, get)
+          if (s && s.objective > parent.objective + 0.05) next.push(s)
+        }
+      }
+      beam = diverseTop(next, cfg.beamWidth, 3)
     }
-    const myAfter = exact.perWeek(applyTrade(me.players, cand.give, cand.get, capacity, pts))
-    const theirAfter = exact.perWeek(applyTrade(them.players, cand.get, cand.give, capacity, pts))
-    const perWeek = exact.weeks.map((week, i) => ({
-      week,
-      mine: round2(myAfter[i] - myExactBase[i]),
-      theirs: round2(theirAfter[i] - theirBase![i]),
-    }))
-    funnel.scored++
-    const myGain = round2(wmean(perWeek.map((w) => w.mine), exact.weights))
-    if (myGain < cfg.minMyGain) {
-      funnel.rejectedMyGain++
-      continue
-    }
-    const theirGain = round2(wmean(perWeek.map((w) => w.theirs), exact.weights))
-    if (theirGain < cfg.minTheirGain) {
-      funnel.rejectedTheirGain++
-      continue
-    }
-    const myCost = round2(
-      wmean(exact.perWeek(me.players.filter((id) => !cand.give.includes(id))).map((v, i) => myExactBase[i] - v), exact.weights),
-    )
-    ideas.push({
-      partnerId: cand.partnerId,
-      get: cand.get,
-      give: cand.give,
-      myGain,
-      theirGain,
-      myCost,
-      valueAsk: round2(cand.get.reduce((a, id) => a + (market[id] ?? 0), 0) - (packageValue.get(cand.give.join(',')) ?? 0)),
-      weeksBetter: perWeek.filter((w) => w.mine > 0.05).length,
-      weeks: perWeek.length,
-      fills: null,
-      mutual: round2(Math.min(myGain, theirGain)),
-      perWeek,
-    })
-  }
 
-  // One row per player worth asking for. Among the packages landing within a
-  // quarter-point of the best return on that player, keep whichever does the
-  // most for the other side — that is the version they actually say yes to.
-  const byTarget = new Map<string, TradeIdea[]>()
-  for (const idea of ideas) {
-    const key = `${idea.partnerId}:${idea.get.join(',')}`
-    const group = byTarget.get(key)
-    if (group) group.push(idea)
-    else byTarget.set(key, [idea])
+    // ---- Exact pass for this partner's most promising deals ----
+    const theirExactBase = exact.perWeek(them.players)
+    const shortlist = diverseTop([...pool.values()], cfg.scoredPerTeam, 20)
+    for (const cand of shortlist) {
+      funnel.scored++
+      if (cand.ask > cfg.maxValueAsk) {
+        funnel.rejectedValueAsk++
+        continue
+      }
+      const myRoster = applyTrade(me.players, cand.give, cand.get, capacity, pts)
+      const theirRosterAfter = applyTrade(them.players, cand.get, cand.give, capacity, pts)
+      const myAfter = exact.perWeek(myRoster)
+      const theirAfter = exact.perWeek(theirRosterAfter)
+      const perWeek = exact.weeks.map((week, i) => ({
+        week,
+        mine: round2(myAfter[i] - myExactBase[i]),
+        theirs: round2(theirAfter[i] - theirExactBase[i]),
+      }))
+      const myGain = round2(wmean(perWeek.map((w) => w.mine), exact.weights))
+      if (myGain < cfg.minMyGain) {
+        funnel.rejectedMyGain++
+        continue
+      }
+      const theirGain = round2(wmean(perWeek.map((w) => w.theirs), exact.weights))
+      if (theirGain < cfg.minTheirGain) {
+        funnel.rejectedTheirGain++
+        continue
+      }
+      const myCost = round2(
+        wmean(exact.perWeek(me.players.filter((id) => !cand.give.includes(id))).map((v, i) => myExactBase[i] - v), exact.weights),
+      )
+      ideas.push({
+        partnerId: them.rosterId,
+        get: cand.get,
+        give: cand.give,
+        shape: tradeShape(cand.give.length, cand.get.length),
+        myGain,
+        theirGain,
+        myCost,
+        valueAsk: round2(cand.ask),
+        weeksBetter: perWeek.filter((w) => w.mine > 0.05).length,
+        weeks: perWeek.length,
+        fills: null,
+        myCuts: cutBy(me.players, cand.give, cand.get, myRoster),
+        theirCuts: cutBy(them.players, cand.get, cand.give, theirRosterAfter),
+        mutual: round2(Math.min(myGain, theirGain)),
+        perWeek,
+      })
+    }
   }
-  const best: TradeIdea[] = []
-  for (const group of byTarget.values()) {
-    const top = Math.max(...group.map((g) => g.myGain))
-    const near = group.filter((g) => g.myGain >= top - 0.25)
-    near.sort((a, b) => b.theirGain - a.theirGain || a.give.length - b.give.length || b.myGain - a.myGain)
-    best.push(near[0])
-  }
-
   funnel.kept = ideas.length
+
+  // ---- Final list ----
+  // Drop padding: if a smaller deal inside this one does at least as well for
+  // both sides, the extra piece is not earning its place.
+  const byKey = new Map(ideas.map((i) => [dealKey(i.give, i.get), i]))
+  const padded = (i: TradeIdea) => {
+    for (const side of ['give', 'get'] as const) {
+      if (i[side].length < 2) continue
+      for (const id of i[side]) {
+        const give = side === 'give' ? i.give.filter((x) => x !== id) : i.give
+        const get = side === 'get' ? i.get.filter((x) => x !== id) : i.get
+        const smaller = byKey.get(dealKey(give, get))
+        if (smaller && smaller.myGain >= i.myGain - 0.05 && smaller.theirGain >= i.theirGain - 0.05) return true
+      }
+    }
+    return false
+  }
+  // Variety: no more than a handful per partner, and no near-copies — a deal
+  // sharing most of its players with one already chosen has to be clearly better.
+  const ranked = ideas
+    .filter((i) => !padded(i))
+    .sort((a, b) => b.myGain - a.myGain || b.mutual - a.mutual)
+  const chosen: TradeIdea[] = []
+  const perPartner = new Map<number, number>()
+  const overlap = (a: TradeIdea, b: TradeIdea) => {
+    const sa = new Set([...a.give, ...a.get])
+    const sb = [...b.give, ...b.get]
+    const shared = sb.filter((id) => sa.has(id)).length
+    return shared / Math.max(sa.size, sb.length)
+  }
+  for (const idea of ranked) {
+    if (chosen.length >= cfg.limit) break
+    if ((perPartner.get(idea.partnerId) ?? 0) >= cfg.perPartner) continue
+    // A near-copy earns a place only as a genuinely different way to pay —
+    // clearly better for them than every version already chosen — and no
+    // deal gets more than three versions.
+    const twins = chosen.filter((c) => c.partnerId === idea.partnerId && overlap(c, idea) >= 0.6)
+    if (twins.length >= 3 || twins.some((t) => idea.theirGain <= t.theirGain + 0.5)) continue
+    chosen.push(idea)
+    perPartner.set(idea.partnerId, (perPartner.get(idea.partnerId) ?? 0) + 1)
+  }
   input.onFunnel?.(funnel)
-  const ranked = best.sort((a, b) => b.myGain - a.myGain || b.mutual - a.mutual).slice(0, cfg.limit)
 
   // Label the hole each surviving deal plugs. Left until last because the
-  // unpruned solve is the expensive one and only rows on screen need it.
+  // unpruned solve is the expensive one and only deals on screen need it.
   const firstWeek = makeLineupEval(slots, players, horizon[0].pts, floor)
+  const slotPts = (ids: string[]) =>
+    firstWeek.assign(ids).assignments.map((p) => (p ? (isWaiverFill(p.id) ? p.pts : (horizon[0].pts[p.id] ?? 0)) : 0))
   const beforeCache = new Map<number, number[]>()
-  for (const idea of ranked) {
+  for (const idea of chosen) {
     const them = others.find((t) => t.rosterId === idea.partnerId)
     if (!them) continue
     let before = beforeCache.get(idea.partnerId)
     if (!before) {
-      before = firstWeek.assign(them.players).assignments.map((p) => (p ? (isWaiverFill(p.id) ? p.pts : (horizon[0].pts[p.id] ?? 0)) : 0))
+      before = slotPts(them.players)
       beforeCache.set(idea.partnerId, before)
     }
-    const after = firstWeek
-      .assign(applyTrade(them.players, idea.get, idea.give, capacity, pts))
-      .assignments.map((p) => (p ? (isWaiverFill(p.id) ? p.pts : (horizon[0].pts[p.id] ?? 0)) : 0))
+    const after = slotPts(applyTrade(them.players, idea.get, idea.give, capacity, pts))
     let bestDelta = 0.05
     for (let i = 0; i < after.length; i++) {
       const delta = after[i] - (before[i] ?? 0)
@@ -703,7 +786,72 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
       }
     }
   }
-  return ranked
+  return chosen
+}
+
+/**
+ * Price one hand-built deal with the same week-by-week math the search uses.
+ * Any makeup, no filters: the builder wants the honest number even for a
+ * terrible offer.
+ */
+export const scoreTrade = (input: {
+  slots: Slot[]
+  players: PlayerMap
+  horizon: Horizon
+  pts: Record<string, number>
+  me: TradeTeam
+  partner: TradeTeam
+  give: string[]
+  get: string[]
+  capacity: number
+  market: Record<string, number>
+  floor?: WaiverFloor
+}): TradeIdea | null => {
+  const { slots, players, horizon, pts, me, partner, give, get, capacity, market } = input
+  if (!horizon.length || (!give.length && !get.length)) return null
+  const floor = input.floor ?? {}
+  const exact = makeHorizonEval(slots, players, horizon, floor)
+  const myBase = exact.perWeek(me.players)
+  const theirBase = exact.perWeek(partner.players)
+  const myRoster = applyTrade(me.players, give, get, capacity, pts)
+  const theirRoster = applyTrade(partner.players, get, give, capacity, pts)
+  const myAfter = exact.perWeek(myRoster)
+  const theirAfter = exact.perWeek(theirRoster)
+  const perWeek = exact.weeks.map((week, i) => ({ week, mine: round2(myAfter[i] - myBase[i]), theirs: round2(theirAfter[i] - theirBase[i]) }))
+  const myGain = round2(wmean(perWeek.map((w) => w.mine), exact.weights))
+  const theirGain = round2(wmean(perWeek.map((w) => w.theirs), exact.weights))
+  const value = (ids: string[]) => ids.reduce((a, id) => a + Math.max(0, market[id] ?? 0), 0)
+  const firstWeek = makeLineupEval(slots, players, horizon[0].pts, floor)
+  const slotPts = (ids: string[]) =>
+    firstWeek.assign(ids).assignments.map((p) => (p ? (isWaiverFill(p.id) ? p.pts : (horizon[0].pts[p.id] ?? 0)) : 0))
+  const before = slotPts(partner.players)
+  const after = slotPts(theirRoster)
+  let fills: TradeIdea['fills'] = null
+  let bestDelta = 0.05
+  for (let i = 0; i < after.length; i++) {
+    const d = after[i] - (before[i] ?? 0)
+    if (d > bestDelta) {
+      bestDelta = d
+      fills = { slot: slots[i].name, index: i, before: round2(before[i] ?? 0), after: round2(after[i]) }
+    }
+  }
+  return {
+    partnerId: partner.rosterId,
+    give,
+    get,
+    shape: tradeShape(give.length, get.length),
+    myGain,
+    theirGain,
+    myCost: round2(wmean(exact.perWeek(me.players.filter((id) => !give.includes(id))).map((v, i) => myBase[i] - v), exact.weights)),
+    valueAsk: round2(value(get) - value(give)),
+    weeksBetter: perWeek.filter((w) => w.mine > 0.05).length,
+    weeks: perWeek.length,
+    fills,
+    myCuts: cutBy(me.players, give, get, myRoster),
+    theirCuts: cutBy(partner.players, get, give, theirRoster),
+    mutual: round2(Math.min(myGain, theirGain)),
+    perWeek,
+  }
 }
 
 // ---------- Who is worth chasing ----------
