@@ -7,6 +7,7 @@
 // geometry flattened onto the page as a contact shadow.
 
 import { paintShadow, paintSticker, StickerPalette } from './stickerArt'
+import { ROLL_RATIO, aimPeel, solvePeel } from './stickerPeel'
 import {
   CANVAS_BLEED,
   EdgeHit,
@@ -16,7 +17,6 @@ import {
   STICKER_HEIGHT,
   STICKER_WIDTH,
   blobPoints,
-  extentFrom,
   isInsideBlob,
   nearestEdge,
 } from './stickerShape'
@@ -29,25 +29,9 @@ const OUTLINE_POINTS = 120
 const HINT_FOLD = 17
 const MAX_TILT = 0.17
 const CAMERA_DISTANCE = 1100
-/** Fraction of the available travel after which the sticker comes off. */
-const DETACH_AT = 0.82
 /** Curl kept while the sticker is off the page, so it does not look rigid. */
 const AIRBORNE_FOLD = 0.16
 const AIRBORNE_LIFT = 96
-
-// Radius of the roll per unit of fold. A fatter tube than a strict
-// half-cylinder (which would be 1/PI): seen from a camera looking straight
-// down at the page, a thin roll foreshortens into a flat crease, while this
-// keeps enough of the curved surface facing the viewer to read as vinyl
-// lifting off the paper.
-const ROLL_RATIO = 0.42
-/** Angle swept by the material between the fold line and the free edge. */
-const ROLL_ANGLE = 1 / ROLL_RATIO
-/** Distance the free edge travels per unit of fold. */
-const PULL_RATIO = Math.hypot(
-  1 - ROLL_RATIO * Math.sin(ROLL_ANGLE),
-  ROLL_RATIO * (1 - Math.cos(ROLL_ANGLE)),
-)
 
 // Physics runs on a fixed step, decoupled from the display's refresh rate, so
 // the springs feel identical on 60Hz and 120Hz screens and stay stable through
@@ -500,6 +484,10 @@ export const createStickerScene = (
   let hoverGloss = 0.15
 
   let mode: Mode = 'idle'
+  // The point on the outline that was grabbed, and where the fold line starts.
+  // They differ when the outline reaches behind the grabbed point (see
+  // supportShift), in which case the fold has to start further back.
+  let handle: Point = { x: 0, y: 0 }
   let grab: Point = { x: 0, y: 0 }
   let direction: Point = { x: 1, y: 0 }
   let inward: Point = { x: 1, y: 0 }
@@ -582,10 +570,12 @@ export const createStickerScene = (
   }
 
   const aimAt = (hit: EdgeHit) => {
-    grab = hit.point
+    const aim = aimPeel(outline, hit.point, hit.inward)
+    handle = hit.point
     inward = hit.inward
     direction = hit.inward
-    extent = Math.max(24, extentFrom(outline, hit.point, hit.inward))
+    grab = aim.origin
+    extent = aim.extent
   }
 
   const updateHover = () => {
@@ -611,40 +601,12 @@ export const createStickerScene = (
   }
 
   const peelTarget = () => {
-    const dragX = pointer.x - dragStart.x
-    const dragY = -(pointer.y - dragStart.y)
-    // Outward normal in shader space (y up). `inward` is stored in local space
-    // (y down), so negating it and flipping y leaves x negated and y as-is.
-    const outX = -inward.x
-    const outY = inward.y
-
-    const along = dragX * outX + dragY * outY
-    const perpX = dragX - outX * along
-    const perpY = dragY - outY * along
-    const pull = Math.max(0, along) + 0.35 * Math.hypot(perpX, perpY)
-
-    const dragLength = Math.hypot(dragX, dragY)
-    if (dragLength > 6) {
-      // The fold axis leans into whichever way the pointer is pulling, so the
-      // curl reads as a response to the gesture rather than a fixed animation.
-      const pullX = -dragX / dragLength
-      const pullY = -dragY / dragLength
-      const inX = inward.x
-      const inY = -inward.y
-      const alignment = pullX * inX + pullY * inY
-      if (alignment > 0.15) {
-        const mixX = inX * 0.4 + pullX * 0.6
-        const mixY = inY * 0.4 + pullY * 0.6
-        const length = Math.hypot(mixX, mixY) || 1
-        direction = { x: mixX / length, y: -mixY / length }
-      } else {
-        direction = inward
-      }
-    }
-
-    const target = clamp(pull / PULL_RATIO, 0, extent * 1.04)
-    if (target > extent * DETACH_AT) mode = 'airborne'
-    return target
+    const peel = solvePeel(outline, handle, inward, pointer.x - dragStart.x, pointer.y - dragStart.y)
+    grab = peel.origin
+    direction = peel.direction
+    extent = peel.extent
+    if (peel.detached) mode = 'airborne'
+    return peel.fold
   }
 
   const updateTargets = () => {

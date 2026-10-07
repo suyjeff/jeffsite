@@ -80,8 +80,11 @@ export const STAGE_MARGIN = 6
  */
 export const CANVAS_BLEED = 72
 
-/** Distance from the outline at which the peel affordance starts to show. */
-export const GRAB_BAND = 34
+/**
+ * How far outside the outline the sticker can still be grabbed, and where the
+ * hover lift starts to show.
+ */
+export const GRAB_BAND = 44
 
 export type Point = { x: number; y: number }
 
