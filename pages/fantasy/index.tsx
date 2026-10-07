@@ -93,7 +93,8 @@ const FantasyPage = () => {
     return [current, current - 1, current - 2].map(String)
   }, [data])
 
-  const update = (patch: Partial<Prefs>) => prefs && setPrefs({ ...prefs, ...patch })
+  // Functional form, so two updates in one handler (Model's "Reset all") both land.
+  const update = (patch: Partial<Prefs>) => setPrefs((p) => (p ? { ...p, ...patch } : p))
 
   const myTeam = analysis && analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
   const mySeason = myTeam ? analysis!.seasonById[myTeam.rosterId] : null
@@ -213,7 +214,7 @@ const FantasyPage = () => {
       )}
 
       {data && analysis && prefs ? (
-        <div className={cx(loading && 'opacity-60 transition-opacity')}>
+        <div key={data.league.league_id} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'me' && <MeView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'power' && (

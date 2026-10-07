@@ -464,6 +464,8 @@ describe('scoreTrade', () => {
     expect(scored.myGain).toBeCloseTo(idea.myGain, 2)
     expect(scored.theirGain).toBeCloseTo(idea.theirGain, 2)
     expect(scored.perWeek).toEqual(idea.perWeek)
+    // Same scorer underneath, so the whole card matches, labels and cuts included.
+    expect(scored).toEqual(idea)
   })
   it('scores lopsided offers honestly instead of filtering them', () => {
     const scored = scoreTrade({ ...base, give: ['a_spare'], get: ['b_wr1'] })!

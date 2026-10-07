@@ -23,10 +23,11 @@ const RosterTable = ({ data, analysis, rosterId, basis }: { data: LeagueData; an
   const { values, posRanks } = analysis
 
   const rows: Row[] = useMemo(() => {
-    const starters = (team.roster.starters ?? []).filter((s) => s && s !== '0')
-    const starterSet = new Set(starters)
+    // Index slots on the unfiltered list: an empty slot ('0') still holds its place.
+    const slotted = team.roster.starters ?? []
+    const starterSet = new Set(slotted.filter((s) => s && s !== '0'))
     const slotNames = (data.league.roster_positions ?? []).filter((p) => !NON_START.has(p))
-    const out: Row[] = starters.map((id, i) => ({ id, slot: (slotNames[i] ?? 'ST').replace('SUPER_FLEX', 'SF'), starter: true }))
+    const out: Row[] = slotted.flatMap((id, i) => (id && id !== '0' ? [{ id, slot: (slotNames[i] ?? 'ST').replace('SUPER_FLEX', 'SF'), starter: true }] : []))
     const reserve = new Set(team.roster.reserve ?? [])
     const taxi = new Set(team.roster.taxi ?? [])
     for (const id of team.players) {

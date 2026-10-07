@@ -85,6 +85,20 @@ export const buildTeamWeeks = (
   return out
 }
 
+/** Opponent per team per week, keyed by week so a week without a matchup stays a gap. */
+export const opponentsByWeek = (matchupsByWeek: Record<number, SleeperMatchup[]>, weeks: number[]): Record<number, Record<number, number>> => {
+  const out: Record<number, Record<number, number>> = {}
+  for (const week of weeks) {
+    const ms = matchupsByWeek[week] ?? []
+    for (const m of ms) {
+      if (m.matchup_id == null) continue
+      const opp = ms.find((o) => o.matchup_id === m.matchup_id && o.roster_id !== m.roster_id)
+      if (opp) (out[m.roster_id] ??= {})[week] = opp.roster_id
+    }
+  }
+  return out
+}
+
 export const futureOpponents = (
   matchupsByWeek: Record<number, SleeperMatchup[]>,
   futureWeeks: number[],

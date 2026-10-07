@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
-import { DEFAULT_TRADE_CONFIG, findTargets, findTrades, scoreTrade, type TradeIdea, type TradeShape } from '../../../lib/fantasy/trades'
+import { DEFAULT_TRADE_CONFIG, SUGGESTED_TRADE_CONFIG, findTargets, findTrades, scoreTrade, type TradeIdea, type TradeShape } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule } from '../ContextNotes'
 import PlayerName from '../PlayerName'
@@ -85,7 +85,7 @@ const TradesView = ({
   const search = useMemo(() => {
     if (!base) return { ideas: [] as TradeIdea[], ms: 0 }
     const t0 = performance.now()
-    const ideas = findTrades({ ...base, others, config: { minTheirGain, maxValueAsk, limit: 80, perPartner: 8 } })
+    const ideas = findTrades({ ...base, others, config: { ...SUGGESTED_TRADE_CONFIG, minTheirGain, maxValueAsk } })
     return { ideas, ms: performance.now() - t0 }
   }, [base, others, minTheirGain, maxValueAsk])
 

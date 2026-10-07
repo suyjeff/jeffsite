@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
-import type { PowerWeights } from '../../../lib/fantasy/power'
+import { opponentsByWeek, type PowerWeights } from '../../../lib/fantasy/power'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DivergingStacks, Legend } from '../charts'
 import { Avatar, Badge, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, type Column } from '../ui'
@@ -261,10 +261,11 @@ const PowerView = ({
 
 /** Remaining regular-season opponents, shaded by how strong each one is. */
 const ScheduleGrid = ({ data, analysis, onTeam }: { data: LeagueData; analysis: Analysis; onTeam: (id: number) => void }) => {
-  const { teams, powerById, seasonById, myRosterId, teamById } = analysis
+  const { teams, powerById, myRosterId, teamById } = analysis
   const weeks = data.futureWeeks
   const short = (name: string) => (name.length > 9 ? `${name.slice(0, 8)}…` : name)
   const rows = [...teams].sort((a, b) => (powerById[b.rosterId].sos ?? 0) - (powerById[a.rosterId].sos ?? 0))
+  const byWeek = useMemo(() => opponentsByWeek(data.matchupsByWeek, weeks), [data.matchupsByWeek, weeks])
   if (!weeks.length) return <Panel title="Remaining schedule">No regular-season weeks left.</Panel>
   return (
     <Panel title="Remaining schedule · hardest first" pad={false} actions={<span>shade = opponent power</span>}>
@@ -283,7 +284,7 @@ const ScheduleGrid = ({ data, analysis, onTeam }: { data: LeagueData; analysis: 
           </thead>
           <tbody>
             {rows.map((t) => {
-              const opps = seasonById[t.rosterId]?.remainingOpponents ?? []
+              const opps = byWeek[t.rosterId] ?? {}
               return (
                 <tr key={t.rosterId}>
                   <td className="sticky left-0 z-10 bg-ff-panel px-2 py-1">
@@ -292,8 +293,8 @@ const ScheduleGrid = ({ data, analysis, onTeam }: { data: LeagueData; analysis: 
                     </button>
                   </td>
                   <td className="num px-1 text-center text-ff-text">{fmt(powerById[t.rosterId].sos, 0)}</td>
-                  {weeks.map((w, i) => {
-                    const opp = opps[i]
+                  {weeks.map((w) => {
+                    const opp = opps[w]
                     if (opp == null) return <td key={w} className="h-8 rounded-[4px] bg-ff-sunken text-center text-ff-muted">–</td>
                     const score = powerById[opp]?.score ?? 50
                     return (

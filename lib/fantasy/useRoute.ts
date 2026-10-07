@@ -32,7 +32,8 @@ export const useRoute = <S extends string>(sections: readonly S[], fallback: S) 
   const setSub = useCallback(
     (sub: string) => {
       const next = `#${route.section}/${sub}`
-      window.history.replaceState(null, '', next)
+      // Keep the existing state: Next's router ignores popstate entries without its own.
+      window.history.replaceState(window.history.state, '', next)
       setRoute({ section: route.section, sub })
     },
     [route.section],

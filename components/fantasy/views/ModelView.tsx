@@ -4,7 +4,7 @@ import { AVAILABILITY_PRIOR_GAMES, BASE_AVAILABILITY, HEALTHY_DECAY, NEXT_MAN_SH
 import { starterDemand } from '../../../lib/fantasy/lineup'
 import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../../../lib/fantasy/power'
 import { clearFantasyCache } from '../../../lib/fantasy/sleeper'
-import { DEFAULT_TRADE_CONFIG, DEFAULT_WAIVER_DEPTH, type TradeConfig } from '../../../lib/fantasy/trades'
+import { DEFAULT_TRADE_CONFIG, DEFAULT_WAIVER_DEPTH, SUGGESTED_TRADE_CONFIG, type TradeConfig } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DEFAULT_MODEL, type ModelConfig } from '../../../lib/fantasy/war'
 import { HBars, Histogram, Legend, MiniLines } from '../charts'
@@ -617,8 +617,8 @@ const CONFIG_NOTES: Record<keyof TradeConfig, string> = {
   getPerTeam: 'Their players seeding the search, by what each adds to you.',
   beamWidth: 'Partial deals kept per partner at each growth step.',
   minMyGain: 'Pts/wk the deal must add to your optimal lineup.',
-  minTheirGain: 'Pts/wk it must add to theirs. Adjustable on Trades.',
-  maxValueAsk: 'Market value you may ask for beyond what you send. Adjustable on Trades.',
+  minTheirGain: 'Pts/wk it must add to theirs. Default; the Limits sliders on Trades override it.',
+  maxValueAsk: 'Market value you may ask for beyond what you send. Default; the Limits sliders on Trades override it.',
   scoredPerTeam: 'Shortlist per partner that gets exact week-by-week scoring.',
   perPartner: 'Most suggestions from one roster.',
   limit: 'Suggestions returned.',
@@ -700,8 +700,13 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
             ]}
           />
         </Panel>
-        <Panel title="Search config" pad={false} actions={<span className="font-mono text-[10.5px]">DEFAULT_TRADE_CONFIG</span>}>
-          <Spec rows={(Object.keys(DEFAULT_TRADE_CONFIG) as (keyof TradeConfig)[]).map((k) => ({ k, v: DEFAULT_TRADE_CONFIG[k], note: CONFIG_NOTES[k] }))} />
+        <Panel title="Search config, as the Trades page runs it" pad={false}>
+          <Spec
+            rows={(Object.keys(DEFAULT_TRADE_CONFIG) as (keyof TradeConfig)[]).map((k) => {
+              const live = SUGGESTED_TRADE_CONFIG[k] ?? DEFAULT_TRADE_CONFIG[k]
+              return { k, v: live, note: live !== DEFAULT_TRADE_CONFIG[k] ? `${CONFIG_NOTES[k]} Library default ${DEFAULT_TRADE_CONFIG[k]}.` : CONFIG_NOTES[k] }
+            })}
+          />
         </Panel>
       </div>
 

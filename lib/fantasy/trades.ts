@@ -468,6 +468,12 @@ export const DEFAULT_TRADE_CONFIG: TradeConfig = {
   limit: 40,
 }
 
+/**
+ * What the Trades page runs on top of the defaults: a longer list, since the
+ * page groups near-copies into one card and filters by makeup and partner.
+ */
+export const SUGGESTED_TRADE_CONFIG: Partial<TradeConfig> = { limit: 80, perPartner: 8 }
+
 /** Shape of a deal from your side: who sends more bodies. */
 export type TradeShape = 'one-for-one' | 'consolidate' | 'depth' | 'swap'
 
@@ -527,6 +533,7 @@ export type TradeFunnel = {
   combinations: number
   /** Deals that reached the exact week-by-week pass. */
   scored: number
+  /** Packages screened out for asking too much open-market value; exact already, so cut before the exact pass. */
   rejectedValueAsk: number
   rejectedMyGain: number
   rejectedTheirGain: number
@@ -561,6 +568,87 @@ const cutBy = (before: string[], out: string[], incoming: string[], after: strin
 }
 
 /**
+ * The exact week-by-week pricing of a deal, shared by the search and the
+ * builder so a suggestion card and its "Adjust" view always agree.
+ */
+const makeDealScorer = (slots: Slot[], players: PlayerMap, horizon: Horizon, floor: WaiverFloor, capacity: number, pts: Record<string, number>, market: Record<string, number>) => {
+  const exact = makeHorizonEval(slots, players, horizon, floor)
+  const firstWeek = makeLineupEval(slots, players, horizon[0].pts, floor)
+  // A player below replacement has no trade value, not negative value — otherwise
+  // asking for someone's worst bench body would shave the premium you ask for.
+  const valueOf = (ids: string[]) => ids.reduce((a, id) => a + Math.max(0, market[id] ?? 0), 0)
+  const bases = new Map<number, number[]>()
+  const baseOf = (team: TradeTeam) => {
+    let b = bases.get(team.rosterId)
+    if (!b) bases.set(team.rosterId, (b = exact.perWeek(team.players)))
+    return b
+  }
+  // What sending a set costs your lineup before anything comes back. Many deals share a give side.
+  const costs = new Map<string, number>()
+  const myCost = (me: TradeTeam, give: string[]) => {
+    const key = [...give].sort().join(',')
+    let c = costs.get(key)
+    if (c === undefined) {
+      const base = baseOf(me)
+      c = round2(wmean(exact.perWeek(me.players.filter((id) => !give.includes(id))).map((v, i) => base[i] - v), exact.weights))
+      costs.set(key, c)
+    }
+    return c
+  }
+  const slotPts = (ids: string[]) => firstWeek.assign(ids).assignments.map((p) => (p ? (isWaiverFill(p.id) ? p.pts : (horizon[0].pts[p.id] ?? 0)) : 0))
+
+  /** Gains, cuts and value ask. `fills` is left null; label it with `fillsFor`. */
+  const score = (me: TradeTeam, partner: TradeTeam, give: string[], get: string[]): TradeIdea => {
+    const myBase = baseOf(me)
+    const theirBase = baseOf(partner)
+    const myRoster = applyTrade(me.players, give, get, capacity, pts)
+    const theirRoster = applyTrade(partner.players, get, give, capacity, pts)
+    const myAfter = exact.perWeek(myRoster)
+    const theirAfter = exact.perWeek(theirRoster)
+    const perWeek = exact.weeks.map((week, i) => ({ week, mine: round2(myAfter[i] - myBase[i]), theirs: round2(theirAfter[i] - theirBase[i]) }))
+    const myGain = round2(wmean(perWeek.map((w) => w.mine), exact.weights))
+    const theirGain = round2(wmean(perWeek.map((w) => w.theirs), exact.weights))
+    return {
+      partnerId: partner.rosterId,
+      give,
+      get,
+      shape: tradeShape(give.length, get.length),
+      myGain,
+      theirGain,
+      myCost: myCost(me, give),
+      valueAsk: round2(valueOf(get) - valueOf(give)),
+      weeksBetter: perWeek.filter((w) => w.mine > 0.05).length,
+      weeks: perWeek.length,
+      fills: null,
+      myCuts: cutBy(me.players, give, get, myRoster),
+      theirCuts: cutBy(partner.players, get, give, theirRoster),
+      mutual: round2(Math.min(myGain, theirGain)),
+      perWeek,
+    }
+  }
+
+  /** The partner's starting slot that improves most in the first week, if any does. */
+  const before = new Map<number, number[]>()
+  const fillsFor = (partner: TradeTeam, idea: TradeIdea): TradeIdea['fills'] => {
+    let b = before.get(partner.rosterId)
+    if (!b) before.set(partner.rosterId, (b = slotPts(partner.players)))
+    const after = slotPts(applyTrade(partner.players, idea.get, idea.give, capacity, pts))
+    let fills: TradeIdea['fills'] = null
+    let bestDelta = 0.05
+    for (let i = 0; i < after.length; i++) {
+      const delta = after[i] - (b[i] ?? 0)
+      if (delta > bestDelta) {
+        bestDelta = delta
+        fills = { slot: slots[i].name, index: i, before: round2(b[i] ?? 0), after: round2(after[i]) }
+      }
+    }
+    return fills
+  }
+
+  return { score, fillsFor, valueOf }
+}
+
+/**
  * Search every other roster for deals that leave both lineups better, in any
  * makeup up to the size caps: one-for-one, three-for-one consolidations,
  * one-for-three depth deals, two-for-two swaps.
@@ -585,12 +673,10 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   if (!horizon.length) return []
 
   const screen = makeLineupEval(slots, players, pts, floor)
-  const exact = makeHorizonEval(slots, players, horizon, floor)
+  const scorer = makeDealScorer(slots, players, horizon, floor, capacity, pts, market)
+  const { valueOf } = scorer
   const myScreenBase = screen.total(me.players)
   const mine = me.players.filter((id) => players[id])
-  // A player below replacement has no trade value, not negative value — otherwise
-  // asking for someone's worst bench body would shave the premium you ask for.
-  const valueOf = (ids: string[]) => ids.reduce((a, id) => a + Math.max(0, market[id] ?? 0), 0)
 
   const funnel: TradeFunnel = { combinations: 0, scored: 0, rejectedValueAsk: 0, rejectedMyGain: 0, rejectedTheirGain: 0, kept: 0 }
 
@@ -609,26 +695,29 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
     0.15 * Math.max(0, size - 2)
 
   const ideas: TradeIdea[] = []
-  const myExactBase = exact.perWeek(me.players)
 
   for (const them of others) {
     const theirRoster = them.players.filter((id) => players[id])
     const theirScreenBase = screen.total(them.players)
-    const seen = new Set<string>()
+    const seen = new Map<string, State>()
     const pool = new Map<string, State>()
 
-    const evaluate = (give: string[], get: string[]): State | null => {
+    /** Screen a deal once; later parents reaching the same deal get the cached state. */
+    const evaluate = (give: string[], get: string[]): State => {
       const key = dealKey(give, get)
-      if (seen.has(key)) return null
-      seen.add(key)
+      const cached = seen.get(key)
+      if (cached) return cached
       funnel.combinations++
       const my = screen.total(applyTrade(me.players, give, get, capacity, pts)) - myScreenBase
       const their = screen.total(applyTrade(them.players, get, give, capacity, pts)) - theirScreenBase
       const ask = valueOf(get) - valueOf(give)
       const state = { give, get, my, their, ask, objective: objective(my, their, ask, give.length + get.length) }
-      // Anything within a point of every bar goes to the exact pass: the
-      // screen misses in both directions by up to a point or so.
-      if (my >= cfg.minMyGain - 1 && their >= cfg.minTheirGain - 1 && ask <= cfg.maxValueAsk + 1) pool.set(key, state)
+      seen.set(key, state)
+      // Anything within a point of the gain bars goes to the exact pass: the
+      // screen misses in both directions by up to a point or so. The value
+      // ask is already exact, so it is cut here rather than wasting a slot.
+      if (ask > cfg.maxValueAsk) funnel.rejectedValueAsk++
+      else if (my >= cfg.minMyGain - 1 && their >= cfg.minTheirGain - 1) pool.set(key, state)
       return state
     }
 
@@ -641,17 +730,14 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
       .map((c) => c.id)
     if (!targets.length) continue
     let beam: State[] = []
-    for (const get of targets) {
-      for (const give of mine) {
-        const s = evaluate([give], [get])
-        if (s) beam.push(s)
-      }
-    }
+    for (const get of targets) for (const give of mine) beam.push(evaluate([give], [get]))
     beam = diverseTop(beam, cfg.beamWidth, 0)
 
     // Growth: one player at a time, on either side, only when it helps.
     for (let size = 3; size <= cfg.maxPlayers && beam.length; size++) {
       const next: State[] = []
+      // A child reachable from two parents is judged against each of them, but queued once.
+      const queued = new Set<State>()
       for (const parent of beam) {
         const moves: [string[], string[]][] = []
         if (parent.give.length < cfg.maxGive) {
@@ -662,60 +748,22 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
         }
         for (const [give, get] of moves) {
           const s = evaluate(give, get)
-          if (s && s.objective > parent.objective + 0.05) next.push(s)
+          if (s.objective > parent.objective + 0.05 && !queued.has(s)) {
+            queued.add(s)
+            next.push(s)
+          }
         }
       }
       beam = diverseTop(next, cfg.beamWidth, 3)
     }
 
     // ---- Exact pass for this partner's most promising deals ----
-    const theirExactBase = exact.perWeek(them.players)
-    const shortlist = diverseTop([...pool.values()], cfg.scoredPerTeam, 20)
-    for (const cand of shortlist) {
+    for (const cand of diverseTop([...pool.values()], cfg.scoredPerTeam, 20)) {
       funnel.scored++
-      if (cand.ask > cfg.maxValueAsk) {
-        funnel.rejectedValueAsk++
-        continue
-      }
-      const myRoster = applyTrade(me.players, cand.give, cand.get, capacity, pts)
-      const theirRosterAfter = applyTrade(them.players, cand.get, cand.give, capacity, pts)
-      const myAfter = exact.perWeek(myRoster)
-      const theirAfter = exact.perWeek(theirRosterAfter)
-      const perWeek = exact.weeks.map((week, i) => ({
-        week,
-        mine: round2(myAfter[i] - myExactBase[i]),
-        theirs: round2(theirAfter[i] - theirExactBase[i]),
-      }))
-      const myGain = round2(wmean(perWeek.map((w) => w.mine), exact.weights))
-      if (myGain < cfg.minMyGain) {
-        funnel.rejectedMyGain++
-        continue
-      }
-      const theirGain = round2(wmean(perWeek.map((w) => w.theirs), exact.weights))
-      if (theirGain < cfg.minTheirGain) {
-        funnel.rejectedTheirGain++
-        continue
-      }
-      const myCost = round2(
-        wmean(exact.perWeek(me.players.filter((id) => !cand.give.includes(id))).map((v, i) => myExactBase[i] - v), exact.weights),
-      )
-      ideas.push({
-        partnerId: them.rosterId,
-        get: cand.get,
-        give: cand.give,
-        shape: tradeShape(cand.give.length, cand.get.length),
-        myGain,
-        theirGain,
-        myCost,
-        valueAsk: round2(cand.ask),
-        weeksBetter: perWeek.filter((w) => w.mine > 0.05).length,
-        weeks: perWeek.length,
-        fills: null,
-        myCuts: cutBy(me.players, cand.give, cand.get, myRoster),
-        theirCuts: cutBy(them.players, cand.get, cand.give, theirRosterAfter),
-        mutual: round2(Math.min(myGain, theirGain)),
-        perWeek,
-      })
+      const idea = scorer.score(me, them, cand.give, cand.get)
+      if (idea.myGain < cfg.minMyGain) funnel.rejectedMyGain++
+      else if (idea.theirGain < cfg.minTheirGain) funnel.rejectedTheirGain++
+      else ideas.push(idea)
     }
   }
   funnel.kept = ideas.length
@@ -764,27 +812,9 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
 
   // Label the hole each surviving deal plugs. Left until last because the
   // unpruned solve is the expensive one and only deals on screen need it.
-  const firstWeek = makeLineupEval(slots, players, horizon[0].pts, floor)
-  const slotPts = (ids: string[]) =>
-    firstWeek.assign(ids).assignments.map((p) => (p ? (isWaiverFill(p.id) ? p.pts : (horizon[0].pts[p.id] ?? 0)) : 0))
-  const beforeCache = new Map<number, number[]>()
   for (const idea of chosen) {
     const them = others.find((t) => t.rosterId === idea.partnerId)
-    if (!them) continue
-    let before = beforeCache.get(idea.partnerId)
-    if (!before) {
-      before = slotPts(them.players)
-      beforeCache.set(idea.partnerId, before)
-    }
-    const after = slotPts(applyTrade(them.players, idea.get, idea.give, capacity, pts))
-    let bestDelta = 0.05
-    for (let i = 0; i < after.length; i++) {
-      const delta = after[i] - (before[i] ?? 0)
-      if (delta > bestDelta) {
-        bestDelta = delta
-        idea.fills = { slot: slots[i].name, index: i, before: round2(before[i] ?? 0), after: round2(after[i]) }
-      }
-    }
+    if (them) idea.fills = scorer.fillsFor(them, idea)
   }
   return chosen
 }
@@ -809,49 +839,10 @@ export const scoreTrade = (input: {
 }): TradeIdea | null => {
   const { slots, players, horizon, pts, me, partner, give, get, capacity, market } = input
   if (!horizon.length || (!give.length && !get.length)) return null
-  const floor = input.floor ?? {}
-  const exact = makeHorizonEval(slots, players, horizon, floor)
-  const myBase = exact.perWeek(me.players)
-  const theirBase = exact.perWeek(partner.players)
-  const myRoster = applyTrade(me.players, give, get, capacity, pts)
-  const theirRoster = applyTrade(partner.players, get, give, capacity, pts)
-  const myAfter = exact.perWeek(myRoster)
-  const theirAfter = exact.perWeek(theirRoster)
-  const perWeek = exact.weeks.map((week, i) => ({ week, mine: round2(myAfter[i] - myBase[i]), theirs: round2(theirAfter[i] - theirBase[i]) }))
-  const myGain = round2(wmean(perWeek.map((w) => w.mine), exact.weights))
-  const theirGain = round2(wmean(perWeek.map((w) => w.theirs), exact.weights))
-  const value = (ids: string[]) => ids.reduce((a, id) => a + Math.max(0, market[id] ?? 0), 0)
-  const firstWeek = makeLineupEval(slots, players, horizon[0].pts, floor)
-  const slotPts = (ids: string[]) =>
-    firstWeek.assign(ids).assignments.map((p) => (p ? (isWaiverFill(p.id) ? p.pts : (horizon[0].pts[p.id] ?? 0)) : 0))
-  const before = slotPts(partner.players)
-  const after = slotPts(theirRoster)
-  let fills: TradeIdea['fills'] = null
-  let bestDelta = 0.05
-  for (let i = 0; i < after.length; i++) {
-    const d = after[i] - (before[i] ?? 0)
-    if (d > bestDelta) {
-      bestDelta = d
-      fills = { slot: slots[i].name, index: i, before: round2(before[i] ?? 0), after: round2(after[i]) }
-    }
-  }
-  return {
-    partnerId: partner.rosterId,
-    give,
-    get,
-    shape: tradeShape(give.length, get.length),
-    myGain,
-    theirGain,
-    myCost: round2(wmean(exact.perWeek(me.players.filter((id) => !give.includes(id))).map((v, i) => myBase[i] - v), exact.weights)),
-    valueAsk: round2(value(get) - value(give)),
-    weeksBetter: perWeek.filter((w) => w.mine > 0.05).length,
-    weeks: perWeek.length,
-    fills,
-    myCuts: cutBy(me.players, give, get, myRoster),
-    theirCuts: cutBy(partner.players, get, give, theirRoster),
-    mutual: round2(Math.min(myGain, theirGain)),
-    perWeek,
-  }
+  const scorer = makeDealScorer(slots, players, horizon, input.floor ?? {}, capacity, pts, market)
+  const idea = scorer.score(me, partner, give, get)
+  idea.fills = scorer.fillsFor(partner, idea)
+  return idea
 }
 
 // ---------- Who is worth chasing ----------

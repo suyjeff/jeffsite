@@ -283,12 +283,14 @@ const initials = (name: string) =>
     .join('')
 
 const Img = ({ src, alt, size, className, fallback }: { src: string | null; alt: string; size: number; className?: string; fallback: string }) => {
-  const [failed, setFailed] = useState(false)
+  // Remember which src failed, so a slot reused for another image tries again.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  const failed = failedSrc === src
   return (
     <span className={cx('relative inline-flex shrink-0 items-center justify-center overflow-hidden bg-ff-sunken text-ff-muted ring-1 ring-ff-line', className)} style={{ width: size, height: size }}>
       {src && !failed ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} className="h-full w-full object-cover object-top" />
+        <img src={src} alt={alt} loading="lazy" decoding="async" onError={() => setFailedSrc(src)} className="h-full w-full object-cover object-top" />
       ) : (
         <span className="font-mono font-medium" style={{ fontSize: Math.max(9, size * 0.36) }}>
           {fallback}
