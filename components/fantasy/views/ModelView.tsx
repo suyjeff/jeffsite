@@ -572,7 +572,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
         </Panel>
         <Panel title="Points that move to teammates">
           <HBars rows={Object.entries(TRANSFER).map(([k, v]) => ({ key: k, label: k, value: v }))} format={(v) => pct(v)} max={1} slot="s2" />
-          <p className="mt-2 text-[11.5px] text-ff-muted">Measured on 2026 weeks where Sleeper zeroes a starter and later brings them back.</p>
+          <p className="mt-2 text-[11.5px] text-ff-muted">Measured on 2026 weeks where Sleeper zeroes a starter and later brings him back.</p>
         </Panel>
       </div>
 
@@ -584,7 +584,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
           defaultSort="net"
           columns={[
             { key: 'p', label: 'Player', sticky: true, sort: (r) => players[r.id]?.name ?? '', render: (r) => <PlayerName player={players[r.id]} id={r.id} size={22} sub={owner(r.id)} /> },
-            { key: 'raw', label: 'Sleeper', align: 'right', sort: (r) => r.c.raw, render: (r) => fmt(r.c.raw) },
+            { key: 'raw', label: 'Base', align: 'right', title: 'Before injury and role adjustments', sort: (r) => r.c.raw, render: (r) => fmt(r.c.raw) },
             { key: 'adj', label: 'Exp', align: 'right', sort: (r) => r.c.adjusted, render: (r) => <span className="text-ff-text">{fmt(r.c.adjusted)}</span> },
             {
               key: 'lost',
@@ -773,6 +773,7 @@ const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analy
     { src: '/schedule/nfl/regular/{s}', what: 'NFL schedule', n: `${Math.round(scheduleGames)} games`, ttl: '12h' },
     { src: '/players/nfl/trending/add', what: 'Trending adds', n: data.trending.length, ttl: '1h' },
     { src: '/league/{id}/transactions/{w}', what: `Transactions${data.history ? ` (+${data.history.season})` : ''}`, n: data.transactions.length + (data.history?.transactions.length ?? 0), ttl: 'past 24h · live 10m' },
+    { src: '/lines/available?sports[]=nfl', what: `Prop lines${data.market ? ` (wk ${data.market.week})` : ''}`, n: data.market ? `${data.market.props} props · ${data.market.players} players` : 'none open', ttl: '20m' },
     { src: 'github:dynastyprocess/…/db_fpecr_latest.csv', what: `FantasyPros ECR ${data.consensus?.date ?? ''}`, n: data.consensus ? `${data.consensus.matched} matched` : 'unavailable', ttl: '12h' },
   ]
   return (

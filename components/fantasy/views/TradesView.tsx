@@ -364,12 +364,12 @@ const TradesView = ({
                 { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} sub={t.ownerId == null ? <span className="text-ff-pos">free agent</span> : teamById[t.ownerId]?.name} /> },
                 { key: 'slot', label: 'Starts at', hideBelow: 'sm', render: (t) => <span className="font-mono text-[11.5px] text-ff-text2">{t.slot ?? '—'}</span> },
                 { key: 'add', label: 'Adds', align: 'right', title: 'Points per week added to your optimal lineup', sort: (t) => t.add, render: (t) => <Num value={t.add} digits={2} signed /> },
-                { key: 'cost', label: 'Owner loses', align: 'right', title: 'Points per week the owner’s lineup loses without this player', sort: (t) => t.ownerCost, render: (t) => (t.ownerId == null ? <span className="text-ff-muted">–</span> : <Num value={t.ownerCost} digits={2} />) },
+                { key: 'cost', label: 'Owner loses', align: 'right', title: 'Points per week his own lineup loses without him', sort: (t) => t.ownerCost, render: (t) => (t.ownerId == null ? <span className="text-ff-muted">–</span> : <Num value={t.ownerCost} digits={2} />) },
                 {
                   key: 'surplus',
                   label: 'Surplus',
                   align: 'right',
-                  title: 'Adds to you minus what the owner loses. Positive: worth more to you than to them.',
+                  title: 'Adds to you minus what his owner loses. Positive: worth more to you than to them.',
                   sort: (t) => t.surplus,
                   render: (t) => (t.ownerId == null ? <span className="text-ff-muted">–</span> : <Num value={t.surplus} digits={2} signed />),
                 },
@@ -482,7 +482,7 @@ const TradesView = ({
                   ),
                 },
                 { key: 'play', label: 'Plays', align: 'right', sort: (r) => data.context[r.id]?.play ?? 1, render: (r) => pct(data.context[r.id]?.play) },
-                { key: 'raw', label: 'Sleeper', align: 'right', hideBelow: 'sm', title: "Sleeper's projection, points per week", sort: (r) => data.context[r.id]?.raw ?? 0, render: (r) => fmt(data.context[r.id]?.raw) },
+                { key: 'raw', label: 'Base', align: 'right', hideBelow: 'sm', title: 'Points per week before injury and role adjustments (Sleeper, coming week blended with prop lines)', sort: (r) => data.context[r.id]?.raw ?? 0, render: (r) => fmt(data.context[r.id]?.raw) },
                 { key: 'adj', label: 'Expected', align: 'right', title: 'After chance of playing and teammates’ absences', sort: (r) => data.context[r.id]?.adjusted ?? 0, render: (r) => fmt(data.context[r.id]?.adjusted) },
                 {
                   key: 'chg',

@@ -302,6 +302,32 @@ export const getTransactions = (leagueId: string, week: number, isPast: boolean)
       })),
   })
 
+/**
+ * One week of projected stat lines, kept only for players with a real share
+ * of the week (2+ PPR points), so the cached copy is a few dozen KB rather
+ * than the raw ~650KB. Feeds the prop-line scoring, which needs the
+ * categories the lines do not price (fumbles, two-pointers, bonuses).
+ */
+export const getWeekStatLines = (season: string, week: number) =>
+  cachedGet<WeekStats, WeekStats>(`/projections/nfl/regular/${season}/${week}`, 3 * HOUR, {
+    key: `proj-lines:${season}:${week}`,
+    transform: (raw) => {
+      const out: WeekStats = {}
+      for (const id of Object.keys(raw)) if ((raw[id]?.pts_ppr ?? 0) >= 2 || (raw[id]?.fgm ?? 0) > 0) out[id] = raw[id]
+      return out
+    },
+  })
+
+// ---------- Market lines ----------
+
+/**
+ * Sleeper's prop board for the NFL, reduced to two-sided player props before
+ * caching. About 100KB gzipped; Sleeper's CDN caches it for 30 seconds, and
+ * this page reads it at most every 20 minutes.
+ */
+export const getLines = <R>(transform: (raw: unknown) => R) =>
+  cachedGet<unknown, R>('/lines/available?sports%5B%5D=nfl', 20 * MINUTE, { base: 'https://api.sleeper.app', key: 'lines:nfl', transform })
+
 // ---------- Outside rankings ----------
 
 /**

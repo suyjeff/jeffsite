@@ -58,10 +58,10 @@ const RosterTable = ({ data, analysis, rosterId, basis }: { data: LeagueData; an
     slotCol,
     playerCol,
     { key: 'exp', label: 'Exp/wk', align: 'right', title: 'Expected points per week over the horizon, after injury odds and teammates’ absences', sort: (r) => analysis.horizon.perWeek[r.id] ?? 0, render: (r) => <span className="text-ff-text">{fmt(analysis.horizon.perWeek[r.id])}</span> },
-    { key: 'raw', label: 'Sleeper', align: 'right', hideBelow: 'sm', title: 'Sleeper projection per week over the horizon', sort: (r) => data.context[r.id]?.raw ?? 0, render: (r) => fmt(data.context[r.id]?.raw) },
+    { key: 'raw', label: 'Base', align: 'right', hideBelow: 'sm', title: 'Projection per week over the horizon before injury and role adjustments: Sleeper, with the coming week blended with prop lines', sort: (r) => data.context[r.id]?.raw ?? 0, render: (r) => fmt(data.context[r.id]?.raw) },
     { key: 'play', label: 'Plays', align: 'right', sort: (r) => data.context[r.id]?.play ?? 1, render: (r) => <span className={(data.context[r.id]?.play ?? 1) < 0.8 ? 'text-ff-neg' : ''}>{pct(data.context[r.id]?.play)}</span> },
-    { key: 'loss', label: 'If gone', align: 'right', title: 'Points per week your optimal lineup loses without this player', sort: (r) => loss[r.id] ?? 0, render: (r) => <Num value={loss[r.id] != null ? -loss[r.id] : null} signed digits={2} /> },
-    { key: 'mkt', label: 'Value', align: 'right', hideBelow: 'md', title: 'Points per week above replacement at the position', sort: (r) => analysis.market[r.id] ?? -99, render: (r) => fmt(analysis.market[r.id]) },
+    { key: 'loss', label: 'If gone', align: 'right', title: 'Points per week your optimal lineup loses without him', sort: (r) => loss[r.id] ?? 0, render: (r) => <Num value={loss[r.id] != null ? -loss[r.id] : null} signed digits={2} /> },
+    { key: 'mkt', label: 'Value', align: 'right', hideBelow: 'md', title: 'Points per week above replacement at his position', sort: (r) => analysis.market[r.id] ?? -99, render: (r) => fmt(analysis.market[r.id]) },
     ...(data.playoffWeeks.length
       ? [{ key: 'po', label: 'Playoff opp', hideBelow: 'lg' as const, render: (r: Row) => <PlayoffSchedule context={data.context[r.id]} weeks={data.playoffWeeks} /> }]
       : []),

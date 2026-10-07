@@ -104,7 +104,30 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       sort: (id) => perWeek[id] ?? 0,
       render: (id) => <span className="text-ff-text">{fmt(perWeek[id])}</span>,
     },
-    { key: 'raw', label: 'Sleeper', align: 'right', hideBelow: 'sm', sort: (id) => data.context[id]?.raw ?? perWeek[id] ?? 0, render: (id) => fmt(data.context[id]?.raw ?? perWeek[id]) },
+    { key: 'raw', label: 'Base', align: 'right', hideBelow: 'sm', title: 'Per week before injury and role adjustments: Sleeper, with the coming week blended with prop lines', sort: (id) => data.context[id]?.raw ?? perWeek[id] ?? 0, render: (id) => fmt(data.context[id]?.raw ?? perWeek[id]) },
+    ...(data.market
+      ? [
+          {
+            key: 'lines',
+            label: `Wk${data.market.week} lines`,
+            align: 'right' as const,
+            hideBelow: 'md' as const,
+            title: `Fantasy points implied by this week's prop lines, league scoring, next to Sleeper's own week ${data.market.week} number`,
+            sort: (id: string) => data.market!.byId[id]?.pts ?? -1,
+            render: (id: string) => {
+              const m = data.market!.byId[id]
+              if (!m) return <span className="text-ff-muted">–</span>
+              const gap = m.pts - m.sleeper
+              return (
+                <span title={`Sleeper ${fmt(m.sleeper)} · lines ${fmt(m.pts)}`}>
+                  <span className="text-ff-text">{fmt(m.pts)}</span>
+                  <span className={cx('ml-1 text-[10.5px]', Math.abs(gap) < 0.5 ? 'text-ff-muted' : gap > 0 ? 'text-ff-pos' : 'text-ff-neg')}>{fmtSigned(gap)}</span>
+                </span>
+              )
+            },
+          },
+        ]
+      : []),
     {
       key: 'play',
       label: 'Plays',
@@ -154,7 +177,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             key: 'you',
             label: 'To you',
             align: 'right' as const,
-            title: 'Points per week this player would add to your optimal lineup, after cutting your least useful player',
+            title: 'Points per week he would add to your optimal lineup, after cutting your least useful player',
             sort: (id: string) => toYou[id] ?? -99,
             render: (id: string) => (rosteredBy[id] === myRosterId ? <span className="text-ff-muted">yours</span> : <Num value={toYou[id]} signed digits={2} />),
           },

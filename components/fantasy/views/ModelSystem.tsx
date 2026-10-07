@@ -1,11 +1,13 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ELO, EFFICIENCY_PRIOR_GAMES, FORM_PRIOR_GAMES, FORM_WEIGHT, SIM, type BacktestModel, type BacktestScore } from '../../../lib/fantasy/forecast'
+import { gradeSnapshots, loadSnapshots, MARKET_WEIGHT, MEDIAN_TO_MEAN } from '../../../lib/fantasy/lines'
 import { useFantasy } from '../FantasyContext'
 import { Badge, Num, Panel, Stat, StatGrid, Table, cx, fmt, fmtSigned, pct } from '../ui'
 
 // ---------- System map ----------
 
 type NodeId =
+  | 'lines'
   | 'proj'
   | 'results'
   | 'history'
@@ -35,6 +37,8 @@ const COLS = ['sources', 'adjust', 'core', 'models', 'outputs']
 
 /** Edges: what each node feeds. The map is drawn from this list and nothing else. */
 const EDGES: [NodeId, NodeId][] = [
+  ['lines', 'avail'],
+  ['lines', 'backtest'],
   ['proj', 'avail'],
   ['history', 'avail'],
   ['schedule', 'avail'],
@@ -75,6 +79,14 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
   const removed = Object.values(data.context).reduce((a, c) => a + c.lost, 0)
   const nodes: MapNode[] = [
     { id: 'proj', col: 0, label: 'Sleeper projections', stat: `${data.rawHorizon.length} wks ahead · ${Object.keys(data.pastProjections).length} past`, note: 'Weekly, league-scored. Already price opponents and announced absences.' },
+    {
+      id: 'lines',
+      col: 0,
+      label: 'Prop lines',
+      stat: data.market ? `${data.market.players} priced · wk ${data.market.week}` : 'none open',
+      tab: 'backtest',
+      note: `Sleeper's prop board, de-vigged and read as expected stats; blended ${Math.round(MARKET_WEIGHT * 100)}% into the coming week.`,
+    },
     { id: 'results', col: 0, label: 'League results', stat: `${data.regularWeeks.length} wks${data.history ? ` + ${data.history.weeks.length} last season` : ''}`, note: 'Matchups and player points for every completed week.' },
     { id: 'history', col: 0, label: 'Injury history', stat: `${Object.keys(data.availability).length} players`, tab: 'availability', note: 'Games played over two seasons plus this one.' },
     { id: 'schedule', col: 0, label: 'NFL schedule', stat: data.schedule ? `${data.schedule.weeks.length} wks` : 'missing', note: 'Byes and opponents.' },
@@ -218,7 +230,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
         </Panel>
         <Panel title="What is assumed" index={2}>
           <p className="text-[12.5px] leading-relaxed text-ff-text2">
-            Season-long team uncertainty τ = {SIM.tauShare}·σ; Elo K {ELO.k} with a ⅓ summer regression (538’s NFL values); priors of {EFFICIENCY_PRIOR_GAMES} games on lineup efficiency and {FORM_PRIOR_GAMES} on form; the yes-odds weights. Each is labelled where it is used.
+            The coming week blends prop lines and Sleeper {Math.round(MARKET_WEIGHT * 100)}/{Math.round((1 - MARKET_WEIGHT) * 100)}, with yardage lines read as medians (mean/median: rec {MEDIAN_TO_MEAN.rec_yd}, rush {MEDIAN_TO_MEAN.rush_yd}, pass {MEDIAN_TO_MEAN.pass_yd}). Season-long team uncertainty τ = {SIM.tauShare}·σ; Elo K {ELO.k} with a ⅓ summer regression (538’s NFL values); priors of {EFFICIENCY_PRIOR_GAMES} games on lineup efficiency and {FORM_PRIOR_GAMES} on form; the yes-odds weights. Each is labelled where it is used.
           </p>
         </Panel>
         <Panel title="What was decided by evidence" index={3}>
@@ -321,6 +333,51 @@ const Reliability = ({ s }: { s: BacktestScore }) => {
   )
 }
 
+/** Prop lines against Sleeper on finished weeks, from snapshots this browser filed before kickoff. */
+const LinesTracker = () => {
+  const { data } = useFantasy()
+  const snaps = useMemo(() => loadSnapshots(data.league.season), [data.league.season])
+  const grade = useMemo(() => (data.valueSeason === data.league.season ? gradeSnapshots(snaps, data.weekPoints) : null), [snaps, data])
+  const filed = Object.keys(snaps).map(Number).sort((a, b) => a - b)
+  const rows = grade
+    ? [
+        { k: 'Sleeper', v: grade.maeSleeper },
+        { k: 'Prop lines', v: grade.maeMarket },
+        { k: `Blend ${Math.round(MARKET_WEIGHT * 100)}/${Math.round((1 - MARKET_WEIGHT) * 100)} (used)`, v: grade.maeBlend },
+      ].sort((a, b) => a.v - b.v)
+    : []
+  const worst = rows.length ? Math.max(...rows.map((r) => r.v)) : 1
+  return (
+    <Panel title="Weekly player points · prop lines vs Sleeper" actions={<span>mean absolute error, lower is better</span>}>
+      {grade ? (
+        <div className="space-y-1.5">
+          {rows.map((r) => (
+            <div key={r.k} className="grid grid-cols-[150px_minmax(0,1fr)_56px] items-center gap-3 text-[12.5px]">
+              <span className="text-ff-text2">{r.k}</span>
+              <span className="h-[6px] bg-ff-sunken">
+                <span className="block h-full bg-ff-s1" style={{ width: `${(r.v / worst) * 100}%` }} />
+              </span>
+              <span className="num text-right text-ff-text">{r.v.toFixed(2)}</span>
+            </div>
+          ))}
+          <p className="pt-1 font-mono text-[10.5px] text-ff-muted">
+            {grade.n} player-weeks · wk {grade.weeks.join(', ')} · graded from snapshots filed in this browser before kickoff
+          </p>
+        </div>
+      ) : (
+        <p className="text-[12.5px] leading-relaxed text-ff-text2">
+          No free archive of past prop lines exists, so the page keeps its own: every load before kickoff files what the lines and Sleeper projected for each priced player, and the week is graded once it is scored.{' '}
+          {filed.length ? (
+            <span className="font-mono text-[11px] text-ff-muted">Filed so far: wk {filed.join(', ')}. First grade after those games finish.</span>
+          ) : (
+            <span className="font-mono text-[11px] text-ff-muted">Nothing filed yet.</span>
+          )}
+        </p>
+      )}
+    </Panel>
+  )
+}
+
 export const BacktestTab = () => {
   const { models, data } = useFantasy()
   const bt = models.backtest
@@ -329,6 +386,7 @@ export const BacktestTab = () => {
   const seasons = [data.league.season, ...(data.history ? [data.history.season] : [])]
   return (
     <div className="space-y-3">
+      <LinesTracker />
       <Panel title="Next-week win probability, graded out of sample" pad={false} actions={<span>{seasons.join(' + ')}</span>}>
         <Table
           rows={rows}
