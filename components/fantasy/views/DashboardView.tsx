@@ -210,7 +210,7 @@ const DashboardView = () => {
                 + Widget
               </Button>
               {catalog && (
-                <div className="absolute right-0 top-full z-40 mt-1 w-[300px] border border-ff-line2 bg-ff-panel shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
+                <div className="fixed inset-x-2 top-[100px] z-40 border border-ff-line2 bg-ff-panel shadow-[0_8px_24px_rgba(0,0,0,0.25)] md:absolute md:inset-x-auto md:right-0 md:top-full md:mt-1 md:w-[300px]">
                   <div className="ff-label border-b border-ff-line px-3 py-1.5">add widget</div>
                   <div className="ff-scroll max-h-[60vh] overflow-auto">
                     {(Object.keys(WIDGETS) as WidgetKind[]).map((k) => (

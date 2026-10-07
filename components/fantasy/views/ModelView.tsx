@@ -275,7 +275,7 @@ const ValueTab = ({ data, analysis, baseline, model, setModel }: { data: LeagueD
   const top = useMemo(() => [...withGames].sort((a, b) => b.war - a.war).slice(0, 12), [withGames])
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
       <div className="space-y-3">
         <Panel title="Parameters" pad={false} actions={<span className="font-mono text-[10.5px]">war.ts</span>}>
           <Param
@@ -328,7 +328,7 @@ Value  = perActive − repl_horizon(pos)`}</Code>
       </div>
 
       <div className="min-w-0 space-y-3">
-        <StatGrid className="xl:grid-cols-4">
+        <StatGrid>
           <Stat
             label="Above replacement"
             value={above}
@@ -357,7 +357,7 @@ Value  = perActive − repl_horizon(pos)`}</Code>
           />
         </Panel>
 
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <Panel title="WAR distribution" actions={<span className="num">{withGames.length} players</span>}>
             <Histogram values={withGames.map((v) => v.war)} bins={24} marker={0} markerLabel="replacement" format={(v) => fmt(v, 1)} />
           </Panel>
@@ -460,7 +460,7 @@ const PowerTab = ({ analysis, baseline, weights, setWeights }: { analysis: Analy
           </div>
           <Legend items={shares.map((s) => ({ label: s.label, slot: s.slot, value: pct(s.share) }))} />
         </div>
-        <div className="grid sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
           {COMPONENTS.map((c) => (
             <Param
               key={c.key}
@@ -479,7 +479,7 @@ const PowerTab = ({ analysis, baseline, weights, setWeights }: { analysis: Analy
           ))}
         </div>
       </Panel>
-      <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <Panel title="Rankings at these weights" pad={false} actions={changed ? <span className="num">{moved} teams moved</span> : <span>defaults</span>}>
           <Table rows={analysis.power} rowKey={(p) => p.rosterId} columns={columns} defaultSort="rk" defaultDesc rowClass={(p) => cx(p.rosterId === analysis.myRosterId && 'ff-mine')} />
         </Panel>
@@ -525,14 +525,14 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
 
   return (
     <div className="space-y-3">
-      <StatGrid className="xl:grid-cols-4">
+      <StatGrid>
         <Stat label="League prior" value={pct(BASE_AVAILABILITY)} sub="share of games suited up" />
         <Stat label="Rostered median" value={rates.length ? pct([...rates].sort((a, b) => a - b)[Math.floor(rates.length / 2)]) : '–'} sub={`${rates.length} skill players`} />
         <Stat label="Pts/wk removed" value={fmt(totalLost)} sub="injury risk, league-wide" />
         <Stat label="Pts/wk reassigned" value={fmt(totalGained)} sub="to next men up" />
       </StatGrid>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title="P(play) for a healthy player, by weeks ahead">
           <MiniLines
             xs={weeksAhead}
@@ -554,7 +554,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
         </Panel>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Panel title="Constants" pad={false} actions={<span className="font-mono text-[10.5px]">context.ts</span>}>
           <Spec
             stacked
@@ -646,7 +646,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
 
   return (
     <div className="space-y-3">
-      <StatGrid className="xl:grid-cols-4">
+      <StatGrid>
         <Stat label="Pricing horizon" value={`${data.horizon.length} wk`} sub={modeLabel} />
         <Stat
           label="Playoff weight"
@@ -684,7 +684,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
         </div>
       </Panel>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title="Position pricing over the horizon" pad={false}>
           <Table
             rows={rows}
@@ -722,7 +722,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
         </Panel>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title="Search objective">
           <Code>{`objective = myGain
           + 0.30 · min(theirGain, myGain)
@@ -778,7 +778,7 @@ const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analy
   ]
   return (
     <div className="space-y-3">
-      <StatGrid className="xl:grid-cols-4">
+      <StatGrid>
         <Stat label="Week" value={data.state.week ?? '–'} sub={`${data.state.season} ${data.state.season_type}`} />
         <Stat label="Points source" value={<span className="text-[15px]">{data.pointsSource}</span>} sub="for player value" />
         <Stat label="Horizon source" value={<span className="text-[15px]">{data.horizonSource}</span>} sub="for trade pricing" />

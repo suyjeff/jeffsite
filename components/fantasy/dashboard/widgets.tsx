@@ -122,9 +122,9 @@ const Odds = ({ sel, select }: WidgetProps) => {
     <div>
       <Th>
         <span className="flex-1">team</span>
-        <span className="w-9 text-right">rec</span>
+        <span className="hidden w-9 text-right sm:inline">rec</span>
         <span className="w-10 text-right" title="Expected points per week">rtg</span>
-        <span className="w-9 text-right" title="Mean simulated wins">W</span>
+        <span className="hidden w-9 text-right sm:inline" title="Mean simulated wins">W</span>
         <span className="w-10 text-right">PO</span>
         <span className="hidden w-9 text-right sm:inline">bye</span>
         <span className="w-[78px] text-right">title</span>
@@ -137,11 +137,11 @@ const Odds = ({ sel, select }: WidgetProps) => {
             <span className="min-w-0 flex-1">
               <TeamTag id={r.rosterId} />
             </span>
-            <span className="num w-9 text-right text-ff-text2">
+            <span className="num hidden w-9 text-right text-ff-text2 sm:inline">
               {season.wins}-{season.losses}
             </span>
             <span className="num w-10 text-right text-ff-text">{fmt(r.rating)}</span>
-            <span className="num w-9 text-right text-ff-text2">{fmt(s.wins)}</span>
+            <span className="num hidden w-9 text-right text-ff-text2 sm:inline">{fmt(s.wins)}</span>
             <span className={cx('num w-10 text-right', s.playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted')}>{pct(s.playoffs)}</span>
             <span className="num hidden w-9 text-right text-ff-text2 sm:inline">{pct(s.bye)}</span>
             <span className="flex w-[78px] items-center justify-end gap-1.5">

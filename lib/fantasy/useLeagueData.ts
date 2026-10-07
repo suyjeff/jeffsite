@@ -538,10 +538,15 @@ export const useLeagueData = (opts: LoadOptions | null) => {
   const [progress, setProgress] = useState('')
   const [nonce, setNonce] = useState(0)
   const active = useRef(0)
+  const lastUser = useRef<string | null>(null)
 
   useEffect(() => {
     if (!opts) return
     const id = ++active.current
+    // A different user's league must never stay on screen under the new name, even if their load fails.
+    const who = opts.username.trim().toLowerCase()
+    if (lastUser.current !== null && lastUser.current !== who) setData(null)
+    lastUser.current = who
     setLoading(true)
     setError(null)
     loadLeagueData(opts, (msg) => {
