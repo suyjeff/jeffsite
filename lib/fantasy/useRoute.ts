@@ -22,9 +22,13 @@ export const useRoute = <S extends string>(sections: readonly S[], fallback: S) 
     return () => window.removeEventListener('hashchange', read)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const go = useCallback((section: S, sub?: string | null) => {
+  /** Navigate; `replace` swaps the current history entry instead of adding one (for redirects). */
+  const go = useCallback((section: S, sub?: string | null, opts?: { replace?: boolean }) => {
     const next = sub ? `#${section}/${sub}` : `#${section}`
-    if (window.location.hash !== next) window.location.hash = next
+    if (opts?.replace) {
+      window.history.replaceState(window.history.state, '', next)
+      setRoute({ section, sub: sub ?? null })
+    } else if (window.location.hash !== next) window.location.hash = next
     else setRoute({ section, sub: sub ?? null })
   }, [])
 

@@ -9,6 +9,7 @@ import ModelView from '../../components/fantasy/views/ModelView'
 import PlayersView from '../../components/fantasy/views/PlayersView'
 import PowerView from '../../components/fantasy/views/PowerView'
 import TeamsView from '../../components/fantasy/views/TeamsView'
+import WaiversView from '../../components/fantasy/views/WaiversView'
 import TradesView from '../../components/fantasy/views/TradesView'
 import { analyze, withWeights } from '../../lib/fantasy/analysis'
 import { buildModels } from '../../lib/fantasy/models'
@@ -63,6 +64,10 @@ const loadPrefs = (): Prefs => {
 const FantasyPage = () => {
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const route = useRoute(SECTION_KEYS, 'dash')
+  // Waivers moved out of My team into their own section; old links still land there.
+  useEffect(() => {
+    if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })
+  }, [route.section, route.sub]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     purgeStaleCache()
@@ -256,6 +261,7 @@ const FantasyPage = () => {
         <div key={data.league.league_id} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
+          {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'me' && <MeView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'power' && (
             <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} weights={prefs.weights} />

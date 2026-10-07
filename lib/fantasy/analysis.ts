@@ -122,7 +122,7 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
   seasons.forEach((s) => (seasonById[s.rosterId] = s))
   const strength: Record<number, number> = {}
   teams.forEach((t) => (strength[t.rosterId] = rosterStrength(slots, t.players, players, values)))
-  const power = computePower(seasons, strength, weights)
+  const power = computePower(seasons, strength, weights, sigma)
   const powerById: Record<number, PowerRow> = {}
   power.forEach((p) => (powerById[p.rosterId] = p))
 
@@ -168,8 +168,16 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
  * rebuilt when a weight slider moves.
  */
 export const withWeights = (analysis: Analysis, weights: PowerWeights): Analysis => {
-  const power = computePower(analysis.seasons, analysis.strength, weights)
+  const power = computePower(analysis.seasons, analysis.strength, weights, analysis.sigma)
   const powerById: Record<number, PowerRow> = {}
   power.forEach((p) => (powerById[p.rosterId] = p))
   return { ...analysis, power, powerById }
 }
+
+/**
+ * Sleeper's pre-game projection for one player in each of the given weeks, in
+ * league scoring, or null where there was none. Never read against a proxy
+ * season's weeks, whose numbers would line up with the wrong games.
+ */
+export const pastProjection = (data: LeagueData, id: string, weeks: number[]): (number | null)[] =>
+  data.pointsSource.startsWith('proxy') ? weeks.map(() => null) : weeks.map((w) => data.pastProjections[w]?.[id] ?? null)

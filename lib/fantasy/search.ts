@@ -3,7 +3,7 @@
 // Trades page asking for the same thing should pay for it once.
 
 import type { Analysis } from './analysis'
-import { DEFAULT_TRADE_CONFIG, findTrades, SUGGESTED_TRADE_CONFIG, type TradeConfig, type TradeIdea } from './trades'
+import { DEFAULT_TRADE_CONFIG, findTargets, findTrades, SUGGESTED_TRADE_CONFIG, type TradeConfig, type TradeIdea, type TradeTarget } from './trades'
 import type { LeagueData } from './useLeagueData'
 
 // Keyed on the market-value table, which keeps its identity across composite
@@ -41,4 +41,20 @@ export const searchTrades = (data: LeagueData, analysis: Analysis, config: Parti
   const out = { ideas, ms: (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0 }
   byConfig.set(key, out)
   return out
+}
+
+/**
+ * Free agents who would start for you, best first, with the cut the add
+ * forces already priced in. Only the top of the pool by expected points is
+ * solved, which is where every useful add lives.
+ */
+export const waiverTargets = (data: LeagueData, analysis: Analysis, opts: { pool?: number; limit?: number } = {}): TradeTarget[] => {
+  if (analysis.myRosterId == null || !data.horizon.length) return []
+  const perWeek = analysis.horizon.perWeek
+  const fa = Object.keys(perWeek)
+    .filter((id) => data.players[id] && analysis.rosteredBy[id] == null)
+    .sort((a, b) => perWeek[b] - perWeek[a])
+    .slice(0, opts.pool ?? 150)
+  const base = tradeBase(data, analysis)
+  return base ? findTargets({ ...base, others: [], rosteredBy: analysis.rosteredBy, freeAgents: fa, limit: opts.limit ?? 40 }) : []
 }

@@ -146,13 +146,27 @@ describe('power', () => {
     const seasons = buildTeamSeasons([1, 2, 3, 4], tw, [1, 2], {})
     const rows = computePower(seasons, { 1: 1, 2: 0.5, 3: 0.8, 4: 0.2 }, DEFAULT_POWER_WEIGHTS)
     expect(rows[0].rosterId).toBe(1)
-    expect(rows[0].score).toBe(100)
-    expect(rows[rows.length - 1].score).toBe(0)
+    // A win probability against an average team: above and below 50, never pinned to the ends.
+    expect(rows[0].score).toBeGreaterThan(50)
+    expect(rows[0].score).toBeLessThan(100)
+    expect(rows[rows.length - 1].score).toBeLessThan(50)
+    expect(rows[rows.length - 1].score).toBeGreaterThan(0)
+    // Scores sit symmetric about 50 because margins are centred on the league mean.
+    expect(rows.reduce((a, r) => a + r.margin, 0)).toBeCloseTo(0)
     // Preseason: no games, only roster strength counts.
     const empty = buildTeamSeasons([1, 2], {}, [], {})
     const pre = computePower(empty, { 1: 2, 2: 1 }, DEFAULT_POWER_WEIGHTS)
     expect(pre[0].rosterId).toBe(1)
     expect(pre[0].components.allPlay).toBe(0)
+  })
+  it('regresses a short sample toward the mean', () => {
+    const team = (rosterId: number, ppg: number, games: number) =>
+      ({ rosterId, games, ppg, recentPpg: ppg, allPlayPct: 0.5, efficiency: 0.9, remainingOpponents: [] }) as unknown as Parameters<typeof computePower>[0][number]
+    const early = computePower([team(1, 140, 2), team(2, 100, 2), team(3, 100, 2)], {}, DEFAULT_POWER_WEIGHTS, 25)
+    const late = computePower([team(1, 140, 12), team(2, 100, 12), team(3, 100, 12)], {}, DEFAULT_POWER_WEIGHTS, 25)
+    expect(early[0].margin).toBeGreaterThan(0)
+    // Same gap in points per game, but six times the games behind it.
+    expect(late[0].margin).toBeGreaterThan(early[0].margin * 2)
   })
 })
 

@@ -3,7 +3,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import { Avatar, cx } from './ui'
 
-export const SECTION_KEYS = ['dash', 'trades', 'me', 'power', 'teams', 'players', 'model'] as const
+export const SECTION_KEYS = ['dash', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 type Group = 'Overview' | 'Your team' | 'League' | 'Engine'
@@ -14,12 +14,16 @@ export const SECTIONS: Section[] = [
   { key: 'dash', label: 'Dashboard', short: 'Dash', group: 'Overview' },
   { key: 'trades', label: 'Trades', short: 'Trades', group: 'Your team' },
   { key: 'me', label: 'My team', short: 'Team', group: 'Your team' },
+  { key: 'waivers', label: 'Waivers', short: 'Waivers', group: 'Your team' },
   { key: 'power', label: 'Power', short: 'Power', group: 'League' },
   { key: 'teams', label: 'Teams', short: 'Teams', group: 'League' },
   { key: 'players', label: 'Players', short: 'Players', group: 'League' },
   { key: 'model', label: 'Model', short: 'Model', group: 'Engine' },
 ]
 const GROUPS: Group[] = ['Overview', 'Your team', 'League', 'Engine']
+
+/** The two-digit register number shown beside a section, which is also its keyboard shortcut. */
+export const sectionCode = (key: SectionKey) => String(SECTIONS.findIndex((s) => s.key === key) + 1).padStart(2, '0')
 
 /** What the phone's bottom bar carries; everything else lives in the drawer. */
 const TAB_BAR: SectionKey[] = ['dash', 'trades', 'me', 'power']

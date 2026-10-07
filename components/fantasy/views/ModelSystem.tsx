@@ -100,7 +100,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
     { id: 'trades', col: 3, label: 'Trade search', stat: `${analysis.teams.length - 1} partners`, tab: 'engine', note: 'Beam search over packages, scored week by week.' },
     { id: 'rating', col: 3, label: 'Forecast rating', stat: f ? `eff ${pct(f.leagueEff)} · form ×${FORM_WEIGHT}` : 'off', tab: 'forecast', note: 'Projected lineup × efficiency: points per projected point (ELWAY’s lineup weights).' },
     { id: 'elo', col: 3, label: 'Elo', stat: `K ${ELO.k} · prior ${models.lastSeasonGames ? 'carried' : 'flat'}`, tab: 'forecast', note: 'Results only, margin-aware, regressed between seasons.' },
-    { id: 'composite', col: 3, label: 'Composite', stat: 'weighted z', tab: 'power', note: 'All-play, scoring, form, roster, efficiency.' },
+    { id: 'composite', col: 3, label: 'Composite', stat: 'win % vs avg', tab: 'power', note: 'All-play, scoring, form, roster, efficiency; results regressed by games played.' },
     { id: 'sim', col: 3, label: 'Season sim', stat: f ? `${f.sims.toLocaleString()} × σ ${fmt(f.sigma)}` : 'off', tab: 'forecast', note: 'Week-by-week seasons with a persistent team level, then the bracket.' },
     { id: 'perceived', col: 3, label: 'Perceived value', stat: models.perceived ? 'ECR → pts/wk' : 'off', tab: 'behavior', note: 'Consensus rank priced on the model’s own value curve.' },
     { id: 'behavior', col: 3, label: 'Behaviour read', stat: `${models.behavior.trades.length} trades seen`, tab: 'behavior', note: 'Engagement, trade history, perceived fairness.' },
@@ -429,8 +429,8 @@ export const BacktestTab = () => {
             .
           </p>
           <p>
-            Read the standard errors before the ranking: with a few dozen games, gaps under about 0.03 are noise. Reliability plots predicted against observed win rates; points on the dashed line are well calibrated. The composite has no natural
-            probability, so it is mapped with a fixed slope chosen beforehand; its <i>Picks right</i> column is the fairer read of it.
+            Read the standard errors before the ranking: with a few dozen games, gaps under about 0.03 are noise. Reliability plots predicted against observed win rates; points on the dashed line are well calibrated. The composite is graded on its
+            regressed margin in points per week, through the same weekly σ as the point-based models.
           </p>
         </div>
       </Panel>

@@ -6,7 +6,7 @@
 import type { Analysis } from './analysis'
 import { leagueBehavior, type LeagueBehavior } from './behavior'
 import { perceivedValues } from './consensus'
-import { backtest, buildForecast, gamesFrom, preseasonElo, runElo, type EloRun, type Forecast, type ForecastInput } from './forecast'
+import { backtest, buildForecast, gamesFrom, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
 import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, type TeamWeek } from './power'
 import type { LeagueData } from './useLeagueData'
 
@@ -22,6 +22,12 @@ export type Models = {
   behavior: LeagueBehavior
   /** Consensus rank priced on the model's value curve, pts/wk. */
   perceived: Record<string, number> | null
+  /**
+   * What each team was expected to score in each completed week, before it
+   * kicked off: its best projected lineup from the roster it had then, times
+   * the manager's efficiency. Keyed rosterId → week.
+   */
+  expectedPast: Record<number, Record<number, number>>
 }
 
 /** Remaining regular-season pairings, one row per game. */
@@ -37,13 +43,13 @@ export const remainingSchedule = (data: LeagueData) =>
     return out
   })
 
-const powerScore = (teamWeeks: Record<number, TeamWeek[]>, weeks: number[]) => {
+const powerMargin = (sigma: number) => (teamWeeks: Record<number, TeamWeek[]>, weeks: number[]) => {
   if (!weeks.length) return {}
   const ids = [...new Set(weeks.flatMap((w) => (teamWeeks[w] ?? []).map((t) => t.rosterId)))]
   // Results-only composite: roster strength needs the value model at that date, so it sits out.
   const seasons = buildTeamSeasons(ids, teamWeeks, weeks, {})
   const out: Record<number, number> = {}
-  for (const p of computePower(seasons, {}, DEFAULT_POWER_WEIGHTS)) out[p.rosterId] = p.score
+  for (const p of computePower(seasons, {}, DEFAULT_POWER_WEIGHTS, sigma)) out[p.rosterId] = p.margin
   return out
 }
 
@@ -81,14 +87,22 @@ export const buildModels = (data: LeagueData, analysis: Analysis): Models => {
     elo: elo.final,
     sigmaFallback: analysis.sigma * 0.9,
   }
-  const forecast = data.horizon.length && data.horizonSource === 'projections' ? buildForecast(forecastInput) : null
+  const past = pastByWeek(forecastInput)
+  const forecast = data.horizon.length && data.horizonSource === 'projections' ? buildForecast(forecastInput, SIM.sims, past) : null
+  const ratings = forecast?.ratings ?? teamRatings({ ...forecastInput, horizon: [] }, past).ratings
+  const expectedPast: Models['expectedPast'] = {}
+  for (const r of ratings) {
+    const byWeek: Record<number, number> = {}
+    for (const w of Object.keys(past).map(Number)) if (past[w][r.rosterId] > 0) byWeek[w] = past[w][r.rosterId] * r.efficiency
+    expectedPast[r.rosterId] = byWeek
+  }
 
   const bt = backtest(
     [
       { season: data.league.season, teamWeeks: analysis.teamWeeks, weeks: data.regularWeeks, pastProjections: data.pastProjections, eloStart: eloPrior },
       ...(prevTeamWeeks && data.history ? [{ season: data.history.season, teamWeeks: prevTeamWeeks, weeks: data.history.weeks }] : []),
     ],
-    { slots: analysis.slots, players: data.players, floor: analysis.horizonReplacement, sigma: forecast?.sigma ?? analysis.sigma, powerScore },
+    { slots: analysis.slots, players: data.players, floor: analysis.horizonReplacement, sigma: forecast?.sigma ?? analysis.sigma, powerMargin: powerMargin(analysis.sigma) },
   )
 
   const behavior = leagueBehavior({
@@ -103,5 +117,5 @@ export const buildModels = (data: LeagueData, analysis: Analysis): Models => {
   // model's own value rather than zero, so a miss never looks like a free player.
   const perceived = data.consensus ? { ...Object.fromEntries(Object.entries(analysis.market).map(([id, v]) => [id, Math.max(0, v)])), ...perceivedValues(data.consensus, analysis.market) } : null
 
-  return { forecast, forecastInput, elo, eloPrior, lastSeasonGames, backtest: bt, behavior, perceived }
+  return { forecast, forecastInput, elo, eloPrior, lastSeasonGames, backtest: bt, behavior, perceived, expectedPast }
 }

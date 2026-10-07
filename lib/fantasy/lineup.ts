@@ -222,3 +222,29 @@ export const optimalLineup = (slots: Slot[], players: LineupPlayer[]): Lineup =>
   }
   return { total: Math.round(total * 100) / 100, assignments }
 }
+
+/**
+ * Starters who cannot score: an empty slot, or a player with no projection
+ * (on bye, or ruled out) who did not score either. Managers fix these before
+ * kickoff far more often than not, so the models read them as a lineup not set
+ * yet rather than as the team's real expectation.
+ */
+export const deadStarters = (
+  slots: Slot[],
+  slotted: string[] | undefined,
+  proj: Record<string, number>,
+  scored: Record<string, number> = {},
+): { slot: Slot; id: string | null }[] => {
+  if (!slotted?.length) return []
+  const out: { slot: Slot; id: string | null }[] = []
+  slots.forEach((slot, i) => {
+    const id = slotted[i]
+    if (!id || id === '0') out.push({ slot, id: null })
+    else if (!((proj[id] ?? 0) > 0) && !((scored[id] ?? 0) > 0)) out.push({ slot, id })
+  })
+  return out
+}
+
+/** What a dead slot would have scored with a replacement-level body in it. */
+export const deadSlotFill = (dead: { slot: Slot }[], floor: Record<string, number>) =>
+  dead.reduce((a, d) => a + Math.max(0, ...d.slot.eligible.map((pos) => floor[pos] ?? 0)), 0)

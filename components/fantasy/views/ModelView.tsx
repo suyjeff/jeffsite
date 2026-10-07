@@ -2,13 +2,14 @@ import React, { useMemo, type ReactNode } from 'react'
 import { analyze, withWeights, type Analysis } from '../../../lib/fantasy/analysis'
 import { AVAILABILITY_PRIOR_GAMES, BASE_AVAILABILITY, HEALTHY_DECAY, NEXT_MAN_SHARE, SKILL_POSITIONS, STATUS_PLAY, TRANSFER, playProbability } from '../../../lib/fantasy/context'
 import { starterDemand } from '../../../lib/fantasy/lineup'
-import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../../../lib/fantasy/power'
+import { DEFAULT_POWER_WEIGHTS, RESULTS_PRIOR_GAMES, type PowerWeights } from '../../../lib/fantasy/power'
 import { clearFantasyCache } from '../../../lib/fantasy/sleeper'
 import { DEFAULT_TRADE_CONFIG, DEFAULT_WAIVER_DEPTH, SUGGESTED_TRADE_CONFIG, type TradeConfig } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DEFAULT_MODEL, type ModelConfig } from '../../../lib/fantasy/war'
 import { HBars, Histogram, Legend, MiniLines } from '../charts'
 import PlayerName from '../PlayerName'
+import { sectionCode } from '../Shell'
 import { Avatar, Badge, Button, Num, PageHeader, Panel, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, type Column } from '../ui'
 import { BacktestTab, BehaviorTab, ForecastTab, SystemTab } from './ModelSystem'
 import { COMPONENTS } from './PowerView'
@@ -165,7 +166,7 @@ const ModelView = ({ data, analysis, sub, onSub, model, setModel, weights, setWe
   return (
     <>
       <PageHeader
-        code="07"
+        code={sectionCode('model')}
         title="Model"
         meta={
           <>
@@ -441,7 +442,7 @@ const PowerTab = ({ analysis, baseline, weights, setWeights }: { analysis: Analy
         )
       },
     },
-    { key: 'score', label: 'Score', align: 'right', sort: (p) => p.score, render: (p) => <span className="text-ff-text">{fmt(p.score, 0)}</span> },
+    { key: 'score', label: 'Score', align: 'right', title: 'Chance to beat a league-average team in a week', sort: (p) => p.score, render: (p) => <span className="text-ff-text">{fmt(p.score, 0)}</span> },
     ...COMPONENTS.map((c, i) => ({
       key: c.key,
       label: c.label,
@@ -484,13 +485,15 @@ const PowerTab = ({ analysis, baseline, weights, setWeights }: { analysis: Analy
           <Table rows={analysis.power} rowKey={(p) => p.rosterId} columns={columns} defaultSort="rk" defaultDesc rowClass={(p) => cx(p.rosterId === analysis.myRosterId && 'ff-mine')} />
         </Panel>
         <Panel title="Method">
-          <Code>{`z_k   = (x_k − μ_k) / σ_k
-score = Σ (w_k / Σw) · z_k
-power = 100 · (score − min)
-            / (max − min)`}</Code>
+          <Code>{`z_k    = (x_k − μ_k) / σ_k
+r      = n / (n + ${RESULTS_PRIOR_GAMES})   results only; roster r = 1
+c      = Σ (w_k / Σw) · r · z_k
+margin = c · sd(PPG)          pts/wk vs avg
+power  = 100 · Φ(margin / (σ√2))`}</Code>
           <p className="mt-2 text-[12px] leading-relaxed text-ff-muted">
             Each component is z-scored across the {analysis.teams.length} teams, so weights are relative and only their shares matter. A component with no data yet (preseason) drops out and the rest
-            renormalize. Bars show each team&apos;s z, clipped at ±2.5.
+            renormalize. Results are regressed toward the league mean by games played (n), because a few weeks of fantasy scores are mostly noise; roster strength is a
+            current read and is not. The score is the chance of beating a league-average team in a week, so 50 is average. Bars show each team&apos;s regressed z, clipped at ±2.5.
           </p>
         </Panel>
       </div>

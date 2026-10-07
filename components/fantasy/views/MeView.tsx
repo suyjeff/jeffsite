@@ -1,16 +1,16 @@
 import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { optimalLineup, type LineupPlayer } from '../../../lib/fantasy/lineup'
-import { tradeBase } from '../../../lib/fantasy/search'
-import { findTargets, makeHorizonEval } from '../../../lib/fantasy/trades'
+import { makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes } from '../ContextNotes'
 import PlayerName from '../PlayerName'
-import { Badge, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, compact, cx, fmt, pct } from '../ui'
+import { sectionCode } from '../Shell'
+import { Badge, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, cx, fmt, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
-type Sub = 'overview' | 'roster' | 'waivers'
-const SUBS: Sub[] = ['overview', 'roster', 'waivers']
+type Sub = 'overview' | 'roster'
+const SUBS: Sub[] = ['overview', 'roster']
 
 const MeView = ({
   data,
@@ -89,23 +89,11 @@ const MeView = ({
     })
   }, [me, slotBasis, needs, analysis.teams, data.valueWeeks, data.weekPoints, slots, players])
 
-  // ---- Waivers ----
-  const waivers = useMemo(() => {
-    if (!me || !data.horizon.length) return []
-    const perWeek = analysis.horizon.perWeek
-    const fa = Object.keys(perWeek)
-      .filter((id) => players[id] && analysis.rosteredBy[id] === undefined)
-      .sort((a, b) => perWeek[b] - perWeek[a])
-      .slice(0, 150)
-    const base = tradeBase(data, analysis)
-    return base ? findTargets({ ...base, others: [], rosteredBy: analysis.rosteredBy, freeAgents: fa, limit: 40 }) : []
-  }, [me, data, analysis, players])
-  const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
 
   if (!me) {
     return (
       <>
-        <PageHeader code="03" title="My team" />
+        <PageHeader code={sectionCode('me')} title="My team" />
         <div className="mt-4">
           <Empty title="No roster of yours in this league">Pick a league you are in from the menu.</Empty>
         </div>
@@ -118,7 +106,7 @@ const MeView = ({
   return (
     <>
       <PageHeader
-        code="03"
+        code={sectionCode('me')}
         title={me.name}
         meta={
           <>
@@ -136,7 +124,6 @@ const MeView = ({
             items={[
               { key: 'overview', label: 'Overview' },
               { key: 'roster', label: 'Roster', count: me.players.length },
-              { key: 'waivers', label: 'Waivers', count: waivers.length },
             ]}
           />
         }
@@ -257,28 +244,6 @@ const MeView = ({
           </Panel>
         )}
 
-        {tab === 'waivers' && (
-          <Panel title="Free agents who would start for you" pad={false} actions={<span>pts/wk added to your lineup</span>}>
-            <Table
-              rows={waivers}
-              rowKey={(t) => t.id}
-              defaultSort="add"
-              empty="No free agent would crack your lineup."
-              columns={[
-                { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} /> },
-                { key: 'trend', label: '', hideBelow: 'sm', render: (t) => (trending[t.id] ? <Badge tone="pos" title={`${trending[t.id].toLocaleString()} adds across Sleeper in the last 24h`}>↑{compact(trending[t.id])} adds</Badge> : null) },
-                { key: 'slot', label: 'Starts at', render: (t) => <span className="font-mono text-[11px] text-ff-text2">{t.slot ?? '—'}</span> },
-                { key: 'add', label: 'Adds', align: 'right', sort: (t) => t.add, render: (t) => <Num value={t.add} signed digits={2} /> },
-                { key: 'exp', label: 'Exp/wk', align: 'right', sort: (t) => analysis.horizon.perWeek[t.id] ?? 0, render: (t) => fmt(analysis.horizon.perWeek[t.id]) },
-                { key: 'play', label: 'Plays', align: 'right', hideBelow: 'sm', render: (t) => pct(data.context[t.id]?.play) },
-                { key: 'why', label: 'Context', hideBelow: 'md', render: (t) => <ContextNotes context={data.context[t.id]} players={players} max={3} /> },
-              ]}
-            />
-            <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-              Adding a player means dropping your least useful one, and that cut is already in the number, so any positive value is a real upgrade.
-            </p>
-          </Panel>
-        )}
       </div>
     </>
   )

@@ -371,34 +371,87 @@ export const Meter = ({ value, max, width = 64, tone = 'accent' }: { value: numb
   </span>
 )
 
-/** Single-series sparkline with a hover readout and an optional baseline. */
-export const Sparkline = ({ points, baseline, width = 96, height = 24, labels }: { points: number[]; baseline?: number; width?: number; height?: number; labels?: string[] }) => {
+/** A bar that grows either way from a centre tick: for values with a natural middle, like 50%. */
+export const CenterMeter = ({ value, width = 64 }: { value: number; width?: number }) => {
+  const v = Math.max(-1, Math.min(1, value))
+  return (
+    <span className="relative inline-block h-1.5 shrink-0 bg-ff-accent/15 align-middle" style={{ width }}>
+      <span className={cx('absolute top-0 h-1.5', v >= 0 ? 'left-1/2 bg-ff-accent' : 'right-1/2 bg-ff-neg/80')} style={{ width: `${Math.abs(v) * 50}%` }} />
+      <span className="absolute -top-0.5 left-1/2 h-2.5 w-px -translate-x-1/2 bg-ff-muted/70" />
+    </span>
+  )
+}
+
+/**
+ * Weekly sparkline with a hover readout, an optional baseline, and an optional
+ * faded projection line underneath (same weeks, null where there was none), so
+ * a week read against what was expected is one glance.
+ */
+export const Sparkline = ({
+  points,
+  projected,
+  baseline,
+  width = 96,
+  height = 24,
+  labels,
+}: {
+  points: number[]
+  projected?: (number | null | undefined)[]
+  baseline?: number
+  width?: number
+  height?: number
+  labels?: string[]
+}) => {
   const [hover, setHover] = useState<number | null>(null)
   if (!points.length) return <span className="text-ff-muted">–</span>
-  const all = baseline !== undefined ? [...points, baseline] : points
+  const proj = projected?.some((v) => v != null) ? projected : undefined
+  const all = [...points, ...(baseline !== undefined ? [baseline] : []), ...(proj ?? []).filter((v): v is number => v != null)]
   const min = Math.min(...all, 0)
   const max = Math.max(...all, 1)
   const x = (i: number) => (points.length === 1 ? width / 2 : (i / (points.length - 1)) * (width - 6) + 3)
   const y = (v: number) => height - 3 - ((v - min) / (max - min || 1)) * (height - 6)
   const d = points.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
+  const pd = proj ? linePath(proj, x, y) : ''
+  const ph = hover !== null ? proj?.[hover] : null
   return (
     <span className="relative inline-block align-middle" onMouseLeave={() => setHover(null)}>
-      <svg width={width} height={height} className="block text-ff-accent" role="img" aria-label={`Weekly points: ${points.map((p) => p.toFixed(1)).join(', ')}`}>
+      <svg
+        width={width}
+        height={height}
+        className="block text-ff-accent"
+        role="img"
+        aria-label={`Weekly points: ${points.map((p, i) => p.toFixed(1) + (proj?.[i] != null ? ` (proj ${proj[i]!.toFixed(1)})` : '')).join(', ')}`}
+      >
         {baseline !== undefined && <line x1={0} x2={width} y1={y(baseline)} y2={y(baseline)} className="stroke-ff-line2" strokeWidth={1} />}
+        {pd && <path d={pd} fill="none" className="stroke-ff-muted" strokeOpacity={0.55} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />}
         <path d={d} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
         <circle cx={x(points.length - 1)} cy={y(points[points.length - 1])} r={2.5} fill="currentColor" />
         {points.map((_, i) => (
           <rect key={i} x={x(i) - width / points.length / 2} y={0} width={width / points.length} height={height} fill="transparent" onMouseEnter={() => setHover(i)} />
         ))}
+        {hover !== null && ph != null && <circle cx={x(hover)} cy={y(ph)} r={2.5} className="fill-ff-muted" />}
         {hover !== null && <circle cx={x(hover)} cy={y(points[hover])} r={4} fill="currentColor" className="stroke-ff-panel" strokeWidth={2} />}
       </svg>
       {hover !== null && (
         <span className="pointer-events-none absolute -top-6 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ff-text px-1.5 py-0.5 font-mono text-[10.5px] text-ff-panel">
           {labels?.[hover] ?? `Wk ${hover + 1}`} · {points[hover].toFixed(1)}
+          {ph != null && <span className="opacity-70"> / proj {ph.toFixed(1)}</span>}
         </span>
       )}
     </span>
   )
+}
+
+/** SVG path through the non-null points, breaking the line at each gap. */
+export const linePath = (vals: (number | null | undefined)[], x: (i: number) => number, y: (v: number) => number) => {
+  let d = ''
+  let pen = false
+  vals.forEach((v, i) => {
+    if (v == null) return void (pen = false)
+    d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`
+    pen = true
+  })
+  return d
 }
 
 /**

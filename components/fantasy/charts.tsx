@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { cx, fmt, fmtSigned } from './ui'
+import { cx, fmt, fmtSigned, linePath } from './ui'
 
 // Small SVG charts for the fantasy app. One axis each, hairline grid, thin
 // marks with rounded-sm data ends, a 2px surface gap between touching marks, and
@@ -214,6 +214,115 @@ export const MiniLines = ({
           ))}
         </span>
       )}
+    </div>
+  )
+}
+
+/**
+ * Results against expectations, week by week. The projection is a faded line
+ * underneath (dashed where the weeks are still to come); what actually
+ * happened sits on top, each week's dot marked by whether it beat the
+ * projection. One axis, points per week.
+ */
+export const ProjectionChart = ({
+  weeks,
+  actual,
+  projected,
+  height = 170,
+  highlight = [],
+  unit = 'pts',
+}: {
+  weeks: number[]
+  actual: (number | null)[]
+  projected: (number | null)[]
+  height?: number
+  /** Weeks to shade, e.g. the fantasy playoffs. */
+  highlight?: number[]
+  unit?: string
+}) => {
+  const [hover, setHover] = useState<number | null>(null)
+  const [ref, w] = useWidth(480)
+  const vals = [...actual, ...projected].filter((v): v is number => v != null)
+  if (!weeks.length || !vals.length) return null
+  const lastPlayed = actual.reduce<number>((a, v, i) => (v != null ? i : a), -1)
+  const rawLo = Math.min(...vals)
+  const rawHi = Math.max(...vals)
+  const span = rawHi - rawLo || 10
+  const lo = Math.max(0, Math.floor((rawLo - span * 0.1) / 10) * 10)
+  const hi = Math.ceil((rawHi + span * 0.1) / 10) * 10
+  const pad = { l: 34, r: 10, t: 10, b: 20 }
+  const iw = Math.max(40, w - pad.l - pad.r)
+  const ih = height - pad.t - pad.b
+  const step = iw / weeks.length
+  const x = (i: number) => pad.l + step * (i + 0.5)
+  const y = (v: number) => pad.t + ih - ((v - lo) / (hi - lo || 1)) * ih
+  const ticks = [lo, (lo + hi) / 2, hi]
+  const pastProj = projected.map((v, i) => (i <= Math.max(lastPlayed, 0) ? v : null))
+  // The dashed run starts at the last played week so the two lines join.
+  const futureProj = projected.map((v, i) => (i >= lastPlayed ? v : null))
+  const h = hover
+  const diff = h !== null && actual[h] != null && projected[h] != null ? actual[h]! - projected[h]! : null
+  return (
+    <div className="relative" ref={ref} onMouseLeave={() => setHover(null)}>
+      <svg width={w} height={height} className="block" role="img" aria-label={`Weekly ${unit}, scored against projected`}>
+        {weeks.map((wk, i) => (highlight.includes(wk) ? <rect key={`h${i}`} x={x(i) - step / 2} y={pad.t} width={step} height={ih} className="fill-ff-accent/[0.06]" /> : null))}
+        {ticks.map((t, i) => (
+          <g key={i}>
+            <line x1={pad.l} x2={w - pad.r} y1={y(t)} y2={y(t)} className="stroke-ff-line" strokeWidth={1} />
+            <text x={pad.l - 6} y={y(t) + 3} textAnchor="end" className="fill-ff-muted font-mono text-[9.5px]">
+              {Math.round(t)}
+            </text>
+          </g>
+        ))}
+        {weeks.map((wk, i) =>
+          i % Math.max(1, Math.ceil(weeks.length / Math.max(4, Math.floor(iw / 34)))) === 0 || i === weeks.length - 1 ? (
+            <text key={i} x={x(i)} y={height - 5} textAnchor="middle" className="fill-ff-muted font-mono text-[9.5px]">
+              {wk}
+            </text>
+          ) : null,
+        )}
+        {h !== null && <line x1={x(h)} x2={x(h)} y1={pad.t} y2={pad.t + ih} className="stroke-ff-line2" strokeWidth={1} />}
+        <path d={linePath(pastProj, x, y)} fill="none" className="stroke-ff-muted" strokeOpacity={0.5} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <path d={linePath(futureProj, x, y)} fill="none" className="stroke-ff-muted" strokeOpacity={0.5} strokeWidth={2} strokeDasharray="4 4" strokeLinecap="round" />
+        <path d={linePath(actual, x, y)} fill="none" className="stroke-ff-accent" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {actual.map((v, i) => {
+          if (v == null) return null
+          const p = projected[i]
+          const tone = p == null ? 'fill-ff-accent' : v >= p ? 'fill-ff-pos' : 'fill-ff-neg'
+          return <circle key={i} cx={x(i)} cy={y(v)} r={h === i ? 4.5 : 3} className={cx(tone, 'stroke-ff-panel')} strokeWidth={2} />
+        })}
+        {h !== null && actual[h] == null && projected[h] != null && <circle cx={x(h)} cy={y(projected[h]!)} r={3.5} className="fill-ff-muted stroke-ff-panel" strokeWidth={2} />}
+        {weeks.map((_, i) => (
+          <rect key={i} x={x(i) - step / 2} y={pad.t} width={step} height={ih} fill="transparent" onMouseEnter={() => setHover(i)} />
+        ))}
+      </svg>
+      {h !== null && (
+        <span
+          className="pointer-events-none absolute z-30 rounded-sm bg-ff-text px-2 py-1 font-mono text-[10.5px] leading-relaxed text-ff-panel"
+          style={{ left: Math.max(0, Math.min(x(h) + 10, w - 140)), top: pad.t }}
+        >
+          <span className="block opacity-70">week {weeks[h]}</span>
+          {actual[h] != null && <span className="block">scored {fmt(actual[h])}</span>}
+          {projected[h] != null && <span className="block opacity-80">projected {fmt(projected[h])}</span>}
+          {diff != null && <span className="block">{fmtSigned(diff)} vs proj</span>}
+        </span>
+      )}
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 px-1 font-mono text-[10px] text-ff-muted">
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-3 bg-ff-accent" />
+          scored
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-3 bg-ff-muted/50" />
+          projected
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-ff-pos" />
+          beat
+          <span className="ml-1 h-2 w-2 rounded-full bg-ff-neg" />
+          missed
+        </span>
+      </div>
     </div>
   )
 }
