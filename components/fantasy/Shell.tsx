@@ -1,11 +1,12 @@
-import React, { useEffect, useState, type ReactNode } from 'react'
+import React, { useEffect, useRef, useState, type ReactNode } from 'react'
 import Head from 'next/head'
-import { Avatar, Dropdown, cx } from './ui'
+import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
+import { Avatar, Dropdown, cx, usePhone } from './ui'
 
 export const SECTION_KEYS = ['dash', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
-type Group = 'Overview' | 'Your team' | 'League' | 'M.O.N.K.E.'
+type Group = 'Overview' | 'Your team' | 'League' | 'Engine'
 type Section = { key: SectionKey; label: string; short: string; group: Group }
 
 /** Order is the register: the number beside each entry is also its keyboard shortcut. */
@@ -17,13 +18,13 @@ export const SECTIONS: Section[] = [
   { key: 'power', label: 'Power', short: 'Power', group: 'League' },
   { key: 'teams', label: 'Teams', short: 'Teams', group: 'League' },
   { key: 'players', label: 'Players', short: 'Players', group: 'League' },
-  { key: 'monke', label: 'Readout', short: 'Readout', group: 'M.O.N.K.E.' },
-  { key: 'model', label: 'Tuning', short: 'Tuning', group: 'M.O.N.K.E.' },
+  { key: 'monke', label: 'M.O.N.K.E.', short: 'MONKE', group: 'Engine' },
+  { key: 'model', label: 'Tuning', short: 'Tuning', group: 'Engine' },
 ]
-const GROUPS: Group[] = ['Overview', 'Your team', 'League', 'M.O.N.K.E.']
+const GROUPS: Group[] = ['Overview', 'Your team', 'League', 'Engine']
 
 /** The engine's name, and what it stands for. */
-export const MONKE = { name: 'M.O.N.K.E.', long: 'Mostly Overthinking NFL Kickers & Everything' }
+export const MONKE = { name: 'M.O.N.K.E.', long: 'Many Orangutans Nervously Keyboarding Estimates' }
 
 /** The two-digit register number shown beside a section, which is also its keyboard shortcut. */
 export const sectionCode = (key: SectionKey) => String(SECTIONS.findIndex((s) => s.key === key) + 1).padStart(2, '0')
@@ -135,9 +136,7 @@ const SidebarBody = ({
     <nav className="ff-scroll flex-1 overflow-y-auto py-1.5" aria-label="Sections">
       {GROUPS.map((g) => (
         <div key={g} className="pb-1.5">
-          <div className="ff-label px-3 pb-1 pt-2" title={g === MONKE.name ? MONKE.long : undefined}>
-            {g}
-          </div>
+          <div className="ff-label px-3 pb-1 pt-2">{g}</div>
           {SECTIONS.filter((s) => s.group === g).map(({ key, label }) => {
             const i = SECTIONS.findIndex((s) => s.key === key) + 1
             const active = key === section
@@ -147,6 +146,7 @@ const SidebarBody = ({
                 onClick={() => onNavigate(key)}
                 aria-current={active ? 'page' : undefined}
                 aria-keyshortcuts={String(i)}
+                title={key === 'monke' ? MONKE.long : undefined}
                 className={cx(
                   'group flex h-8 w-full items-center gap-3 px-3 text-left text-[13px] transition-colors',
                   active ? 'bg-ff-raised text-ff-text' : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
@@ -197,10 +197,18 @@ const typing = (e: KeyboardEvent) => {
 const Shell = (props: ShellProps) => {
   const { section, onNavigate, children, title, loading, onRefresh, leagues, leagueId } = props
   const [drawer, setDrawer] = useState(false)
+  const phone = usePhone()
+  // The drawer is a phone control; widening the window past it simply closes it.
+  useEffect(() => {
+    if (!phone) setDrawer(false)
+  }, [phone])
+  const drawerSheet = useRef<SwipeSheetHandle>(null)
+  // Closing slides the drawer away first; it unmounts once it is off screen.
+  const closeDrawer = () => (drawerSheet.current ? drawerSheet.current.dismiss() : setDrawer(false))
 
   useEffect(() => {
     if (!drawer) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDrawer(false)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && drawerSheet.current?.dismiss()
     window.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
@@ -227,7 +235,7 @@ const Shell = (props: ShellProps) => {
   }, [onNavigate, onRefresh])
 
   const navigate = (s: SectionKey) => {
-    setDrawer(false)
+    if (drawer) closeDrawer()
     onNavigate(s)
     window.scrollTo({ top: 0 })
   }
@@ -261,20 +269,22 @@ const Shell = (props: ShellProps) => {
         </button>
       </header>
 
-      {/* Phone drawer */}
-      <div className={cx('fixed inset-0 z-40 md:hidden', drawer ? 'pointer-events-auto' : 'pointer-events-none')} aria-hidden={!drawer}>
-        <div onClick={() => setDrawer(false)} className={cx('absolute inset-0 bg-black/60 transition-opacity duration-150', drawer ? 'opacity-100' : 'opacity-0')} />
-        <div
-          role="dialog"
-          aria-label="Menu"
-          className={cx(
-            'absolute inset-y-0 left-0 w-[86vw] max-w-[320px] border-r border-ff-line bg-ff-panel transition-transform duration-150 ease-out',
-            drawer ? 'translate-x-0' : '-translate-x-full',
-          )}
-        >
-          <SidebarBody {...props} onNavigate={navigate} onClose={() => setDrawer(false)} />
+      {/* Phone drawer: swipe it left to close, like any native sheet. */}
+      {drawer && phone && (
+        <div>
+          <SwipeSheet
+            ref={drawerSheet}
+            side="left"
+            className="z-40"
+            onDismissed={() => setDrawer(false)}
+            backdropClassName="bg-black/60"
+            panelProps={{ role: 'dialog', 'aria-label': 'Menu' }}
+            panelClassName="h-full w-[86vw] max-w-[320px] shrink-0 border-r border-ff-line bg-ff-panel"
+          >
+            <SidebarBody {...props} onNavigate={navigate} onClose={closeDrawer} />
+          </SwipeSheet>
         </div>
-      </div>
+      )}
 
       <main className="overflow-x-clip pt-12 md:pl-[220px] md:pt-0">
         <div className={cx('mx-auto px-3 pb-24 md:px-5 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
