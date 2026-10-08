@@ -169,7 +169,7 @@ const DashboardView = () => {
     setCatalog(false)
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50)
   }
-  // Drag the corner: the widget snaps to whole columns and rows as the pointer moves.
+  // Drag a handle (right edge: width, bottom edge: height, corner: both); the widget snaps to whole columns and rows.
   const startResize = (e: React.PointerEvent<HTMLElement>, w: Widget, axes: 'x' | 'y' | 'xy') => {
     if (e.button !== 0 || !grid.current) return
     e.preventDefault()
@@ -183,7 +183,6 @@ const DashboardView = () => {
     const { w: w0, h: h0 } = w
     setResizing(w.id)
     const onMove = (ev: PointerEvent) => {
-      // Below xl the grid is two halves, so width steps between 6 and 12.
       // Width is the desktop column span; below xl the grid is two halves, so only height changes there.
       const nextW = wide && axes !== 'y' ? Math.max(MIN_W, Math.min(12, w0 + Math.round((ev.clientX - x0) / (colW + GAP)))) : w0
       const nextH = axes !== 'x' ? Math.max(MIN_H, Math.min(MAX_H, h0 + Math.round((ev.clientY - y0) / (ROW + GAP)))) : h0

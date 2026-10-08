@@ -226,6 +226,20 @@ export const Segmented = <K extends string>({
   </div>
 )
 
+/** Whether the viewport is phone-width (below md), kept live across rotation and resizing. */
+export const usePhone = () => {
+  const query = '(max-width: 767px)'
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(query)
+    const on = () => setPhone(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return phone
+}
+
 // Server render has no layout; the effect only matters in the browser.
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 

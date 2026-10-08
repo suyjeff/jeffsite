@@ -264,7 +264,7 @@
 
 /* Dashboard resizing, drawn like a design tool's selection: a 1px accent frame, square handles
    with a larger hit area, and the size in grid units under the frame while dragging. Outside edit
-   mode only the corner handle shows, on hover; in edit mode the frame and all handles do. */
+   mode only the corner handle shows, on hover; in edit mode every handle shows, and the frame on hover. */
 .ff .ff-frame,
 .ff .ff-handle,
 .ff .ff-size {
@@ -318,18 +318,29 @@
   background: rgb(var(--ff-accent));
   pointer-events: none;
 }
+/* From md the handles exist (and stay in the accessibility tree) but sit invisible until wanted:
+   the corner on hover; every handle in edit mode, hover or not, so touch tablets can resize too. */
 @media (min-width: 768px) {
+  .ff .ff-handle {
+    display: block;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .ff .ff-editing > .ff-handle,
+  .ff .ff-resizing > .ff-handle {
+    opacity: 1;
+    pointer-events: auto;
+  }
   @media (hover: hover) {
     .ff .ff-widget:hover > .ff-handle-se {
-      display: block;
+      opacity: 1;
+      pointer-events: auto;
     }
-    .ff .ff-editing:hover > .ff-frame,
-    .ff .ff-editing:hover > .ff-handle {
+    .ff .ff-editing:hover > .ff-frame {
       display: block;
     }
   }
   .ff .ff-resizing > .ff-frame,
-  .ff .ff-resizing > .ff-handle,
   .ff .ff-resizing > .ff-size {
     display: block;
   }
@@ -445,15 +456,10 @@
   }
 }
 
-/* Sheets: up from the bottom on phones, in from the right on wider screens. */
+/* Sheets: the wide-screen side sheet slides in from the right. */
 @keyframes ff-fade-in {
   from {
     opacity: 0;
-  }
-}
-@keyframes ff-sheet-up {
-  from {
-    transform: translateY(100%);
   }
 }
 @keyframes ff-sheet-left {
@@ -464,13 +470,9 @@
 .ff .ff-fade-in {
   animation: ff-fade-in 160ms ease-out;
 }
+/* The wide-screen side sheet; phones use SwipeSheet, which enters by scrolling. */
 .ff .ff-sheet {
-  animation: ff-sheet-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-@media (min-width: 768px) {
-  .ff .ff-sheet {
-    animation-name: ff-sheet-left;
-  }
+  animation: ff-sheet-left 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @media (prefers-reduced-motion: reduce) {
   .ff .ff-fade-in,

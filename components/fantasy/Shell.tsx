@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react'
 import Head from 'next/head'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
-import { Avatar, Dropdown, cx } from './ui'
+import { Avatar, Dropdown, cx, usePhone } from './ui'
 
 export const SECTION_KEYS = ['dash', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
@@ -197,6 +197,11 @@ const typing = (e: KeyboardEvent) => {
 const Shell = (props: ShellProps) => {
   const { section, onNavigate, children, title, loading, onRefresh, leagues, leagueId } = props
   const [drawer, setDrawer] = useState(false)
+  const phone = usePhone()
+  // The drawer is a phone control; widening the window past it simply closes it.
+  useEffect(() => {
+    if (!phone) setDrawer(false)
+  }, [phone])
   const drawerSheet = useRef<SwipeSheetHandle>(null)
   // Closing slides the drawer away first; it unmounts once it is off screen.
   const closeDrawer = () => (drawerSheet.current ? drawerSheet.current.dismiss() : setDrawer(false))
@@ -265,8 +270,8 @@ const Shell = (props: ShellProps) => {
       </header>
 
       {/* Phone drawer: swipe it left to close, like any native sheet. */}
-      {drawer && (
-        <div className="md:hidden">
+      {drawer && phone && (
+        <div>
           <SwipeSheet
             ref={drawerSheet}
             side="left"

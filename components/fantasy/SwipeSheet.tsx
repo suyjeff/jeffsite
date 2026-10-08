@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, type ReactNode } from 'react'
+import React, { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { cx } from './ui'
 
 // A phone sheet whose swipe is the browser's own scroll, after React Aria's Sheet
@@ -47,8 +47,11 @@ const SwipeSheet = forwardRef<
   const done = useRef(false)
   const dismissedRef = useRef(onDismissed)
   dismissedRef.current = onDismissed
-  const pad = useRef(side === 'bottom' && iosSafari() ? 'calc(100lvh - 100svh + 58px)' : '0px')
+  const [pad] = useState(() => (side === 'bottom' && iosSafari() ? 'calc(100lvh - 100svh + 58px)' : '0px'))
   const y = side === 'bottom'
+  // The sheet's size along the swipe, kept by a ResizeObserver so scrolling never reads layout.
+  const size = useRef(1)
+  const fallback = useRef<number>()
 
   const finish = () => {
     if (done.current) return
@@ -61,14 +64,23 @@ const SwipeSheet = forwardRef<
     const max = y ? el.scrollHeight - el.clientHeight : el.scrollWidth - el.clientWidth
     return y ? { open: max, gone: 0 } : { open: 0, gone: max }
   }
+  // How much of the sheet is on screen, 0–1, from the scroll position alone.
+  const shown = () => {
+    const el = scroller.current
+    if (!el) return 0
+    const at = y ? el.scrollTop - (positions().open - size.current) : size.current - el.scrollLeft
+    return Math.max(0, Math.min(1, at / size.current))
+  }
   const scrollTo = (to: number, smooth: boolean) => scroller.current?.scrollTo({ [y ? 'top' : 'left']: to, behavior: smooth && !reducedMotion() ? 'smooth' : 'auto' })
 
   const dismiss = () => {
     if (done.current || !scroller.current) return
     if (reducedMotion()) return finish()
     scrollTo(positions().gone, true)
-    // The observer closes it as it leaves; this covers a browser that never lets it get there.
-    window.setTimeout(finish, 700)
+    // The observer closes it as it leaves. This covers a browser that never lets it get there, unless
+    // the sheet has been grabbed and pulled back meanwhile.
+    window.clearTimeout(fallback.current)
+    fallback.current = window.setTimeout(() => shown() < 0.05 && finish(), 700)
   }
   useImperativeHandle(ref, () => ({ dismiss }))
 
@@ -80,33 +92,37 @@ const SwipeSheet = forwardRef<
     return () => cancelAnimationFrame(raf)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Backdrop follows how much of the sheet shows; a dismissal is the sheet fully gone.
+  // Backdrop follows how much of the sheet shows; a dismissal is the sheet (all but a sliver) gone.
   useEffect(() => {
     const el = scroller.current
     const sheet = panel.current
     if (!el || !sheet) return
     const shade = () => {
-      const r = sheet.getBoundingClientRect()
-      const shown = y ? (window.innerHeight - r.top) / (r.height || 1) : r.right / (r.width || 1)
-      if (backdrop.current) backdrop.current.style.opacity = String(Math.max(0, Math.min(1, shown)))
+      if (backdrop.current) backdrop.current.style.opacity = String(shown())
     }
-    shade()
+    const ro = new ResizeObserver(() => {
+      size.current = (y ? sheet.offsetHeight : sheet.offsetWidth) || 1
+      shade()
+    })
+    ro.observe(sheet)
     el.addEventListener('scroll', shade, { passive: true })
-    window.addEventListener('resize', shade)
     let entered = false
     const io = new IntersectionObserver(
       ([entry]) => {
-        entered ||= entry.intersectionRatio > 0
-        if (entered && entry.intersectionRatio <= 0) finish()
+        // Entered once at least 1% has shown, so the first sliver of the entrance never reads as a dismissal.
+        entered ||= entry.intersectionRatio >= 0.01
+        // Under 1% left on screen counts as gone: a snap can land a fraction of a pixel short of the edge.
+        if (entered && entry.intersectionRatio < 0.01) finish()
       },
       // Count the strip behind the iOS toolbar as on screen, so the sheet closes only once truly gone.
-      { threshold: [0, 1], rootMargin: `0px 0px ${y ? toPx(pad.current) : 0}px 0px` },
+      { threshold: [0, 0.01, 1], rootMargin: `0px 0px ${y ? toPx(pad) : 0}px 0px` },
     )
     io.observe(sheet)
     return () => {
+      ro.disconnect()
       el.removeEventListener('scroll', shade)
-      window.removeEventListener('resize', shade)
       io.disconnect()
+      window.clearTimeout(fallback.current)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -118,7 +134,7 @@ const SwipeSheet = forwardRef<
   const tapOutside = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) dismiss()
   }
-  const P = pad.current
+  const P = pad
   const marker = (style: React.CSSProperties) => <div aria-hidden style={{ position: 'absolute', pointerEvents: 'none', ...style }} />
 
   return (

@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { ProjectionChart } from './charts'
 import AdjustControl from './AdjustControl'
 import { ContextNotes } from './ContextNotes'
 import { useFantasy } from './FantasyContext'
 import LinesBlock from './LinesBlock'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
-import { Badge, PlayerAvatar, PosTag, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel } from './ui'
+import { Badge, PlayerAvatar, PosTag, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel, usePhone } from './ui'
 
 const Section = ({ title, children, aside }: { title: string; children: React.ReactNode; aside?: React.ReactNode }) => (
   <section className="border-t border-ff-line px-4 py-3">
@@ -26,7 +26,7 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
   const panel = useRef<HTMLDivElement>(null)
   const p = data.players[id]
   // Phones get the swipeable bottom sheet; its close slides away first, then reports back.
-  const [phone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches)
+  const phone = usePhone()
   const swipe = useRef<SwipeSheetHandle>(null)
   const close = useRef(onClose)
   close.current = phone ? () => (swipe.current ? swipe.current.dismiss() : onClose()) : onClose
@@ -110,8 +110,8 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
   const dialog = { role: 'dialog', 'aria-modal': true, 'aria-label': `${p.name} details`, tabIndex: -1 } as const
   const body = (
     <>
-      <div className="mx-auto mt-2 h-1 w-10 shrink-0 bg-ff-line2 md:hidden" aria-hidden />
-      <header className="flex items-start gap-3 px-4 pb-3 pt-3 md:pt-4">
+      {phone && <div className="mx-auto mt-2 h-1 w-10 shrink-0 bg-ff-line2" aria-hidden />}
+      <header className={cx('flex items-start gap-3 px-4 pb-3', phone ? 'pt-3' : 'pt-4')}>
         <PlayerAvatar id={id} player={p} size={56} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -127,12 +127,12 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
           </div>
         </div>
         <button onClick={() => close.current()} className="-mr-1 -mt-1 h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close">
-          <span className="md:hidden">Close</span>
-          <span className="hidden md:inline">ESC</span>
+          {phone ? 'Close' : 'ESC'}
         </button>
       </header>
 
-      <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-auto [scrollbar-gutter:stable] md:overscroll-contain">
+      {/* On phones the content chains its scroll to the sheet, so a swipe down from the top dismisses it. */}
+      <div className={cx('ff-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]', phone ? 'overscroll-auto' : 'overscroll-contain')}>
         <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line sm:grid-cols-4 [&>*]:border-0">
           <Stat label="Exp / wk" value={fmt(perWeek)} sub="rest of season" />
           <Stat label="Value" value={market != null ? fmtSigned(market, 1) : '–'} sub={posRank ? `model ${p.pos}${posRank}` : 'over replacement'} tone={market != null && market > 0 ? 'pos' : undefined} />
