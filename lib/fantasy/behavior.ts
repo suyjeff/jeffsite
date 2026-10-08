@@ -12,6 +12,7 @@
 //               model. A deal the model likes that the consensus calls fair
 //               is the one that gets accepted.
 
+import { tradeValue, type Currency } from './currency'
 import type { LeagueHistory } from './useLeagueData'
 import type { TradeIdea } from './trades'
 import type { PlayerMap, SleeperTransaction } from './types'
@@ -151,6 +152,8 @@ export type AcceptRead = {
   /** Value they give minus value they get, as the consensus rankings price it. */
   perceivedAsk: number | null
   reasons: string[]
+  /** The same reasons, each marked as helping (pos) or hurting (neg) the chance they say yes. */
+  signals: { text: string; tone: 'pos' | 'neg' | 'neutral' }[]
 }
 
 const logistic = (x: number) => 1 / (1 + Math.exp(-x))
@@ -166,32 +169,39 @@ const logistic = (x: number) => 1 / (1 + Math.exp(-x))
  *   trade history         +0.25 per trade, capped; +0.3 if they have traded with you
  *   extra bodies          −0.15 per player past a 1-for-1
  */
-export const acceptRead = (idea: TradeIdea, me: number, behavior: LeagueBehavior | null, perceived: Record<string, number> | null): AcceptRead => {
-  const reasons: string[] = []
-  const perceivedAsk = perceived
-    ? idea.get.reduce((a, id) => a + (perceived[id] ?? 0), 0) - idea.give.reduce((a, id) => a + (perceived[id] ?? 0), 0)
-    : null
+export const acceptRead = (idea: TradeIdea, me: number, behavior: LeagueBehavior | null, perceived: Record<string, number> | null, currency?: Currency): AcceptRead => {
+  const signals: AcceptRead['signals'] = []
+  const say = (text: string, tone: 'pos' | 'neg' | 'neutral') => signals.push({ text, tone })
+  // Consensus value, priced the way people price it: streamers cheap, their own drafted players dear.
+  const perceivedAsk = perceived ? tradeValue(idea.get, perceived, currency, true) - tradeValue(idea.give, perceived, currency, false) : null
   const ask = perceivedAsk ?? idea.valueAsk
   let x = -0.1 + 0.9 * idea.theirGain - 0.45 * Math.max(0, ask) + 0.1 * Math.min(2, Math.max(0, -ask))
   if (perceivedAsk != null) {
-    if (perceivedAsk > 1.5) reasons.push('looks like an overpay to them by consensus')
-    else if (perceivedAsk < -0.5) reasons.push('consensus says they win it')
-    else reasons.push('consensus calls it fair')
+    if (perceivedAsk > 1.5) say('looks like an overpay to them by consensus', 'neg')
+    else if (perceivedAsk < -0.5) say('consensus says they win it', 'pos')
+    else say('consensus calls it fair', 'neutral')
   }
   const team = behavior?.teams[idea.partnerId]
   if (team) {
     x += 0.8 * (team.engagement - 0.5)
-    if (team.engagement >= 0.75) reasons.push('one of the most active managers')
-    else if (team.engagement <= 0.25) reasons.push('rarely touches his roster')
+    if (team.engagement >= 0.75) say('one of the most active managers', 'pos')
+    else if (team.engagement <= 0.25) say('rarely touches his roster', 'neg')
     const history = team.trades + 0.5 * team.tradesLast
     x += 0.25 * Math.min(3, history)
-    if (team.trades + team.tradesLast > 0) reasons.push(`${team.trades + team.tradesLast} trade${team.trades + team.tradesLast === 1 ? '' : 's'} on record`)
+    if (team.trades + team.tradesLast > 0) say(`${team.trades + team.tradesLast} trade${team.trades + team.tradesLast === 1 ? '' : 's'} on record`, 'pos')
+    else say('no trades on record', 'neg')
     if (team.partners[me]) {
       x += 0.3
-      reasons.push('has traded with you before')
+      say('has traded with you before', 'pos')
     }
   }
   x -= 0.15 * Math.max(0, idea.give.length + idea.get.length - 2)
   const index = Math.round(logistic(x) * 100)
-  return { index, band: index >= 60 ? 'likely' : index >= 35 ? 'possible' : 'long shot', perceivedAsk: perceivedAsk == null ? null : Math.round(perceivedAsk * 100) / 100, reasons }
+  return {
+    index,
+    band: index >= 60 ? 'likely' : index >= 35 ? 'possible' : 'long shot',
+    perceivedAsk: perceivedAsk == null ? null : Math.round(perceivedAsk * 100) / 100,
+    reasons: signals.map((s) => s.text),
+    signals,
+  }
 }

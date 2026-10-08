@@ -259,7 +259,8 @@ export const Button = ({
 }: {
   children: ReactNode
   onClick?: () => void
-  variant?: 'outline' | 'ghost' | 'primary'
+  /** accent: the one action a view exists for (build a trade); primary: a confirming action. */
+  variant?: 'outline' | 'ghost' | 'primary' | 'accent'
   size?: 'sm' | 'md'
   className?: string
   title?: string
@@ -275,6 +276,7 @@ export const Button = ({
       'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40',
       size === 'sm' ? 'h-7 px-2 text-[11.5px]' : 'h-8 px-3 text-[12.5px]',
       variant === 'primary' && 'bg-ff-text text-ff-panel hover:bg-ff-text/85',
+      variant === 'accent' && 'bg-ff-accent font-medium text-white shadow-[0_0_0_1px_rgb(var(--ff-accent)/0.4)] hover:bg-ff-accent/90',
       variant === 'outline' && 'border border-ff-line bg-ff-panel text-ff-text hover:border-ff-line2 hover:bg-ff-raised',
       variant === 'ghost' && 'text-ff-muted hover:bg-ff-raised hover:text-ff-text',
       className,
@@ -316,6 +318,74 @@ const TONE: Record<Tone, string> = {
   warn: 'bg-ff-warn/15 text-ff-warn',
   accent: 'bg-ff-accent/10 text-ff-accent',
 }
+
+/**
+ * A number that matters, sized by how much. Three steps, used sparingly:
+ *   hero  the one figure a card or view is about (one per view, ideally)
+ *   lg    the figures that decide something
+ *   md    supporting figures
+ * Everything else is plain body text, not a Figure. The unit sits small and
+ * muted beside the value so the eye lands on the number.
+ */
+export const Figure = ({
+  label,
+  value,
+  unit,
+  sub,
+  size = 'md',
+  tone,
+  title,
+  className,
+}: {
+  label?: ReactNode
+  value: ReactNode
+  unit?: ReactNode
+  sub?: ReactNode
+  size?: 'hero' | 'lg' | 'md'
+  tone?: 'pos' | 'neg' | 'warn' | 'accent' | 'muted'
+  title?: string
+  className?: string
+}) => (
+  <div className={cx('min-w-0', title && 'cursor-help', className)} title={title}>
+    {label && <div className="ff-label truncate">{label}</div>}
+    <div className={cx('flex items-baseline gap-1', label && (size === 'hero' ? 'mt-1' : 'mt-0.5'))}>
+      <span
+        className={cx(
+          'num leading-none',
+          size === 'hero' ? 'text-[26px] font-medium tracking-[-0.03em]' : size === 'lg' ? 'text-[18px] font-medium tracking-[-0.02em]' : 'text-[14px]',
+          tone === 'pos' ? 'text-ff-pos' : tone === 'neg' ? 'text-ff-neg' : tone === 'warn' ? 'text-ff-warn' : tone === 'accent' ? 'text-ff-accent' : tone === 'muted' ? 'text-ff-muted' : 'text-ff-text',
+        )}
+      >
+        {value}
+      </span>
+      {unit && <span className="font-mono text-[10px] text-ff-muted">{unit}</span>}
+    </div>
+    {sub && <div className="mt-1 truncate text-[11px] leading-snug text-ff-muted">{sub}</div>}
+  </div>
+)
+
+/** A short tagged fact: a reason for or against, a status, a small count. Tone carries the meaning; text stays readable. */
+export const Chip = ({ children, tone = 'neutral', title, className }: { children: ReactNode; tone?: Tone; title?: string; className?: string }) => (
+  <span
+    title={title}
+    className={cx(
+      'inline-flex max-w-full items-center gap-1 whitespace-nowrap border px-1.5 py-[1px] text-[11.5px] leading-[18px]',
+      tone === 'pos'
+        ? 'border-ff-pos/25 bg-ff-pos/[0.08] text-ff-pos'
+        : tone === 'neg'
+          ? 'border-ff-neg/25 bg-ff-neg/[0.08] text-ff-neg'
+          : tone === 'warn'
+            ? 'border-ff-warn/30 bg-ff-warn/10 text-ff-warn'
+            : tone === 'accent'
+              ? 'border-ff-accent/25 bg-ff-accent/[0.08] text-ff-accent'
+              : 'border-ff-line bg-ff-sunken text-ff-text2',
+      title && 'cursor-help',
+      className,
+    )}
+  >
+    <span className="truncate">{children}</span>
+  </span>
+)
 
 export const Badge = ({ children, tone = 'neutral', title, className }: { children: ReactNode; tone?: Tone; title?: string; className?: string }) => (
   <span title={title} className={cx('inline-flex items-center whitespace-nowrap px-1.5 font-mono text-[10.5px] leading-[18px]', TONE[tone], title && 'cursor-help', className)}>

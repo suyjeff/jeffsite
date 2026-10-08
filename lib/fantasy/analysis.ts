@@ -1,3 +1,4 @@
+import { tradeCurrency, type Currency } from './currency'
 import { startingSlots, type Slot } from './lineup'
 import {
   buildTeamSeasons,
@@ -71,6 +72,8 @@ export type Analysis = {
   needs: Record<number, TeamNeeds>
   /** Players a roster may hold, so uneven packages are costed honestly. */
   capacity: number
+  /** How people price players in a trade: streamers cheap, drafted players dear (see currency.ts). */
+  currency: Currency
 }
 
 export const teamDisplayName = (user: SleeperUser | undefined, rosterId: number) =>
@@ -135,6 +138,15 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
   const market = marketValues(horizon.perActive, players, horizonReplacement)
   const capacity = Math.max(rosterCapacity(rosterPositions), ...teams.map((t) => t.players.length))
   const needs = teamNeeds(teams, slots, players, data.horizon, horizonStarter, rosterPositions, numTeams, horizonReplacement)
+  const currency = tradeCurrency({
+    players,
+    market,
+    rosterPositions,
+    numTeams,
+    rosters: teams.map((t) => ({ rosterId: t.rosterId, players: t.players })),
+    transactions: data.transactions,
+    consensus: data.consensus,
+  })
 
   return {
     slots,
@@ -158,6 +170,7 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
     market,
     needs,
     capacity,
+    currency,
   }
 }
 

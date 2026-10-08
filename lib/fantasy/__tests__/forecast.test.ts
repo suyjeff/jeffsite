@@ -5,6 +5,10 @@ import { deadStarters, startingSlots } from '../lineup'
 import type { TeamWeek } from '../power'
 import { backtest, bracketOrder, clinchStatus, eloWinProb, gamesFrom, managedPoints, persistMean, phi, preseasonElo, runElo, simulateSeason, ELO } from '../forecast'
 import { applyAdjustments, liveAdjustments } from '../adjust'
+import type { Analysis } from '../analysis'
+import type { Models } from '../models'
+import { scoutTeam } from '../scout'
+import { ATTACHMENT, tradeCurrency, tradeValue } from '../currency'
 import type { TradeIdea } from '../trades'
 import type { LeagueData } from '../useLeagueData'
 import type { PlayerMap, SleeperTransaction } from '../types'
@@ -250,5 +254,64 @@ describe('adjustments', () => {
   it('drops a one-week read once that week has passed', () => {
     const live = liveAdjustments({ a: { pct: -0.25, scope: 'week', week: 4 }, b: { pct: 0.1, scope: 'season', week: 4 }, c: { pct: 0, scope: 'season', week: 5 } }, 5)
     expect(Object.keys(live)).toEqual(['b'])
+  })
+})
+
+describe('trade currency', () => {
+  const P = (id: string, pos: string) => ({ id, name: id, pos, fpos: [pos], team: 'KC', status: null, injury: null, age: null, exp: null })
+  const players = { q1: P('q1', 'QB'), q2: P('q2', 'QB'), q3: P('q3', 'QB'), d: P('d', 'DEF'), w: P('w', 'WR') }
+  const market = { q1: 6, q2: 4, q3: 2, d: 1.5, w: 5 }
+  const cur = tradeCurrency({
+    players,
+    market,
+    rosterPositions: ['QB', 'WR', 'DEF'],
+    numTeams: 2,
+    rosters: [
+      { rosterId: 1, players: ['q1', 'w', 'd'] },
+      { rosterId: 2, players: ['q2', 'q3'] },
+    ],
+    transactions: [{ type: 'free_agent', status: 'complete', roster_ids: [1], adds: { d: 1 }, drops: null, picks: 0, created: 1, leg: 1 }],
+  })
+  it('prices streamers low and drafted players dear', () => {
+    // Two QB starters: q3 (third) is past the line by a full half again.
+    expect(cur.factor.q3).toBeCloseTo(0.35)
+    expect(cur.factor.q1).toBeUndefined()
+    expect(cur.factor.d).toBeCloseTo(0.1)
+    // Picked up this season: no attachment. Drafted: attached.
+    expect(cur.attached.has('d')).toBe(false)
+    expect(cur.attached.has('w')).toBe(true)
+    expect(tradeValue(['w'], market, cur, true)).toBeCloseTo(5 * ATTACHMENT)
+    expect(tradeValue(['q3', 'd'], market, cur, false)).toBeCloseTo(2 * 0.35 + 1.5 * 0.1)
+  })
+})
+
+describe('scouting report', () => {
+  const analysis = {
+    slots: [],
+    teams: [1, 2, 3, 4, 5, 6].map((rosterId) => ({ rosterId, players: [] })),
+    teamById: {},
+    needs: {
+      1: {
+        slots: [
+          { slot: 'RB', starter: 'a', gap: 2.5 },
+          { slot: 'RB', starter: 'b', gap: 1 },
+          { slot: 'WR', starter: 'c', gap: -0.5 },
+          { slot: 'WR', starter: null, gap: -1 },
+        ],
+      },
+    },
+    seasonById: { 1: { games: 4, wins: 1, losses: 3, luck: -1.2, expectedWins: 2.2 } },
+    powerById: Object.fromEntries([1, 2, 3, 4, 5, 6].map((id) => [id, { sos: 40 + id }])),
+    horizonReplacement: {},
+  } as unknown as Analysis
+  const data = { players: { a: { name: 'A One' }, b: { name: 'B Two' }, c: { name: 'C Three' } }, horizon: [], rawHorizon: [], context: {} } as unknown as LeagueData
+  it('groups rooms, flags luck and schedule, and ranks by size', () => {
+    const s = scoutTeam(data, analysis, { forecast: null } as unknown as Models, 1)
+    expect(s.strengths.map((f) => f.key)).toEqual(['pos:RB', 'schedule'])
+    expect(s.strengths[0].value).toBeCloseTo(3.5)
+    expect(s.strengths[0].detail).toBe('One, Two')
+    // Luck (1.2 wins ≈ 4.8 pts) outranks a 1.5-point WR hole.
+    expect(s.weaknesses.map((f) => f.key)).toEqual(['luck', 'pos:WR'])
+    expect(s.summary).toBe('Built on RB (+3.5/wk); held back by bad luck (−1.2 wins).')
   })
 })

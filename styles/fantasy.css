@@ -63,17 +63,26 @@
   }
 }
 
+/*
+ * The app's monospace is Chivo Mono: a grotesque mono with a plain zero.
+ * Plex Mono (the rest of the site) marks its zero with a dot, which turns a
+ * screen of figures into a field of speckles. Scoped to the app so the other
+ * pages keep their type.
+ */
+.ff .font-mono,
+.ff .num,
+.ff .ff-label {
+  font-family: 'Chivo Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
 /* Numbers align in columns and read as data. */
 .ff .num {
-  font-family: theme('fontFamily.mono');
   font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1, 'zero' 1;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
 }
 
 /* Instrument labels: mono, small caps-height, wide tracking. */
 .ff .ff-label {
-  font-family: theme('fontFamily.mono');
   font-size: 10px;
   line-height: 14px;
   letter-spacing: 0.12em;

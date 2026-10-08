@@ -72,7 +72,7 @@ const TradesView = ({
 
   const { models } = useFantasy()
   const search = useMemo(() => searchTrades(data, analysis, { minTheirGain, maxValueAsk }), [data, analysis, minTheirGain, maxValueAsk])
-  const reads = useMemo(() => new Map(search.ideas.map((i) => [i, acceptRead(i, myRosterId ?? -1, models.behavior, models.perceived)])), [search.ideas, myRosterId, models])
+  const reads = useMemo(() => new Map(search.ideas.map((i) => [i, acceptRead(i, myRosterId ?? -1, models.behavior, models.perceived, analysis.currency)])), [search.ideas, myRosterId, models])
 
   const shown = useMemo(() => {
     let xs = search.ideas
@@ -199,18 +199,15 @@ const TradesView = ({
 
   const horizonWeeks = data.horizon.map((h) => h.week)
   const meta = (
-    <>
-      <span className="num">
-        wks {horizonWeeks[0]}–{horizonWeeks[horizonWeeks.length - 1]}
+    <span className="flex flex-wrap gap-x-1.5" title={`Searched in ${Math.round(search.ms)}ms`}>
+      <span>
+        <span className="num text-ff-text2">{search.ideas.length}</span> deals with <span className="num text-ff-text2">{new Set(search.ideas.map((i) => i.partnerId)).size}</span> teams
       </span>
-      {data.playoffWeeks.length > 0 && data.horizonMode === 'playoffs' && (
-        <>
-          {' '}· playoffs <span className="num">×{data.playoffWeight}</span>
-        </>
-      )}{' '}
-      · <span className="num">{search.ideas.length}</span> deals across <span className="num">{new Set(search.ideas.map((i) => i.partnerId)).size}</span> teams ·{' '}
-      <span className="num">{Math.round(search.ms)}ms</span>
-    </>
+      <span>
+        · priced wks {horizonWeeks[0]}–{horizonWeeks[horizonWeeks.length - 1]}
+        {data.playoffWeeks.length > 0 && data.horizonMode === 'playoffs' && data.playoffWeight !== 1 ? `, playoffs ×${data.playoffWeight}` : ''}
+      </span>
+    </span>
   )
 
   const filterControls = (
@@ -246,6 +243,13 @@ const TradesView = ({
         code={sectionCode('trades')}
         title="Trades"
         meta={meta}
+        actions={
+          tab !== 'builder' && (
+            <Button variant="accent" onClick={() => onSub('builder')} title="Put together any deal and see it priced">
+              Build a trade →
+            </Button>
+          )
+        }
         tabs={
           <Tabs<Sub>
             value={tab}

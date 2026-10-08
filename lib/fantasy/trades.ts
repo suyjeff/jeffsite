@@ -11,6 +11,7 @@
 // optimal starting lineup over the weeks ahead — so both halves of a deal are
 // priced on the same scale.
 
+import { tradeValue, UNTRADED_POSITIONS, type Currency } from './currency'
 import { optimalLineup, starterDemand, type LineupPlayer, type Slot } from './lineup'
 import type { PlayerMap } from './types'
 
@@ -520,6 +521,8 @@ export type TradeSearchInput = {
   others: TradeTeam[]
   capacity: number
   market: Record<string, number>
+  /** How people price players in a trade (streamers cheap, drafted players dear); plain market value without it. */
+  currency?: Currency
   /** Replacement level per position: the lineup floor any owner can reach via waivers. */
   floor?: WaiverFloor
   config?: Partial<TradeConfig>
@@ -571,12 +574,23 @@ const cutBy = (before: string[], out: string[], incoming: string[], after: strin
  * The exact week-by-week pricing of a deal, shared by the search and the
  * builder so a suggestion card and its "Adjust" view always agree.
  */
-const makeDealScorer = (slots: Slot[], players: PlayerMap, horizon: Horizon, floor: WaiverFloor, capacity: number, pts: Record<string, number>, market: Record<string, number>) => {
+const makeDealScorer = (
+  slots: Slot[],
+  players: PlayerMap,
+  horizon: Horizon,
+  floor: WaiverFloor,
+  capacity: number,
+  pts: Record<string, number>,
+  market: Record<string, number>,
+  currency?: Currency,
+) => {
   const exact = makeHorizonEval(slots, players, horizon, floor)
   const firstWeek = makeLineupEval(slots, players, horizon[0].pts, floor)
-  // A player below replacement has no trade value, not negative value — otherwise
-  // asking for someone's worst bench body would shave the premium you ask for.
-  const valueOf = (ids: string[]) => ids.reduce((a, id) => a + Math.max(0, market[id] ?? 0), 0)
+  // Trade value as people price it (see currency.ts). A player below replacement
+  // has none, not negative value — otherwise asking for someone's worst bench
+  // body would shave the premium you ask for. Their players carry their
+  // manager's attachment; yours are priced as they would price them.
+  const valueOf = (ids: string[], theirs: boolean) => tradeValue(ids, market, currency, theirs)
   const bases = new Map<number, number[]>()
   const baseOf = (team: TradeTeam) => {
     let b = bases.get(team.rosterId)
@@ -616,7 +630,7 @@ const makeDealScorer = (slots: Slot[], players: PlayerMap, horizon: Horizon, flo
       myGain,
       theirGain,
       myCost: myCost(me, give),
-      valueAsk: round2(valueOf(get) - valueOf(give)),
+      valueAsk: round2(valueOf(get, true) - valueOf(give, false)),
       weeksBetter: perWeek.filter((w) => w.mine > 0.05).length,
       weeks: perWeek.length,
       fills: null,
@@ -673,10 +687,12 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   if (!horizon.length) return []
 
   const screen = makeLineupEval(slots, players, pts, floor)
-  const scorer = makeDealScorer(slots, players, horizon, floor, capacity, pts, market)
+  const scorer = makeDealScorer(slots, players, horizon, floor, capacity, pts, market, input.currency)
   const { valueOf } = scorer
   const myScreenBase = screen.total(me.players)
-  const mine = me.players.filter((id) => players[id])
+  // Kickers and defenses are streamed, not traded: an offer built on one reads as a joke.
+  const tradeable = (id: string) => !!players[id] && !UNTRADED_POSITIONS.has(players[id].pos)
+  const mine = me.players.filter(tradeable)
 
   const funnel: TradeFunnel = { combinations: 0, scored: 0, rejectedValueAsk: 0, rejectedMyGain: 0, rejectedTheirGain: 0, kept: 0 }
 
@@ -697,7 +713,7 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   const ideas: TradeIdea[] = []
 
   for (const them of others) {
-    const theirRoster = them.players.filter((id) => players[id])
+    const theirRoster = them.players.filter(tradeable)
     const theirScreenBase = screen.total(them.players)
     const seen = new Map<string, State>()
     const pool = new Map<string, State>()
@@ -710,7 +726,7 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
       funnel.combinations++
       const my = screen.total(applyTrade(me.players, give, get, capacity, pts)) - myScreenBase
       const their = screen.total(applyTrade(them.players, get, give, capacity, pts)) - theirScreenBase
-      const ask = valueOf(get) - valueOf(give)
+      const ask = valueOf(get, true) - valueOf(give, false)
       const state = { give, get, my, their, ask, objective: objective(my, their, ask, give.length + get.length) }
       seen.set(key, state)
       // Anything within a point of the gain bars goes to the exact pass: the
@@ -835,11 +851,12 @@ export const scoreTrade = (input: {
   get: string[]
   capacity: number
   market: Record<string, number>
+  currency?: Currency
   floor?: WaiverFloor
 }): TradeIdea | null => {
   const { slots, players, horizon, pts, me, partner, give, get, capacity, market } = input
   if (!horizon.length || (!give.length && !get.length)) return null
-  const scorer = makeDealScorer(slots, players, horizon, input.floor ?? {}, capacity, pts, market)
+  const scorer = makeDealScorer(slots, players, horizon, input.floor ?? {}, capacity, pts, market, input.currency)
   const idea = scorer.score(me, partner, give, get)
   idea.fills = scorer.fillsFor(partner, idea)
   return idea

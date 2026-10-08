@@ -4,6 +4,7 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ProjectionChart } from '../charts'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
+import ScoutReport from '../ScoutReport'
 import { sectionCode } from '../Shell'
 import { Avatar, Badge, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
@@ -76,6 +77,8 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
           <Stat label="Lineup efficiency" value={pct(season.efficiency)} sub="of optimal points scored" />
           <Stat label="Projected lineup" value={fmt(needs[rosterId]?.lineup)} sub={needs[rosterId]?.worstPos ? `thinnest at ${needs[rosterId].worstPos}` : 'pts/wk'} />
         </StatGrid>
+
+        <ScoutReport rosterId={rosterId} mine={rosterId === myRosterId} />
 
         {inner === 'roster' && (
           <Panel

@@ -5,6 +5,7 @@ import { makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes } from '../ContextNotes'
 import PlayerName from '../PlayerName'
+import ScoutReport from '../ScoutReport'
 import { sectionCode } from '../Shell'
 import { Badge, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, ago, cx, fmt, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
@@ -154,6 +155,8 @@ const MeView = ({
                 )}
               </StatGrid>
             )}
+
+            <ScoutReport rosterId={me.rosterId} mine />
 
             {fresh.length > 0 && (
               <Panel title="Recent news on your roster" actions={<span>player file {ago(newsAsOf)} old</span>} pad={false}>

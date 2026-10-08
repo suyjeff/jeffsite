@@ -21,6 +21,7 @@ export const tradeBase = (data: LeagueData, analysis: Analysis) => {
     me: { rosterId: me.rosterId, players: me.players },
     capacity: analysis.capacity,
     market: analysis.market,
+    currency: analysis.currency,
     floor: analysis.horizonReplacement,
   }
 }
