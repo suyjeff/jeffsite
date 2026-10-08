@@ -277,7 +277,7 @@ const TradeCard = ({
           )}
         </div>
         {onBuild && (
-          <Button size="sm" variant="accent" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
+          <Button size="sm" variant="aqua" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
             Build this trade →
           </Button>
         )}

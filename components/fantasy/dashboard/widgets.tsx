@@ -3,9 +3,9 @@ import { acceptRead } from '../../../lib/fantasy/behavior'
 import { pastProjection } from '../../../lib/fantasy/analysis'
 import { deadStarters } from '../../../lib/fantasy/lineup'
 import { isWaiverFill, makeLineupEval } from '../../../lib/fantasy/trades'
-import { PROP_LABEL } from '../../../lib/fantasy/lines'
 import { searchTrades, waiverTargets } from '../../../lib/fantasy/search'
 import AdjustControl from '../AdjustControl'
+import LinesBlock from '../LinesBlock'
 import { describeNote } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
@@ -188,9 +188,6 @@ const Odds = ({ sel, select }: WidgetProps) => {
           </Row>
         )
       })}
-      <div className="px-3 py-1.5 font-mono text-[10px] text-ff-muted">
-        {f.sims.toLocaleString()} seasons · weekly σ {fmt(f.sigma)} · season τ {fmt(f.tau)}
-      </div>
     </div>
   )
 }
@@ -486,7 +483,7 @@ const Waivers = ({ sel, select }: WidgetProps) => {
 }
 
 const PlayerCard = ({ sel }: WidgetProps) => {
-  const { data, analysis } = useFantasy()
+  const { data, analysis, openPlayer } = useFantasy()
   const fallback = useMemo(() => {
     const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
     return me ? [...me.players].sort((a, b) => (analysis.market[b] ?? -99) - (analysis.market[a] ?? -99))[0] : Object.keys(analysis.market)[0]
@@ -513,8 +510,15 @@ const PlayerCard = ({ sel }: WidgetProps) => {
             <span className="font-mono text-[11px] text-ff-muted">{p.team ?? 'FA'}</span>
             {p.injury && <Badge tone="warn">{p.injury}</Badge>}
           </div>
-          <div className="mt-1 truncate text-[17px] font-medium leading-tight text-ff-text">{p.name}</div>
-          <div className="mt-0.5 truncate text-[11.5px] text-ff-muted">{owner === undefined ? 'free agent' : owner === analysis.myRosterId ? 'on your roster' : analysis.teamById[owner]?.name}</div>
+          <button onClick={() => openPlayer(id)} className="mt-1 block max-w-full truncate text-left text-[17px] font-medium leading-tight text-ff-text hover:underline">
+            {p.name}
+          </button>
+          <div className="mt-0.5 flex items-baseline justify-between gap-2 text-[11.5px] text-ff-muted">
+            <span className="truncate">{owner === undefined ? 'free agent' : owner === analysis.myRosterId ? 'on your roster' : analysis.teamById[owner]?.name}</span>
+            <button onClick={() => openPlayer(id)} className="shrink-0 font-mono text-[10.5px] text-ff-accent hover:underline">
+              Details →
+            </button>
+          </div>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-px border-b border-ff-line bg-ff-line">
@@ -726,36 +730,6 @@ const Activity = ({ select }: WidgetProps) => {
 }
 
 /** One player's prop lines: the line, the de-vigged chance of the over, and what it implies. */
-const LinesBlock = ({ id }: { id: string }) => {
-  const { data } = useFantasy()
-  const m = data.market!.byId[id]
-  return (
-    <div>
-      <div className="ff-label mb-1 flex justify-between">
-        <span>lines · wk {data.market!.week}</span>
-        <span className="normal-case tracking-normal">
-          <span className="text-ff-text">{fmt(m.pts)}</span> vs sleeper {fmt(m.sleeper)}
-        </span>
-      </div>
-      <div className="border border-ff-line">
-        {m.props.map((p) => (
-          <div key={p.stat} className="flex items-center gap-2 border-b border-ff-line/60 px-2 py-0.5 font-mono text-[10.5px] last:border-0">
-            <span className="flex-1 truncate text-ff-text2">{PROP_LABEL[p.stat] ?? p.stat}</span>
-            <span className="w-10 text-right text-ff-text">{p.stat === 'anytime_touchdowns' ? '' : p.line}</span>
-            <span className="w-9 text-right text-ff-muted" title="Chance of the over, margin removed">
-              {p.stat === 'anytime_touchdowns' ? '' : 'o'}
-              {Math.round(p.pOver * 100)}%
-            </span>
-            <span className="w-14 shrink-0 whitespace-nowrap text-right text-ff-text2" title="Implied expected value">
-              {p.stat === 'anytime_touchdowns' ? `${p.mean.toFixed(2)} td` : `≈${p.mean.toFixed(p.mean < 10 ? 1 : 0)}`}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 /** The week's prop board, read as fantasy points next to Sleeper's projection. */
 const Props = ({ sel, select }: WidgetProps) => {
   const { data, analysis, models } = useFantasy()

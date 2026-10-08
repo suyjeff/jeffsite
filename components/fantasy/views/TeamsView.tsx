@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ProjectionChart } from '../charts'
@@ -6,7 +6,7 @@ import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import ScoutReport from '../ScoutReport'
 import { sectionCode } from '../Shell'
-import { Avatar, Badge, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct } from '../ui'
+import { Avatar, Badge, DeltaChip, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Inner = 'roster' | 'results' | 'slots'
@@ -27,18 +27,23 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
   const chartWeeks = [...data.regularWeeks, ...data.futureWeeks.filter((w) => ahead[w] != null)]
   const scored: Record<number, number> = Object.fromEntries(season.weeks.map((w) => [w.week, w.points]))
 
+  // The league's averages, so each figure reads as above or below.
+  const league = useMemo(() => {
+    const all = analysis.teams.map((t) => seasonById[t.rosterId]).filter((x) => x && x.games > 0)
+    const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
+    return { ppg: mean(all.map((x) => x.ppg)), eff: mean(all.map((x) => x.efficiency)), lineup: mean(analysis.teams.map((t) => needs[t.rosterId]?.lineup ?? 0).filter((x) => x > 0)) }
+  }, [analysis.teams, seasonById, needs])
+
   return (
     <>
       <PageHeader
         code={sectionCode('teams')}
         title={
-          <span className="flex items-center gap-2.5">
-            <Avatar src={team.avatar} name={team.name} size={28} />
+          <span className="inline-flex items-baseline gap-2">
             {team.name}
             {rosterId === myRosterId && <Badge tone="accent">you</Badge>}
           </span>
         }
-        meta={`${team.owner} · ${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''} · power #${power.rank} of ${analysis.teams.length}`}
         tabs={
           <>
             <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 pb-2 md:mx-0 md:px-0">
@@ -70,12 +75,22 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
       />
       <div className="mt-4 space-y-3">
         <StatGrid>
-          <Stat label="Power" value={`#${power.rank}`} sub={`${fmt(power.score, 0)}% vs avg team`} />
+          <Stat label="Power" value={`#${power.rank}`} badge={{ text: `${fmt(power.score, 0)}% vs avg team`, tone: power.score >= 55 ? 'pos' : power.score <= 45 ? 'neg' : 'neutral' }} sub="chance to beat an average team" />
           <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`all-play ${fmt(season.allPlayWins, 0)}-${fmt(season.allPlayLosses, 0)}`} />
-          <Stat label="Points per game" value={fmt(season.ppg)} sub={`last 3: ${fmt(season.recentPpg)}`} />
-          <Stat label="Luck" value={fmtSigned(season.luck, 1)} sub="wins vs all-play" />
-          <Stat label="Lineup efficiency" value={pct(season.efficiency)} sub="of optimal points scored" />
-          <Stat label="Projected lineup" value={fmt(needs[rosterId]?.lineup)} sub={needs[rosterId]?.worstPos ? `thinnest at ${needs[rosterId].worstPos}` : 'pts/wk'} />
+          <Stat label="Points per game" value={fmt(season.ppg)} delta={league.ppg ? <DeltaChip value={season.ppg - league.ppg} title="Against the league average" /> : undefined} sub={`last 3: ${fmt(season.recentPpg)}`} />
+          <Stat label="Luck" value={fmtSigned(season.luck, 1)} tone={season.luck >= 0.5 ? 'warn' : undefined} sub="wins vs all-play" />
+          <Stat
+            label="Lineup efficiency"
+            value={pct(season.efficiency)}
+            delta={league.eff ? <DeltaChip value={(season.efficiency - league.eff) * 100} digits={0} suffix="pt" title="Against the league average" /> : undefined}
+            sub="of optimal points scored"
+          />
+          <Stat
+            label="Projected lineup"
+            value={fmt(needs[rosterId]?.lineup)}
+            delta={needs[rosterId] && league.lineup ? <DeltaChip value={needs[rosterId].lineup - league.lineup} title="Against the league average" /> : undefined}
+            sub={needs[rosterId]?.worstPos ? `thinnest at ${needs[rosterId].worstPos}` : 'pts/wk'}
+          />
         </StatGrid>
 
         <ScoutReport rosterId={rosterId} mine={rosterId === myRosterId} />

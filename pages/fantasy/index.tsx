@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { FantasyProvider } from '../../components/fantasy/FantasyContext'
+import PlayerSheet from '../../components/fantasy/PlayerSheet'
 import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../../components/fantasy/Shell'
 import { Label, Segmented, Select, cx, simOdds } from '../../components/fantasy/ui'
 import DashboardView from '../../components/fantasy/views/DashboardView'
@@ -135,6 +136,11 @@ const FantasyPage = () => {
   const analysis = useMemo(() => (core && prefs ? withWeights(core, prefs.weights) : null), [core, prefs?.weights]) // eslint-disable-line react-hooks/exhaustive-deps
   const history = useMemo(() => (loaded && coreLoaded ? buildHistory(loaded, coreLoaded) : null), [loaded, coreLoaded])
   const models = useMemo(() => (data && core && history ? buildModels(data, core, history) : null), [data, core, history])
+
+  // The player detail sheet, open over whatever page you are on.
+  const [sheet, setSheet] = useState<string | null>(null)
+  const closeSheet = useCallback(() => setSheet(null), [])
+  useEffect(() => setSheet(null), [leagueKey])
 
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   useEffect(() => {
@@ -288,7 +294,7 @@ const FantasyPage = () => {
       )}
 
       {data && analysis && models && prefs ? (
-        <FantasyProvider value={{ data, analysis, models, adjust, go: (s, sub) => route.go(s, sub ?? undefined) }}>
+        <FantasyProvider value={{ data, analysis, models, adjust, go: (s, sub) => route.go(s, sub ?? undefined), openPlayer: setSheet }}>
         <div key={data.league.league_id} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
@@ -313,15 +319,17 @@ const FantasyPage = () => {
             />
           )}
         </div>
+        {sheet && data.players[sheet] && <PlayerSheet id={sheet} onClose={closeSheet} />}
         </FantasyProvider>
       ) : (
         !error && (
-          <div className="mt-6 space-y-3">
-            <div className="flex items-center gap-2 font-mono text-[11.5px] text-ff-muted">
-              <span className="ff-pulse h-1.5 w-1.5 bg-ff-warn" />
-              <span className="ff-caret">{loading ? progress : 'starting'}</span>
+          // Padding, not margin: a top margin here collapses through to the page and shows a strip of body.
+          <div className="pb-6">
+            <div className="-mx-3 flex h-11 items-center gap-2.5 border-b border-ff-line px-3 font-mono text-[11.5px] text-ff-muted md:-mx-5 md:px-5">
+              <span className="ff-pulse h-1.5 w-1.5 shrink-0 bg-ff-warn" />
+              <span className="ff-caret min-w-0 truncate">{loading ? progress : 'starting'}</span>
             </div>
-            <div className="grid gap-px border border-ff-line bg-ff-line lg:grid-cols-2">
+            <div className="mt-4 grid gap-px border border-ff-line bg-ff-line lg:grid-cols-2">
               {[0, 1, 2, 3].map((i) => (
                 <div key={i} className="h-56 animate-pulse bg-ff-panel" />
               ))}

@@ -7,7 +7,7 @@ import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
 import { sectionCode } from '../Shell'
-import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
+import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, DeltaChip, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
 
 type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'odds', 'standings', 'schedule']
@@ -120,7 +120,7 @@ const PowerView = ({
     { key: 'xw', label: 'Proj W', align: 'right', hideBelow: 'sm', title: 'Mean simulated wins at season end', sort: (r) => forecast!.sim[r.rosterId].wins, render: (r) => fmt(forecast!.sim[r.rosterId].wins) },
     { key: 'po', label: 'Playoffs', align: 'right', sort: (r) => forecast!.sim[r.rosterId].playoffs, render: (r) => <span className={forecast!.sim[r.rosterId].playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted'}>{simOdds(forecast!.sim[r.rosterId], 'playoffs')}</span> },
     { key: 'title', label: 'Title', align: 'right', sort: (r) => forecast!.sim[r.rosterId].title, render: (r) => simOdds(forecast!.sim[r.rosterId], 'title', forecast!.sim[r.rosterId].title < 0.1 ? 1 : 0) },
-    { key: 'elo', label: 'Elo', align: 'right', hideBelow: 'lg', sort: (r) => models.elo.final[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-muted">{Math.round(models.elo.final[r.rosterId] ?? 1500)}</span> },
+    { key: 'elo', label: 'Elo', align: 'right', hideBelow: 'xl', sort: (r) => models.elo.final[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-muted">{Math.round(models.elo.final[r.rosterId] ?? 1500)}</span> },
   ]
 
   const eloColumns: Column<{ rosterId: number }>[] = [
@@ -220,12 +220,6 @@ const PowerView = ({
       <PageHeader
         code={sectionCode('power')}
         title="Power"
-        meta={
-          <>
-            <span className="num">{played}</span> wk played · ranking by {rankModel === 'forecast' ? 'forecast (expected pts/wk)' : rankModel === 'elo' ? 'Elo (results only)' : 'composite (results-weighted)'}
-            {forecast && <> · {forecast.sims.toLocaleString()} simulated seasons</>}
-          </>
-        }
         tabs={
           <Tabs<Sub>
             value={tab}
@@ -243,12 +237,35 @@ const PowerView = ({
         {me && (
           <StatGrid>
             <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.elo.final[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />
-            {forecast && <Stat label="Playoff odds" value={simOdds(forecast.sim[myRosterId!], 'playoffs')} sub={`title ${simOdds(forecast.sim[myRosterId!], 'title', 1)} · bye ${simOdds(forecast.sim[myRosterId!], 'bye')}`} />}
-            <Stat label="Standing" value={standingRank ? `#${standingRank}` : '–'} sub={playoffTeams ? `top ${playoffTeams} make the playoffs` : undefined} />
+            {forecast && (
+              <Stat
+                label="Playoff odds"
+                value={simOdds(forecast.sim[myRosterId!], 'playoffs')}
+                meter={forecast.sim[myRosterId!].playoffs}
+                sub={`title ${simOdds(forecast.sim[myRosterId!], 'title', 1)} · bye ${simOdds(forecast.sim[myRosterId!], 'bye')}`}
+              />
+            )}
+            <Stat
+              label="Standing"
+              value={standingRank ? `#${standingRank}` : '–'}
+              badge={
+                standingRank && playoffTeams
+                  ? standingRank <= playoffTeams
+                    ? { text: 'in a playoff spot', tone: 'pos' }
+                    : { text: `${standingRank - playoffTeams} spot${standingRank - playoffTeams === 1 ? '' : 's'} out`, tone: 'warn' }
+                  : undefined
+              }
+              sub={playoffTeams ? `top ${playoffTeams} make it` : undefined}
+            />
             <Stat label="Record" value={`${me.season.wins}-${me.season.losses}${me.season.ties ? `-${me.season.ties}` : ''}`} sub={`all-play ${pct(me.season.allPlayPct)}`} />
-            <Stat label="Points per game" value={fmt(me.season.ppg)} delta={<Num value={me.season.ppg - leagueAvgPpg} signed />} sub="vs league average" />
+            <Stat label="Points per game" value={fmt(me.season.ppg)} delta={<DeltaChip value={me.season.ppg - leagueAvgPpg} title="Against the league average" />} sub={`league ${fmt(leagueAvgPpg)}`} />
             {!forecast && <Stat label="Luck" value={fmtSigned(me.season.luck, 1)} sub="wins above all-play expectation" />}
-            <Stat label="Schedule ahead" value={fmt(me.power.sos, 0)} sub="avg power of remaining opponents" />
+            <Stat
+              label="Schedule ahead"
+              value={fmt(me.power.sos, 0)}
+              badge={me.power.sos != null && Math.abs(me.power.sos - 50) >= 1 ? { text: me.power.sos > 50 ? 'harder than average' : 'easier than average', tone: me.power.sos > 50 ? 'warn' : 'pos' } : undefined}
+              sub="opponents' power, 50 = average"
+            />
           </StatGrid>
         )}
 

@@ -213,3 +213,104 @@
     font-size: 16px;
   }
 }
+
+/*
+ * The Aqua button: Mac OS X's default push button, kept for the one action a
+ * view exists for. A gel capsule: a white gloss over the top half, a caustic
+ * glow pooling at the bottom, a dark rim, and the slow throb the default
+ * button had. Square everywhere else in the app is deliberate; this one is
+ * allowed to be fun.
+ */
+.ff .ff-aqua {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  border-radius: 999px;
+  border: 1px solid #2259a8;
+  padding: 0 1.3em;
+  color: #04122a;
+  font-weight: 500;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+  background: linear-gradient(180deg, #9fc8f5 0%, #6aa7ee 30%, #3d8ae6 50%, #2e7fe3 55%, #4b9bf0 78%, #86c8ff 100%);
+  box-shadow:
+    inset 0 -2px 4px rgba(170, 225, 255, 0.7),
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    0 1px 2px rgba(0, 30, 80, 0.4),
+    0 2px 5px rgba(30, 90, 180, 0.22);
+  animation: ff-aqua-throb 1.6s ease-in-out infinite alternate;
+  transition: filter 120ms;
+}
+/* The gloss: a capsule of light over the top half, inset from the rim. */
+.ff .ff-aqua::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 9px;
+  right: 9px;
+  top: 2px;
+  height: 45%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.28));
+  pointer-events: none;
+}
+.ff .ff-aqua:hover {
+  filter: brightness(1.06) saturate(1.05);
+}
+.ff .ff-aqua:active {
+  filter: brightness(0.92) saturate(1.15);
+  animation: none;
+}
+.ff .ff-aqua:focus-visible {
+  outline: 2px solid rgb(var(--ff-accent) / 0.6);
+  outline-offset: 2px;
+}
+@keyframes ff-aqua-throb {
+  from {
+    filter: brightness(0.97);
+  }
+  to {
+    filter: brightness(1.1) saturate(1.08);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-aqua {
+    animation: none;
+  }
+}
+
+/* Sheets: up from the bottom on phones, in from the right on wider screens. */
+@keyframes ff-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ff-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes ff-sheet-left {
+  from {
+    transform: translateX(100%);
+  }
+}
+.ff .ff-fade-in {
+  animation: ff-fade-in 160ms ease-out;
+}
+.ff .ff-sheet {
+  animation: ff-sheet-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (min-width: 768px) {
+  .ff .ff-sheet {
+    animation-name: ff-sheet-left;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-fade-in,
+  .ff .ff-sheet {
+    animation: none;
+  }
+}

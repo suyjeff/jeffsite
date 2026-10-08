@@ -7,7 +7,7 @@ import { ContextNotes } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import ScoutReport from '../ScoutReport'
 import { sectionCode } from '../Shell'
-import { Badge, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, ago, cx, fmt, pct } from '../ui'
+import { Badge, Button, DeltaChip, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, ago, cx, fmt, fmtSigned, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Sub = 'overview' | 'roster'
@@ -109,21 +109,16 @@ const MeView = ({
     )
   }
   const season = analysis.seasonById[me.rosterId]
-  const power = analysis.powerById[me.rosterId]
 
   return (
     <>
       <PageHeader
         code={sectionCode('me')}
         title={me.name}
-        meta={
-          <>
-            {season.wins}-{season.losses}
-            {season.ties ? `-${season.ties}` : ''} · power #{power.rank} of {analysis.teams.length} ·{' '}
-            <button className="underline decoration-ff-line2 underline-offset-2 hover:text-ff-text" onClick={() => onTeam(me.rosterId)}>
-              team page
-            </button>
-          </>
+        actions={
+          <Button size="sm" variant="ghost" onClick={() => onTeam(me.rosterId)} title="The same team as the league sees it">
+            Team page →
+          </Button>
         }
         tabs={
           <Tabs<Sub>
@@ -141,13 +136,30 @@ const MeView = ({
           <>
             {kpis && (
               <StatGrid>
-                <Stat label="Projected lineup" value={fmt(kpis.mine)} sub={`pts/wk · #${kpis.rank} of ${analysis.teams.length}`} />
-                <Stat label="Vs league average" value={<Num value={kpis.mine - kpis.avg} signed />} sub={`league ${fmt(kpis.avg)} pts/wk`} />
-                <Stat label="Injury drag" value={<Num value={-kpis.drag} signed digits={1} />} sub="pts/wk to expected absences, net" />
-                <Stat label="Biggest hole" value={kpis.hole ?? '–'} sub={kpis.hole ? `an average starter adds ${fmt(kpis.holePts)}/wk` : undefined} />
-                <Stat label="All-play" value={pct(season.allPlayPct)} sub={`luck ${season.luck >= 0 ? '+' : ''}${fmt(season.luck)} wins`} />
+                <Stat
+                  label="Projected lineup"
+                  value={fmt(kpis.mine)}
+                  delta={<DeltaChip value={kpis.mine - kpis.avg} title="Against the league's average lineup" />}
+                  badge={{ text: `#${kpis.rank} of ${analysis.teams.length}`, tone: kpis.rank <= Math.ceil(analysis.teams.length / 3) ? 'pos' : kpis.rank > analysis.teams.length - Math.ceil(analysis.teams.length / 3) ? 'neg' : 'neutral' }}
+                  sub={`pts/wk · league ${fmt(kpis.avg)}`}
+                />
+                <Stat label="Injury drag" value={fmtSigned(-kpis.drag, 1)} tone={kpis.drag > 1.5 ? 'neg' : undefined} sub="pts/wk to expected absences, net" />
+                <Stat label="Biggest hole" value={kpis.hole ?? '–'} tone={kpis.hole ? 'warn' : undefined} sub={kpis.hole ? `an average starter adds ${fmt(kpis.holePts)}/wk` : undefined} />
+                <Stat
+                  label="All-play"
+                  value={pct(season.allPlayPct)}
+                  meter={season.allPlayPct}
+                  badge={Math.abs(season.luck) >= 0.5 ? { text: `${season.luck > 0 ? 'lucky' : 'unlucky'} ${fmtSigned(season.luck, 1)} W`, tone: season.luck > 0 ? 'warn' : 'neutral' } : undefined}
+                  sub="win rate against every team, every week"
+                />
                 {lineupCheck ? (
-                  <Stat label={`Week ${data.projectionWeek} optimal`} value={fmt(lineupCheck.best)} delta={<Num value={lineupCheck.best - lineupCheck.current} signed />} sub="vs your set lineup" />
+                  <Stat
+                    label={`Week ${data.projectionWeek} optimal`}
+                    value={fmt(lineupCheck.best)}
+                    delta={<DeltaChip value={lineupCheck.best - lineupCheck.current} title="Against the lineup you have set" />}
+                    badge={lineupCheck.start.length ? { text: `${lineupCheck.start.length} swap${lineupCheck.start.length === 1 ? '' : 's'} to make`, tone: 'warn' } : { text: 'lineup is optimal', tone: 'pos' }}
+                    sub="vs your set lineup"
+                  />
                 ) : (
                   <Stat label="Points per game" value={fmt(season.ppg)} />
                 )}
