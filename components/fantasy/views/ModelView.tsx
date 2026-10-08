@@ -168,20 +168,10 @@ const ModelView = ({ data, analysis, sub, onSub, model, setModel, weights, setWe
       <PageHeader
         code={sectionCode('model')}
         title="Model"
-        meta={
-          <>
-            <span className="num">{Object.keys(DEFAULT_MODEL).length + Object.keys(DEFAULT_POWER_WEIGHTS).length}</span> live parameters ·{' '}
-            {changed.length ? (
-              <span className="text-ff-accent">
-                <span className="num">{changed.length}</span> off default
-              </span>
-            ) : (
-              'all at defaults'
-            )}
-          </>
-        }
         actions={
           changed.length > 0 && (
+            <>
+            <Badge tone="accent">{changed.length} off default</Badge>
             <Button
               size="sm"
               onClick={() => {
@@ -191,6 +181,7 @@ const ModelView = ({ data, analysis, sub, onSub, model, setModel, weights, setWe
             >
               Reset all
             </Button>
+            </>
           )
         }
         tabs={

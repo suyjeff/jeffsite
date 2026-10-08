@@ -13,6 +13,8 @@ export type FantasyCtx = {
   /** Your nudges to player projections (see lib/fantasy/adjust). */
   adjust: { all: Adjustments; week: number | null; set: (id: string, a: Adjustment | null) => void }
   go: (section: SectionKey, sub?: string | null) => void
+  /** Open a player's detail sheet. */
+  openPlayer: (id: string) => void
 }
 
 const Ctx = createContext<FantasyCtx | null>(null)

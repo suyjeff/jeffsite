@@ -1,6 +1,5 @@
 import React, { useEffect, useState, type ReactNode } from 'react'
 import Head from 'next/head'
-import Link from 'next/link'
 import { Avatar, cx } from './ui'
 
 export const SECTION_KEYS = ['dash', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'model'] as const
@@ -47,13 +46,12 @@ export type ShellProps = {
   status?: string[]
 }
 
-/** The wordmark, linking back to the Lab. Shared by the shell and onboarding. */
+/** The wordmark. Shared by the shell and onboarding. */
 export const Brand = () => (
-  <Link href="/lab" className="group flex items-baseline gap-2" title="Back to the Lab">
-    <span className="font-mono text-[10px] text-ff-muted group-hover:text-ff-text">‹ LAB</span>
+  <span className="flex items-baseline gap-2">
     <span className="text-[14px] font-semibold tracking-[-0.01em] text-ff-text">Fantasy</span>
     <span className="font-mono text-[10px] text-ff-muted">/term</span>
-  </Link>
+  </span>
 )
 
 /** Document head for every fantasy screen. */
@@ -90,10 +88,6 @@ const SidebarBody = ({
     <div className="flex h-11 shrink-0 items-center justify-between border-b border-ff-line pl-3 pr-2">
       <Brand />
       <span className="flex items-center gap-1">
-        <span className="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-[0.12em] text-ff-muted" title={loading ? progress : 'Live from Sleeper'}>
-          <span className={cx('h-1.5 w-1.5', loading ? 'ff-pulse bg-ff-warn' : 'bg-ff-pos')} />
-          {loading ? 'sync' : 'live'}
-        </span>
         {onClose && (
           <button onClick={onClose} className="h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close menu">
             ESC
@@ -169,7 +163,15 @@ const SidebarBody = ({
           {loading ? '···' : 'R↻'}
         </button>
       </div>
-      {status && status.length > 0 && <div className="truncate">{status.join(' · ')}</div>}
+      {status && status.length > 0 && (
+        <div className="flex flex-wrap gap-x-2">
+          {status.map((s) => (
+            <span key={s} className="whitespace-nowrap">
+              {s}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   </div>
 )
@@ -198,6 +200,8 @@ const Shell = (props: ShellProps) => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || typing(e)) return
+      // A sheet over the page owns the keyboard.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
       const n = Number(e.key)
       if (n >= 1 && n <= SECTIONS.length) {
         e.preventDefault()

@@ -20,7 +20,7 @@ import {
 import { ContextNotes } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import { sectionCode } from '../Shell'
-import { Badge, CenterMeter, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, compact, cx, fmt, pct, type Column } from '../ui'
+import { DeltaChip, Badge, CenterMeter, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, compact, cx, fmt, pct, type Column } from '../ui'
 
 type Sub = 'stream' | 'adds'
 const SUBS: Sub[] = ['stream', 'adds']
@@ -94,7 +94,6 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   // The weeks roll over on a refresh; a pick that has passed falls back to the coming week.
   const week = picked != null && weeks.includes(picked) ? picked : (weeks[0] ?? 0)
   const lines = useStatLines(data.league.season, weeks)
-  const freeCount = useMemo(() => Object.keys(players).filter((id) => analysis.rosteredBy[id] == null && players[id].team).length, [players, analysis.rosteredBy])
 
   // Season-to-date matchup tables need this season's results against this season's schedule.
   const ownSeason = !data.pointsSource.startsWith('proxy')
@@ -195,6 +194,8 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       key: 'vs',
       label: 'vs yours',
       align: 'right',
+      // A constant offset from the projection: the headline tile carries it on phones.
+      hideBelow: 'sm',
       title: `Projection minus your best ${posLabel} this week`,
       sort: (r) => r.vsMine ?? -99,
       render: (r) => (r.vsMine != null ? <Num value={r.vsMine} signed /> : <span className="text-ff-muted">–</span>),
@@ -344,11 +345,6 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       <PageHeader
         code={sectionCode('waivers')}
         title="Waivers"
-        meta={
-          <>
-            <span className="num">{freeCount.toLocaleString()}</span> free agents · wk <span className="num">{weeks[0] ?? '–'}</span>
-          </>
-        }
         tabs={
           <Tabs<Sub>
             items={[
@@ -398,7 +394,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                     label="Best this week"
                     value={picks ? fmt(picks.week.proj) : '–'}
                     sub={picks ? players[picks.week.id]?.name : 'no free agents projected'}
-                    delta={picks?.week.vsMine != null ? <Num value={picks.week.vsMine} signed /> : undefined}
+                    delta={picks?.week.vsMine != null ? <DeltaChip value={picks.week.vsMine} title="Against your best at the position" /> : undefined}
                   />
                   <Stat label="Most upside" value={picks ? pct(picks.upside.boom) : '–'} sub={picks ? `${players[picks.upside.id]?.name} · boom odds` : '–'} />
                   <Stat

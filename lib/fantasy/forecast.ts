@@ -251,7 +251,7 @@ export const measureNoise = (input: ForecastInput, efficiency: Record<number, nu
 }
 
 export const teamRatings = (input: ForecastInput, past = pastByWeek(input)) => {
-  const { teams, teamWeeks, playedWeeks } = input
+  const { teams, teamWeeks } = input
   const evalH = input.horizon.length ? makeHorizonEval(input.slots, input.players, input.horizon, input.floor) : null
   // Efficiency is measured against the same thing it scales: points scored per
   // point of *projected* optimal lineup. (Against the hindsight optimum it would

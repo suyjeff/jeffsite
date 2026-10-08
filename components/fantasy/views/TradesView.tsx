@@ -51,7 +51,7 @@ const TradesView = ({
   onSub: (s: string) => void
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'suggested'
-  const { myRosterId, teamById, needs, slots } = analysis
+  const { myRosterId, teamById, needs } = analysis
   const players = data.players
   const me = myRosterId != null ? teamById[myRosterId] : null
 
@@ -197,19 +197,6 @@ const TradesView = ({
     )
   }
 
-  const horizonWeeks = data.horizon.map((h) => h.week)
-  const meta = (
-    <span className="flex flex-wrap gap-x-1.5" title={`Searched in ${Math.round(search.ms)}ms`}>
-      <span>
-        <span className="num text-ff-text2">{search.ideas.length}</span> deals with <span className="num text-ff-text2">{new Set(search.ideas.map((i) => i.partnerId)).size}</span> teams
-      </span>
-      <span>
-        · priced wks {horizonWeeks[0]}–{horizonWeeks[horizonWeeks.length - 1]}
-        {data.playoffWeeks.length > 0 && data.horizonMode === 'playoffs' && data.playoffWeight !== 1 ? `, playoffs ×${data.playoffWeight}` : ''}
-      </span>
-    </span>
-  )
-
   const filterControls = (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <Slider
@@ -242,10 +229,9 @@ const TradesView = ({
       <PageHeader
         code={sectionCode('trades')}
         title="Trades"
-        meta={meta}
         actions={
           tab !== 'builder' && (
-            <Button variant="accent" onClick={() => onSub('builder')} title="Put together any deal and see it priced">
+            <Button variant="aqua" onClick={() => onSub('builder')} title="Put together any deal and see it priced">
               Build a trade →
             </Button>
           )

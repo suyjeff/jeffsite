@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { WIDGETS, type Selection, type WidgetKind } from '../dashboard/widgets'
-import { useFantasy } from '../FantasyContext'
 import { sectionCode } from '../Shell'
 import { Button, PageHeader, cx } from '../ui'
 
@@ -130,7 +129,6 @@ const Menu = ({ widget, onChange, onRemove, onMove, close }: { widget: Widget; o
 }
 
 const DashboardView = () => {
-  const { data, models } = useFantasy()
   const [layout, setLayout] = useState<Widget[]>(DEFAULT_LAYOUT)
   const [loaded, setLoaded] = useState(false)
   const [menu, setMenu] = useState<string | null>(null)
@@ -181,26 +179,11 @@ const DashboardView = () => {
     })
   }
 
-  const week = models.forecast?.nextWeek[0]?.week ?? data.horizon[0]?.week
-  const meta = useMemo(
-    () =>
-      [
-        `${layout.length} widgets`,
-        week ? `wk ${week}` : null,
-        models.forecast ? `${models.forecast.sims.toLocaleString()} sims` : null,
-        data.consensus ? `ecr ${data.consensus.date}` : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    [layout.length, week, models.forecast, data.consensus],
-  )
-
   return (
     <>
       <PageHeader
         code={sectionCode('dash')}
         title="Dashboard"
-        meta={meta}
         actions={
           <>
             <Button size="sm" variant="ghost" onClick={() => setLayout(DEFAULT_LAYOUT)} title="Restore the default board">

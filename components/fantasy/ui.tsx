@@ -123,25 +123,42 @@ export const Panel = ({
   </section>
 )
 
-/** Page title row plus the page's tabs. Sticks under the mobile top bar. */
-export const PageHeader = ({ title, meta, actions, tabs, code }: { title: ReactNode; meta?: ReactNode; actions?: ReactNode; tabs?: ReactNode; code?: string }) => (
-  <div className="sticky top-12 z-20 -mx-3 bg-ff-bg/90 px-3 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-0 md:-mx-5 md:px-5">
-    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 pb-1.5 pt-2.5 md:pb-2 md:pt-4">
-      <div className="min-w-0">
-        {/* On phones the top bar already names the section. */}
-        <div className="hidden items-baseline gap-2.5 md:flex">
-          {code && <span className="num text-[11px] text-ff-muted">{code}</span>}
-          <h1 className="text-[20px] font-medium leading-tight tracking-[-0.01em] text-ff-text">{title}</h1>
-        </div>
-        {meta && <div className="font-mono text-[11px] text-ff-muted md:mt-1">{meta}</div>}
+/**
+ * Page title row plus the page's tabs. Sticks under the mobile top bar.
+ *
+ * On desktop the title row is the same 44px as the sidebar's wordmark row and
+ * shares its bottom rule, so the two read as one header line across the
+ * screen. On phones the top bar already names the page, so the row only
+ * appears when there is something to act on.
+ */
+export const PageHeader = ({
+  title,
+  meta,
+  actions,
+  tabs,
+  code,
+  mobileTitle,
+}: {
+  title: ReactNode
+  meta?: ReactNode
+  actions?: ReactNode
+  tabs?: ReactNode
+  code?: string
+  /** Show the title on phones too, where the top bar only names the section. */
+  mobileTitle?: boolean
+}) => (
+  <div className="sticky top-12 z-20 -mx-3 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-0 md:-mx-5">
+    <div className={cx('items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5', actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden')}>
+      <div className="flex min-w-0 items-baseline gap-2.5">
+        {code && <span className="num hidden text-[10.5px] text-ff-muted md:inline">{code}</span>}
+        <h1 className={cx('min-w-0 truncate text-[15px] font-medium leading-tight tracking-[-0.01em] text-ff-text md:block', mobileTitle ? 'block' : 'hidden')}>{title}</h1>
+        {meta && <span className="min-w-0 truncate font-mono text-[10.5px] text-ff-muted">{meta}</span>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>
-    {tabs}
+    {tabs && <div className="px-3 md:px-5">{tabs}</div>}
   </div>
 )
-
-// ---------- Navigation controls ----------
 
 export type TabItem<K extends string> = { key: K; label: string; count?: number | null }
 
@@ -259,8 +276,8 @@ export const Button = ({
 }: {
   children: ReactNode
   onClick?: () => void
-  /** accent: the one action a view exists for (build a trade); primary: a confirming action. */
-  variant?: 'outline' | 'ghost' | 'primary' | 'accent'
+  /** aqua: the one action a view exists for (build a trade); primary: a confirming action. */
+  variant?: 'outline' | 'ghost' | 'primary' | 'aqua'
   size?: 'sm' | 'md'
   className?: string
   title?: string
@@ -276,7 +293,7 @@ export const Button = ({
       'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40',
       size === 'sm' ? 'h-7 px-2 text-[11.5px]' : 'h-8 px-3 text-[12.5px]',
       variant === 'primary' && 'bg-ff-text text-ff-panel hover:bg-ff-text/85',
-      variant === 'accent' && 'bg-ff-accent font-medium text-white shadow-[0_0_0_1px_rgb(var(--ff-accent)/0.4)] hover:bg-ff-accent/90',
+      variant === 'aqua' && 'ff-aqua',
       variant === 'outline' && 'border border-ff-line bg-ff-panel text-ff-text hover:border-ff-line2 hover:bg-ff-raised',
       variant === 'ghost' && 'text-ff-muted hover:bg-ff-raised hover:text-ff-text',
       className,
@@ -288,13 +305,62 @@ export const Button = ({
 
 // ---------- Figures ----------
 
-export const Stat = ({ label, value, delta, sub, className }: { label: ReactNode; value: ReactNode; delta?: ReactNode; sub?: ReactNode; className?: string }) => (
-  <div className={cx('min-w-0 border border-ff-line bg-ff-panel px-2.5 py-2 sm:px-3', className)}>
+/** A signed change as a small tinted chip: green up, red down, grey at zero. */
+export const DeltaChip = ({ value, digits = 1, suffix, title }: { value: number; digits?: number; suffix?: ReactNode; title?: string }) => {
+  const zero = Math.abs(value) < 0.5 * 10 ** -digits
+  const tone: Tone = zero ? 'neutral' : value > 0 ? 'pos' : 'neg'
+  return (
+    <span title={title} className={cx('num inline-flex items-center border px-1 py-px text-[11px] leading-none', TONE_CHIP[tone])}>
+      {fmtSigned(value, digits)}
+      {suffix}
+    </span>
+  )
+}
+
+/**
+ * A headline figure. The value is the thing; a change rides beside it as a
+ * tinted chip, a status (in the playoffs, one spot out) sits under it as a
+ * badge, and a probability can carry a hairline meter. The sub line is for
+ * context only, in muted text.
+ */
+export const Stat = ({
+  label,
+  value,
+  delta,
+  sub,
+  badge,
+  meter,
+  tone,
+  className,
+}: {
+  label: ReactNode
+  value: ReactNode
+  delta?: ReactNode
+  sub?: ReactNode
+  badge?: { text: ReactNode; tone: Tone; title?: string }
+  /** 0–1: a thin bar under the value, for odds and shares. */
+  meter?: number
+  tone?: Tone
+  className?: string
+}) => (
+  <div className={cx('min-w-0 border border-ff-line bg-ff-panel px-2.5 py-2 sm:px-3 sm:py-2.5', className)}>
     <div className="ff-label sm:truncate">{label}</div>
-    <div className="mt-1.5 flex min-w-0 items-baseline gap-1.5 sm:gap-2">
-      <span className="num truncate text-[17px] leading-none text-ff-text sm:text-[20px]">{value}</span>
-      {delta && <span className="text-[11px] sm:text-xs">{delta}</span>}
+    <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+      <span className={cx('num truncate text-[18px] font-medium leading-none tracking-[-0.02em] sm:text-[21px]', tone && tone !== 'neutral' ? TONE_TEXT[tone] : 'text-ff-text')}>{value}</span>
+      {delta}
     </div>
+    {meter != null && (
+      <span className="mt-2 block h-[3px] w-full max-w-[120px] bg-ff-line">
+        <span className="block h-full bg-ff-accent" style={{ width: `${Math.max(0, Math.min(1, meter)) * 100}%` }} />
+      </span>
+    )}
+    {badge && (
+      <div className="mt-1.5">
+        <Chip tone={badge.tone} title={badge.title} className="text-[10.5px] leading-4">
+          {badge.text}
+        </Chip>
+      </div>
+    )}
     {sub && <div className="mt-1 text-[10.5px] leading-snug text-ff-muted sm:truncate sm:text-[11px]">{sub}</div>}
   </div>
 )
@@ -306,8 +372,10 @@ export const Stat = ({ label, value, delta, sub, className }: { label: ReactNode
  */
 export const StatGrid = ({ children, className }: { children: ReactNode; className?: string }) => {
   const n = Children.toArray(children).filter(Boolean).length
-  const cols = n % 3 === 0 ? (n >= 6 ? 'sm:grid-cols-3 xl:grid-cols-6' : 'sm:grid-cols-3') : n === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'
-  return <div className={cx('grid grid-cols-2 gap-px border border-ff-line bg-ff-line [&>*]:border-0', n % 2 === 1 && 'max-sm:[&>*:last-child]:col-span-2', cols, className)}>{children}</div>
+  const cols = n % 3 === 0 ? (n >= 6 ? 'sm:grid-cols-3 xl:grid-cols-6' : 'sm:grid-cols-3') : n === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : n === 5 ? 'sm:grid-cols-3 xl:grid-cols-5' : 'sm:grid-cols-3'
+  // No empty cells: a short last row's final tile stretches to the edge.
+  const fill = n === 5 ? 'sm:max-xl:[&>*:last-child]:col-span-2' : n % 3 === 2 && n !== 2 ? 'sm:[&>*:last-child]:col-span-2' : n % 3 === 1 && n !== 4 ? 'sm:[&>*:last-child]:col-span-3' : null
+  return <div className={cx('grid grid-cols-2 gap-px border border-ff-line bg-ff-line [&>*]:border-0', n % 2 === 1 && 'max-sm:[&>*:last-child]:col-span-2', cols, fill, className)}>{children}</div>
 }
 
 type Tone = 'neutral' | 'pos' | 'neg' | 'warn' | 'accent'
@@ -410,6 +478,15 @@ const POS_TINT: Record<string, string> = {
   TE: 'bg-ff-s2/20 ring-ff-s2/40',
   DEF: 'bg-ff-s4/20 ring-ff-s4/40',
 }
+/** Injury statuses that mean he does not play: IR, Out, PUP, suspended, not active. */
+export const isOut = (injury?: string | null) => !!injury && /^(IR|Out|PUP|Sus|NA)/i.test(injury)
+
+/** Who holds a player, for a detail card: "Free agent", "Your roster", or the team's name. */
+export const ownerLabel = (a: { rosteredBy: Record<string, number>; myRosterId: number | null; teamById: Record<number, { name: string } | undefined> }, id: string) => {
+  const owner = a.rosteredBy[id]
+  return owner === undefined ? 'Free agent' : owner === a.myRosterId ? 'Your roster' : (a.teamById[owner]?.name ?? '—')
+}
+
 export const PosTag = ({ pos, className }: { pos: string; className?: string }) => (
   <span
     className={cx(
@@ -687,10 +764,10 @@ export type Column<T> = {
   /** Keep this column pinned while the table scrolls sideways (first column on phones). */
   sticky?: boolean
   /** Hide below this breakpoint. */
-  hideBelow?: 'sm' | 'md' | 'lg'
+  hideBelow?: 'sm' | 'md' | 'lg' | 'xl'
 }
 
-const HIDE: Record<string, string> = { sm: 'hidden sm:table-cell', md: 'hidden md:table-cell', lg: 'hidden lg:table-cell' }
+const HIDE: Record<string, string> = { sm: 'hidden sm:table-cell', md: 'hidden md:table-cell', lg: 'hidden lg:table-cell', xl: 'hidden xl:table-cell' }
 
 export function Table<T>({
   rows,
