@@ -183,13 +183,30 @@ export type Usage = {
   /** Carries plus targets per game, season to date and recently. */
   opps: number
   recentOpps: number
+  /** Carries plus targets in his last game, and per game in the games before it. */
+  lastOpps: number
+  priorOpps: number
+  /** Snap share in his last game. */
+  lastSnaps: number
+  /** The week of his last game. */
+  lastWeek: number
   games: number
 }
 
+/**
+ * How much of a one-game swing in carries plus targets shows up again the
+ * next game, measured on 2024–25 (RBs 0.34, WRs and TEs 0.29). Sleeper's
+ * projection moves by about the same (0.35 and 0.24), so this explains a role
+ * change rather than adjusting for it.
+ */
+export const ROLE_CARRYOVER = { RB: 0.34, WR: 0.29, TE: 0.29 } as Record<string, number>
+/** A swing worth a note: at least this many carries plus targets, and a third of his usual. */
+export const ROLE_SWING = 6
+
 /** Snap share and opportunities from weekly stat lines, oldest week first. */
 export const usageFromStats = (weeks: { week: number; stats: Record<string, StatLine> }[], players: PlayerMap): Record<string, Usage> => {
-  const perPlayer: Record<string, { snap: number; opps: number }[]> = {}
-  for (const { stats } of [...weeks].sort((a, b) => a.week - b.week)) {
+  const perPlayer: Record<string, { snap: number; opps: number; week: number }[]> = {}
+  for (const { week, stats } of [...weeks].sort((a, b) => a.week - b.week)) {
     for (const id of Object.keys(stats)) {
       const p = players[id]
       if (!p || !SKILL_POSITIONS.includes(p.pos as (typeof SKILL_POSITIONS)[number])) continue
@@ -199,6 +216,7 @@ export const usageFromStats = (weeks: { week: number; stats: Record<string, Stat
       ;(perPlayer[id] ??= []).push({
         snap: team > 0 ? (s.off_snp ?? 0) / team : 0,
         opps: (s.rush_att ?? 0) + (s.rec_tgt ?? 0),
+        week,
       })
     }
   }
@@ -212,6 +230,10 @@ export const usageFromStats = (weeks: { week: number; stats: Record<string, Stat
       recentSnaps: round2(avg(recent.map((x) => x.snap))),
       opps: round2(avg(g.map((x) => x.opps))),
       recentOpps: round2(avg(recent.map((x) => x.opps))),
+      lastOpps: g[g.length - 1].opps,
+      priorOpps: round2(avg(g.slice(0, -1).map((x) => x.opps))),
+      lastSnaps: round2(g[g.length - 1].snap),
+      lastWeek: g[g.length - 1].week,
       games: g.length,
     }
   }
@@ -226,7 +248,7 @@ export type ContextNote =
   | { kind: 'bump'; from: string[]; pts: number }
   | { kind: 'temporary'; weeks: number[]; behind: string[]; during: number; after: number }
   | { kind: 'returns'; week: number | null }
-  | { kind: 'usage'; snaps: number; recentSnaps: number }
+  | { kind: 'usage'; prior: number; last: number; lastSnaps: number; carryover: number; injury: string | null }
   | { kind: 'playoffs'; weeks: number[]; vsNormal: number }
 
 export type PlayerContext = {
@@ -272,6 +294,7 @@ export const adjustHorizon = (input: AdjustInput): { horizon: Horizon; context: 
   const { horizon, players, availability, schedule, usage } = input
   const decay = input.decay ?? HEALTHY_DECAY
   if (!horizon.length) return { horizon: [], context: {} }
+  const latestUsageWeek = Math.max(0, ...Object.values(usage ?? {}).map((u) => u.lastWeek))
 
   // Normal level: a player's typical projection in weeks he is projected to play.
   const normal: Record<string, number> = {}
@@ -439,7 +462,11 @@ export const adjustHorizon = (input: AdjustInput): { horizon: Horizon; context: 
       }
     }
     const u = usage?.[id]
-    if (u && u.games >= 3 && Math.abs(u.recentSnaps - u.snaps) >= 0.12) notes.push({ kind: 'usage', snaps: u.snaps, recentSnaps: u.recentSnaps })
+    // A one-game swing in work, not a two-game average: a benching shows up in a single box score.
+    // Only from the latest week: a game weeks ago (he has missed time since) is not this week's news.
+    if (u && u.games >= 3 && u.lastWeek === latestUsageWeek && Math.abs(u.lastOpps - u.priorOpps) >= Math.max(ROLE_SWING, u.priorOpps / 3)) {
+      notes.push({ kind: 'usage', prior: u.priorOpps, last: u.lastOpps, lastSnaps: u.lastSnaps, carryover: ROLE_CARRYOVER[p.pos] ?? 0.3, injury: p.injury })
+    }
     if (input.playoffStart != null && normal[id]) {
       const po = horizon.filter((w) => w.week >= input.playoffStart! && (w.pts[id] ?? 0) > 0)
       if (po.length) {

@@ -15,8 +15,9 @@ import type {
 } from './types'
 
 const BASE = 'https://api.sleeper.app/v1'
-// v2: trimmed players gained depth-chart and injury fields; older cached copies lack them.
-const CACHE_PREFIX = 'ff:v2:'
+// v3: trimmed players carry the news timestamp; v2 added depth-chart and injury fields.
+// Older copies are purged on load (purgeStaleCache), so the bump frees their quota.
+const CACHE_PREFIX = 'ff:v3:'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -176,6 +177,7 @@ export const trimPlayer = (p: SleeperPlayer): TrimmedPlayer | null => {
     exp: p.years_exp ?? null,
     depth: p.depth_chart_order ?? null,
     injuryBody: p.injury_body_part ?? null,
+    newsAt: p.news_updated ?? null,
   }
 }
 

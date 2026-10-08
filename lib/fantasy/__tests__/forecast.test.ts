@@ -3,8 +3,10 @@ import { acceptRead, leagueBehavior } from '../behavior'
 import { matchConsensus, normName, parseCsv, perceivedValues, reduceConsensusCsv } from '../consensus'
 import { deadStarters, startingSlots } from '../lineup'
 import type { TeamWeek } from '../power'
-import { backtest, bracketOrder, eloWinProb, gamesFrom, managedPoints, phi, preseasonElo, runElo, simulateSeason, ELO } from '../forecast'
+import { backtest, bracketOrder, clinchStatus, eloWinProb, gamesFrom, managedPoints, persistMean, phi, preseasonElo, runElo, simulateSeason, ELO } from '../forecast'
+import { applyAdjustments, liveAdjustments } from '../adjust'
 import type { TradeIdea } from '../trades'
+import type { LeagueData } from '../useLeagueData'
 import type { PlayerMap, SleeperTransaction } from '../types'
 
 const P = (id: string, name: string, pos: string, team: string | null = null): PlayerMap[string] => ({ id, name, pos, fpos: [pos], team, status: null, injury: null, age: null, exp: null })
@@ -193,5 +195,60 @@ describe('unset lineups', () => {
     expect(managedPoints(tw, slots, { q: 20 }, { RB: 8, WR: 9, TE: 5 })).toBe(30 + 8 + 9)
     // No projections for the week: nothing to judge by, points stand.
     expect(managedPoints(tw, slots, undefined, { RB: 8 })).toBe(30)
+  })
+})
+
+describe('clinching and persistence', () => {
+  it('settles a spot only when the win arithmetic does', () => {
+    // Four teams, two spots, one game left each (1v2, 3v4).
+    const schedule = [
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
+    ]
+    const rec = (wins: number) => ({ wins, losses: 0, ties: 0 })
+    const s = clinchStatus([1, 2, 3, 4], { 1: rec(5), 2: rec(3), 3: rec(3), 4: rec(1) }, schedule, 2)
+    // Team 1 at 5 wins: only team 2 or 3 (max 4) could follow, never two above it.
+    expect(s[1]).toBe('in')
+    // Team 4 can reach 2; teams 1, 2 and 3 already have more.
+    expect(s[4]).toBe('out')
+    expect(s[2]).toBeNull()
+    expect(s[3]).toBeNull()
+    // A week missing from the schedule (failed fetch) still counts as a week to play.
+    const gap = clinchStatus([1, 2, 3, 4], { 1: rec(5), 2: rec(4), 3: rec(3), 4: rec(3) }, [], 2, 2)
+    expect(gap[1]).toBeNull()
+  })
+  it('settles the cut line by points-for once the season is over', () => {
+    const r = (wins: number, pf: number) => ({ wins, losses: 0, ties: 0, pf })
+    const s = clinchStatus([1, 2, 3], { 1: r(9, 1500), 2: r(8, 1400), 3: r(8, 1350) }, [], 2, 0)
+    expect([s[1], s[2], s[3]]).toEqual(['in', 'in', 'out'])
+  })
+  it('pulls ratings toward the week average', () => {
+    const m = persistMean((t) => (t === 1 ? 120 : 100), [1, 2], 0.5)
+    expect(m(1, 5)).toBeCloseTo(115)
+    expect(m(2, 5)).toBeCloseTo(105)
+  })
+})
+
+describe('adjustments', () => {
+  const data = {
+    horizon: [
+      { week: 5, pts: { a: 10, b: 8 } },
+      { week: 6, pts: { a: 12, b: 0 } },
+    ],
+    rawHorizon: [{ week: 5, pts: { a: 10, b: 8 } }],
+    projections: { a: 10, b: 8 },
+    projectionWeek: 5,
+  } as unknown as LeagueData
+  it('scales one week or every week ahead, and leaves byes at zero', () => {
+    const out = applyAdjustments(data, { a: { pct: -0.25, scope: 'week', week: 5 }, b: { pct: 0.5, scope: 'season', week: 5 } })
+    expect(out.horizon[0].pts).toEqual({ a: 7.5, b: 12 })
+    expect(out.horizon[1].pts).toEqual({ a: 12, b: 0 })
+    expect(out.projections).toEqual({ a: 7.5, b: 12 })
+    // Nothing to apply: the same object back, so nothing downstream recomputes.
+    expect(applyAdjustments(data, {})).toBe(data)
+  })
+  it('drops a one-week read once that week has passed', () => {
+    const live = liveAdjustments({ a: { pct: -0.25, scope: 'week', week: 4 }, b: { pct: 0.1, scope: 'season', week: 4 }, c: { pct: 0, scope: 'season', week: 5 } }, 5)
+    expect(Object.keys(live)).toEqual(['b'])
   })
 })

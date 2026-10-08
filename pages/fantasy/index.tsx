@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { FantasyProvider } from '../../components/fantasy/FantasyContext'
 import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../../components/fantasy/Shell'
-import { Label, Segmented, Select, cx } from '../../components/fantasy/ui'
+import { Label, Segmented, Select, cx, simOdds } from '../../components/fantasy/ui'
 import DashboardView from '../../components/fantasy/views/DashboardView'
 import Onboarding from '../../components/fantasy/Onboarding'
 import MeView from '../../components/fantasy/views/MeView'
@@ -11,8 +11,9 @@ import PowerView from '../../components/fantasy/views/PowerView'
 import TeamsView from '../../components/fantasy/views/TeamsView'
 import WaiversView from '../../components/fantasy/views/WaiversView'
 import TradesView from '../../components/fantasy/views/TradesView'
+import { applyAdjustments, liveAdjustments, loadAdjustments, saveAdjustments, type Adjustment, type Adjustments } from '../../lib/fantasy/adjust'
 import { analyze, withWeights } from '../../lib/fantasy/analysis'
-import { buildModels } from '../../lib/fantasy/models'
+import { buildHistory, buildModels } from '../../lib/fantasy/models'
 import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../../lib/fantasy/power'
 import { purgeStaleCache } from '../../lib/fantasy/sleeper'
 import {
@@ -97,18 +98,48 @@ const FantasyPage = () => {
         : null,
     [ready, prefs?.username, prefs?.leagueId, prefs?.season, prefs?.horizon, prefs?.playoffWeight], // eslint-disable-line react-hooks/exhaustive-deps
   )
-  const { data, error, loading, progress, reload } = useLeagueData(opts)
+  const { data: loaded, error, loading, progress, reload } = useLeagueData(opts)
+  // Your nudges for this league, applied to the data itself so every model downstream uses them.
+  // Read in the same render the league arrives in, so no model is built with another league's reads.
+  const leagueKey = loaded?.league.league_id ?? null
+  const stored = useMemo(() => (leagueKey ? loadAdjustments(leagueKey) : {}), [leagueKey])
+  const [edited, setEdited] = useState<{ key: string | null; adj: Adjustments } | null>(null)
+  const adj = edited && edited.key === leagueKey ? edited.adj : stored
+  const firstWeek = loaded?.horizon[0]?.week ?? null
+  const live = useMemo(() => liveAdjustments(adj, firstWeek), [adj, firstWeek])
+  const data = useMemo(() => (loaded ? applyAdjustments(loaded, live) : null), [loaded, live])
+  const adjust = useMemo(
+    () => ({
+      all: live,
+      week: firstWeek,
+      set: (id: string, a: Adjustment | null) => {
+        const next = { ...live }
+        if (a && a.pct) next[id] = a
+        else delete next[id]
+        if (leagueKey) saveAdjustments(leagueKey, next)
+        setEdited({ key: leagueKey, adj: next })
+      },
+    }),
+    [live, firstWeek, leagueKey],
+  )
   // Everything but the composite ranking depends on the data and the value model;
   // weights only re-rank. Models and the trade search key on the core, so moving
   // a weight slider never reruns the season simulation or the backtest.
-  const core = useMemo(() => (data && prefs ? analyze(data, prefs.model, DEFAULT_POWER_WEIGHTS) : null), [data, prefs?.model]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Your reads change the weeks ahead only: the history-based models (Elo, the backtest, league behaviour)
+  // are built once from the league as loaded and kept when a read changes.
+  const coreLoaded = useMemo(() => (loaded && prefs ? analyze(loaded, prefs.model, DEFAULT_POWER_WEIGHTS) : null), [loaded, prefs?.model]) // eslint-disable-line react-hooks/exhaustive-deps
+  const core = useMemo(
+    () => (data && prefs ? (data === loaded ? coreLoaded : analyze(data, prefs.model, DEFAULT_POWER_WEIGHTS)) : null),
+    [data, loaded, coreLoaded, prefs?.model], // eslint-disable-line react-hooks/exhaustive-deps
+  )
   const analysis = useMemo(() => (core && prefs ? withWeights(core, prefs.weights) : null), [core, prefs?.weights]) // eslint-disable-line react-hooks/exhaustive-deps
-  const models = useMemo(() => (data && core ? buildModels(data, core) : null), [data, core])
+  const history = useMemo(() => (loaded && coreLoaded ? buildHistory(loaded, coreLoaded) : null), [loaded, coreLoaded])
+  const models = useMemo(() => (data && core && history ? buildModels(data, core, history) : null), [data, core, history])
 
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   useEffect(() => {
-    if (data) setLoadedAt(new Date())
-  }, [data])
+    if (loaded) setLoadedAt(new Date())
+  }, [loaded])
 
   const seasonOptions = useMemo(() => {
     const current = Number(data?.state.league_season ?? data?.state.season ?? new Date().getFullYear())
@@ -121,7 +152,7 @@ const FantasyPage = () => {
   const myTeam = analysis && analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
   const mySeason = myTeam ? analysis!.seasonById[myTeam.rosterId] : null
   const myPower = myTeam ? analysis!.powerById[myTeam.rosterId] : null
-  const myOdds = myTeam && models?.forecast ? models.forecast.sim[myTeam.rosterId]?.playoffs : null
+  const mySim = myTeam && models?.forecast ? models.forecast.sim[myTeam.rosterId] : null
   const horizonWeeks = data?.horizon.map((h) => h.week) ?? []
 
   const controls = prefs && (
@@ -235,7 +266,7 @@ const FantasyPage = () => {
       leagueId={data?.league.league_id ?? null}
       onLeague={(id) => update({ leagueId: id })}
       leagueMeta={data ? `${data.league.season} · ${data.league.total_rosters} teams${data.state.season_type === 'regular' && data.league.season === data.state.season ? ` · wk ${data.state.week}` : ''}` : undefined}
-      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${myOdds != null ? ` · ${Math.round(myOdds * 100)}% playoffs` : myPower ? ` · power #${myPower.rank} of ${analysis!.teams.length}` : ''}` } : null}
+      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${mySim ? ` · ${simOdds(mySim, 'playoffs')} playoffs` : myPower ? ` · power #${myPower.rank} of ${analysis!.teams.length}` : ''}` } : null}
       controls={controls}
       loading={loading}
       progress={progress}
@@ -257,7 +288,7 @@ const FantasyPage = () => {
       )}
 
       {data && analysis && models && prefs ? (
-        <FantasyProvider value={{ data, analysis, models, go: (s, sub) => route.go(s, sub ?? undefined) }}>
+        <FantasyProvider value={{ data, analysis, models, adjust, go: (s, sub) => route.go(s, sub ?? undefined) }}>
         <div key={data.league.league_id} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}

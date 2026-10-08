@@ -194,6 +194,8 @@ export type ForecastInput = {
   elo: Record<number, number>
   /** Fallback weekly noise when there is nothing to measure it from. */
   sigmaFallback: number
+  /** Regular-season weeks left on the calendar (the schedule above can be missing one that failed to load). */
+  weeksLeft?: number
 }
 
 /** Each team's projected optimal lineup in every completed week that has projections, from the roster it had then. */
@@ -337,6 +339,53 @@ export type SimTeam = {
   title: number
   /** Probability of each seed, 1-indexed (index 0 unused). */
   seeds: number[]
+  /** Settled by the arithmetic of wins alone, whatever happens: 'in', 'out', or null while still open. */
+  clinch: 'in' | 'out' | null
+}
+
+/**
+ * Playoff spots settled by wins alone. A team is in when, even losing out,
+ * fewer than `spots` other teams could still reach its win total; out when at
+ * least `spots` teams already have more wins than it could reach. Ties count
+ * against the team (points-for is unknown in advance), and head-to-head games
+ * are not netted out, so this only ever errs toward "still open".
+ *
+ * `weeksLeft` is how many regular-season weeks remain on the calendar. Each
+ * team is assumed to play at least that many games, so a week whose matchups
+ * failed to load never makes a race look decided. With nothing left to play,
+ * the standings are final and points-for breaks the ties.
+ */
+export const clinchStatus = (
+  teams: number[],
+  record: Record<number, { wins: number; ties: number; pf?: number }>,
+  schedule: { a: number; b: number }[],
+  spots: number,
+  weeksLeft = 0,
+): Record<number, 'in' | 'out' | null> => {
+  const left: Record<number, number> = {}
+  for (const g of schedule) {
+    left[g.a] = (left[g.a] ?? 0) + 1
+    left[g.b] = (left[g.b] ?? 0) + 1
+  }
+  const now = (t: number) => (record[t]?.wins ?? 0) + 0.5 * (record[t]?.ties ?? 0)
+  const games = (t: number) => Math.max(left[t] ?? 0, weeksLeft)
+  const max = (t: number) => now(t) + games(t)
+  const out: Record<number, 'in' | 'out' | null> = {}
+  if (spots > 0 && spots < teams.length && teams.every((t) => games(t) === 0)) {
+    const final = [...teams].sort((x, y) => now(y) - now(x) || (record[y]?.pf ?? 0) - (record[x]?.pf ?? 0))
+    final.forEach((t, i) => (out[t] = i < spots ? 'in' : 'out'))
+    return out
+  }
+  for (const t of teams) {
+    if (spots <= 0 || spots >= teams.length) {
+      out[t] = spots >= teams.length ? 'in' : 'out'
+      continue
+    }
+    const threats = teams.filter((o) => o !== t && max(o) >= now(t)).length
+    const ahead = teams.filter((o) => o !== t && now(o) > max(t)).length
+    out[t] = threats < spots ? 'in' : ahead >= spots ? 'out' : null
+  }
+  return out
 }
 
 export type SimInput = {
@@ -349,11 +398,41 @@ export type SimInput = {
   sigma: number
   /** Season-long uncertainty in a team's level, drawn once per simulated season. */
   tau: number
+  /** Regular-season weeks left on the calendar, for settling clinches (see clinchStatus). */
+  weeksLeft?: number
   sims: number
   seed?: number
 }
 
-export const SIM = { sims: 4000, tauShare: 0.3 }
+/**
+ * Season-simulation settings, fitted on how 148 real 2025 Sleeper leagues
+ * (1,722 teams) actually finished, simulating from week 4 and from week 6.
+ *
+ *   tauShare     Spread of each team's season-long level around its rating,
+ *                as a share of weekly σ: how wrong a rating can be.
+ *   persistence  How much of a team's gap to the league average carries
+ *                through the rest of the season. Rosters drift (injuries,
+ *                trades, waiver pickups), and that pulls teams toward the middle.
+ *
+ * The earlier settings (0.3, 1.0) were a little overconfident: teams given
+ * 95–99% made it 96.4% of the time against 97.2% predicted. These score
+ * best on log loss at both start weeks (0.4544 vs 0.4575 at week 4; 0.3990
+ * vs 0.4042 at week 6). Every team either setting put at 99% or higher did
+ * make the playoffs (34 of 34 and 92 of 92), so a very high number for a
+ * team that is far ahead is earned; what it never is, until the arithmetic
+ * says so, is 100%.
+ */
+export const SIM = { sims: 4000, tauShare: 0.4, persistence: 0.85 }
+
+/** A team's expectation pulled toward the week's league average by SIM.persistence, for simulating weeks ahead. */
+export const persistMean = (mean: (t: number, w: number) => number, teams: number[], persistence = SIM.persistence) => {
+  const avg = new Map<number, number>()
+  return (t: number, w: number) => {
+    let a = avg.get(w)
+    if (a === undefined) avg.set(w, (a = teams.reduce((s, x) => s + mean(x, w), 0) / (teams.length || 1)))
+    return a + persistence * (mean(t, w) - a)
+  }
+}
 
 export const simulateSeason = (input: SimInput): Record<number, SimTeam> => {
   const { teams, schedule, record, sigma, tau, sims, playoffWeeks } = input
@@ -362,7 +441,8 @@ export const simulateSeason = (input: SimInput): Record<number, SimTeam> => {
   const order = size ? bracketOrder(size) : []
   const byes = size - nPlayoff
   const out: Record<number, SimTeam> = {}
-  for (const t of teams) out[t] = { rosterId: t, wins: 0, playoffs: 0, bye: 0, final: 0, title: 0, seeds: Array(teams.length + 1).fill(0) }
+  const settled = clinchStatus(teams, record, schedule, nPlayoff, input.weeksLeft ?? 0)
+  for (const t of teams) out[t] = { rosterId: t, wins: 0, playoffs: 0, bye: 0, final: 0, title: 0, seeds: Array(teams.length + 1).fill(0), clinch: settled[t] }
   const z = normals(rng(input.seed ?? 20240917))
   // Means are fixed per sim input; read them once.
   const meanCache = new Map<string, number>()
@@ -465,17 +545,21 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = past
   const byId = Object.fromEntries(ratings.map((r) => [r.rosterId, r])) as Record<number, TeamRating>
   const mean = (t: number, w: number) => byId[t]?.byWeek[w] ?? byId[t]?.rating ?? 0
   const tau = SIM.tauShare * noise.sigma
+  const ids = input.teams.map((t) => t.rosterId)
   const sim = simulateSeason({
-    teams: input.teams.map((t) => t.rosterId),
+    teams: ids,
     record: input.record,
     schedule: input.schedule,
     playoffWeeks: input.playoffWeeks,
     playoffTeams: input.playoffTeams,
-    mean,
+    mean: persistMean(mean, ids),
     sigma: noise.sigma,
+    weeksLeft: input.weeksLeft,
     tau,
     sims,
   })
+  // Next week's odds read the rating as is: the per-game backtest grades exactly this, and the
+  // persistence pull is about drift over many weeks, which one week ahead has barely begun.
   const firstWeek = input.schedule.length ? Math.min(...input.schedule.map((g) => g.week)) : null
   const nextWeek = input.schedule
     .filter((g) => g.week === firstWeek)
@@ -508,13 +592,14 @@ export const tradeLeverage = (input: ForecastInput, base: Forecast, trade: { me:
     playoffTeams: input.playoffTeams,
     sigma: base.sigma,
     tau: base.tau,
+    weeksLeft: input.weeksLeft,
     sims,
     seed: 777,
   }
   // The baseline and the lineup evaluator are the same for every trade; build them once per forecast.
   let cached = leverageCache.get(base)
   if (!cached) {
-    cached = { evalH: makeHorizonEval(input.slots, input.players, input.horizon, input.floor), before: simulateSeason({ ...common, mean: base.mean }) }
+    cached = { evalH: makeHorizonEval(input.slots, input.players, input.horizon, input.floor), before: simulateSeason({ ...common, mean: persistMean(base.mean, common.teams) }) }
     leverageCache.set(base, cached)
   }
   const { evalH, before } = cached
@@ -530,7 +615,7 @@ export const tradeLeverage = (input: ForecastInput, base: Forecast, trade: { me:
     afterRating[rid] = xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
   }
   // Weeks the horizon does not cover (the playoffs, in the shorter modes) use the post-trade rating too.
-  const post = simulateSeason({ ...common, mean: (t, w) => (after[t] ? (after[t][w] ?? afterRating[t]) : base.mean(t, w)) })
+  const post = simulateSeason({ ...common, mean: persistMean((t, w) => (after[t] ? (after[t][w] ?? afterRating[t]) : base.mean(t, w)), common.teams) })
   const delta = (rid: number) => ({
     playoffs: round3(post[rid].playoffs - before[rid].playoffs),
     title: round3(post[rid].title - before[rid].title),
