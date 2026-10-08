@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { optimalLineup, type LineupPlayer } from '../../../lib/fantasy/lineup'
-import { makeHorizonEval } from '../../../lib/fantasy/trades'
+import { availabilityDrag } from '../../../lib/fantasy/scout'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes } from '../ContextNotes'
 import PlayerName from '../PlayerName'
+import ScoutReport from '../ScoutReport'
 import { sectionCode } from '../Shell'
 import { Badge, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, ago, cx, fmt, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
@@ -66,11 +67,9 @@ const MeView = ({
     const lineups = analysis.teams.map((t) => needs[t.rosterId]?.lineup ?? 0).sort((a, b) => b - a)
     const mine = needs[me.rosterId]?.lineup ?? 0
     const avg = lineups.reduce((a, b) => a + b, 0) / (lineups.length || 1)
-    const raw = makeHorizonEval(slots, players, data.rawHorizon, analysis.horizonReplacement).total(me.players)
-    const adjusted = makeHorizonEval(slots, players, data.horizon, analysis.horizonReplacement).total(me.players)
     const hole = needs[me.rosterId]?.worstPos
-    return { mine, rank: lineups.indexOf(mine) + 1, avg, drag: raw - adjusted, hole, holePts: hole ? needs[me.rosterId].byPos[hole] : 0 }
-  }, [me, data.horizon, data.rawHorizon, analysis, needs, slots, players])
+    return { mine, rank: lineups.indexOf(mine) + 1, avg, drag: -availabilityDrag(data, analysis, me.players), hole, holePts: hole ? needs[me.rosterId].byPos[hole] : 0 }
+  }, [me, data, analysis, needs])
 
   // ---- Slots: ahead (horizon) or to date (results) ----
   const slotRows = useMemo(() => {
@@ -144,7 +143,7 @@ const MeView = ({
               <StatGrid>
                 <Stat label="Projected lineup" value={fmt(kpis.mine)} sub={`pts/wk · #${kpis.rank} of ${analysis.teams.length}`} />
                 <Stat label="Vs league average" value={<Num value={kpis.mine - kpis.avg} signed />} sub={`league ${fmt(kpis.avg)} pts/wk`} />
-                <Stat label="Injury drag" value={<Num value={-kpis.drag} signed digits={1} />} sub="pts/wk to expected absences" />
+                <Stat label="Injury drag" value={<Num value={-kpis.drag} signed digits={1} />} sub="pts/wk to expected absences, net" />
                 <Stat label="Biggest hole" value={kpis.hole ?? '–'} sub={kpis.hole ? `an average starter adds ${fmt(kpis.holePts)}/wk` : undefined} />
                 <Stat label="All-play" value={pct(season.allPlayPct)} sub={`luck ${season.luck >= 0 ? '+' : ''}${fmt(season.luck)} wins`} />
                 {lineupCheck ? (
@@ -154,6 +153,8 @@ const MeView = ({
                 )}
               </StatGrid>
             )}
+
+            <ScoutReport rosterId={me.rosterId} mine />
 
             {fresh.length > 0 && (
               <Panel title="Recent news on your roster" actions={<span>player file {ago(newsAsOf)} old</span>} pad={false}>

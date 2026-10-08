@@ -259,7 +259,7 @@ const Shell = (props: ShellProps) => {
         </div>
       </div>
 
-      <main className="pt-12 md:pl-[220px] md:pt-0">
+      <main className="overflow-x-clip pt-12 md:pl-[220px] md:pt-0">
         <div className={cx('mx-auto px-3 pb-24 md:px-5 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
       </main>
 

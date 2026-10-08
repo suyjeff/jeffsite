@@ -4,13 +4,14 @@ import { SIM } from '../../../lib/fantasy/forecast'
 import { opponentsByWeek, RESULTS_PRIOR_GAMES, type PowerWeights } from '../../../lib/fantasy/power'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DivergingStacks, Legend } from '../charts'
+import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
 import { sectionCode } from '../Shell'
 import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
 
 type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'odds', 'standings', 'schedule']
-type RankModel = 'forecast' | 'composite' | 'elo'
+type RankModel = RankingModel
 
 export const COMPONENTS: { key: keyof PowerWeights; label: string; slot: string }[] = [
   { key: 'allPlay', label: 'All-play', slot: 's1' },
@@ -252,72 +253,75 @@ const PowerView = ({
         )}
 
         {tab === 'rankings' && (
-          <Panel
-            title={rankModel !== 'composite' ? 'Power rankings' : view === 'table' ? 'Power rankings' : 'Where each score comes from'}
-            pad={rankModel === 'composite' && view === 'breakdown'}
-            actions={
-              <>
-                <Segmented<RankModel>
-                  size="sm"
-                  label="Ranking model"
-                  value={rankModel}
-                  onChange={setRankModel}
-                  options={[
-                    ...(forecast ? [{ key: 'forecast' as const, label: 'Forecast', title: 'Expected points per week: projected lineup × lineup efficiency. Best calibrated in the backtest.' }] : []),
-                    { key: 'composite', label: 'Composite', title: 'Weighted z-scores of all-play, scoring, form, roster and efficiency' },
-                    { key: 'elo', label: 'Elo', title: 'Results-only Elo with a carried-over prior' },
-                  ]}
-                />
-                {rankModel === 'composite' && (
-                  <Segmented
+          <div>
+            <Panel
+              title={rankModel !== 'composite' ? 'Power rankings' : view === 'table' ? 'Power rankings' : 'Where each score comes from'}
+              pad={rankModel === 'composite' && view === 'breakdown'}
+              actions={
+                <>
+                  <Segmented<RankModel>
                     size="sm"
-                    value={view}
-                    onChange={setView}
+                    label="Ranking model"
+                    value={rankModel}
+                    onChange={setRankModel}
                     options={[
-                      { key: 'table', label: 'Table' },
-                      { key: 'breakdown', label: 'Breakdown' },
+                      ...(forecast ? [{ key: 'forecast' as const, label: 'Forecast', title: 'Expected points per week: projected lineup × lineup efficiency. Best calibrated in the backtest.' }] : []),
+                      { key: 'composite', label: 'Composite', title: 'Weighted z-scores of all-play, scoring, form, roster and efficiency' },
+                      { key: 'elo', label: 'Elo', title: 'Results-only Elo with a carried-over prior' },
                     ]}
                   />
-                )}
-              </>
-            }
-          >
-            {rankModel === 'forecast' && forecast ? (
-              <Table rows={forecastOrder.map((rosterId) => ({ rosterId }))} columns={forecastColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
-            ) : rankModel === 'elo' ? (
-              <Table rows={eloOrder.map((rosterId) => ({ rosterId }))} columns={eloColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
-            ) : view === 'table' ? (
-              <Table
-                rows={analysis.power.map((p) => ({ rosterId: p.rosterId }))}
-                columns={powerColumns}
-                rowKey={(r) => r.rosterId}
-                onRowClick={(r) => onTeam(r.rosterId)}
-                rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')}
-              />
-            ) : (
-              <div className="space-y-3">
-                <Legend items={COMPONENTS.map((c) => ({ label: c.label, slot: c.slot, value: `${Math.round((Math.max(0, weights[c.key]) / weightSum) * 100)}%` }))} />
-                <DivergingStacks
-                  parts={COMPONENTS}
-                  rows={analysis.power.map((p) => ({
-                    key: p.rosterId,
-                    label: (
-                      <span className={p.rosterId === myRosterId ? 'font-medium text-ff-accent' : ''}>
-                        <span className="num mr-1.5 text-ff-muted">{p.rank}</span>
-                        {analysis.teamById[p.rosterId].name}
-                      </span>
-                    ),
-                    values: COMPONENTS.map((c) => (p.components[c.key] * Math.max(0, weights[c.key])) / weightSum),
-                    total: p.score,
-                  }))}
-                  label={(score) => fmt(score, 0)}
+                  {rankModel === 'composite' && (
+                    <Segmented
+                      size="sm"
+                      value={view}
+                      onChange={setView}
+                      options={[
+                        { key: 'table', label: 'Table' },
+                        { key: 'breakdown', label: 'Breakdown' },
+                      ]}
+                    />
+                  )}
+                </>
+              }
+            >
+              {rankModel === 'forecast' && forecast ? (
+                <Table rows={forecastOrder.map((rosterId) => ({ rosterId }))} columns={forecastColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
+              ) : rankModel === 'elo' ? (
+                <Table rows={eloOrder.map((rosterId) => ({ rosterId }))} columns={eloColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
+              ) : view === 'table' ? (
+                <Table
+                  rows={analysis.power.map((p) => ({ rosterId: p.rosterId }))}
+                  columns={powerColumns}
+                  rowKey={(r) => r.rosterId}
+                  onRowClick={(r) => onTeam(r.rosterId)}
+                  rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')}
                 />
-                <p className="text-[11.5px] text-ff-muted">
-                  Each bar is a component&apos;s z-score times its weight, with results pulled toward average by sample size ({played} {played === 1 ? 'game counts' : 'games count'} for {Math.round((played / (played + RESULTS_PRIOR_GAMES)) * 100)}%; roster strength is never regressed). Right of the line helps, left hurts. The number is the chance to beat an average team in a week, so 50 is average. Weights live in Model.
-                </p>
-              </div>
-            )}
-          </Panel>
+              ) : (
+                <div className="space-y-3">
+                  <Legend items={COMPONENTS.map((c) => ({ label: c.label, slot: c.slot, value: `${Math.round((Math.max(0, weights[c.key]) / weightSum) * 100)}%` }))} />
+                  <DivergingStacks
+                    parts={COMPONENTS}
+                    rows={analysis.power.map((p) => ({
+                      key: p.rosterId,
+                      label: (
+                        <span className={p.rosterId === myRosterId ? 'font-medium text-ff-accent' : ''}>
+                          <span className="num mr-1.5 text-ff-muted">{p.rank}</span>
+                          {analysis.teamById[p.rosterId].name}
+                        </span>
+                      ),
+                      values: COMPONENTS.map((c) => (p.components[c.key] * Math.max(0, weights[c.key])) / weightSum),
+                      total: p.score,
+                    }))}
+                    label={(score) => fmt(score, 0)}
+                  />
+                  <p className="text-[11.5px] text-ff-muted">
+                    Each bar is a component&apos;s z-score times its weight, with results pulled toward average by sample size ({played} {played === 1 ? 'game counts' : 'games count'} for {Math.round((played / (played + RESULTS_PRIOR_GAMES)) * 100)}%; roster strength is never regressed). Right of the line helps, left hurts. The number is the chance to beat an average team in a week, so 50 is average. Weights live in Model.
+                  </p>
+                </div>
+              )}
+            </Panel>
+            <ModelExplainer model={rankModel === 'forecast' && !forecast ? 'composite' : rankModel} />
+          </div>
         )}
 
         {tab === 'odds' && forecast && <OddsGrid onTeam={onTeam} />}
