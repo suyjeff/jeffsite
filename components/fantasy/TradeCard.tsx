@@ -6,7 +6,7 @@ import { applyTrade, type TradeIdea } from '../../lib/fantasy/trades'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { ContextNotes } from './ContextNotes'
 import { useFantasy } from './FantasyContext'
-import { Avatar, Badge, Button, Num, PlayerAvatar, WeekBars, cx, fmtSigned, odds as fmtOdds } from './ui'
+import { Avatar, Badge, Button, Num, PlayerAvatar, WeekBars, cx, fmtSigned, simOdds } from './ui'
 
 export const SHAPE_LABEL: Record<TradeIdea['shape'], string> = {
   'one-for-one': 'Straight swap',
@@ -133,7 +133,7 @@ const TradeCard = ({
             <div className="truncate text-[13px] font-medium text-ff-text">{team?.name}</div>
             <div className="truncate font-mono text-[10px] text-ff-muted">
               {season ? `${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}` : ''}
-              {odds ? ` · ${fmtOdds(odds.playoffs, 0, odds.clinch)} po` : ''}
+              {odds ? ` · ${simOdds(odds, 'playoffs')} po` : ''}
               {analysis.needs[idea.partnerId]?.worstPos ? ` · needs ${analysis.needs[idea.partnerId].worstPos}` : ''}
             </div>
           </div>

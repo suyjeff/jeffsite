@@ -51,12 +51,14 @@ const MeView = ({
     }
   }, [me, data.projections, players, slots])
 
-  // ---- Fresh news: players on your roster Sleeper flagged in the last day ----
+  // ---- Fresh news: players on your roster Sleeper flagged in the day before the player file was pulled ----
+  // The file refreshes once a day (Sleeper asks for no more), so the window is anchored to it rather than to now.
+  const newsAsOf = useMemo(() => Object.values(players).reduce((a, p) => Math.max(a, p.newsAt ?? 0), 0), [players])
   const fresh = useMemo(() => {
-    if (!me) return []
-    const cutoff = Date.now() - 24 * 3600_000
+    if (!me || !newsAsOf) return []
+    const cutoff = newsAsOf - 24 * 3600_000
     return me.players.filter((id) => (players[id]?.newsAt ?? 0) > cutoff).sort((a, b) => (players[b].newsAt ?? 0) - (players[a].newsAt ?? 0))
-  }, [me, players])
+  }, [me, players, newsAsOf])
 
   // ---- Headline numbers ----
   const kpis = useMemo(() => {
@@ -154,7 +156,7 @@ const MeView = ({
             )}
 
             {fresh.length > 0 && (
-              <Panel title="News in the last day" actions={<span>{fresh.length} on your roster</span>} pad={false}>
+              <Panel title="Recent news on your roster" actions={<span>player file {ago(newsAsOf)} old</span>} pad={false}>
                 {fresh.map((id) => (
                   <div key={id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-ff-line/60 px-3 py-2 last:border-b-0">
                     <span className="min-w-0 flex-1">
@@ -164,7 +166,8 @@ const MeView = ({
                   </div>
                 ))}
                 <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-                  Sleeper flags when a player has news but not what it says; read it in the Sleeper app. If it changes your view, set your read on him from Players or the dashboard player card.
+                  News in the day before Sleeper&apos;s player file was pulled; the file refreshes once a day, so later stories show up tomorrow. Sleeper flags that a player has news but
+                  not what it says: read it in the Sleeper app, and if it changes your view, set your read on him from Players or the dashboard player card.
                 </p>
               </Panel>
             )}

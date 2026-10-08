@@ -60,7 +60,7 @@ export const describeNote = (note: ContextNote, players: PlayerMap): { tone: Ton
       return {
         tone: up ? 'good' : 'warn',
         label: `work ${Math.round(note.prior)}→${note.last}`,
-        title: `Carries plus targets: ${note.prior.toFixed(1)} a game before, ${note.last} last game (${Math.round(note.lastSnaps * 100)}% of snaps). In 2024–25 about ${Math.round(note.carryover * 100)}% of a one-game swing like this showed up again the next week, and Sleeper's projection already moves by about that much. If the news says more (or less) than that, set your read on the player.`,
+        title: `Carries plus targets: ${note.prior.toFixed(1)} a game before, ${note.last} last game (${Math.round(note.lastSnaps * 100)}% of snaps).${!up && note.injury ? ` He is listed ${note.injury}, so this may be an in-game injury rather than a role change.` : ''} In 2024–25 about ${Math.round(note.carryover * 100)}% of a one-game swing like this showed up again the next week, and Sleeper's projection already moves by about that much. If the news says more (or less) than that, set your read on the player.`,
       }
     }
     case 'playoffs':

@@ -213,6 +213,14 @@ describe('clinching and persistence', () => {
     expect(s[4]).toBe('out')
     expect(s[2]).toBeNull()
     expect(s[3]).toBeNull()
+    // A week missing from the schedule (failed fetch) still counts as a week to play.
+    const gap = clinchStatus([1, 2, 3, 4], { 1: rec(5), 2: rec(4), 3: rec(3), 4: rec(3) }, [], 2, 2)
+    expect(gap[1]).toBeNull()
+  })
+  it('settles the cut line by points-for once the season is over', () => {
+    const r = (wins: number, pf: number) => ({ wins, losses: 0, ties: 0, pf })
+    const s = clinchStatus([1, 2, 3], { 1: r(9, 1500), 2: r(8, 1400), 3: r(8, 1350) }, [], 2, 0)
+    expect([s[1], s[2], s[3]]).toEqual(['in', 'in', 'out'])
   })
   it('pulls ratings toward the week average', () => {
     const m = persistMean((t) => (t === 1 ? 120 : 100), [1, 2], 0.5)

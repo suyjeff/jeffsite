@@ -9,7 +9,7 @@ import AdjustControl from '../AdjustControl'
 import { describeNote } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, odds, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, simOdds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -179,11 +179,11 @@ const Odds = ({ sel, select }: WidgetProps) => {
             </span>
             <span className="num w-10 text-right text-ff-text">{fmt(r.rating)}</span>
             <span className="num hidden w-9 text-right text-ff-text2 sm:inline">{fmt(s.wins)}</span>
-            <span className={cx('num w-10 text-right', s.playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted')}>{odds(s.playoffs, 0, s.clinch)}</span>
-            <span className="num hidden w-9 text-right text-ff-text2 sm:inline">{odds(s.bye, 0, s.clinch === 'out' ? 'out' : null)}</span>
+            <span className={cx('num w-10 text-right', s.playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted')}>{simOdds(s, 'playoffs')}</span>
+            <span className="num hidden w-9 text-right text-ff-text2 sm:inline">{simOdds(s, 'bye')}</span>
             <span className="flex w-[78px] items-center justify-end gap-1.5">
               <Bar value={s.title} max={maxTitle} width={30} />
-              <span className="num w-9 text-right text-ff-text">{odds(s.title, s.title < 0.1 ? 1 : 0, s.clinch === 'out' ? 'out' : null)}</span>
+              <span className="num w-9 text-right text-ff-text">{simOdds(s, 'title', s.title < 0.1 ? 1 : 0)}</span>
             </span>
           </Row>
         )
@@ -592,8 +592,8 @@ const TeamCard = ({ sel, select }: WidgetProps) => {
           <div className="grid grid-cols-3 gap-3 text-right">
             {[
               ['rtg', fmt(r.rating)],
-              ['po', odds(s.playoffs, 0, s.clinch)],
-              ['title', odds(s.title, s.title < 0.1 ? 1 : 0, s.clinch === 'out' ? 'out' : null)],
+              ['po', simOdds(s, 'playoffs')],
+              ['title', simOdds(s, 'title', s.title < 0.1 ? 1 : 0)],
             ].map(([k, v]) => (
               <div key={k}>
                 <div className="ff-label">{k}</div>

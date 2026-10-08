@@ -15,6 +15,16 @@ export const fmtSigned = (n: number | null | undefined, digits = 1) => {
 export const pct = (n: number | null | undefined, digits = 0) => (n === null || n === undefined || Number.isNaN(n) ? '–' : `${(n * 100).toFixed(digits)}%`)
 
 /**
+ * One of a simulated team's odds, settled by its clinch status: playoffs read
+ * it directly; bye, final and title are only ever settled at zero, by elimination.
+ */
+export const simOdds = (s: { playoffs: number; bye: number; final: number; title: number; clinch: 'in' | 'out' | null } | null | undefined, key: 'playoffs' | 'bye' | 'final' | 'title', digits = 0) =>
+  s ? odds(s[key], digits, key === 'playoffs' ? s.clinch : s.clinch === 'out' ? 'out' : null) : '–'
+
+/** A read on a player as a signed percent: −25%, +10%. */
+export const signedPct = (p: number) => `${fmtSigned(p * 100, 0)}%`
+
+/**
  * A simulated probability. It never rounds to a certainty the arithmetic has
  * not settled: 99.7% reads ">99%", and 100% or 0% appear only when `settled`
  * says the outcome is decided.
@@ -711,7 +721,23 @@ export function Table<T>({
               <tr
                 key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={cx('group border-b border-ff-line/60 last:border-0', onRowClick && 'cursor-pointer', 'hover:bg-ff-raised', rowClass?.(row))}
+                tabIndex={onRowClick ? 0 : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onRowClick(row)
+                        }
+                      }
+                    : undefined
+                }
+                className={cx(
+                  'group border-b border-ff-line/60 last:border-0',
+                  onRowClick && 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent',
+                  'hover:bg-ff-raised',
+                  rowClass?.(row),
+                )}
               >
                 {columns.map((c) => (
                   <td

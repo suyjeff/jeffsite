@@ -194,6 +194,8 @@ export type ForecastInput = {
   elo: Record<number, number>
   /** Fallback weekly noise when there is nothing to measure it from. */
   sigmaFallback: number
+  /** Regular-season weeks left on the calendar (the schedule above can be missing one that failed to load). */
+  weeksLeft?: number
 }
 
 /** Each team's projected optimal lineup in every completed week that has projections, from the roster it had then. */
@@ -347,12 +349,18 @@ export type SimTeam = {
  * least `spots` teams already have more wins than it could reach. Ties count
  * against the team (points-for is unknown in advance), and head-to-head games
  * are not netted out, so this only ever errs toward "still open".
+ *
+ * `weeksLeft` is how many regular-season weeks remain on the calendar. Each
+ * team is assumed to play at least that many games, so a week whose matchups
+ * failed to load never makes a race look decided. With nothing left to play,
+ * the standings are final and points-for breaks the ties.
  */
 export const clinchStatus = (
   teams: number[],
-  record: Record<number, { wins: number; ties: number }>,
+  record: Record<number, { wins: number; ties: number; pf?: number }>,
   schedule: { a: number; b: number }[],
   spots: number,
+  weeksLeft = 0,
 ): Record<number, 'in' | 'out' | null> => {
   const left: Record<number, number> = {}
   for (const g of schedule) {
@@ -360,8 +368,14 @@ export const clinchStatus = (
     left[g.b] = (left[g.b] ?? 0) + 1
   }
   const now = (t: number) => (record[t]?.wins ?? 0) + 0.5 * (record[t]?.ties ?? 0)
-  const max = (t: number) => now(t) + (left[t] ?? 0)
+  const games = (t: number) => Math.max(left[t] ?? 0, weeksLeft)
+  const max = (t: number) => now(t) + games(t)
   const out: Record<number, 'in' | 'out' | null> = {}
+  if (spots > 0 && spots < teams.length && teams.every((t) => games(t) === 0)) {
+    const final = [...teams].sort((x, y) => now(y) - now(x) || (record[y]?.pf ?? 0) - (record[x]?.pf ?? 0))
+    final.forEach((t, i) => (out[t] = i < spots ? 'in' : 'out'))
+    return out
+  }
   for (const t of teams) {
     if (spots <= 0 || spots >= teams.length) {
       out[t] = spots >= teams.length ? 'in' : 'out'
@@ -384,6 +398,8 @@ export type SimInput = {
   sigma: number
   /** Season-long uncertainty in a team's level, drawn once per simulated season. */
   tau: number
+  /** Regular-season weeks left on the calendar, for settling clinches (see clinchStatus). */
+  weeksLeft?: number
   sims: number
   seed?: number
 }
@@ -425,7 +441,7 @@ export const simulateSeason = (input: SimInput): Record<number, SimTeam> => {
   const order = size ? bracketOrder(size) : []
   const byes = size - nPlayoff
   const out: Record<number, SimTeam> = {}
-  const settled = clinchStatus(teams, record, schedule, nPlayoff)
+  const settled = clinchStatus(teams, record, schedule, nPlayoff, input.weeksLeft ?? 0)
   for (const t of teams) out[t] = { rosterId: t, wins: 0, playoffs: 0, bye: 0, final: 0, title: 0, seeds: Array(teams.length + 1).fill(0), clinch: settled[t] }
   const z = normals(rng(input.seed ?? 20240917))
   // Means are fixed per sim input; read them once.
@@ -538,9 +554,12 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = past
     playoffTeams: input.playoffTeams,
     mean: persistMean(mean, ids),
     sigma: noise.sigma,
+    weeksLeft: input.weeksLeft,
     tau,
     sims,
   })
+  // Next week's odds read the rating as is: the per-game backtest grades exactly this, and the
+  // persistence pull is about drift over many weeks, which one week ahead has barely begun.
   const firstWeek = input.schedule.length ? Math.min(...input.schedule.map((g) => g.week)) : null
   const nextWeek = input.schedule
     .filter((g) => g.week === firstWeek)
@@ -573,6 +592,7 @@ export const tradeLeverage = (input: ForecastInput, base: Forecast, trade: { me:
     playoffTeams: input.playoffTeams,
     sigma: base.sigma,
     tau: base.tau,
+    weeksLeft: input.weeksLeft,
     sims,
     seed: 777,
   }

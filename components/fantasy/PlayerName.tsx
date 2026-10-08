@@ -1,7 +1,7 @@
 import React from 'react'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
 import { useFantasyMaybe } from './FantasyContext'
-import { PlayerAvatar, PosTag, cx } from './ui'
+import { PlayerAvatar, PosTag, cx, signedPct } from './ui'
 
 const injuryTone = (injury: string | null) => {
   if (!injury) return null
@@ -38,10 +38,9 @@ const PlayerName = ({
           {adj && (
             <span
               className="shrink-0 font-mono text-[9.5px] font-semibold text-ff-accent"
-              title={`Your read: ${adj.pct > 0 ? '+' : ''}${Math.round(adj.pct * 100)}% on his projection, ${adj.scope === 'week' ? `week ${adj.week} only` : 'every week ahead'}`}
+              title={`Your read: ${signedPct(adj.pct)} on his projection, ${adj.scope === 'week' ? `week ${adj.week} only` : 'every week ahead'}`}
             >
-              {adj.pct > 0 ? '+' : '−'}
-              {Math.round(Math.abs(adj.pct) * 100)}%
+              {signedPct(adj.pct)}
             </span>
           )}
         </span>

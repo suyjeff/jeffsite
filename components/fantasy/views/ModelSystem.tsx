@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ELO, EFFICIENCY_PRIOR_GAMES, FORM_PRIOR_GAMES, FORM_WEIGHT, SIM, type BacktestModel, type BacktestScore } from '../../../lib/fantasy/forecast'
 import { gradeSnapshots, loadSnapshots, MARKET_WEIGHT, MEDIAN_TO_MEAN } from '../../../lib/fantasy/lines'
 import { useFantasy } from '../FantasyContext'
-import { Badge, Num, Panel, Stat, StatGrid, Table, cx, fmt, fmtSigned, odds, pct } from '../ui'
+import { Badge, Num, Panel, Stat, StatGrid, Table, cx, fmt, fmtSigned, simOdds, pct } from '../ui'
 
 // ---------- System map ----------
 
@@ -106,7 +106,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
     { id: 'behavior', col: 3, label: 'Behaviour read', stat: `${models.behavior.trades.length} trades seen`, tab: 'behavior', note: 'Engagement, trade history, perceived fairness.' },
     { id: 'cards', col: 4, label: 'Trade cards', stat: 'Δ odds · yes-odds', note: 'Every suggestion carries leverage and acceptance.' },
     { id: 'power', col: 4, label: 'Power rankings', stat: '3 models', note: 'Choose Forecast, Composite or Elo.' },
-    { id: 'odds', col: 4, label: 'Playoff odds', stat: f && analysis.myRosterId != null ? `you ${odds(f.sim[analysis.myRosterId].playoffs, 0, f.sim[analysis.myRosterId].clinch)}` : '–', tab: 'forecast', note: 'Playoffs, byes, finals, titles, seeds.' },
+    { id: 'odds', col: 4, label: 'Playoff odds', stat: f && analysis.myRosterId != null ? `you ${simOdds(f.sim[analysis.myRosterId], 'playoffs')}` : '–', tab: 'forecast', note: 'Playoffs, byes, finals, titles, seeds.' },
     { id: 'backtest', col: 4, label: 'Backtest', stat: best ? `best: ${best.model} ${best.brier.toFixed(3)}` : '–', tab: 'backtest', note: 'Every model graded on games it had not seen.' },
   ]
 
@@ -281,8 +281,8 @@ export const ForecastTab = () => {
             { key: 'r', label: 'Rating', align: 'right', sort: (r) => r.rating, render: (r) => <span className="text-ff-text">{fmt(r.rating)}</span> },
             { key: 'elo', label: 'Elo', align: 'right', sort: (r) => r.elo, render: (r) => r.elo },
             { key: 'w', label: 'Proj W', align: 'right', sort: (r) => f.sim[r.rosterId].wins, render: (r) => fmt(f.sim[r.rosterId].wins) },
-            { key: 'po', label: 'PO', align: 'right', sort: (r) => f.sim[r.rosterId].playoffs, render: (r) => odds(f.sim[r.rosterId].playoffs, 0, f.sim[r.rosterId].clinch) },
-            { key: 'ti', label: 'Title', align: 'right', sort: (r) => f.sim[r.rosterId].title, render: (r) => odds(f.sim[r.rosterId].title, 1, f.sim[r.rosterId].clinch === 'out' ? 'out' : null) },
+            { key: 'po', label: 'PO', align: 'right', sort: (r) => f.sim[r.rosterId].playoffs, render: (r) => simOdds(f.sim[r.rosterId], 'playoffs') },
+            { key: 'ti', label: 'Title', align: 'right', sort: (r) => f.sim[r.rosterId].title, render: (r) => simOdds(f.sim[r.rosterId], 'title', 1) },
           ]}
         />
       </Panel>

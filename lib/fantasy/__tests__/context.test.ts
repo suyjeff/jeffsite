@@ -119,6 +119,7 @@ describe('usageFromStats', () => {
     expect(u.lastOpps).toBe(18)
     expect(u.priorOpps).toBeCloseTo(9)
     expect(u.lastSnaps).toBeCloseTo(0.75)
+    expect(u.lastWeek).toBe(3)
     expect(u.games).toBe(3)
   })
 })

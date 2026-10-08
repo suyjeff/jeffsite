@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { pastProjection, type Analysis } from '../../../lib/fantasy/analysis'
 import { applyTrade, makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
@@ -7,7 +7,7 @@ import { ContextNotes, PlayoffSchedule } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import { sectionCode } from '../Shell'
-import { Badge, Button, Num, PageHeader, Panel, Segmented, Sparkline, Table, ago, compact, cx, fmt, fmtSigned, pct, type Column } from '../ui'
+import { Badge, Button, Num, PageHeader, Panel, Segmented, Sparkline, Table, ago, compact, cx, fmt, fmtSigned, pct, signedPct, type Column } from '../ui'
 
 const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
 type Pos = (typeof POSITIONS)[number]
@@ -28,6 +28,11 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   useEffect(() => setLimit(PAGE), [pos, own, query, basis])
   const { adjust } = useFantasy()
   const [picked, setPicked] = useState<string | null>(null)
+  const pickedPanel = useRef<HTMLDivElement>(null)
+  // The panel sits above the table: bring it into view when a row far down the list is picked.
+  useEffect(() => {
+    if (picked) pickedPanel.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [picked])
   const adjusted = Object.entries(adjust.all)
 
   const ids = useMemo(() => {
@@ -299,10 +304,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                 <button onClick={() => setPicked(id)} className="text-ff-text hover:underline">
                   {players[id]?.name ?? id}
                 </button>
-                <span className="num text-ff-accent">
-                  {a.pct > 0 ? '+' : '−'}
-                  {Math.round(Math.abs(a.pct) * 100)}%
-                </span>
+                <span className="num text-ff-accent">{signedPct(a.pct)}</span>
                 <span className="font-mono text-[10.5px] text-ff-muted">{a.scope === 'week' ? `wk ${a.week}` : 'season'}</span>
                 <button onClick={() => adjust.set(id, null)} aria-label={`Clear your read on ${players[id]?.name ?? id}`} className="px-1 font-mono text-[11px] text-ff-muted hover:text-ff-neg">
                   ×
@@ -313,23 +315,25 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
         )}
         {!picked && !adjusted.length && <p className="text-[11.5px] text-ff-muted">Pick a player to see his context and set your own read on his projection.</p>}
         {picked && players[picked] && (
-          <Panel
-            title="Selected"
-            actions={
-              <button onClick={() => setPicked(null)} className="font-mono text-[11px] text-ff-muted hover:text-ff-text">
-                close
-              </button>
-            }
-          >
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-              <div className="min-w-0 space-y-2">
-                <PlayerName player={players[picked]} id={picked} sub={owner(picked)} />
-                <ContextNotes context={data.context[picked]} players={players} max={6} />
-                {players[picked].newsAt ? <div className="font-mono text-[10.5px] text-ff-muted">sleeper news {ago(players[picked].newsAt!)} ago · check the story in the Sleeper app</div> : null}
+          <div ref={pickedPanel} className="scroll-mt-28">
+            <Panel
+              title="Selected"
+              actions={
+                <button onClick={() => setPicked(null)} className="font-mono text-[11px] text-ff-muted hover:text-ff-text">
+                  close
+                </button>
+              }
+            >
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+                <div className="min-w-0 space-y-2">
+                  <PlayerName player={players[picked]} id={picked} sub={owner(picked)} />
+                  <ContextNotes context={data.context[picked]} players={players} max={6} />
+                  {players[picked].newsAt ? <div className="font-mono text-[10.5px] text-ff-muted">sleeper news {ago(players[picked].newsAt!)} ago · check the story in the Sleeper app</div> : null}
+                </div>
+                <AdjustControl id={picked} />
               </div>
-              <AdjustControl id={picked} />
-            </div>
-          </Panel>
+            </Panel>
+          </div>
         )}
         <Panel pad={false}>
           <Table

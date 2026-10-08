@@ -1,10 +1,9 @@
 import React from 'react'
 import { appliesTo } from '../../lib/fantasy/adjust'
 import { useFantasy } from './FantasyContext'
-import { Segmented, cx, fmt } from './ui'
+import { Segmented, cx, fmt, signedPct } from './ui'
 
 const STEPS = [-0.5, -0.25, -0.1, 0, 0.1, 0.25, 0.5]
-const label = (p: number) => (p === 0 ? '0' : `${p > 0 ? '+' : '−'}${Math.round(Math.abs(p) * 100)}`)
 
 /**
  * Your read on a player, applied everywhere: a percentage on his projection
@@ -35,7 +34,7 @@ const AdjustControl = ({ id, className }: { id: string; className?: string }) =>
         label="Adjust projection"
         value={String(pct)}
         onChange={(v) => adjust.set(id, Number(v) ? { pct: Number(v), scope, week } : null)}
-        options={STEPS.map((s) => ({ key: String(s), label: `${label(s)}${s ? '%' : ''}`, title: s ? `${label(s)}% on his projection` : 'No adjustment' }))}
+        options={STEPS.map((s) => ({ key: String(s), label: s ? signedPct(s) : '0', title: s ? `${signedPct(s)} on his projection` : 'No adjustment' }))}
       />
       {pct !== 0 && (
         <Segmented<'week' | 'season'>
