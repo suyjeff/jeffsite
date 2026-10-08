@@ -3,6 +3,7 @@ import { ELO, EFFICIENCY_PRIOR_GAMES, FORM_PRIOR_GAMES, FORM_WEIGHT, SIM, type B
 import { gradeSnapshots, loadSnapshots, MARKET_WEIGHT, MEDIAN_TO_MEAN } from '../../../lib/fantasy/lines'
 import { useFantasy } from '../FantasyContext'
 import { MONKE } from '../Shell'
+import { surname } from '../../../lib/fantasy/scout'
 import { Badge, N, Num, Panel, Stat, StatGrid, Table, cx, fmt, fmtSigned, simOdds, pct } from '../ui'
 
 // ---------- Overview ----------
@@ -37,7 +38,7 @@ export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
       n: '02',
       verb: 'Prices',
       line: 'Value is points over the replacement starter.',
-      fig: top ? `top: ${top.name.split(' ').slice(-1)[0]} ${fmtSigned(top.v, 1)}/wk` : '–',
+      fig: top ? `top: ${surname(top.name)} ${fmtSigned(top.v, 1)}/wk` : '–',
       from: 'your lineup slots and league size',
       tab: 'value',
     },
@@ -99,7 +100,7 @@ export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
           {best && (
             <li className="flex items-baseline justify-between gap-3 px-3 py-2">
               <span>
-                Best game predictor: {best.model}, Brier <N>{best.brier.toFixed(3)}</N> vs <N>0.250</N> for a coin flip
+                Best game predictor: {MODEL_LABEL[best.model]}, Brier <N>{best.brier.toFixed(3)}</N> vs <N>0.250</N> for a coin flip
               </span>
               <button onClick={() => open('backtest')} className="shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
                 backtest →

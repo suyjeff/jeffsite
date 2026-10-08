@@ -106,7 +106,7 @@ const SidebarBody = ({
         value={leagueId ?? ''}
         onChange={onLeague}
         options={leagues.map((l) => ({ value: l.id, label: l.name }))}
-        menuClassName="left-2 right-2 min-w-0"
+        menuClassName="!left-2 !right-2 !min-w-0"
         buttonClassName="block hover:bg-ff-raised"
         renderButton={(cur, open) => (
           <span className="flex items-center justify-between gap-2 px-3 py-2.5">
@@ -178,7 +178,7 @@ const SidebarBody = ({
         <dl className="mt-1 grid grid-cols-2 gap-px border border-ff-line bg-ff-line">
           {status.map((s) => (
             <div key={s.label} className="flex items-baseline justify-between gap-2 bg-ff-panel px-2 py-1" title={s.title}>
-              <dt className="text-[9.5px] uppercase tracking-[0.08em]">{s.label}</dt>
+              <dt className="text-[9.5px] tracking-[0.08em]">{s.label}</dt>
               <dd className="num truncate text-ff-text2">{s.value}</dd>
             </div>
           ))}
@@ -190,7 +190,8 @@ const SidebarBody = ({
 
 const typing = (e: KeyboardEvent) => {
   const t = e.target as HTMLElement | null
-  return !!t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+  // An open dropdown takes letters and digits for type-ahead.
+  return !!t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.getAttribute('aria-expanded') === 'true')
 }
 
 const Shell = (props: ShellProps) => {

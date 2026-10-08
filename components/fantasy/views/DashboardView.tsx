@@ -177,19 +177,22 @@ const DashboardView = () => {
     const el = e.currentTarget
     el.setPointerCapture(e.pointerId)
     const wide = window.matchMedia('(min-width: 1280px)').matches
-    const gridW = grid.current.clientWidth
-    const colW = (gridW - GAP * 11) / 12
+    const colW = (grid.current.clientWidth - GAP * 11) / 12
     const x0 = e.clientX
     const y0 = e.clientY
     const { w: w0, h: h0 } = w
     setResizing(w.id)
     const onMove = (ev: PointerEvent) => {
       // Below xl the grid is two halves, so width steps between 6 and 12.
-      const dx = ev.clientX - x0
-      const halfOrFull = (w0 <= 6 ? 0.5 : 1) * gridW + dx > 0.75 * gridW ? 12 : 6
-      const nextW = wide ? Math.max(MIN_W, Math.min(12, w0 + Math.round(dx / (colW + GAP)))) : Math.abs(dx) < 24 ? w0 : halfOrFull
+      // Width is the desktop column span; below xl the grid is two halves, so only height changes there.
+      const nextW = wide ? Math.max(MIN_W, Math.min(12, w0 + Math.round((ev.clientX - x0) / (colW + GAP)))) : w0
       const nextH = Math.max(MIN_H, Math.min(MAX_H, h0 + Math.round((ev.clientY - y0) / (ROW + GAP))))
-      setLayout((xs) => xs.map((x) => (x.id === w.id && (x.w !== nextW || x.h !== nextH) ? { ...x, w: nextW, h: nextH } : x)))
+      setLayout((xs) => {
+        const cur = xs.find((x) => x.id === w.id)
+        // Most moves stay inside one cell: keep the same array so nothing re-renders or re-saves.
+        if (!cur || (cur.w === nextW && cur.h === nextH)) return xs
+        return xs.map((x) => (x.id === w.id ? { ...x, w: nextW, h: nextH } : x))
+      })
     }
     const onUp = () => {
       el.removeEventListener('pointermove', onMove)

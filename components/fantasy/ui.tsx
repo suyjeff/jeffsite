@@ -236,8 +236,10 @@ const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayout
  */
 export const Swap = ({ k, children, className }: { k: string; children: ReactNode; className?: string }) => {
   const box = useRef<HTMLDivElement>(null)
+  const inner = useRef<HTMLDivElement>(null)
   const height = useRef<number | null>(null)
   const prev = useRef(k)
+  const timer = useRef<number>()
   useEffect(() => {
     const el = box.current
     if (!el) return
@@ -247,35 +249,41 @@ export const Swap = ({ k, children, className }: { k: string; children: ReactNod
       if (!el.style.height) height.current = el.offsetHeight
     })
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => {
+      ro.disconnect()
+      window.clearTimeout(timer.current)
+    }
   }, [])
   useIsoLayoutEffect(() => {
     const el = box.current
-    const from = height.current
     if (!el || prev.current === k) return
     prev.current = k
-    if (from == null || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    // Children stay mounted (their sort and paging survive); the fade is replayed on the same node.
+    inner.current?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: 'ease-out' })
+    // Mid-transition from a quick earlier switch: start from where the box is now, and measure the content free of the pin.
+    const from = el.style.height ? el.getBoundingClientRect().height : height.current
+    window.clearTimeout(timer.current)
+    el.style.transition = ''
+    el.style.height = ''
+    el.style.overflow = ''
     const to = el.offsetHeight
-    if (Math.abs(from - to) < 2) return
+    if (from == null || Math.abs(from - to) < 2) return
     el.style.height = `${from}px`
     el.style.overflow = 'hidden'
     void el.offsetHeight
     el.style.transition = 'height 160ms cubic-bezier(0.2, 0, 0, 1)'
     el.style.height = `${to}px`
-    const done = () => {
+    timer.current = window.setTimeout(() => {
       el.style.height = ''
       el.style.overflow = ''
       el.style.transition = ''
       height.current = el.offsetHeight
-    }
-    const t = window.setTimeout(done, 200)
-    return () => window.clearTimeout(t)
+    }, 200)
   }, [k])
   return (
     <div ref={box} className={className}>
-      <div key={k} className="ff-swap">
-        {children}
-      </div>
+      <div ref={inner}>{children}</div>
     </div>
   )
 }

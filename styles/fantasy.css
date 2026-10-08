@@ -225,10 +225,6 @@
   }
 }
 
-/* Swapped content (a tab, a picker's view) fades in; opacity only, so it is safe under reduced motion. */
-.ff .ff-swap {
-  animation: ff-pop-fade 120ms ease-out;
-}
 /* A control that appears beside another slides its width open instead of shoving its neighbours. */
 .ff .ff-reveal-x {
   display: grid;

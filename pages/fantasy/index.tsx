@@ -6,7 +6,7 @@ import { Label, Segmented, Select, cx, simOdds } from '../../components/fantasy/
 import DashboardView from '../../components/fantasy/views/DashboardView'
 import Onboarding from '../../components/fantasy/Onboarding'
 import MeView from '../../components/fantasy/views/MeView'
-import ModelView from '../../components/fantasy/views/ModelView'
+import ModelView, { READOUT } from '../../components/fantasy/views/ModelView'
 import PlayersView from '../../components/fantasy/views/PlayersView'
 import PowerView from '../../components/fantasy/views/PowerView'
 import TeamsView from '../../components/fantasy/views/TeamsView'
@@ -69,6 +69,8 @@ const FantasyPage = () => {
   // Waivers moved out of My team into their own section; old links still land there.
   useEffect(() => {
     if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })
+    // The Model page split into Readout and Tuning; its read-only tabs moved to Readout.
+    if (route.section === 'model' && route.sub && READOUT.includes(route.sub as (typeof READOUT)[number])) route.go('monke', route.sub, { replace: true })
   }, [route.section, route.sub]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -260,8 +262,8 @@ const FantasyPage = () => {
   const section = route.section as SectionKey
   const title = data ? `${SECTIONS.find((s) => s.key === route.section)?.label ?? 'Fantasy'} · ${data.league.name}` : 'Fantasy'
   const status = [
-    data?.state.season_type === 'regular' ? { label: 'Week', value: String(data.state.week), title: 'NFL week, from Sleeper' } : null,
-    models?.forecast ? { label: 'Sims', value: models.forecast.sims.toLocaleString(), title: 'Seasons simulated for the playoff odds' } : null,
+    data?.state.season_type === 'regular' ? { label: 'WEEK', value: String(data.state.week), title: 'NFL week, from Sleeper' } : null,
+    models?.forecast ? { label: 'SIMS', value: models.forecast.sims.toLocaleString(), title: 'Seasons simulated for the playoff odds' } : null,
     models?.forecast ? { label: 'σ', value: models.forecast.sigma.toFixed(1), title: 'Weekly score noise: how far a team-week strays from its projection' } : null,
     { label: 'ECR', value: data?.consensus ? 'on' : 'off', title: data?.consensus ? 'FantasyPros consensus ranks loaded' : 'FantasyPros consensus ranks unavailable' },
   ].filter((x): x is { label: string; value: string; title: string } => !!x)
