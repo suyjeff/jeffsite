@@ -240,8 +240,20 @@
     inset 0 1px 1px rgba(255, 255, 255, 0.35),
     0 1px 2px rgba(0, 30, 80, 0.4),
     0 2px 5px rgba(30, 90, 180, 0.22);
-  animation: ff-aqua-throb 1.6s ease-in-out infinite alternate;
   transition: filter 120ms;
+}
+/* The throb: a wash of light that breathes. Opacity only, so it stays on the compositor. */
+.ff .ff-aqua::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: 999px;
+  background: radial-gradient(ellipse at 50% 100%, rgba(190, 235, 255, 0.55), rgba(190, 235, 255, 0) 70%);
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity;
+  animation: ff-aqua-throb 1.6s ease-in-out infinite alternate;
 }
 /* The gloss: a capsule of light over the top half, inset from the rim. */
 .ff .ff-aqua::before {
@@ -261,6 +273,8 @@
 }
 .ff .ff-aqua:active {
   filter: brightness(0.92) saturate(1.15);
+}
+.ff .ff-aqua:active::after {
   animation: none;
 }
 .ff .ff-aqua:focus-visible {
@@ -268,15 +282,12 @@
   outline-offset: 2px;
 }
 @keyframes ff-aqua-throb {
-  from {
-    filter: brightness(0.97);
-  }
   to {
-    filter: brightness(1.1) saturate(1.08);
+    opacity: 1;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ff .ff-aqua {
+  .ff .ff-aqua::after {
     animation: none;
   }
 }

@@ -38,6 +38,8 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
     <>
       <PageHeader
         code={sectionCode('teams')}
+        mobileTitle
+        meta={team.owner && team.owner !== team.name ? `@${team.owner}` : undefined}
         title={
           <span className="inline-flex items-baseline gap-2">
             {team.name}

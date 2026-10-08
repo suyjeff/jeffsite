@@ -4,16 +4,7 @@ import AdjustControl from './AdjustControl'
 import { ContextNotes } from './ContextNotes'
 import { useFantasy } from './FantasyContext'
 import LinesBlock from './LinesBlock'
-import { Badge, PlayerAvatar, PosTag, ago, cx, fmt, fmtSigned } from './ui'
-
-/** One figure in the sheet's top band: label, value, and a line of context. */
-const Tile = ({ label, value, sub, tone }: { label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: 'pos' | 'neg' | 'warn' }) => (
-  <div className="min-w-0 bg-ff-panel px-3 py-2">
-    <div className="ff-label truncate">{label}</div>
-    <div className={cx('num mt-1 text-[18px] font-medium leading-none tracking-[-0.02em]', tone === 'pos' ? 'text-ff-pos' : tone === 'neg' ? 'text-ff-neg' : tone === 'warn' ? 'text-ff-warn' : 'text-ff-text')}>{value}</div>
-    {sub && <div className="mt-1 truncate text-[10.5px] text-ff-muted">{sub}</div>}
-  </div>
-)
+import { Badge, PlayerAvatar, PosTag, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel } from './ui'
 
 const Section = ({ title, children, aside }: { title: string; children: React.ReactNode; aside?: React.ReactNode }) => (
   <section className="border-t border-ff-line px-4 py-3">
@@ -34,16 +25,46 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
   const panel = useRef<HTMLDivElement>(null)
   const p = data.players[id]
 
-  // Escape closes; the page behind does not scroll; focus moves in and comes back.
+  // Escape closes; Tab stays inside; the page behind does not scroll; focus moves in and comes back.
   useEffect(() => {
     const back = document.activeElement as HTMLElement | null
     panel.current?.focus()
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (e.defaultPrevented) return
+        // In a field, Escape leaves the field; a second press closes.
+        const t = e.target as HTMLElement | null
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) {
+          t.blur()
+          panel.current?.focus()
+        } else onClose()
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      if (e.key !== 'Tab' || !panel.current) return
+      const focusable = [...panel.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null)
+      if (!focusable.length) return e.preventDefault()
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const at = document.activeElement
+      if (e.shiftKey && (at === first || at === panel.current)) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && at === last) {
+        e.preventDefault()
+        first.focus()
+      } else if (!panel.current.contains(at)) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    // Captured first, so Escape here never also closes a menu or drawer behind.
+    window.addEventListener('keydown', onKey, true)
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
-      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', onKey, true)
       document.body.style.overflow = overflow
       back?.focus?.()
     }
@@ -77,8 +98,7 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
   }, [data, id])
 
   if (!p) return null
-  const out = !!p.injury && /^(IR|Out|PUP|Sus|NA)/i.test(p.injury)
-  const ownerLabel = owner === undefined ? 'Free agent' : owner === analysis.myRosterId ? 'Your roster' : (analysis.teamById[owner]?.name ?? '—')
+  const out = isOut(p.injury)
 
   return (
     <div className="fixed inset-0 z-50" role="presentation">
@@ -108,7 +128,7 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
             </div>
             <h2 className="mt-1 truncate text-[19px] font-medium leading-tight tracking-[-0.01em] text-ff-text">{p.name}</h2>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-ff-muted">
-              <span className={owner === analysis.myRosterId ? 'text-ff-accent' : undefined}>{ownerLabel}</span>
+              <span className={owner === analysis.myRosterId ? 'text-ff-accent' : undefined}>{ownerLabel(analysis, id)}</span>
               {p.newsAt ? <span>· Sleeper news {ago(p.newsAt)} ago</span> : null}
             </div>
           </div>
@@ -119,11 +139,11 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
         </header>
 
         <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line sm:grid-cols-4">
-            <Tile label="Exp / wk" value={fmt(perWeek)} sub="rest of season" />
-            <Tile label="Value" value={market != null ? fmtSigned(market, 1) : '–'} sub={posRank ? `model ${p.pos}${posRank}` : 'over replacement'} tone={market != null && market > 0 ? 'pos' : undefined} />
-            <Tile label="Consensus" value={ecr?.posRank != null ? `${p.pos}${Math.round(ecr.posRank)}` : '–'} sub={ecr?.weekRank != null ? `this week ${p.pos}${Math.round(ecr.weekRank)}` : 'FantasyPros'} />
-            <Tile label="Plays" value={ctx?.play != null ? `${Math.round(ctx.play * 100)}%` : '–'} sub="of weeks ahead" tone={ctx?.play != null && ctx.play < 0.75 ? 'neg' : ctx?.play != null && ctx.play < 0.9 ? 'warn' : undefined} />
+          <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line sm:grid-cols-4 [&>*]:border-0">
+            <Stat label="Exp / wk" value={fmt(perWeek)} sub="rest of season" />
+            <Stat label="Value" value={market != null ? fmtSigned(market, 1) : '–'} sub={posRank ? `model ${p.pos}${posRank}` : 'over replacement'} tone={market != null && market > 0 ? 'pos' : undefined} />
+            <Stat label="Consensus" value={ecr?.posRank != null ? `${p.pos}${Math.round(ecr.posRank)}` : '–'} sub={ecr?.weekRank != null ? `this week ${p.pos}${Math.round(ecr.weekRank)}` : 'FantasyPros'} />
+            <Stat label="Plays" value={ctx?.play != null ? `${Math.round(ctx.play * 100)}%` : '–'} sub="of weeks ahead" meter={ctx?.play ?? undefined} tone={ctx?.play != null && ctx.play < 0.75 ? 'neg' : ctx?.play != null && ctx.play < 0.9 ? 'warn' : undefined} />
           </div>
 
           <section className="px-4 py-3">

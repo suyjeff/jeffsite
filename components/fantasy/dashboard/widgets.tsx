@@ -9,7 +9,7 @@ import LinesBlock from '../LinesBlock'
 import { describeNote } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, simOdds, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, ownerLabel, simOdds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -499,7 +499,6 @@ const PlayerCard = ({ sel }: WidgetProps) => {
   const c = data.context[id]
   const v = analysis.values[id]
   const ecr = data.consensus?.byId[id]
-  const owner = analysis.rosteredBy[id]
   return (
     <div className="flex h-full flex-col">
       <div className="flex gap-3 border-b border-ff-line p-3">
@@ -514,7 +513,7 @@ const PlayerCard = ({ sel }: WidgetProps) => {
             {p.name}
           </button>
           <div className="mt-0.5 flex items-baseline justify-between gap-2 text-[11.5px] text-ff-muted">
-            <span className="truncate">{owner === undefined ? 'free agent' : owner === analysis.myRosterId ? 'on your roster' : analysis.teamById[owner]?.name}</span>
+            <span className={cx('truncate', analysis.rosteredBy[id] === analysis.myRosterId && 'text-ff-accent')}>{ownerLabel(analysis, id)}</span>
             <button onClick={() => openPlayer(id)} className="shrink-0 font-mono text-[10.5px] text-ff-accent hover:underline">
               Details →
             </button>
@@ -729,7 +728,6 @@ const Activity = ({ select }: WidgetProps) => {
   )
 }
 
-/** One player's prop lines: the line, the de-vigged chance of the over, and what it implies. */
 /** The week's prop board, read as fantasy points next to Sleeper's projection. */
 const Props = ({ sel, select }: WidgetProps) => {
   const { data, analysis, models } = useFantasy()

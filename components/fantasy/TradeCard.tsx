@@ -6,7 +6,7 @@ import { applyTrade, type TradeIdea } from '../../lib/fantasy/trades'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { ContextNotes } from './ContextNotes'
 import { useFantasy } from './FantasyContext'
-import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, WeekBars, cx, fmtSigned, simOdds } from './ui'
+import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, WeekBars, cx, fmtSigned, isOut, simOdds } from './ui'
 
 export const SHAPE_LABEL: Record<TradeIdea['shape'], string> = {
   'one-for-one': 'Straight swap',
@@ -21,7 +21,7 @@ const PlayerLine = ({ id, data, analysis, notes }: { id: string; data: LeagueDat
   const perWeek = analysis.horizon.perWeek[id]
   const play = ctx?.play
   const ecr = data.consensus?.byId[id]
-  const out = !!p?.injury && /^(IR|Out|PUP|Sus)/i.test(p.injury)
+  const out = isOut(p?.injury)
   return (
     <div className="flex items-center gap-2.5 py-1.5">
       <PlayerAvatar id={id} player={p} size={34} />

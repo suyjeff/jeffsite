@@ -200,6 +200,8 @@ const Shell = (props: ShellProps) => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || typing(e)) return
+      // A sheet over the page owns the keyboard.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
       const n = Number(e.key)
       if (n >= 1 && n <= SECTIONS.length) {
         e.preventDefault()

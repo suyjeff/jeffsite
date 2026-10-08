@@ -131,12 +131,27 @@ export const Panel = ({
  * screen. On phones the top bar already names the page, so the row only
  * appears when there is something to act on.
  */
-export const PageHeader = ({ title, meta, actions, tabs, code }: { title: ReactNode; meta?: ReactNode; actions?: ReactNode; tabs?: ReactNode; code?: string }) => (
+export const PageHeader = ({
+  title,
+  meta,
+  actions,
+  tabs,
+  code,
+  mobileTitle,
+}: {
+  title: ReactNode
+  meta?: ReactNode
+  actions?: ReactNode
+  tabs?: ReactNode
+  code?: string
+  /** Show the title on phones too, where the top bar only names the section. */
+  mobileTitle?: boolean
+}) => (
   <div className="sticky top-12 z-20 -mx-3 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-0 md:-mx-5">
-    <div className={cx('items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5', actions || meta ? 'flex py-2 md:py-0' : 'hidden')}>
+    <div className={cx('items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5', actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden')}>
       <div className="flex min-w-0 items-baseline gap-2.5">
         {code && <span className="num hidden text-[10.5px] text-ff-muted md:inline">{code}</span>}
-        <h1 className="hidden min-w-0 truncate text-[15px] font-medium leading-tight tracking-[-0.01em] text-ff-text md:block">{title}</h1>
+        <h1 className={cx('min-w-0 truncate text-[15px] font-medium leading-tight tracking-[-0.01em] text-ff-text md:block', mobileTitle ? 'block' : 'hidden')}>{title}</h1>
         {meta && <span className="min-w-0 truncate font-mono text-[10.5px] text-ff-muted">{meta}</span>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
@@ -463,6 +478,15 @@ const POS_TINT: Record<string, string> = {
   TE: 'bg-ff-s2/20 ring-ff-s2/40',
   DEF: 'bg-ff-s4/20 ring-ff-s4/40',
 }
+/** Injury statuses that mean he does not play: IR, Out, PUP, suspended, not active. */
+export const isOut = (injury?: string | null) => !!injury && /^(IR|Out|PUP|Sus|NA)/i.test(injury)
+
+/** Who holds a player, for a detail card: "Free agent", "Your roster", or the team's name. */
+export const ownerLabel = (a: { rosteredBy: Record<string, number>; myRosterId: number | null; teamById: Record<number, { name: string } | undefined> }, id: string) => {
+  const owner = a.rosteredBy[id]
+  return owner === undefined ? 'Free agent' : owner === a.myRosterId ? 'Your roster' : (a.teamById[owner]?.name ?? '—')
+}
+
 export const PosTag = ({ pos, className }: { pos: string; className?: string }) => (
   <span
     className={cx(
