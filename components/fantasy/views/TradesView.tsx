@@ -322,9 +322,8 @@ const TradesView = ({
               </>
             )}
             <p className="text-[11.5px] leading-relaxed text-ff-muted">
-              Deals are grown one player at a time from every one-for-one that helps you, keeping an extra piece only when it improves the deal: a sweetener when they need more,
-              a second ask when there is room. Every number is points per week added to an optimal lineup, solved week by week with injury odds and teammates&apos; absences priced in.
-              Uneven deals cost the side taking more bodies its least useful player.
+              Deals start from every one-for-one that helps you and add a piece only when it improves the deal. Every number is points per week added to a best lineup, week by
+              week, injuries priced in. The side taking more bodies cuts its weakest player.
             </p>
           </>
         )}
@@ -435,8 +434,8 @@ const TradesView = ({
             )}
             <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
               {needsView === 'position'
-                ? 'A big number is a hole worth filling: it already accounts for the flex absorbing part of an upgrade and for what the waiver wire offers.'
-                : 'Points per week each lineup slot produces, minus the league average for that slot. Blue is above average, red below.'}
+                ? 'Bigger = a hole worth filling, net of what the flex and the waiver wire already cover.'
+                : 'Points per week each slot produces against the league average. Blue above, red below.'}
             </p>
           </Panel>
         )}

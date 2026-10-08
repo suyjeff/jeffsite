@@ -204,6 +204,98 @@
 .ff .ff-drop-before { box-shadow: inset 3px 0 0 rgb(var(--ff-accent)); }
 .ff .ff-dragging { opacity: 0.45; }
 
+/* Popovers open with a short fade and a 4px drop; reduced motion keeps just the fade. */
+@keyframes ff-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes ff-pop-fade {
+  from {
+    opacity: 0;
+  }
+}
+.ff .ff-pop {
+  animation: ff-pop 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-pop {
+    animation-name: ff-pop-fade;
+  }
+}
+
+/* A control that appears beside another slides its width open instead of shoving its neighbours. */
+.ff .ff-reveal-x {
+  display: grid;
+  grid-template-columns: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-columns 160ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 120ms,
+    visibility 0s 160ms;
+}
+.ff .ff-reveal-x > * {
+  min-width: 0;
+  overflow: hidden;
+}
+.ff .ff-reveal-x.is-open {
+  grid-template-columns: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-columns 160ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 120ms 40ms,
+    visibility 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-reveal-x {
+    transition: opacity 120ms;
+  }
+}
+
+/* A picker in a 32px panel header: 22px tall, so it keeps 4px of air above and below. */
+.ff .ff-panel-actions [role='radiogroup'] > button {
+  height: 22px;
+  padding: 0 7px;
+  font-size: 10.5px;
+}
+
+/* Dashboard resizing: a corner grip that shows on hover, always in edit mode. */
+.ff .ff-resize {
+  opacity: 0;
+  transition: opacity 120ms;
+  background:
+    linear-gradient(135deg, transparent 0 55%, rgb(var(--ff-muted)) 55% 62%, transparent 62% 72%, rgb(var(--ff-muted)) 72% 79%, transparent 79%);
+  touch-action: none;
+}
+@media (hover: hover) {
+  .ff section:hover > .ff-resize {
+    opacity: 1;
+  }
+}
+.ff .ff-resize-on,
+.ff .ff-resizing > .ff-resize {
+  opacity: 1;
+}
+.ff .ff-editing {
+  outline: 1px dashed rgb(var(--ff-line2));
+  outline-offset: 2px;
+}
+.ff .ff-resizing {
+  outline: 1px solid rgb(var(--ff-accent));
+  outline-offset: 2px;
+  z-index: 5;
+}
+/* Edit mode draws the twelve columns behind the widgets. */
+@media (min-width: 1280px) {
+  .ff .ff-grid-guides {
+    background-image: linear-gradient(to right, rgb(var(--ff-accent) / 0.06) calc(100% - 8px), transparent 0);
+    background-size: calc((100% + 8px) / 12) 100%;
+  }
+}
+
 /* iOS zooms into any text field under 16px on focus. On touch devices, of any
    width, fields get 16px; the layout is built to take it. */
 @media (pointer: coarse) {
@@ -229,17 +321,18 @@
   justify-content: center;
   gap: 0.35em;
   border-radius: 999px;
-  border: 1px solid #2259a8;
-  padding: 0 1.3em;
+  border: 1px solid #2f69b8;
+  height: 26px;
+  padding: 0 1.1em;
+  font-size: 12px;
   color: #04122a;
   font-weight: 500;
   text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
   background: linear-gradient(180deg, #9fc8f5 0%, #6aa7ee 30%, #3d8ae6 50%, #2e7fe3 55%, #4b9bf0 78%, #86c8ff 100%);
   box-shadow:
-    inset 0 -2px 4px rgba(170, 225, 255, 0.7),
-    inset 0 1px 1px rgba(255, 255, 255, 0.35),
-    0 1px 2px rgba(0, 30, 80, 0.4),
-    0 2px 5px rgba(30, 90, 180, 0.22);
+    inset 0 -2px 3px rgba(170, 225, 255, 0.55),
+    inset 0 1px 1px rgba(255, 255, 255, 0.3),
+    0 1px 1.5px rgba(0, 30, 80, 0.22);
   transition: filter 120ms;
 }
 /* The throb: a wash of light that breathes. Opacity only, so it stays on the compositor. */
@@ -260,9 +353,9 @@
   content: '';
   position: absolute;
   z-index: -1;
-  left: 9px;
-  right: 9px;
-  top: 2px;
+  left: 8px;
+  right: 8px;
+  top: 1.5px;
   height: 45%;
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.28));

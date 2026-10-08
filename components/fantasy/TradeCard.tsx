@@ -15,6 +15,15 @@ export const SHAPE_LABEL: Record<TradeIdea['shape'], string> = {
   swap: 'Package swap',
 }
 
+/** A cell's wash, by verdict: enough colour to tell the cells apart from each other and the page. */
+const WASH: Record<'pos' | 'neg' | 'warn' | 'none', string> = {
+  // An inset shadow lays the tint over the panel, not over the hairline grid behind it.
+  pos: 'bg-ff-panel shadow-[inset_0_0_0_999px_rgb(var(--ff-pos)/0.07)]',
+  neg: 'bg-ff-panel shadow-[inset_0_0_0_999px_rgb(var(--ff-neg)/0.06)]',
+  warn: 'bg-ff-panel shadow-[inset_0_0_0_999px_rgb(var(--ff-warn)/0.08)]',
+  none: 'bg-ff-panel',
+}
+
 const PlayerLine = ({ id, data, analysis, notes }: { id: string; data: LeagueData; analysis: Analysis; notes?: boolean }) => {
   const p = data.players[id]
   const ctx = data.context[id]
@@ -127,6 +136,7 @@ const TradeCard = ({
   signals.push(...read.signals)
   const shown = open ? signals : signals.slice(0, 3)
   const bandTone = read.band === 'likely' ? 'pos' : read.band === 'possible' ? 'warn' : 'neg'
+  const playoffTone = lev && lev.me.playoffs > 0.002 ? 'pos' : lev && lev.me.playoffs < -0.002 ? 'neg' : undefined
 
   return (
     <article className="flex min-w-0 flex-col border border-ff-line bg-ff-panel">
@@ -170,9 +180,9 @@ const TradeCard = ({
         </div>
       </div>
 
-      {/* The verdict: what it does for your lineup, for your season, and whether it will happen. */}
+      {/* The verdict: what it does for your lineup, for your season, and whether it will happen. Each cell takes a wash of its verdict's colour. */}
       <div className="grid grid-cols-3 gap-px border-y border-ff-line bg-ff-line">
-        <div className="min-w-0 bg-ff-sunken px-3 py-2.5">
+        <div className={cx('min-w-0 px-3 py-2.5', WASH[idea.myGain > 0 ? 'pos' : 'neg'])}>
           <Figure
             label="For you"
             size="hero"
@@ -183,22 +193,22 @@ const TradeCard = ({
             title="Points per week added to your best lineup, averaged over the horizon"
           />
         </div>
-        <div className="min-w-0 bg-ff-sunken px-3 py-2.5">
+        <div className={cx('min-w-0 px-3 py-2.5', WASH[playoffTone ?? 'none'])}>
           <Figure
             label="Playoffs"
             size="lg"
             value={lev === null ? '–' : pt(lev?.me.playoffs)}
             unit={lev ? 'pt' : undefined}
-            tone={lev && lev.me.playoffs > 0.002 ? 'pos' : lev && lev.me.playoffs < -0.002 ? 'neg' : undefined}
+            tone={playoffTone}
             sub={lev ? (Math.abs(lev.me.title) >= 0.0005 ? `title ${pt(lev.me.title)}pt` : 'title odds unchanged') : lev === null ? 'no projections' : 'simulating'}
             title="Change in your playoff odds: the same simulated seasons, before and after"
           />
         </div>
-        <div className="min-w-0 bg-ff-sunken px-3 py-2.5" title={`Yes-odds ${read.index}/100: their gain, how the deal looks by consensus, and how they trade`}>
+        <div className={cx('min-w-0 px-3 py-2.5', WASH[bandTone])} title={`Yes-odds ${read.index}/100: their gain, how the deal looks by consensus, and how they trade`}>
           <div className="ff-label">Will they</div>
           <div className={cx('mt-1 text-[16px] font-medium leading-none', bandTone === 'pos' ? 'text-ff-pos' : bandTone === 'warn' ? 'text-ff-warn' : 'text-ff-neg')}>{read.band}</div>
-          <span className="mt-2 block h-1 w-full max-w-[72px] bg-ff-line">
-            <span className={cx('block h-full', bandTone === 'pos' ? 'bg-ff-pos' : bandTone === 'warn' ? 'bg-ff-warn' : 'bg-ff-neg/70')} style={{ width: `${read.index}%` }} />
+          <span className="mt-2 block h-1 w-full max-w-[72px] bg-ff-text/10">
+            <span className={cx('block h-full', bandTone === 'pos' ? 'bg-ff-pos' : bandTone === 'warn' ? 'bg-ff-warn' : 'bg-ff-neg')} style={{ width: `${Math.max(4, read.index)}%` }} />
           </span>
         </div>
       </div>

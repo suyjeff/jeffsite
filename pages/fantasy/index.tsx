@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FantasyProvider } from '../../components/fantasy/FantasyContext'
 import PlayerSheet from '../../components/fantasy/PlayerSheet'
 import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../../components/fantasy/Shell'
@@ -6,7 +6,7 @@ import { Label, Segmented, Select, cx, simOdds } from '../../components/fantasy/
 import DashboardView from '../../components/fantasy/views/DashboardView'
 import Onboarding from '../../components/fantasy/Onboarding'
 import MeView from '../../components/fantasy/views/MeView'
-import ModelView from '../../components/fantasy/views/ModelView'
+import ModelView, { READOUT } from '../../components/fantasy/views/ModelView'
 import PlayersView from '../../components/fantasy/views/PlayersView'
 import PowerView from '../../components/fantasy/views/PowerView'
 import TeamsView from '../../components/fantasy/views/TeamsView'
@@ -69,6 +69,8 @@ const FantasyPage = () => {
   // Waivers moved out of My team into their own section; old links still land there.
   useEffect(() => {
     if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })
+    // The Model page split into Readout and Tuning; its read-only tabs moved to Readout.
+    if (route.section === 'model' && route.sub && READOUT.includes(route.sub as (typeof READOUT)[number])) route.go('monke', route.sub, { replace: true })
   }, [route.section, route.sub]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -142,6 +144,14 @@ const FantasyPage = () => {
   const closeSheet = useCallback(() => setSheet(null), [])
   useEffect(() => setSheet(null), [leagueKey])
 
+  // A new section or tab fades its content in (the header stays put), so switching never flashes or snaps.
+  const view = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const root = view.current
+    if (!root || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    for (const el of root.children) if (!el.classList.contains('ff-pagehead')) el.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: 'ease-out' })
+  }, [route.section, route.sub])
+
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   useEffect(() => {
     if (loaded) setLoadedAt(new Date())
@@ -161,10 +171,13 @@ const FantasyPage = () => {
   const mySim = myTeam && models?.forecast ? models.forecast.sim[myTeam.rosterId] : null
   const horizonWeeks = data?.horizon.map((h) => h.week) ?? []
 
+  // Sidebar settings: one row per setting, label on the left, control filling the rest, all on the same 28px rhythm.
+  const row = 'flex h-7 items-center gap-2'
+  const key = 'ff-label w-[52px] shrink-0'
   const controls = prefs && (
     <>
-      <div>
-        <div className="mb-1.5 flex items-baseline justify-between">
+      <div className="space-y-1.5">
+        <div className="flex items-baseline justify-between">
           <Label>Pricing horizon</Label>
           {horizonWeeks.length > 0 && (
             <span className="num text-[10.5px] text-ff-muted">
@@ -174,6 +187,7 @@ const FantasyPage = () => {
         </div>
         <Segmented<HorizonMode>
           size="sm"
+          block
           label="Pricing horizon"
           value={prefs.horizon}
           onChange={(h) => update({ horizon: h })}
@@ -183,50 +197,56 @@ const FantasyPage = () => {
             { key: 'playoffs', label: '+ Playoffs', title: 'Everything left, fantasy playoffs included' },
           ]}
         />
+        {prefs.horizon === 'playoffs' && (data?.playoffWeeks.length ?? 0) > 0 && (
+          <div className={row} title={`How much the fantasy playoff weeks (${data!.playoffWeeks.join(', ')}) count against a regular week`}>
+            <span className={key}>Weight</span>
+            <span className="flex h-full flex-1 items-center border border-ff-line bg-ff-panel">
+              {(
+                [
+                  ['−', -0.5],
+                  ['+', 0.5],
+                ] as const
+              ).map(([label, step], i) => (
+                <React.Fragment key={label}>
+                  {i === 1 && <span className="num flex-1 text-center text-[12px] text-ff-text">{prefs.playoffWeight}×</span>}
+                  <button
+                    className={cx('h-full w-7 text-ff-muted hover:bg-ff-raised hover:text-ff-text', i === 0 ? 'border-r border-ff-line' : 'border-l border-ff-line')}
+                    aria-label={step < 0 ? 'Count playoff weeks less' : 'Count playoff weeks more'}
+                    onClick={() => update({ playoffWeight: Math.max(0, Math.min(3, prefs.playoffWeight + step)) })}
+                  >
+                    {label}
+                  </button>
+                </React.Fragment>
+              ))}
+            </span>
+          </div>
+        )}
       </div>
-      {prefs.horizon === 'playoffs' && (data?.playoffWeeks.length ?? 0) > 0 && (
-        <div className="flex items-center justify-between gap-2">
-          <span className="min-w-0 leading-tight">
-            <span className="block text-[12px] text-ff-text2">Playoff weight</span>
-            <span className="num block text-[10px] text-ff-muted">wk {data!.playoffWeeks.join(' ')}</span>
-          </span>
-          <span className="flex items-center border border-ff-line bg-ff-panel">
-            {(
-              [
-                ['−', -0.5],
-                ['+', 0.5],
-              ] as const
-            ).map(([label, step], i) => (
-              <React.Fragment key={label}>
-                {i === 1 && <span className="num w-9 text-center text-[12px] text-ff-text">{prefs.playoffWeight}×</span>}
-                <button
-                  className="h-6 w-6 text-ff-muted hover:text-ff-text"
-                  aria-label={step < 0 ? 'Count playoff weeks less' : 'Count playoff weeks more'}
-                  onClick={() => update({ playoffWeight: Math.max(0, Math.min(3, prefs.playoffWeight + step)) })}
-                >
-                  {label}
-                </button>
-              </React.Fragment>
-            ))}
-          </span>
-        </div>
-      )}
       <div className="space-y-1.5">
-        <div className="flex h-8 items-center justify-between gap-2 border border-ff-line bg-ff-panel pl-2.5">
-          <span className="min-w-0 truncate font-mono text-[11.5px] text-ff-text" title="Sleeper username">
-            @{prefs.username}
+        <div className={row}>
+          <span className={key}>User</span>
+          <span className="flex h-full min-w-0 flex-1 items-center border border-ff-line bg-ff-panel">
+            <span className="min-w-0 flex-1 truncate pl-2 font-mono text-[11px] text-ff-text" title={`Sleeper user @${prefs.username}`}>
+              @{prefs.username}
+            </span>
+            <button
+              type="button"
+              onClick={() => update({ onboarded: false })}
+              className="h-full w-7 shrink-0 border-l border-ff-line font-mono text-[12px] text-ff-muted hover:bg-ff-raised hover:text-ff-text"
+              title="Switch Sleeper user"
+              aria-label="Switch Sleeper user"
+            >
+              ⇄
+            </button>
           </span>
-          <button type="button" onClick={() => update({ onboarded: false })} className="h-full shrink-0 border-l border-ff-line px-2.5 font-mono text-[10.5px] text-ff-muted hover:bg-ff-raised hover:text-ff-text">
-            switch
-          </button>
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <Label>Season</Label>
+        <div className={row}>
+          <span className={key}>Season</span>
           <Select
             label="Season"
             value={prefs.season ?? seasonOptions[0]}
             onChange={(v) => update({ season: v === seasonOptions[0] ? null : v, leagueId: null })}
-            className="w-[84px] shrink-0 font-mono text-[11.5px]"
+            className="flex-1 font-mono text-[11.5px] [&>button]:h-7"
           >
             {seasonOptions.map((s) => (
               <option key={s} value={s}>
@@ -242,11 +262,11 @@ const FantasyPage = () => {
   const section = route.section as SectionKey
   const title = data ? `${SECTIONS.find((s) => s.key === route.section)?.label ?? 'Fantasy'} · ${data.league.name}` : 'Fantasy'
   const status = [
-    data?.state.season_type === 'regular' ? `WK ${String(data.state.week).padStart(2, '0')}` : null,
-    models?.forecast ? `SIM ${models.forecast.sims}` : null,
-    models?.forecast ? `σ ${models.forecast.sigma.toFixed(1)}` : null,
-    data?.consensus ? 'ECR ✓' : null,
-  ].filter((x): x is string => !!x)
+    data?.state.season_type === 'regular' ? { label: 'WEEK', value: String(data.state.week), title: 'NFL week, from Sleeper' } : null,
+    models?.forecast ? { label: 'SIMS', value: models.forecast.sims.toLocaleString(), title: 'Seasons simulated for the playoff odds' } : null,
+    models?.forecast ? { label: 'σ', value: models.forecast.sigma.toFixed(1), title: 'Weekly score noise: how far a team-week strays from its projection' } : null,
+    { label: 'ECR', value: data?.consensus ? 'on' : 'off', title: data?.consensus ? 'FantasyPros consensus ranks loaded' : 'FantasyPros consensus ranks unavailable' },
+  ].filter((x): x is { label: string; value: string; title: string } => !!x)
 
   // Until prefs are read (first client render), draw nothing rather than flash the wrong screen.
   if (!prefs) return <div className="ff min-h-screen bg-ff-bg" />
@@ -295,7 +315,7 @@ const FantasyPage = () => {
 
       {data && analysis && models && prefs ? (
         <FantasyProvider value={{ data, analysis, models, adjust, go: (s, sub) => route.go(s, sub ?? undefined), openPlayer: setSheet }}>
-        <div key={data.league.league_id} className={cx(loading && 'opacity-60 transition-opacity')}>
+        <div key={data.league.league_id} ref={view} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
@@ -305,8 +325,10 @@ const FantasyPage = () => {
           )}
           {section === 'teams' && <TeamsView data={data} analysis={analysis} sub={route.sub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'players' && <PlayersView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
-          {section === 'model' && (
+          {(section === 'model' || section === 'monke') && (
             <ModelView
+              key={section}
+              mode={section === 'monke' ? 'readout' : 'tuning'}
               data={data}
               analysis={analysis}
               sub={route.sub}

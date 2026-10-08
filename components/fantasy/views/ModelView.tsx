@@ -9,13 +9,43 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DEFAULT_MODEL, type ModelConfig } from '../../../lib/fantasy/war'
 import { HBars, Histogram, Legend, MiniLines } from '../charts'
 import PlayerName from '../PlayerName'
-import { sectionCode } from '../Shell'
-import { Avatar, Badge, Button, Num, PageHeader, Panel, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, type Column } from '../ui'
-import { BacktestTab, BehaviorTab, ForecastTab, SystemTab } from './ModelSystem'
+import { MONKE, sectionCode } from '../Shell'
+import { useFantasy } from '../FantasyContext'
+import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, type Column } from '../ui'
+import { BacktestTab, BehaviorTab, ForecastTab, OverviewTab, SystemTab } from './ModelSystem'
 import { COMPONENTS } from './PowerView'
 
-type Sub = 'system' | 'value' | 'availability' | 'engine' | 'forecast' | 'backtest' | 'behavior' | 'power' | 'data'
-const SUBS: Sub[] = ['system', 'value', 'availability', 'engine', 'forecast', 'backtest', 'behavior', 'power', 'data']
+type Sub = 'overview' | 'system' | 'value' | 'availability' | 'engine' | 'forecast' | 'backtest' | 'behavior' | 'power' | 'data'
+/** Readout: what the engine is saying and how well it has done. Tuning: what you can change, and the method behind it. */
+export const READOUT: Sub[] = ['overview', 'system', 'forecast', 'backtest', 'behavior', 'data']
+export const TUNING: Sub[] = ['value', 'power', 'availability', 'engine']
+const LABEL: Record<Sub, string> = {
+  overview: 'Overview',
+  system: 'Wiring',
+  forecast: 'Forecast',
+  backtest: 'Backtest',
+  behavior: 'Behaviour',
+  data: 'Data',
+  value: 'Player value',
+  power: 'Composite',
+  availability: 'Availability',
+  engine: 'Trade engine',
+}
+/** Tuning tabs with controls; the rest show their working. */
+const TUNABLE: Sub[] = ['value', 'power']
+
+/** Each tab in one line: what it is for, and what, if anything, you can change there. */
+const INTRO: Partial<Record<Sub, { what: string; you: string | null }>> = {
+  system: { what: 'Every input and model, and what feeds what. Hover a box to trace it; click to open it.', you: null },
+  forecast: { what: 'The team ratings and simulated seasons behind playoff odds and Power.', you: null },
+  backtest: { what: 'Each model graded on games it had not seen. Lower Brier is better; a coin flip scores 0.250.', you: null },
+  behavior: { what: 'How each manager trades, read from the league’s transactions. Feeds the yes-odds on trade cards.', you: null },
+  data: { what: 'What was loaded, from where, and when.', you: null },
+  value: { what: 'What a player is worth: points per week over the starter you could replace him with.', you: 'the three sliders. They move values, trades and rankings everywhere.' },
+  power: { what: 'How the Composite ranking weighs each signal.', you: 'the weights. They only change the Composite view on Power.' },
+  availability: { what: 'How injuries and absences are priced, and where the lost points go.', you: null },
+  engine: { what: 'How trades are searched and scored.', you: null },
+}
 
 const fill = (slot: string) => `rgb(var(--ff-${slot}))`
 const near = (a: number, b: number, eps: number) => Math.abs(a - b) <= eps
@@ -151,9 +181,13 @@ type Props = {
   reload: () => void
 }
 
-const ModelView = ({ data, analysis, sub, onSub, model, setModel, weights, setWeights, reload }: Props) => {
-  const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'system'
+const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights, setWeights, reload }: Props & { mode: 'readout' | 'tuning' }) => {
+  const { go } = useFantasy()
+  const subs = mode === 'readout' ? READOUT : TUNING
+  const tab: Sub = subs.includes(sub as Sub) ? (sub as Sub) : subs[0]
   const changed = diffList(model, weights)
+  // A link to any tab, on whichever page holds it.
+  const open = (s: string) => (subs.includes(s as Sub) ? onSub(s) : go(TUNING.includes(s as Sub) ? 'model' : 'monke', s))
 
   // The same league run at the defaults, so every readout can show what your settings moved.
   // Weights alone only re-rank, so that case skips the full re-analysis.
@@ -166,21 +200,26 @@ const ModelView = ({ data, analysis, sub, onSub, model, setModel, weights, setWe
   return (
     <>
       <PageHeader
-        code={sectionCode('model')}
-        title="Model"
+        code={sectionCode(mode === 'readout' ? 'monke' : 'model')}
+        title={
+          <span title={MONKE.long}>
+            <span className="text-ff-muted">{MONKE.name} </span>
+            {mode === 'readout' ? 'Readout' : 'Tuning'}
+          </span>
+        }
         actions={
           changed.length > 0 && (
             <>
-            <Badge tone="accent">{changed.length} off default</Badge>
-            <Button
-              size="sm"
-              onClick={() => {
-                setModel(DEFAULT_MODEL)
-                setWeights(DEFAULT_POWER_WEIGHTS)
-              }}
-            >
-              Reset all
-            </Button>
+              <Badge tone="accent">{changed.length} off default</Badge>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setModel(DEFAULT_MODEL)
+                  setWeights(DEFAULT_POWER_WEIGHTS)
+                }}
+              >
+                Reset all
+              </Button>
             </>
           )
         }
@@ -188,22 +227,22 @@ const ModelView = ({ data, analysis, sub, onSub, model, setModel, weights, setWe
           <Tabs<Sub>
             value={tab}
             onChange={onSub}
-            items={[
-              { key: 'system', label: 'System' },
-              { key: 'value', label: 'Player value' },
-              { key: 'availability', label: 'Availability' },
-              { key: 'engine', label: 'Trade engine' },
-              { key: 'forecast', label: 'Forecast' },
-              { key: 'backtest', label: 'Backtest' },
-              { key: 'behavior', label: 'Behaviour' },
-              { key: 'power', label: 'Composite' },
-              { key: 'data', label: 'Data' },
-            ]}
+            items={subs.map((k) => ({ key: k, label: LABEL[k], ...(mode === 'tuning' && TUNABLE.includes(k) ? { mark: 'tune' } : {}) }))}
           />
         }
       />
       <div className="mt-4 space-y-3">
-        {tab === 'system' && <SystemTab onSub={onSub} />}
+        {INTRO[tab] && (
+          <div className="flex flex-col gap-1 border-l-2 border-ff-line2 pl-3 text-[12.5px] leading-snug sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+            <span className="text-ff-text2">
+              {INTRO[tab]!.what}
+              {INTRO[tab]!.you && <span className="text-ff-text"> Yours to set: {INTRO[tab]!.you}</span>}
+            </span>
+            <span className={cx('shrink-0 font-mono text-[10.5px]', INTRO[tab]!.you ? 'text-ff-accent' : 'text-ff-muted')}>{INTRO[tab]!.you ? 'tunable' : 'read-only'}</span>
+          </div>
+        )}
+        {tab === 'overview' && <OverviewTab open={open} />}
+        {tab === 'system' && <SystemTab onSub={open} />}
         {tab === 'forecast' && <ForecastTab />}
         {tab === 'backtest' && <BacktestTab />}
         {tab === 'behavior' && <BehaviorTab />}
@@ -280,7 +319,11 @@ const ValueTab = ({ data, analysis, baseline, model, setModel }: { data: LeagueD
             step={0.05}
             format={(v) => v.toFixed(2)}
             onChange={(v) => setModel({ ...model, benchFactor: v })}
-            hint="Bench buffer past league-wide starter demand. 0 is the worst weekly starter (classic VBD); 0.6 lands near the best player on waivers. Also sets trade prices."
+            hint={
+              <>
+                Where replacement sits past the league&apos;s starters. <N>0</N> = the worst starter (classic VBD); <N>0.6</N> ≈ the best free agent.
+              </>
+            }
           />
           <Param
             name="halfLife"
@@ -292,7 +335,7 @@ const ValueTab = ({ data, analysis, baseline, model, setModel }: { data: LeagueD
             step={1}
             format={(v) => (v === 0 ? 'off' : `${v} wk`)}
             onChange={(v) => setModel({ ...model, halfLife: v })}
-            hint="Weight on recent weeks for “Now” WAR and roster strength. A week one half-life old counts half."
+            hint="How fast old weeks fade in “Now” WAR and roster strength. A week this old counts half."
           />
           <Param
             name="riskAversion"
@@ -304,7 +347,11 @@ const ValueTab = ({ data, analysis, baseline, model, setModel }: { data: LeagueD
             step={0.05}
             format={(v) => v.toFixed(2)}
             onChange={(v) => setModel({ ...model, riskAversion: v })}
-            hint="Risk-adjusted PPG = PPG − λ·σweekly. Raise it if you would rather have a floor than a ceiling."
+            hint={
+              <>
+                <N>PPG − λ·σ</N>. Raise it to favour floors over ceilings.
+              </>
+            }
           />
         </Panel>
         <Panel title="Definitions" bodyClassName="space-y-2 text-[12.5px] leading-relaxed text-ff-text2">
@@ -313,8 +360,8 @@ WAR_w  = Φ(PAR_w / σ√2) − 0.5
 σ      = ${fmt(analysis.sigma, 2)}  (team score sd)
 Value  = perActive − repl_horizon(pos)`}</Code>
           <p>
-            WAR turns points into wins against a random opponent, so a 40-point week can&apos;t be worth more than one win. <b className="font-medium text-ff-text">Value</b> is the forward-looking
-            version the trade engine prices with.
+            WAR converts points to wins against a random opponent, so one huge week caps at one win. <b className="font-medium text-ff-text">Value</b> is the forward-looking version trades
+            use.
           </p>
         </Panel>
       </div>
@@ -482,9 +529,8 @@ c      = Σ (w_k / Σw) · r · z_k
 margin = c · sd(PPG)          pts/wk vs avg
 power  = 100 · Φ(margin / (σ√2))`}</Code>
           <p className="mt-2 text-[12px] leading-relaxed text-ff-muted">
-            Each component is z-scored across the {analysis.teams.length} teams, so weights are relative and only their shares matter. A component with no data yet (preseason) drops out and the rest
-            renormalize. Results are regressed toward the league mean by games played (n), because a few weeks of fantasy scores are mostly noise; roster strength is a
-            current read and is not. The score is the chance of beating a league-average team in a week, so 50 is average. Bars show each team&apos;s regressed z, clipped at ±2.5.
+            Components are z-scored across the <N>{analysis.teams.length}</N> teams, so only weight shares matter; one with no data yet drops out. Results shrink toward average by
+            games played; roster strength doesn&apos;t. <N>50</N> = an average team. Bars show regressed z, clipped at <N>±2.5</N>.
           </p>
         </Panel>
       </div>
@@ -562,11 +608,11 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
         </Panel>
         <Panel title="Designation vs projection → P(play)">
           <HBars rows={Object.entries(STATUS_PLAY).map(([k, v]) => ({ key: k, label: k, value: v }))} format={(v) => pct(v)} max={1} />
-          <p className="mt-2 text-[11.5px] text-ff-muted">Used only when Sleeper still projects a player its own report rules out.</p>
+          <p className="mt-2 text-[11.5px] text-ff-muted">Only applies when Sleeper projects a player its own report rules out.</p>
         </Panel>
         <Panel title="Points that move to teammates">
           <HBars rows={Object.entries(TRANSFER).map(([k, v]) => ({ key: k, label: k, value: v }))} format={(v) => pct(v)} max={1} slot="s2" />
-          <p className="mt-2 text-[11.5px] text-ff-muted">Measured on 2026 weeks where Sleeper zeroes a starter and later brings him back.</p>
+          <p className="mt-2 text-[11.5px] text-ff-muted">Measured on 2026 weeks where Sleeper zeroed a starter, then brought him back.</p>
         </Panel>
       </div>
 
@@ -724,8 +770,8 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
           − 0.60 · max(0, valueAsk − maxValueAsk)
           − 0.15 · max(0, players − 2)`}</Code>
           <p className="mt-2 text-[12px] leading-relaxed text-ff-muted">
-            Ranks partial deals while the beam grows. The final list is scored exactly: each week&apos;s optimal lineup, before and after, for both teams, with the side taking extra bodies cutting its
-            least useful player.
+            Ranks partial deals during the search. Finalists are scored exactly: both teams&apos; best lineups, week by week, before and after, with the side taking extra bodies cutting its
+            weakest player.
           </p>
         </Panel>
         <Panel title="Pipeline" pad={false}>
@@ -803,7 +849,7 @@ const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analy
       <Panel title="Cache">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="max-w-xl text-[12.5px] text-ff-muted">
-            Responses are cached in this browser under <code className="font-mono text-ff-text2">ff:v3:*</code>. Clearing forces every endpoint above to refetch.
+            Cached in this browser under <code className="font-mono text-ff-text2">ff:v3:*</code>. Clearing refetches everything above.
           </p>
           <Button
             onClick={() => {

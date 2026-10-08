@@ -1,4 +1,6 @@
 module.exports = {
+    // Hover styles only where a pointer can hover, so taps never leave a stuck hover.
+    future: { hoverOnlyWhenSupported: true },
     darkMode: 'media',
     content: [
         "./pages/**/*.{js,ts,jsx,tsx}",

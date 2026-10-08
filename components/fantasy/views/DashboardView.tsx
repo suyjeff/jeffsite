@@ -19,21 +19,20 @@ const HEIGHTS: [string, number][] = [
   ['XL', 15],
 ]
 const CHANNELS = 4
-/** Literal class names so Tailwind generates them. */
-const SPAN: Record<number, string> = {
-  3: 'md:col-span-6 xl:col-span-3',
-  4: 'md:col-span-6 xl:col-span-4',
-  5: 'md:col-span-6 xl:col-span-5',
-  6: 'md:col-span-6 xl:col-span-6',
-  7: 'md:col-span-12 xl:col-span-7',
-  8: 'md:col-span-12 xl:col-span-8',
-  12: 'md:col-span-12 xl:col-span-12',
-}
+const MIN_W = 2
+const MIN_H = 4
+const MAX_H = 24
+/** Grid row unit and gap, in px; they match auto-rows-[34px] and gap-2 below. */
+const ROW = 34
+const GAP = 8
+/** Two columns at md (half or full width), the widget's own span from xl. */
+const spanClass = (w: number) => cx(w <= 6 ? 'md:col-span-6' : 'md:col-span-12', 'xl:[grid-column:span_var(--cols)_/_span_var(--cols)]')
+const heightLabel = (h: number) => HEIGHTS.find(([, x]) => x === h)?.[0] ?? String(h)
 
 const DEFAULT_LAYOUT: Widget[] = [
-  { id: 'w1', kind: 'matchup', w: 4, h: 11, ch: 2 },
-  { id: 'w2', kind: 'odds', w: 5, h: 11, ch: 1 },
-  { id: 'w3', kind: 'player', w: 3, h: 11, ch: 2 },
+  { id: 'w1', kind: 'matchup', w: 4, h: 12, ch: 2 },
+  { id: 'w2', kind: 'odds', w: 5, h: 12, ch: 1 },
+  { id: 'w3', kind: 'player', w: 3, h: 12, ch: 2 },
   { id: 'w4', kind: 'trades', w: 7, h: 9, ch: 0 },
   { id: 'w5', kind: 'team', w: 5, h: 9, ch: 1 },
   { id: 'w6', kind: 'consensus', w: 4, h: 9, ch: 2 },
@@ -49,7 +48,7 @@ const load = (): Widget[] => {
     const raw = window.localStorage.getItem(STORAGE)
     if (!raw) return DEFAULT_LAYOUT
     const xs = JSON.parse(raw) as Widget[]
-    const ok = Array.isArray(xs) && xs.every((x) => x && typeof x.id === 'string' && x.kind in WIDGETS)
+    const ok = Array.isArray(xs) && xs.every((x) => x && typeof x.id === 'string' && x.kind in WIDGETS && Number.isInteger(x.w) && Number.isInteger(x.h))
     return ok ? xs : DEFAULT_LAYOUT
   } catch {
     return DEFAULT_LAYOUT
@@ -134,6 +133,9 @@ const DashboardView = () => {
   const [menu, setMenu] = useState<string | null>(null)
   const [catalog, setCatalog] = useState(false)
   const [drag, setDrag] = useState<{ id: string; over: string | null } | null>(null)
+  const [resizing, setResizing] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const grid = useRef<HTMLDivElement>(null)
   // Channel 0 is "unlinked": each such widget keeps its own selection, keyed by id.
   const [selection, setSelection] = useState<Record<string, Selection>>({})
 
@@ -167,6 +169,41 @@ const DashboardView = () => {
     setCatalog(false)
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50)
   }
+  // Drag the corner: the widget snaps to whole columns and rows as the pointer moves.
+  const startResize = (e: React.PointerEvent<HTMLElement>, w: Widget) => {
+    if (e.button !== 0 || !grid.current) return
+    e.preventDefault()
+    e.stopPropagation()
+    const el = e.currentTarget
+    el.setPointerCapture(e.pointerId)
+    const wide = window.matchMedia('(min-width: 1280px)').matches
+    const colW = (grid.current.clientWidth - GAP * 11) / 12
+    const x0 = e.clientX
+    const y0 = e.clientY
+    const { w: w0, h: h0 } = w
+    setResizing(w.id)
+    const onMove = (ev: PointerEvent) => {
+      // Below xl the grid is two halves, so width steps between 6 and 12.
+      // Width is the desktop column span; below xl the grid is two halves, so only height changes there.
+      const nextW = wide ? Math.max(MIN_W, Math.min(12, w0 + Math.round((ev.clientX - x0) / (colW + GAP)))) : w0
+      const nextH = Math.max(MIN_H, Math.min(MAX_H, h0 + Math.round((ev.clientY - y0) / (ROW + GAP))))
+      setLayout((xs) => {
+        const cur = xs.find((x) => x.id === w.id)
+        // Most moves stay inside one cell: keep the same array so nothing re-renders or re-saves.
+        if (!cur || (cur.w === nextW && cur.h === nextH)) return xs
+        return xs.map((x) => (x.id === w.id ? { ...x, w: nextW, h: nextH } : x))
+      })
+    }
+    const onUp = () => {
+      el.removeEventListener('pointermove', onMove)
+      el.removeEventListener('pointerup', onUp)
+      el.removeEventListener('pointercancel', onUp)
+      setResizing(null)
+    }
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerup', onUp)
+    el.addEventListener('pointercancel', onUp)
+  }
   const drop = (target: string) => {
     if (!drag || drag.id === target) return
     setLayout((xs) => {
@@ -186,8 +223,12 @@ const DashboardView = () => {
         title="Dashboard"
         actions={
           <>
-            <Button size="sm" variant="ghost" onClick={() => setLayout(DEFAULT_LAYOUT)} title="Restore the default board">
+            {/* Phones have no edit mode, so Reset stays there; on wide screens it lives in edit mode. */}
+            <Button size="sm" variant="ghost" onClick={() => setLayout(DEFAULT_LAYOUT)} title="Restore the default board" className={editing ? undefined : 'md:hidden'}>
               Reset
+            </Button>
+            <Button size="sm" variant={editing ? 'primary' : 'ghost'} onClick={() => setEditing((x) => !x)} title="Show resize handles and grid guides" className="hidden md:inline-flex">
+              {editing ? 'Done' : 'Edit layout'}
             </Button>
             <div className="relative">
               <Button size="sm" variant={catalog ? 'primary' : 'outline'} onClick={() => setCatalog((c) => !c)}>
@@ -217,7 +258,7 @@ const DashboardView = () => {
       />
       <div className="ff-canvas -mx-3 mt-0 min-h-[calc(100vh-120px)] p-1.5 md:-mx-5 md:p-2">
         {/* Phones stack widgets at their natural height; the row grid starts at md. */}
-        <div className="grid grid-cols-1 gap-1.5 md:grid-flow-row-dense md:auto-rows-[34px] md:grid-cols-12 md:gap-2">
+        <div ref={grid} className={cx('grid grid-cols-1 gap-1.5 md:grid-flow-row-dense md:auto-rows-[34px] md:grid-cols-12 md:gap-2', editing && 'ff-grid-guides')}>
           {layout.map((w) => {
             const meta = WIDGETS[w.kind]
             const key = keyFor(w)
@@ -240,9 +281,11 @@ const DashboardView = () => {
                   'relative flex max-h-[72vh] min-w-0 flex-col border border-ff-line bg-ff-panel md:max-h-none md:[grid-row:span_var(--rows)_/_span_var(--rows)]',
                   drag?.id === w.id && 'ff-dragging',
                   drag && drag.over === w.id && drag.id !== w.id && 'ff-drop-before',
-                  SPAN[w.w] ?? 'md:col-span-6',
+                  spanClass(w.w),
+                  resizing === w.id && 'ff-resizing',
+                  editing && 'ff-editing',
                 )}
-                style={{ ['--rows' as string]: w.h }}
+                style={{ ['--rows' as string]: w.h, ['--cols' as string]: w.w }}
               >
                 <header
                   draggable
@@ -268,7 +311,7 @@ const DashboardView = () => {
                       className="flex h-full items-center border-l border-ff-line px-2.5 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text"
                       title="Size, channel, order"
                     >
-                      {w.w}·{HEIGHTS.find(([, h]) => h === w.h)?.[0] ?? w.h}
+                      {w.w}·{heightLabel(w.h)}
                     </button>
                     {menu === w.id && (
                       <Menu
@@ -295,6 +338,14 @@ const DashboardView = () => {
                 <div className="ff-scroll min-h-0 flex-1 overflow-auto">
                   <Body sel={sel} select={(s) => setSelection((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...s } }))} w={w.w} h={w.h} />
                 </div>
+                <span
+                  role="separator"
+                  aria-label={`Resize ${meta.title}: ${w.w} columns by ${w.h} rows`}
+                  title="Drag to resize"
+                  onPointerDown={(e) => startResize(e, w)}
+                  className={cx('ff-resize absolute bottom-0 right-0 z-10 hidden h-4 w-4 cursor-nwse-resize md:block', editing && 'ff-resize-on')}
+                />
+                {resizing === w.id && <span className="pointer-events-none absolute bottom-1.5 right-5 z-10 bg-ff-text px-1.5 py-0.5 font-mono text-[10.5px] text-ff-panel">{w.w} × {w.h}</span>}
               </section>
             )
           })}

@@ -1,4 +1,4 @@
-import React, { Children, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { Children, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
 
 // ---------- Formatting ----------
@@ -116,7 +116,7 @@ export const Panel = ({
           {index != null && <span className="num text-[10px] text-ff-muted/70">{String(index).padStart(2, '0')}</span>}
           {title ? <Label className="truncate text-ff-text2">{title}</Label> : null}
         </span>
-        {actions && <div className="flex shrink-0 items-center gap-2 font-mono text-[10.5px] text-ff-muted">{actions}</div>}
+        {actions && <div className="ff-panel-actions flex min-w-0 shrink-0 items-center gap-2 font-mono text-[10.5px] text-ff-muted">{actions}</div>}
       </header>
     )}
     <div className={cx(pad && 'p-3', bodyClassName)}>{children}</div>
@@ -147,7 +147,7 @@ export const PageHeader = ({
   /** Show the title on phones too, where the top bar only names the section. */
   mobileTitle?: boolean
 }) => (
-  <div className="sticky top-12 z-20 -mx-3 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-0 md:-mx-5">
+  <div className="ff-pagehead sticky top-12 z-20 -mx-3 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-0 md:-mx-5">
     <div className={cx('items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5', actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden')}>
       <div className="flex min-w-0 items-baseline gap-2.5">
         {code && <span className="num hidden text-[10.5px] text-ff-muted md:inline">{code}</span>}
@@ -160,7 +160,7 @@ export const PageHeader = ({
   </div>
 )
 
-export type TabItem<K extends string> = { key: K; label: string; count?: number | null }
+export type TabItem<K extends string> = { key: K; label: string; count?: number | null; /** A small mono tag after the label, e.g. "tune". */ mark?: string }
 
 export const Tabs = <K extends string>({ items, value, onChange }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void }) => (
   <div role="tablist" className="no-scrollbar -mb-px flex overflow-x-auto border-b border-ff-line [mask-image:linear-gradient(to_right,black_88%,transparent)] md:[mask-image:none]">
@@ -176,6 +176,7 @@ export const Tabs = <K extends string>({ items, value, onChange }: { items: TabI
         >
           {t.label}
           {t.count != null && <span className="num ml-1.5 text-[10.5px] text-ff-muted">{t.count}</span>}
+          {t.mark && <span className="ml-1.5 bg-ff-accent/10 px-1 py-px align-[1px] font-mono text-[9.5px] text-ff-accent">{t.mark}</span>}
           {active && <span className="absolute inset-x-0 -bottom-px h-[2px] bg-ff-text" />}
         </button>
       )
@@ -192,14 +193,17 @@ export const Segmented = <K extends string>({
   onChange,
   size = 'md',
   label,
+  block,
 }: {
   options: SegOption<NoInfer<K>>[]
   value: K
   onChange: (k: NoInfer<K>) => void
   size?: 'sm' | 'md'
   label?: string
+  /** Fill the row, splitting it evenly between the options. */
+  block?: boolean
 }) => (
-  <div role="radiogroup" aria-label={label} className="no-scrollbar inline-flex max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel">
+  <div role="radiogroup" aria-label={label} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex')}>
     {options.map((o) => {
       const active = o.key === value
       return (
@@ -222,47 +226,262 @@ export const Segmented = <K extends string>({
   </div>
 )
 
+// Server render has no layout; the effect only matters in the browser.
+const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
+
 /**
- * A native select (keyboard, screen readers and the phone picker all work)
- * with the browser's own arrow removed, so it can never crowd or clip the
- * text. The caret is a glyph in a reserved gutter.
+ * Content that changes with a picker. The new content fades in over 120ms and
+ * the box eases from the old height to the new one over 160ms, so switching
+ * views never snaps the page around. Reduced motion skips both.
  */
+export const Swap = ({ k, children, className }: { k: string; children: ReactNode; className?: string }) => {
+  const box = useRef<HTMLDivElement>(null)
+  const inner = useRef<HTMLDivElement>(null)
+  const height = useRef<number | null>(null)
+  const prev = useRef(k)
+  const timer = useRef<number>()
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    height.current = el.offsetHeight
+    // Track the settled height; while a transition holds an inline height, it is not the content's.
+    const ro = new ResizeObserver(() => {
+      if (!el.style.height) height.current = el.offsetHeight
+    })
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      window.clearTimeout(timer.current)
+    }
+  }, [])
+  useIsoLayoutEffect(() => {
+    const el = box.current
+    if (!el || prev.current === k) return
+    prev.current = k
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    // Children stay mounted (their sort and paging survive); the fade is replayed on the same node.
+    inner.current?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: 'ease-out' })
+    // Mid-transition from a quick earlier switch: start from where the box is now, and measure the content free of the pin.
+    const from = el.style.height ? el.getBoundingClientRect().height : height.current
+    window.clearTimeout(timer.current)
+    el.style.transition = ''
+    el.style.height = ''
+    el.style.overflow = ''
+    const to = el.offsetHeight
+    if (from == null || Math.abs(from - to) < 2) return
+    el.style.height = `${from}px`
+    el.style.overflow = 'hidden'
+    void el.offsetHeight
+    el.style.transition = 'height 160ms cubic-bezier(0.2, 0, 0, 1)'
+    el.style.height = `${to}px`
+    timer.current = window.setTimeout(() => {
+      el.style.height = ''
+      el.style.overflow = ''
+      el.style.transition = ''
+      height.current = el.offsetHeight
+    }, 200)
+  }, [k])
+  return (
+    <div ref={box} className={className}>
+      <div ref={inner}>{children}</div>
+    </div>
+  )
+}
+
+export type DropdownOption = { value: string; label: ReactNode; sub?: ReactNode; disabled?: boolean }
+
+/**
+ * A listbox in the app's own skin: square, hairline, mono caret, a check on
+ * the current choice. Keyboard as a native select: arrows move, Enter or Space
+ * picks, Escape and Tab close, a letter jumps. Opens upward when there is no
+ * room below.
+ */
+export const Dropdown = ({
+  value,
+  options,
+  onChange,
+  label,
+  className,
+  buttonClassName,
+  renderButton,
+  menuClassName,
+}: {
+  value: string
+  options: DropdownOption[]
+  onChange: (v: string) => void
+  label: string
+  className?: string
+  buttonClassName?: string
+  /** Custom face for the trigger; gets the current option and whether the list is open. */
+  renderButton?: (current: DropdownOption | undefined, open: boolean) => ReactNode
+  menuClassName?: string
+}) => {
+  const [open, setOpen] = useState(false)
+  const [up, setUp] = useState(false)
+  const [active, setActive] = useState(0)
+  const root = useRef<HTMLDivElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+  const id = useId()
+  const current = options.find((o) => o.value === value)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => !root.current?.contains(e.target as Node) && setOpen(false)
+    window.addEventListener('pointerdown', onDown)
+    return () => window.removeEventListener('pointerdown', onDown)
+  }, [open])
+  // Keep the highlighted option in view as the arrows move it.
+  useEffect(() => {
+    if (open) list.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [open, active])
+
+  const show = () => {
+    const r = root.current?.getBoundingClientRect()
+    if (r) setUp(window.innerHeight - r.bottom < 260 && r.top > window.innerHeight - r.bottom)
+    setActive(Math.max(0, options.findIndex((o) => o.value === value)))
+    setOpen(true)
+  }
+  const pick = (i: number) => {
+    const o = options[i]
+    if (!o || o.disabled) return
+    setOpen(false)
+    if (o.value !== value) onChange(o.value)
+  }
+  const step = (d: number) => {
+    let i = active
+    for (let n = 0; n < options.length; n++) {
+      i = (i + d + options.length) % options.length
+      if (!options[i].disabled) break
+    }
+    setActive(i)
+  }
+  const onKey = (e: React.KeyboardEvent) => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        show()
+      }
+      return
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      step(e.key === 'ArrowDown' ? 1 : -1)
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault()
+      setActive(e.key === 'Home' ? 0 : options.length - 1)
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      pick(active)
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      setOpen(false)
+    } else if (e.key === 'Tab') setOpen(false)
+    else if (e.key.length === 1) {
+      const k = e.key.toLowerCase()
+      const text = (o: DropdownOption) => (typeof o.label === 'string' ? o.label : o.value).toLowerCase()
+      const from = options.findIndex((o, i) => i > active && text(o).startsWith(k))
+      const i = from >= 0 ? from : options.findIndex((o) => text(o).startsWith(k))
+      if (i >= 0) setActive(i)
+    }
+  }
+
+  return (
+    <div ref={root} className={cx('relative min-w-0', className)}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={`${id}-list`}
+        aria-activedescendant={open ? `${id}-${active}` : undefined}
+        aria-label={label}
+        onClick={() => (open ? setOpen(false) : show())}
+        onKeyDown={onKey}
+        className={cx(
+          'w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ff-accent/40',
+          renderButton ? null : 'flex h-8 items-center border border-ff-line bg-ff-panel text-[12.5px] text-ff-text hover:border-ff-line2',
+          buttonClassName,
+        )}
+      >
+        {renderButton ? (
+          renderButton(current, open)
+        ) : (
+          <>
+            <span className="min-w-0 flex-1 truncate pl-2.5 pr-2">{current?.label ?? '—'}</span>
+            <span aria-hidden className="flex h-full w-7 shrink-0 items-center justify-center border-l border-ff-line font-mono text-[10px] text-ff-muted">
+              {open ? '▴' : '▾'}
+            </span>
+          </>
+        )}
+      </button>
+      {open && (
+        <div
+          ref={list}
+          id={`${id}-list`}
+          role="listbox"
+          aria-label={label}
+          className={cx(
+            'ff-pop ff-scroll absolute left-0 z-50 max-h-[260px] min-w-full overflow-y-auto overscroll-contain border border-ff-line2 bg-ff-panel py-1 shadow-[0_10px_28px_rgba(0,0,0,0.22)]',
+            up ? 'bottom-full mb-1' : 'top-full mt-1',
+            menuClassName,
+          )}
+        >
+          {options.map((o, i) => {
+            const selected = o.value === value
+            return (
+              <div
+                key={o.value}
+                id={`${id}-${i}`}
+                data-i={i}
+                role="option"
+                aria-selected={selected}
+                aria-disabled={o.disabled || undefined}
+                onPointerEnter={() => setActive(i)}
+                onClick={() => pick(i)}
+                className={cx(
+                  'flex min-h-8 cursor-pointer items-center gap-2 py-1 pl-2 pr-3 text-[12.5px]',
+                  i === active && 'bg-ff-raised',
+                  o.disabled ? 'cursor-default text-ff-muted' : selected ? 'text-ff-text' : 'text-ff-text2',
+                )}
+              >
+                <span aria-hidden className={cx('w-3 shrink-0 font-mono text-[11px] text-ff-accent', !selected && 'invisible')}>
+                  ✓
+                </span>
+                <span className="min-w-0 leading-tight">
+                  <span className={cx('block whitespace-nowrap', selected && 'font-medium')}>{o.label}</span>
+                  {o.sub && <span className="block whitespace-nowrap font-mono text-[10.5px] text-ff-muted">{o.sub}</span>}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The app's dropdown, fed with <option> children like a native select. */
 export const Select = ({
   value,
   onChange,
   children,
   className,
   label,
-  prefix,
 }: {
   value: string | number
   onChange: (v: string) => void
   children: ReactNode
   className?: string
   label: string
-  /** A small mono key shown inside the control, e.g. "TEAM". */
-  prefix?: string
-}) => (
-  <label
-    className={cx(
-      'relative inline-flex h-8 min-w-0 max-w-full items-center border border-ff-line bg-ff-panel text-[12.5px] text-ff-text focus-within:ring-2 focus-within:ring-ff-accent/40 hover:border-ff-line2',
-      className,
-    )}
-  >
-    {prefix && <span className="ff-label pointer-events-none shrink-0 pl-2.5">{prefix}</span>}
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-full w-full min-w-0 cursor-pointer appearance-none truncate bg-transparent pl-2.5 pr-8 outline-none"
-    >
-      {children}
-    </select>
-    <span aria-hidden className="pointer-events-none absolute right-0 top-0 flex h-full w-7 items-center justify-center border-l border-ff-line font-mono text-[10px] text-ff-muted">
-      ▾
-    </span>
-  </label>
-)
+}) => {
+  const options: DropdownOption[] = Children.toArray(children)
+    .filter(isValidElement)
+    .map((el) => {
+      const p = el.props as { value?: string | number; children?: ReactNode; disabled?: boolean }
+      return { value: String(p.value ?? ''), label: p.children, disabled: p.disabled }
+    })
+  return <Dropdown value={String(value)} options={options} onChange={onChange} label={label} className={cx('inline-block', className)} />
+}
 
 export const Button = ({
   children,
@@ -478,6 +697,11 @@ const POS_TINT: Record<string, string> = {
   TE: 'bg-ff-s2/20 ring-ff-s2/40',
   DEF: 'bg-ff-s4/20 ring-ff-s4/40',
 }
+/** A number or formula set in prose: mono, on a faint chip, so it reads as data rather than words. */
+export const N = ({ children, tone }: { children: ReactNode; tone?: 'pos' | 'neg' | 'accent' }) => (
+  <span className={cx('num whitespace-nowrap bg-ff-sunken px-1 py-px text-[0.92em]', tone === 'pos' ? 'text-ff-pos' : tone === 'neg' ? 'text-ff-neg' : tone === 'accent' ? 'text-ff-accent' : 'text-ff-text')}>{children}</span>
+)
+
 /** Injury statuses that mean he does not play: IR, Out, PUP, suspended, not active. */
 export const isOut = (injury?: string | null) => !!injury && /^(IR|Out|PUP|Sus|NA)/i.test(injury)
 
@@ -895,7 +1119,8 @@ export function Table<T>({
                     key={c.key}
                     className={cx(
                       dense ? 'h-8' : 'h-[38px]',
-                      'whitespace-nowrap px-1.5 align-middle first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
+                      // Padding only shows when a cell wraps (stacked badges), so it never touches the rules.
+                      'whitespace-nowrap px-1.5 py-1 align-middle first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
                       align(c),
                       c.align === 'right' && 'num',
                       c.sticky && 'sticky left-0 z-[1] max-w-[170px] overflow-hidden bg-ff-panel group-hover:bg-ff-raised sm:max-w-[300px]',

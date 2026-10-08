@@ -2,7 +2,150 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ELO, EFFICIENCY_PRIOR_GAMES, FORM_PRIOR_GAMES, FORM_WEIGHT, SIM, type BacktestModel, type BacktestScore } from '../../../lib/fantasy/forecast'
 import { gradeSnapshots, loadSnapshots, MARKET_WEIGHT, MEDIAN_TO_MEAN } from '../../../lib/fantasy/lines'
 import { useFantasy } from '../FantasyContext'
-import { Badge, Num, Panel, Stat, StatGrid, Table, cx, fmt, fmtSigned, simOdds, pct } from '../ui'
+import { MONKE } from '../Shell'
+import { surname } from '../../../lib/fantasy/scout'
+import { Badge, N, Num, Panel, Stat, StatGrid, Table, cx, fmt, fmtSigned, simOdds, pct } from '../ui'
+
+// ---------- Overview ----------
+
+/** What the engine does, in four steps with today's numbers, then what it says about you. */
+export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
+  const { data, analysis, models } = useFantasy()
+  const f = models.forecast
+  const me = analysis.myRosterId
+  const best = [...models.backtest.scores].filter((x) => x.model !== 'coin').sort((a, b) => a.brier - b.brier)[0]
+  const top = useMemo(() => {
+    const id = Object.keys(analysis.market).sort((a, b) => analysis.market[b] - analysis.market[a])[0]
+    return id ? { name: data.players[id]?.name ?? id, v: analysis.market[id] } : null
+  }, [analysis.market, data.players])
+  const lineupRank = useMemo(() => {
+    if (me == null) return null
+    const xs = analysis.teams.map((t) => analysis.needs[t.rosterId]?.lineup ?? 0).sort((a, b) => b - a)
+    return xs.indexOf(analysis.needs[me]?.lineup ?? 0) + 1
+  }, [analysis, me])
+  const games = data.regularWeeks.length * analysis.teams.length
+
+  const steps = [
+    {
+      n: '01',
+      verb: 'Projects',
+      line: 'Points for every player, every week left.',
+      fig: `${data.horizon.length} wks × ${Object.keys(analysis.market).length} players`,
+      from: 'Sleeper projections, prop lines, injury history',
+      tab: 'availability',
+    },
+    {
+      n: '02',
+      verb: 'Prices',
+      line: 'Value is points over the replacement starter.',
+      fig: top ? `top: ${surname(top.name)} ${fmtSigned(top.v, 1)}/wk` : '–',
+      from: 'your lineup slots and league size',
+      tab: 'value',
+    },
+    {
+      n: '03',
+      verb: 'Simulates',
+      line: `Plays the season out ${f ? f.sims.toLocaleString() : 'thousands of'} times.`,
+      fig: f ? `σ ${fmt(f.sigma)} · τ ${fmt(f.tau)}` : 'off',
+      from: 'ratings, the schedule, weekly noise',
+      tab: 'forecast',
+    },
+    {
+      n: '04',
+      verb: 'Deals',
+      line: 'Searches trades that improve both lineups.',
+      fig: `${analysis.teams.length - 1} partners · ${models.behavior.trades.length} trades read`,
+      from: 'values, needs, how each manager trades',
+      tab: 'engine',
+    },
+  ]
+
+  return (
+    <>
+      <Panel title="What it does" pad={false}>
+        <p className="border-b border-ff-line px-3 py-2 text-[12.5px] text-ff-text2">
+          <span className="font-mono text-ff-text">{MONKE.name}</span> <span className="text-ff-muted">·</span> {MONKE.long}
+        </p>
+        <ol className="grid grid-cols-1 gap-px bg-ff-line sm:grid-cols-2 xl:grid-cols-4">
+          {steps.map((st) => (
+            <li key={st.n} className="bg-ff-panel">
+              <button onClick={() => open(st.tab)} className="group block h-full w-full px-3 py-3 text-left hover:bg-ff-raised">
+                <span className="flex items-baseline gap-2">
+                  <span className="num text-[10.5px] text-ff-muted">{st.n}</span>
+                  <span className="text-[15px] font-medium text-ff-text">{st.verb}</span>
+                  <span className="ml-auto font-mono text-[10.5px] text-ff-muted group-hover:text-ff-accent">→</span>
+                </span>
+                <span className="mt-1 block text-[12.5px] leading-snug text-ff-text2">{st.line}</span>
+                <span className="mt-2 inline-block bg-ff-accent/10 px-1.5 py-0.5 font-mono text-[11px] text-ff-accent">{st.fig}</span>
+                <span className="mt-2 block text-[11px] leading-snug text-ff-muted">from {st.from}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      </Panel>
+
+      {f && me != null && f.sim[me] && (
+        <Panel title="What it says about you" pad={false}>
+          <StatGrid className="border-0">
+            <Stat label="Playoffs" value={simOdds(f.sim[me], 'playoffs')} meter={f.sim[me].playoffs} sub={`bye ${simOdds(f.sim[me], 'bye')}`} />
+            <Stat label="Title" value={simOdds(f.sim[me], 'title', 1)} sub={`final ${simOdds(f.sim[me], 'final')}`} />
+            <Stat label="Lineup rank" value={lineupRank ? `#${lineupRank}` : '–'} sub={`of ${analysis.teams.length}, projected`} />
+            <Stat label="Biggest hole" value={analysis.needs[me]?.worstPos ?? '–'} tone="warn" sub="weakest slot vs league" />
+          </StatGrid>
+        </Panel>
+      )}
+
+      <Panel title="How far to trust it" pad={false}>
+        <ul className="divide-y divide-ff-line text-[12.5px] leading-snug text-ff-text2">
+          {best && (
+            <li className="flex items-baseline justify-between gap-3 px-3 py-2">
+              <span>
+                Best game predictor: {MODEL_LABEL[best.model]}, Brier <N>{best.brier.toFixed(3)}</N> vs <N>0.250</N> for a coin flip
+              </span>
+              <button onClick={() => open('backtest')} className="shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
+                backtest →
+              </button>
+            </li>
+          )}
+          {f && (
+            <li className="flex items-baseline justify-between gap-3 px-3 py-2">
+              <span>
+                A team-week strays <N>±{fmt(f.sigma)}</N> pts from its projection, so single games stay close to coin flips
+              </span>
+              <button onClick={() => open('forecast')} className="shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
+                forecast →
+              </button>
+            </li>
+          )}
+          <li className="flex items-baseline justify-between gap-3 px-3 py-2">
+            <span>
+              Built on <N>{games}</N> team-games this season{data.history ? (
+                <>
+                  {' '}
+                  plus <N>{data.history.weeks.length}</N> weeks of last season
+                </>
+              ) : null}
+            </span>
+            <button onClick={() => open('data')} className="shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
+              data →
+            </button>
+          </li>
+        </ul>
+      </Panel>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <button onClick={() => open('value')} className="border border-ff-line bg-ff-panel px-3 py-2.5 text-left hover:border-ff-line2">
+          <span className="ff-label">Tuning →</span>
+          <span className="mt-1 block text-[12.5px] text-ff-text2">Change how players are valued and how teams are ranked.</span>
+        </button>
+        <button onClick={() => open('system')} className="border border-ff-line bg-ff-panel px-3 py-2.5 text-left hover:border-ff-line2">
+          <span className="ff-label">Wiring →</span>
+          <span className="mt-1 block text-[12.5px] text-ff-text2">Every input and model, and what feeds what.</span>
+        </button>
+      </div>
+    </>
+  )
+}
 
 // ---------- System map ----------
 
@@ -223,26 +366,58 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
         </div>
       </Panel>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <Panel title="What is measured" index={1}>
-          <p className="text-[12.5px] leading-relaxed text-ff-text2">
-            Weekly noise ({f ? `σ ${fmt(f.sigma)} from ${f.noiseN} team-weeks` : 'fallback'}), how often players actually suit up (two seasons of games), where an injured player’s points go (2026 projections), and how well each ranking predicts games it has not seen.
-          </p>
+        <Panel title="Measured" index={1}>
+          <ul className="space-y-1.5 text-[12.5px] leading-snug text-ff-text2">
+            <li>
+              Weekly noise {f ? (
+                <>
+                  <N>σ {fmt(f.sigma)}</N>, from <N>{f.noiseN}</N> team-weeks
+                </>
+              ) : (
+                'at its fallback'
+              )}
+            </li>
+            <li>How often each player suits up, over two seasons</li>
+            <li>Where an injured player&apos;s points go</li>
+            <li>How well each ranking predicts unseen games</li>
+          </ul>
         </Panel>
-        <Panel title="What is assumed" index={2}>
-          <p className="text-[12.5px] leading-relaxed text-ff-text2">
-            The coming week blends prop lines and Sleeper {Math.round(MARKET_WEIGHT * 100)}/{Math.round((1 - MARKET_WEIGHT) * 100)}, with yardage lines read as medians (mean/median: rec {MEDIAN_TO_MEAN.rec_yd}, rush {MEDIAN_TO_MEAN.rush_yd}, pass {MEDIAN_TO_MEAN.pass_yd}). Season-long team uncertainty τ = {SIM.tauShare}·σ, with {Math.round(SIM.persistence * 100)}% of each rating gap carried through the season (both fitted on 148 real 2025 leagues); Elo K {ELO.k} with a ⅓ summer regression (538’s NFL values); priors of {EFFICIENCY_PRIOR_GAMES} games on lineup efficiency and {FORM_PRIOR_GAMES} on form; the yes-odds weights. Each is labelled where it is used.
-          </p>
+        <Panel title="Assumed" index={2}>
+          <ul className="space-y-1.5 text-[12.5px] leading-snug text-ff-text2">
+            <li>
+              Next week: props <N>{Math.round(MARKET_WEIGHT * 100)}%</N>, Sleeper <N>{Math.round((1 - MARKET_WEIGHT) * 100)}%</N>
+            </li>
+            <li>
+              Yardage lines are medians: rec <N>×{MEDIAN_TO_MEAN.rec_yd}</N> rush <N>×{MEDIAN_TO_MEAN.rush_yd}</N> pass <N>×{MEDIAN_TO_MEAN.pass_yd}</N>
+            </li>
+            <li>
+              Season drift <N>τ = {SIM.tauShare}σ</N>, <N>{Math.round(SIM.persistence * 100)}%</N> of edges persist (fitted, 148 leagues)
+            </li>
+            <li>
+              Elo <N>K={ELO.k}</N>, <N>⅓</N> regressed each summer (538)
+            </li>
+            <li>
+              Priors: <N>{EFFICIENCY_PRIOR_GAMES}</N> games on efficiency, <N>{FORM_PRIOR_GAMES}</N> on form
+            </li>
+          </ul>
         </Panel>
-        <Panel title="What was decided by evidence" index={3}>
-          <p className="text-[12.5px] leading-relaxed text-ff-text2">
-            Form is computed but weighted ×{FORM_WEIGHT}: in both leagues tested when it was built, it made next-week predictions worse. Per-manager efficiency is shrunk with a {EFFICIENCY_PRIOR_GAMES}-game prior for the same reason.{' '}
+        <Panel title="Settled by evidence" index={3}>
+          <ul className="space-y-1.5 text-[12.5px] leading-snug text-ff-text2">
+            <li>
+              Form weighted <N>×{FORM_WEIGHT}</N>: it made next-week predictions worse
+            </li>
+            <li>Efficiency shrunk hard, for the same reason</li>
             {(() => {
               const results = models.backtest.scores.filter((s) => ['ppg', 'allplay', 'power', 'elo'].includes(s.model))
               const worse = results.filter((s) => s.skill < 0).map((s) => MODEL_LABEL[s.model])
-              return worse.length ? `Here, ${worse.join(', ')} scored worse than a coin flip on probability. ` : 'Here, every results model beats a coin flip. '
+              return <li>{worse.length ? `Here, ${worse.join(', ')} did worse than a coin flip` : 'Here, every results model beats a coin flip'}</li>
             })()}
-            {best ? `${MODEL_LABEL[best.model]} grades best (Brier ${best.brier.toFixed(3)}, n ${best.n}).` : ''}
-          </p>
+            {best && (
+              <li>
+                Best: {MODEL_LABEL[best.model]}, Brier <N>{best.brier.toFixed(3)}</N> on <N>{best.n}</N> games
+              </li>
+            )}
+          </ul>
         </Panel>
       </div>
     </div>
@@ -287,16 +462,16 @@ export const ForecastTab = () => {
         />
       </Panel>
       <Panel title="Method · after ELWAY and 538 NFL Elo">
-        <div className="grid grid-cols-1 gap-4 text-[12.5px] leading-relaxed text-ff-text2 lg:grid-cols-2">
-          <p>
-            ELWAY rates NFL teams with Elo-style results, then adjusts for who is actually playing, the quarterback above all. Fantasy inverts the balance: nobody plays defense, so a team&apos;s score is almost entirely the lineup it fields, and that lineup is
-            projected in advance. The rating is therefore the projected optimal lineup for each week, with injury odds and byes priced in, times efficiency: the points this team has actually scored per point its lineup was projected for, shrunk toward the league. That folds in lineup calls and any systematic gap between a roster and its projections.
-          </p>
-          <p>
-            Results still matter twice: they set efficiency, and they measure the weekly noise σ the simulation uses. Elo, the pure-results benchmark, uses 538&apos;s margin multiplier and carries last season&apos;s rating forward,
-            regressed a third of the way to 1500. A season simulation draws one level per team per season (τ) on top of weekly noise, so a team the projections misjudge stays misjudged all year, as it would in reality.
-          </p>
-        </div>
+        <ul className="max-w-[90ch] space-y-1.5 text-[12.5px] leading-snug text-ff-text2">
+          <li>
+            <N>rating = projected best lineup × efficiency</N>, week by week, with injury odds and byes priced in.
+          </li>
+          <li>Efficiency is points scored per point projected, shrunk toward the league. It folds in lineup calls and any roster the projections misread.</li>
+          <li>
+            Each simulated season draws one level per team (<N>τ</N>) on top of weekly noise (<N>σ</N>), so a misjudged team stays misjudged all year.
+          </li>
+          <li>Elo is the results-only benchmark. ELWAY adjusts NFL Elo for who plays; in fantasy the lineup is nearly everything, so it leads here.</li>
+        </ul>
       </Panel>
     </div>
   )
@@ -361,12 +536,12 @@ const LinesTracker = () => {
             </div>
           ))}
           <p className="pt-1 font-mono text-[10.5px] text-ff-muted">
-            {grade.n} player-weeks · wk {grade.weeks.join(', ')} · graded from snapshots filed in this browser before kickoff
+            {grade.n} player-weeks · wk {grade.weeks.join(', ')} · filed in this browser before kickoff
           </p>
         </div>
       ) : (
         <p className="text-[12.5px] leading-relaxed text-ff-text2">
-          No free archive of past prop lines exists, so the page keeps its own: every load before kickoff files what the lines and Sleeper projected for each priced player, and the week is graded once it is scored.{' '}
+          There&apos;s no free archive of old prop lines, so this browser keeps one: each load before kickoff files the lines and Sleeper&apos;s numbers, graded once the week is scored.{' '}
           {filed.length ? (
             <span className="font-mono text-[11px] text-ff-muted">Filed so far: wk {filed.join(', ')}. First grade after those games finish.</span>
           ) : (
@@ -420,17 +595,20 @@ export const BacktestTab = () => {
         />
         <div className="grid grid-cols-1 gap-4 border-t border-ff-line px-3 py-2.5 text-[12px] leading-relaxed text-ff-text2 lg:grid-cols-2">
           <p>
-            Every prediction for week <i>w</i> uses only weeks before <i>w</i>. Projection models need Sleeper&apos;s past projections, so they cover this season only; results models also run on last season. On the{' '}
-            <span className="num">{bt.commonN}</span> games every model predicted:{' '}
+            Week <i>w</i> is predicted from weeks before <i>w</i> only. Projection models cover this season; results models also run on last. On the <N>{bt.commonN}</N> games
+            all of them predicted:{' '}
             {[...bt.commonScores]
               .sort((a, b) => a.brier - b.brier)
-              .map((s) => `${MODEL_LABEL[s.model]} ${s.brier.toFixed(3)}`)
-              .join(' · ')}
+              .map((s, i) => (
+                <React.Fragment key={s.model}>
+                  {i > 0 && ' · '}
+                  {MODEL_LABEL[s.model]} <N>{s.brier.toFixed(3)}</N>
+                </React.Fragment>
+              ))}
             .
           </p>
           <p>
-            Read the standard errors before the ranking: with a few dozen games, gaps under about 0.03 are noise. Reliability plots predicted against observed win rates; points on the dashed line are well calibrated. The composite is graded on its
-            regressed margin in points per week, through the same weekly σ as the point-based models.
+            Check <N>±se</N> first: with a few dozen games, gaps under <N>0.03</N> are noise. On the reliability plots, dots on the dashed line are well calibrated.
           </p>
         </div>
       </Panel>
@@ -496,7 +674,7 @@ export const BehaviorTab = () => {
         </Panel>
         <Panel title="Trade log" pad={false}>
           {b.trades.length === 0 ? (
-            <p className="px-3 py-6 text-center text-[12px] text-ff-muted">No trades on record. Engagement and consensus carry the read alone.</p>
+            <p className="px-3 py-6 text-center text-[12px] text-ff-muted">No trades yet. Yes-odds lean on engagement and consensus.</p>
           ) : (
             <div className="ff-scroll max-h-[420px] overflow-auto">
               {b.trades.map((t, i) => (
@@ -541,7 +719,7 @@ export const BehaviorTab = () => {
           ))}
         </div>
         <p className="mt-2 text-[12px] leading-relaxed text-ff-text2">
-          There are too few trades in one league to fit anything, so these stay small and visible. It ranks offers; it does not claim a probability. Owners judge offers by public rankings, which is why the consensus view of a deal carries real weight.
+          One league has too few trades to fit, so these are set by hand and kept small. The index ranks offers; it isn&apos;t a probability. Consensus weighs heavily because managers judge offers by public rankings.
         </p>
       </Panel>
     </div>

@@ -7,7 +7,7 @@ import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
 import { sectionCode } from '../Shell'
-import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, DeltaChip, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
+import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, Tabs, DeltaChip, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
 
 type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'odds', 'standings', 'schedule']
@@ -273,9 +273,24 @@ const PowerView = ({
           <div>
             <Panel
               title={rankModel !== 'composite' ? 'Power rankings' : view === 'table' ? 'Power rankings' : 'Where each score comes from'}
-              pad={rankModel === 'composite' && view === 'breakdown'}
+              pad={false}
               actions={
                 <>
+                  {/* The composite's own picker opens to the left, so the model picker never moves under the pointer. */}
+                  <span className={cx('ff-reveal-x', rankModel === 'composite' && 'is-open')} aria-hidden={rankModel !== 'composite'}>
+                    <span>
+                      <Segmented
+                        size="sm"
+                        label="Composite view"
+                        value={view}
+                        onChange={setView}
+                        options={[
+                          { key: 'table', label: 'Table' },
+                          { key: 'breakdown', label: 'Breakdown' },
+                        ]}
+                      />
+                    </span>
+                  </span>
                   <Segmented<RankModel>
                     size="sm"
                     label="Ranking model"
@@ -287,55 +302,47 @@ const PowerView = ({
                       { key: 'elo', label: 'Elo', title: 'Results-only Elo with a carried-over prior' },
                     ]}
                   />
-                  {rankModel === 'composite' && (
-                    <Segmented
-                      size="sm"
-                      value={view}
-                      onChange={setView}
-                      options={[
-                        { key: 'table', label: 'Table' },
-                        { key: 'breakdown', label: 'Breakdown' },
-                      ]}
-                    />
-                  )}
                 </>
               }
             >
-              {rankModel === 'forecast' && forecast ? (
-                <Table rows={forecastOrder.map((rosterId) => ({ rosterId }))} columns={forecastColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
-              ) : rankModel === 'elo' ? (
-                <Table rows={eloOrder.map((rosterId) => ({ rosterId }))} columns={eloColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
-              ) : view === 'table' ? (
-                <Table
-                  rows={analysis.power.map((p) => ({ rosterId: p.rosterId }))}
-                  columns={powerColumns}
-                  rowKey={(r) => r.rosterId}
-                  onRowClick={(r) => onTeam(r.rosterId)}
-                  rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')}
-                />
-              ) : (
-                <div className="space-y-3">
-                  <Legend items={COMPONENTS.map((c) => ({ label: c.label, slot: c.slot, value: `${Math.round((Math.max(0, weights[c.key]) / weightSum) * 100)}%` }))} />
-                  <DivergingStacks
-                    parts={COMPONENTS}
-                    rows={analysis.power.map((p) => ({
-                      key: p.rosterId,
-                      label: (
-                        <span className={p.rosterId === myRosterId ? 'font-medium text-ff-accent' : ''}>
-                          <span className="num mr-1.5 text-ff-muted">{p.rank}</span>
-                          {analysis.teamById[p.rosterId].name}
-                        </span>
-                      ),
-                      values: COMPONENTS.map((c) => (p.components[c.key] * Math.max(0, weights[c.key])) / weightSum),
-                      total: p.score,
-                    }))}
-                    label={(score) => fmt(score, 0)}
+              <Swap k={`${rankModel}-${view}`}>
+                {rankModel === 'forecast' && forecast ? (
+                  <Table rows={forecastOrder.map((rosterId) => ({ rosterId }))} columns={forecastColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
+                ) : rankModel === 'elo' ? (
+                  <Table rows={eloOrder.map((rosterId) => ({ rosterId }))} columns={eloColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
+                ) : view === 'table' ? (
+                  <Table
+                    rows={analysis.power.map((p) => ({ rosterId: p.rosterId }))}
+                    columns={powerColumns}
+                    rowKey={(r) => r.rosterId}
+                    onRowClick={(r) => onTeam(r.rosterId)}
+                    rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')}
                   />
-                  <p className="text-[11.5px] text-ff-muted">
-                    Each bar is a component&apos;s z-score times its weight, with results pulled toward average by sample size ({played} {played === 1 ? 'game counts' : 'games count'} for {Math.round((played / (played + RESULTS_PRIOR_GAMES)) * 100)}%; roster strength is never regressed). Right of the line helps, left hurts. The number is the chance to beat an average team in a week, so 50 is average. Weights live in Model.
-                  </p>
-                </div>
-              )}
+                ) : (
+                  <div className="space-y-3 p-3">
+                    <Legend items={COMPONENTS.map((c) => ({ label: c.label, slot: c.slot, value: `${Math.round((Math.max(0, weights[c.key]) / weightSum) * 100)}%` }))} />
+                    <DivergingStacks
+                      parts={COMPONENTS}
+                      rows={analysis.power.map((p) => ({
+                        key: p.rosterId,
+                        label: (
+                          <span className={p.rosterId === myRosterId ? 'font-medium text-ff-accent' : ''}>
+                            <span className="num mr-1.5 text-ff-muted">{p.rank}</span>
+                            {analysis.teamById[p.rosterId].name}
+                          </span>
+                        ),
+                        values: COMPONENTS.map((c) => (p.components[c.key] * Math.max(0, weights[c.key])) / weightSum),
+                        total: p.score,
+                      }))}
+                      label={(score) => fmt(score, 0)}
+                    />
+                    <p className="text-[11.5px] text-ff-muted">
+                      Each bar is a component&apos;s z-score × its weight. Results count <N>{Math.round((played / (played + RESULTS_PRIOR_GAMES)) * 100)}%</N> after <N>{played}</N>{' '}
+                      {played === 1 ? 'game' : 'games'}; roster strength counts in full. Right helps, left hurts; <N>50</N> = average. Weights are in Tuning.
+                    </p>
+                  </div>
+                )}
+              </Swap>
             </Panel>
             <ModelExplainer model={rankModel === 'forecast' && !forecast ? 'composite' : rankModel} />
           </div>
@@ -445,8 +452,9 @@ const OddsGrid = ({ onTeam }: { onTeam: (id: number) => void }) => {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-ff-line px-3 py-2 font-mono text-[10.5px] text-ff-muted">
-        Each season plays out week by week: weekly scores ~ N(rating, σ={fmt(f.sigma)}) around a team level drawn once per season (τ={fmt(f.tau)}), with {Math.round(SIM.persistence * 100)}% of each team&apos;s gap to average carried forward, since rosters drift toward the middle; then the bracket. Both settings were fitted on how 148 real 2025 leagues finished; next week&apos;s matchup odds use the rating as is. Odds never read 100% or 0% until the win arithmetic settles it. The rule after seed {cut} is the playoff line.
+      <p className="border-t border-ff-line px-3 py-2 text-[11.5px] leading-snug text-ff-muted">
+        Scores ~ <N>N(rating, σ={fmt(f.sigma)})</N> around a season level (<N>τ={fmt(f.tau)}</N>), <N>{Math.round(SIM.persistence * 100)}%</N> of edges persisting, then the bracket. Fitted on{' '}
+        <N>148</N> finished leagues. <N>100%</N> and <N>0%</N> only once clinched. The rule after seed <N>{cut}</N> is the playoff line.
       </p>
     </Panel>
   )
