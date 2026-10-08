@@ -20,7 +20,7 @@ import {
 import { ContextNotes } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import { sectionCode } from '../Shell'
-import { DeltaChip, Badge, CenterMeter, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, compact, cx, fmt, pct, type Column } from '../ui'
+import { DeltaChip, Badge, CenterMeter, Empty, N, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, compact, cx, fmt, pct, type Column } from '../ui'
 
 type Sub = 'stream' | 'adds'
 const SUBS: Sub[] = ['stream', 'adds']
@@ -411,12 +411,11 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                   )}
                 </Panel>
                 <p className="text-[11.5px] leading-relaxed text-ff-muted">
-                  <span className="text-ff-text2">How to read it.</span> Proj is the week&apos;s projection (blended with prop lines for the coming week).{' '}
-                  {pos === 'DEF' ? 'Opp total is what the offense across from him is expected to score' : 'Team total is what his offense is expected to score'}: from the
-                  kicker&apos;s extra-point and field-goal props where the board has them (marked m), otherwise Sleeper&apos;s projected points allowed, which is built on the Vegas
-                  line. Matchup is what this opponent has {pos === 'DEF' ? 'handed defenses' : `allowed to ${pos}s`} per game this season against the league average
-                  {!ownSeason ? ' (not available until this season has results)' : ''}. Boom is the chance of a week at or above the league&apos;s average starting {posLabel} (
-                  {fmt(starter)}), using the position&apos;s measured week-to-week spread of ±{fmt(sd)}. Shaded weeks ahead are easy (green) or tough (red) matchups.
+                  <span className="text-ff-text2">Proj</span> blends prop lines into next week. <span className="text-ff-text2">{pos === 'DEF' ? 'Opp total' : 'Team total'}</span>{' '}
+                  {pos === 'DEF' ? 'is what the offense he faces should score' : 'is what his offense should score'} (<N>m</N> = from props, else Vegas via Sleeper).{' '}
+                  <span className="text-ff-text2">Matchup</span> is what this opponent {pos === 'DEF' ? 'gives up to defenses' : `allows ${pos}s`} vs average
+                  {!ownSeason ? ' (needs this season’s results)' : ''}. <span className="text-ff-text2">Boom</span> is the chance of <N>{fmt(starter)}+</N>, an average starter
+                  (<N>±{fmt(sd)}</N> weekly). Green weeks ahead are easy, red tough.
                 </p>
               </>
             )}
@@ -450,8 +449,8 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               <Table rows={adds} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." />
             </Panel>
             <p className="text-[11.5px] leading-relaxed text-ff-muted">
-              Gain is solved week by week over the pricing horizon: your best lineup with him added and your least useful player cut, minus your lineup today, so any positive
-              number is a real upgrade and a player who only covers a bye counts for that week alone. Value is what the league at large would pay.
+              Gain = your best lineup with him in and your weakest player cut, minus today&apos;s, week by week. Anything positive is a real upgrade; a bye fill counts only that
+              week. Value is what the league would pay.
             </p>
           </>
         )}

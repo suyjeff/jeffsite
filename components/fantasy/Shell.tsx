@@ -1,11 +1,11 @@
 import React, { useEffect, useState, type ReactNode } from 'react'
 import Head from 'next/head'
-import { Avatar, cx } from './ui'
+import { Avatar, Dropdown, cx } from './ui'
 
-export const SECTION_KEYS = ['dash', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'model'] as const
+export const SECTION_KEYS = ['dash', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
-type Group = 'Overview' | 'Your team' | 'League' | 'Engine'
+type Group = 'Overview' | 'Your team' | 'League' | 'M.O.N.K.E.'
 type Section = { key: SectionKey; label: string; short: string; group: Group }
 
 /** Order is the register: the number beside each entry is also its keyboard shortcut. */
@@ -17,9 +17,13 @@ export const SECTIONS: Section[] = [
   { key: 'power', label: 'Power', short: 'Power', group: 'League' },
   { key: 'teams', label: 'Teams', short: 'Teams', group: 'League' },
   { key: 'players', label: 'Players', short: 'Players', group: 'League' },
-  { key: 'model', label: 'Model', short: 'Model', group: 'Engine' },
+  { key: 'monke', label: 'Readout', short: 'Readout', group: 'M.O.N.K.E.' },
+  { key: 'model', label: 'Tuning', short: 'Tuning', group: 'M.O.N.K.E.' },
 ]
-const GROUPS: Group[] = ['Overview', 'Your team', 'League', 'Engine']
+const GROUPS: Group[] = ['Overview', 'Your team', 'League', 'M.O.N.K.E.']
+
+/** The engine's name, and what it stands for. */
+export const MONKE = { name: 'M.O.N.K.E.', long: 'Mostly Overthinking NFL Kickers & Everything' }
 
 /** The two-digit register number shown beside a section, which is also its keyboard shortcut. */
 export const sectionCode = (key: SectionKey) => String(SECTIONS.findIndex((s) => s.key === key) + 1).padStart(2, '0')
@@ -42,8 +46,8 @@ export type ShellProps = {
   progress: string
   onRefresh: () => void
   loadedAt: Date | null
-  /** Short status readouts for the footer, e.g. ["WK 05", "SIM 4000"]. */
-  status?: string[]
+  /** The engine's readouts for the footer: label, value, and what it means. */
+  status?: { label: string; value: string; title?: string }[]
 }
 
 /** The wordmark. Shared by the shell and onboarding. */
@@ -97,24 +101,26 @@ const SidebarBody = ({
     </div>
 
     <div className="shrink-0 border-b border-ff-line">
-      <label className="group relative block">
-        <span className="sr-only">League</span>
-        <select value={leagueId ?? ''} onChange={(e) => onLeague(e.target.value)} className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0">
-          {leagues.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-        <span className="flex items-center justify-between gap-2 px-3 py-2.5 peer-hover:bg-ff-raised peer-focus-visible:ring-2 peer-focus-visible:ring-inset peer-focus-visible:ring-ff-accent/40">
-          <span className="min-w-0">
-            <span className="ff-label block">League</span>
-            <span className="mt-0.5 block truncate text-[13px] font-medium text-ff-text">{leagues.find((l) => l.id === leagueId)?.name ?? '—'}</span>
-            {leagueMeta && <span className="block truncate font-mono text-[10.5px] text-ff-muted">{leagueMeta}</span>}
+      <Dropdown
+        label="League"
+        value={leagueId ?? ''}
+        onChange={onLeague}
+        options={leagues.map((l) => ({ value: l.id, label: l.name }))}
+        menuClassName="left-2 right-2 min-w-0"
+        buttonClassName="block hover:bg-ff-raised"
+        renderButton={(cur, open) => (
+          <span className="flex items-center justify-between gap-2 px-3 py-2.5">
+            <span className="min-w-0">
+              <span className="ff-label block">League</span>
+              <span className="mt-0.5 block truncate text-[13px] font-medium text-ff-text">{cur?.label ?? '—'}</span>
+              {leagueMeta && <span className="block truncate font-mono text-[10.5px] text-ff-muted">{leagueMeta}</span>}
+            </span>
+            <span aria-hidden className="shrink-0 font-mono text-[10px] text-ff-muted">
+              {open ? '▴' : '▾'}
+            </span>
           </span>
-          <span className="shrink-0 font-mono text-[10px] text-ff-muted">▾</span>
-        </span>
-      </label>
+        )}
+      />
       {me && (
         <div className="flex items-center gap-2 border-t border-ff-line px-3 py-2">
           <Avatar src={me.avatar} name={me.name} size={22} />
@@ -129,7 +135,9 @@ const SidebarBody = ({
     <nav className="ff-scroll flex-1 overflow-y-auto py-1.5" aria-label="Sections">
       {GROUPS.map((g) => (
         <div key={g} className="pb-1.5">
-          <div className="ff-label px-3 pb-1 pt-2">{g}</div>
+          <div className="ff-label px-3 pb-1 pt-2" title={g === MONKE.name ? MONKE.long : undefined}>
+            {g}
+          </div>
           {SECTIONS.filter((s) => s.group === g).map(({ key, label }) => {
             const i = SECTIONS.findIndex((s) => s.key === key) + 1
             const active = key === section
@@ -156,21 +164,25 @@ const SidebarBody = ({
 
     {controls && <div className="shrink-0 space-y-3 border-t border-ff-line p-3">{controls}</div>}
 
-    <div className="shrink-0 border-t border-ff-line px-3 py-2 font-mono text-[10px] leading-[15px] text-ff-muted">
-      <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate">{loading ? `${progress.toLowerCase()}` : `SYNC ${clock(loadedAt)}`}</span>
-        <button onClick={onRefresh} className="shrink-0 px-1 text-ff-text2 hover:text-ff-text" title="Reload from Sleeper" aria-label="Reload from Sleeper">
-          {loading ? '···' : 'R↻'}
+    <div className="shrink-0 border-t border-ff-line px-3 pb-2.5 pt-2 font-mono text-[10.5px] text-ff-muted">
+      <div className="flex h-6 items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className={cx('h-1.5 w-1.5 shrink-0', loading ? 'ff-pulse bg-ff-warn' : 'bg-ff-pos')} aria-hidden />
+          <span className="min-w-0 truncate">{loading ? progress.toLowerCase() : `synced ${clock(loadedAt)}`}</span>
+        </span>
+        <button onClick={onRefresh} disabled={loading} className="-mr-1.5 h-6 shrink-0 px-1.5 text-ff-text2 hover:bg-ff-raised hover:text-ff-text disabled:opacity-50" title="Reload from Sleeper (R)">
+          reload
         </button>
       </div>
       {status && status.length > 0 && (
-        <div className="flex flex-wrap gap-x-2">
+        <dl className="mt-1 grid grid-cols-2 gap-px border border-ff-line bg-ff-line">
           {status.map((s) => (
-            <span key={s} className="whitespace-nowrap">
-              {s}
-            </span>
+            <div key={s.label} className="flex items-baseline justify-between gap-2 bg-ff-panel px-2 py-1" title={s.title}>
+              <dt className="text-[9.5px] uppercase tracking-[0.08em]">{s.label}</dt>
+              <dd className="num truncate text-ff-text2">{s.value}</dd>
+            </div>
           ))}
-        </div>
+        </dl>
       )}
     </div>
   </div>

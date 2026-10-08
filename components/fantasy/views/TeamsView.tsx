@@ -6,7 +6,7 @@ import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import ScoutReport from '../ScoutReport'
 import { sectionCode } from '../Shell'
-import { Avatar, Badge, DeltaChip, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct } from '../ui'
+import { Avatar, Badge, DeltaChip, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Swap, Table, Tabs, cx, fmt, fmtSigned, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Inner = 'roster' | 'results' | 'slots'
@@ -107,13 +107,15 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
                 value={basis}
                 onChange={setBasis}
                 options={[
-                  { key: 'ahead', label: 'Rest of season' },
-                  { key: 'todate', label: 'Season to date' },
+                  { key: 'ahead', label: 'Ahead', title: 'Rest of season' },
+                  { key: 'todate', label: 'To date', title: 'Season to date' },
                 ]}
               />
             }
           >
-            <RosterTable data={data} analysis={analysis} rosterId={rosterId} basis={basis} />
+            <Swap k={basis}>
+              <RosterTable data={data} analysis={analysis} rosterId={rosterId} basis={basis} />
+            </Swap>
           </Panel>
         )}
 
@@ -123,8 +125,7 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
               <div className="border-b border-ff-line px-2 pb-2 pt-3">
                 <ProjectionChart weeks={chartWeeks} actual={chartWeeks.map((w) => scored[w] ?? null)} projected={chartWeeks.map((w) => expected[w] ?? ahead[w] ?? null)} />
                 <p className="mt-1.5 px-1 text-[11px] leading-snug text-ff-muted">
-                  Projected is the best lineup this roster could have started, on Sleeper&apos;s pre-game projections, times the manager&apos;s efficiency. It assumes byes get
-                  swapped out, so a week with a bye or empty slot left in the lineup shows as a miss. Dashed weeks are still to come.
+                  Projected = best possible lineup on pre-game projections × the manager&apos;s efficiency. A bye or empty slot left in shows as a miss. Dashed weeks are ahead.
                 </p>
               </div>
             )}

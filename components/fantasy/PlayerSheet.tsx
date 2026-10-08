@@ -148,7 +148,7 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
 
           <section className="px-4 py-3">
             <AdjustControl id={id} />
-            <p className="mt-1.5 text-[11px] leading-snug text-ff-muted">Saved in this browser for this league, and used everywhere: lineups, trades, playoff odds, waivers.</p>
+            <p className="mt-1.5 text-[11px] leading-snug text-ff-muted">Saved in this browser for this league. Applies everywhere: lineups, trades, odds, waivers.</p>
           </section>
 
           {chart.weeks.length > 0 && (

@@ -7,7 +7,7 @@ import { ContextNotes } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import ScoutReport from '../ScoutReport'
 import { sectionCode } from '../Shell'
-import { Badge, Button, DeltaChip, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, ago, cx, fmt, fmtSigned, pct } from '../ui'
+import { Badge, Button, DeltaChip, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Swap, Table, Tabs, ago, cx, fmt, fmtSigned, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Sub = 'overview' | 'roster'
@@ -179,8 +179,7 @@ const MeView = ({
                   </div>
                 ))}
                 <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-                  News in the day before Sleeper&apos;s player file was pulled; the file refreshes once a day, so later stories show up tomorrow. Sleeper flags that a player has news but
-                  not what it says: read it in the Sleeper app, and if it changes your view, set your read on him from Players or the dashboard player card.
+                  Sleeper flags that a player has news, not what it says, and refreshes once a day. Read the story in Sleeper; if it changes your view, click his name to set a read.
                 </p>
               </Panel>
             )}
@@ -273,13 +272,15 @@ const MeView = ({
                 value={basis}
                 onChange={setBasis}
                 options={[
-                  { key: 'ahead', label: 'Rest of season' },
-                  { key: 'todate', label: 'Season to date' },
+                  { key: 'ahead', label: 'Ahead', title: 'Rest of season' },
+                  { key: 'todate', label: 'To date', title: 'Season to date' },
                 ]}
               />
             }
           >
-            <RosterTable data={data} analysis={analysis} rosterId={me.rosterId} basis={basis} />
+            <Swap k={basis}>
+              <RosterTable data={data} analysis={analysis} rosterId={me.rosterId} basis={basis} />
+            </Swap>
           </Panel>
         )}
 

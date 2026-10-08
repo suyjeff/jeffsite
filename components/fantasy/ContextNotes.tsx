@@ -27,20 +27,20 @@ export const describeNote = (note: ContextNote, players: PlayerMap): { tone: Ton
       return {
         tone: 'warn',
         label: `${note.status} · ${Math.round(note.play * 100)}% wk ${note.week}`,
-        title: `Sleeper lists him ${note.status}, but his week ${note.week} projection assumes he plays. Counted at a ${Math.round(note.play * 100)}% chance, with the rest going to his teammates.`,
+        title: `Listed ${note.status}, but projected to play in week ${note.week}. Counted at ${Math.round(note.play * 100)}%; the rest goes to teammates.`,
       }
     case 'history':
       return {
         tone: 'bad',
         label: `played ${note.played}/${note.games}`,
-        title: `Suited up for ${note.played} of his teams' last ${note.games} games. Expected to play ${Math.round(note.rate * 100)}% of future games, against ${Math.round(BASE_AVAILABILITY * 100)}% for a typical starter.`,
+        title: `Played ${note.played} of his team's last ${note.games} games. Expected to play ${Math.round(note.rate * 100)}% ahead (typical starter: ${Math.round(BASE_AVAILABILITY * 100)}%).`,
       }
     case 'bump': {
       const who = note.from.map((id) => last(players[id]?.name, id)).join(', ')
       return {
         tone: 'good',
         label: `+${note.pts.toFixed(1)} covering ${who}`,
-        title: `Picks up ${note.pts.toFixed(1)} points a week, on average, from the games ${who} is expected to miss.`,
+        title: `Gains ${note.pts.toFixed(1)} pts/wk on average from games ${who} should miss.`,
       }
     }
     case 'temporary': {
@@ -48,7 +48,7 @@ export const describeNote = (note: ContextNote, players: PlayerMap): { tone: Ton
       return {
         tone: 'warn',
         label: `bigger role ${weekRange(note.weeks)} only`,
-        title: `Projected for ${note.during.toFixed(1)} a week while ${who} is out (${weekRange(note.weeks)}), then about ${note.after.toFixed(1)}. Sell-high territory if someone prices him on the short-term number.`,
+        title: `${note.during.toFixed(1)}/wk while ${who} is out (${weekRange(note.weeks)}), then about ${note.after.toFixed(1)}. Sell high if someone prices the short-term number.`,
       }
     }
     case 'returns':
@@ -60,14 +60,14 @@ export const describeNote = (note: ContextNote, players: PlayerMap): { tone: Ton
       return {
         tone: up ? 'good' : 'warn',
         label: `work ${Math.round(note.prior)}→${note.last}`,
-        title: `Carries plus targets: ${note.prior.toFixed(1)} a game before, ${note.last} last game (${Math.round(note.lastSnaps * 100)}% of snaps).${!up && note.injury ? ` He is listed ${note.injury}, so this may be an in-game injury rather than a role change.` : ''} In 2024–25 about ${Math.round(note.carryover * 100)}% of a one-game swing like this showed up again the next week, and Sleeper's projection already moves by about that much. If the news says more (or less) than that, set your read on the player.`,
+        title: `Carries + targets: ${note.prior.toFixed(1)} a game before, ${note.last} last game (${Math.round(note.lastSnaps * 100)}% of snaps).${!up && note.injury ? ` Listed ${note.injury}: maybe an in-game injury, not a role change.` : ''} About ${Math.round(note.carryover * 100)}% of a swing like this carries over, and Sleeper already prices that. If the news says otherwise, set a read.`,
       }
     }
     case 'playoffs':
       return {
         tone: note.vsNormal > 0 ? 'good' : 'warn',
         label: `playoffs ${note.vsNormal > 0 ? '+' : ''}${Math.round(note.vsNormal * 100)}%`,
-        title: `Projected ${Math.abs(Math.round(note.vsNormal * 100))}% ${note.vsNormal > 0 ? 'above' : 'below'} his usual week across ${weekRange(note.weeks)}, from the matchups Sleeper expects.`,
+        title: `${Math.abs(Math.round(note.vsNormal * 100))}% ${note.vsNormal > 0 ? 'above' : 'below'} his usual week in ${weekRange(note.weeks)}, on Sleeper's matchup projections.`,
       }
   }
 }

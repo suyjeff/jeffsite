@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { acceptRead } from '../../../lib/fantasy/behavior'
 import { pastProjection } from '../../../lib/fantasy/analysis'
 import { deadStarters } from '../../../lib/fantasy/lineup'
+import { surname } from '../../../lib/fantasy/scout'
 import { isWaiverFill, makeLineupEval } from '../../../lib/fantasy/trades'
 import { searchTrades, waiverTargets } from '../../../lib/fantasy/search'
 import AdjustControl from '../AdjustControl'
@@ -9,7 +10,7 @@ import LinesBlock from '../LinesBlock'
 import { describeNote } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, ownerLabel, simOdds, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -223,25 +224,43 @@ const Matchup = ({ select }: WidgetProps) => {
   const p = flip ? 1 - game.pA : game.pA
   const muMe = flip ? game.muB : game.muA
   const muOpp = flip ? game.muA : game.muB
+  const gap = muMe - muOpp
+  const winPct = Math.round(p * 100)
+  const favored = Math.abs(p - 0.5) < 0.03 ? null : p > 0.5 ? mine : opp
+  // Why the number is what it is: the slot edges each way, and who on either side might sit.
+  const edges = (left ?? []).map((s, i) => ({ slot: s.slot, me: s, them: right?.[i], d: s.pts - (right?.[i]?.pts ?? 0) }))
+  const best = edges.reduce<(typeof edges)[number] | null>((a, e) => (e.d > (a?.d ?? 0) ? e : a), null)
+  const worst = edges.reduce<(typeof edges)[number] | null>((a, e) => (e.d < (a?.d ?? 0) ? e : a), null)
+  const doubtful = [...(left ?? []), ...(right ?? [])].filter((s) => s.id && data.players[s.id]?.injury && !isOut(data.players[s.id]?.injury)).map((s) => surname(data.players[s.id!].name))
+  const last = (id: string | null) => (id ? surname(data.players[id]?.name ?? id) : 'waiver')
   return (
     <div className="flex h-full flex-col">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-3 border-b border-ff-line px-3 py-3">
-        <div className="min-w-0">
+      <div className="border-b border-ff-line px-3 pb-2.5 pt-3">
+        <div className="grid grid-cols-2 gap-3 text-[13px]">
           <TeamTag id={mine} />
-          <div className="num mt-1 text-[26px] leading-none text-ff-text">{fmt(muMe)}</div>
+          <span className="flex min-w-0 justify-end">
+            <TeamTag id={opp} />
+          </span>
         </div>
-        <div className="pb-0.5 text-center">
-          <div className="ff-label">wk {game.week} · win</div>
-          <div className={cx('num text-[26px] leading-none', p >= 0.5 ? 'text-ff-pos' : 'text-ff-neg')}>{Math.round(p * 100)}%</div>
+        <div className="mt-1.5 flex items-baseline justify-between gap-3">
+          <span className="num text-[26px] font-medium leading-none tracking-[-0.03em] text-ff-s1">{fmt(muMe)}</span>
+          <span className="font-mono text-[10.5px] text-ff-muted">wk {game.week} · projected</span>
+          <span className="num text-[26px] font-medium leading-none tracking-[-0.03em] text-ff-s2">{fmt(muOpp)}</span>
         </div>
-        <div className="flex min-w-0 flex-col items-end">
-          <TeamTag id={opp} />
-          <div className="num mt-1 text-[26px] leading-none text-ff-text2">{fmt(muOpp)}</div>
+        <div className="mt-2.5 flex items-center gap-2" title={`Chance to win: you ${winPct}%, them ${100 - winPct}%`}>
+          <span className={cx('num w-9 text-[13px] font-medium', favored === mine ? 'text-ff-s1' : 'text-ff-text2')}>{winPct}%</span>
+          <span className="flex h-1.5 flex-1 gap-px">
+            <span className="h-full bg-ff-s1" style={{ width: `${p * 100}%` }} />
+            <span className="h-full flex-1 bg-ff-s2" />
+          </span>
+          <span className={cx('num w-9 text-right text-[13px] font-medium', favored === opp ? 'text-ff-s2' : 'text-ff-text2')}>{100 - winPct}%</span>
         </div>
-      </div>
-      <div className="flex h-1.5">
-        <span className="h-full bg-ff-s1" style={{ width: `${p * 100}%` }} />
-        <span className="h-full flex-1 bg-ff-s2/70" />
+        <div className="mt-1 text-center text-[11px] text-ff-text2">
+          {favored == null ? 'Even' : favored === mine ? 'You’re favored' : `${analysis.teamById[opp]?.name ?? 'They'} favored`}
+          <span className="text-ff-muted"> by </span>
+          <span className="num">{fmt(Math.abs(gap))}</span>
+          <span className="text-ff-muted"> pts</span>
+        </div>
       </div>
       {[mine, opp].map((rid) =>
         unset[rid] ? (
@@ -255,7 +274,7 @@ const Matchup = ({ select }: WidgetProps) => {
         {[left, right].map((side, k) => (
           <div key={k}>
             {(side ?? []).map((s, i) => (
-              <div key={i} className="flex h-7 items-center gap-2 border-b border-ff-line/60 px-3 text-[12px]">
+              <div key={i} className="flex h-6 items-center gap-2 border-b border-ff-line/60 px-3 text-[12px]">
                 <span className="w-8 shrink-0 font-mono text-[10px] text-ff-muted">{s.slot}</span>
                 {s.id ? (
                   <button onClick={() => select({ player: s.id! })} className="min-w-0 flex-1 truncate text-left text-ff-text hover:underline">
@@ -270,6 +289,31 @@ const Matchup = ({ select }: WidgetProps) => {
           </div>
         ))}
       </div>
+      <ul className="space-y-1 border-t border-ff-line bg-ff-sunken/60 px-3 py-2 text-[11.5px] leading-snug text-ff-text2">
+        <li>
+          <span className="text-ff-muted">Spread </span>
+          <span className="num">σ {fmt(f.sigma)}</span>
+          <span className="text-ff-muted"> a team-week, so a </span>
+          <span className="num">{fmt(Math.abs(gap))}</span>
+          <span className="text-ff-muted"> pt gap is </span>
+          <span className="num">{winPct}–{100 - winPct}</span>
+        </li>
+        {best && best.d >= 1 && (
+          <li>
+            <span className="text-ff-pos">Your edge</span> <span className="font-mono text-[10.5px] text-ff-muted">{best.slot}</span> {last(best.me.id)} over {last(best.them?.id ?? null)} <span className="num text-ff-pos">+{fmt(best.d)}</span>
+          </li>
+        )}
+        {worst && worst.d <= -1 && (
+          <li>
+            <span className="text-ff-neg">Their edge</span> <span className="font-mono text-[10.5px] text-ff-muted">{worst.slot}</span> {last(worst.them?.id ?? null)} over {last(worst.me.id)} <span className="num text-ff-neg">{fmtSigned(worst.d, 1)}</span>
+          </li>
+        )}
+        {doubtful.length > 0 && (
+          <li>
+            <span className="text-ff-warn">Swing</span> {doubtful.slice(0, 4).join(', ')} <span className="text-ff-muted">questionable</span>
+          </li>
+        )}
+      </ul>
     </div>
   )
 }
@@ -798,7 +842,7 @@ const Props = ({ sel, select }: WidgetProps) => {
 }
 
 export const WIDGETS: Record<WidgetKind, Meta> = {
-  matchup: { title: 'My matchup', blurb: 'Next week, both lineups, and your chance to win.', w: 4, h: 11, Body: Matchup },
+  matchup: { title: 'My matchup', blurb: 'Next week, both lineups, and your chance to win.', w: 4, h: 12, Body: Matchup },
   odds: { title: 'Playoff odds', blurb: 'Simulated seasons: wins, playoff, bye and title odds.', w: 5, h: 11, Body: Odds },
   scoreboard: { title: 'Scoreboard', blurb: "This week's games with expected scores and win odds.", w: 6, h: 7, Body: Scoreboard },
   trades: { title: 'Trade ideas', blurb: 'Best deal from each partner, and how likely each lands.', w: 7, h: 9, Body: TradeIdeas },
