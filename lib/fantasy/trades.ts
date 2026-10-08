@@ -444,8 +444,9 @@ export type TradeConfig = {
    */
   minTheirGain: number
   /**
-   * How much more open-market value you may ask for than you send, in points
-   * per week, before a deal is treated as a lowball and dropped.
+   * How much more trade value you may ask for than you send, in points per
+   * week (as people price it, see currency.ts), before a deal is treated as a
+   * lowball and dropped.
    */
   maxValueAsk: number
   /** Deals per partner that get the exact week-by-week scoring. */
@@ -492,7 +493,11 @@ export type TradeIdea = {
   theirGain: number
   /** What leaving your roster costs you, before counting what comes back. */
   myCost: number
-  /** Open-market value in minus out. Positive means you are asking for a premium. */
+  /**
+   * Trade value in minus out, priced the way managers price players (see
+   * currency.ts): streamers cheap, the other side's drafted players at a
+   * premium. Positive means you are asking for one.
+   */
   valueAsk: number
   /**
    * Weeks of the horizon your lineup is better off. A deal that only pays in

@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
-import { acceptRead } from '../../lib/fantasy/behavior'
+import { acceptRead, type AcceptRead } from '../../lib/fantasy/behavior'
 import { tradeLeverage } from '../../lib/fantasy/forecast'
 import { applyTrade, type TradeIdea } from '../../lib/fantasy/trades'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
+import { ContextNotes } from './ContextNotes'
 import { useFantasy } from './FantasyContext'
 import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, WeekBars, cx, fmtSigned, simOdds } from './ui'
 
@@ -14,7 +15,7 @@ export const SHAPE_LABEL: Record<TradeIdea['shape'], string> = {
   swap: 'Package swap',
 }
 
-const PlayerLine = ({ id, data, analysis }: { id: string; data: LeagueData; analysis: Analysis }) => {
+const PlayerLine = ({ id, data, analysis, notes }: { id: string; data: LeagueData; analysis: Analysis; notes?: boolean }) => {
   const p = data.players[id]
   const ctx = data.context[id]
   const perWeek = analysis.horizon.perWeek[id]
@@ -44,6 +45,12 @@ const PlayerLine = ({ id, data, analysis }: { id: string; data: LeagueData; anal
             </span>
           )}
         </div>
+        {/* What you take on matters more than what you send: a role about to shrink, a hard playoff run. */}
+        {notes && ctx?.notes.length ? (
+          <div className="mt-1">
+            <ContextNotes context={ctx} players={data.players} max={2} />
+          </div>
+        ) : null}
       </div>
       <Figure value={perWeek != null ? perWeek.toFixed(1) : '–'} unit="/wk" className="shrink-0" title="Expected points per week over the horizon" />
     </div>
@@ -81,7 +88,7 @@ const useLeverage = (idea: TradeIdea) => {
 /** A change in probability as signed points: +0.9. */
 const pt = (v: number | undefined) => (v === undefined ? '···' : fmtSigned(v * 100, 1))
 
-type Signal = { text: string; tone: 'pos' | 'neg' | 'neutral' }
+type Signal = AcceptRead['signals'][number]
 
 const TradeCard = ({
   versions,
@@ -158,7 +165,7 @@ const TradeCard = ({
         <div className="min-w-0 px-3 pb-1.5 pt-2">
           <div className="ff-label">You get</div>
           {idea.get.map((id) => (
-            <PlayerLine key={id} id={id} data={data} analysis={analysis} />
+            <PlayerLine key={id} id={id} data={data} analysis={analysis} notes />
           ))}
         </div>
       </div>

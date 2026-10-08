@@ -311,6 +311,23 @@ export const StatGrid = ({ children, className }: { children: ReactNode; classNa
 }
 
 type Tone = 'neutral' | 'pos' | 'neg' | 'warn' | 'accent'
+/** Text colour per tone, for figures; a chip adds a hairline and a wash of the same colour. */
+const TONE_TEXT: Record<Tone | 'muted', string> = {
+  neutral: 'text-ff-text',
+  pos: 'text-ff-pos',
+  neg: 'text-ff-neg',
+  warn: 'text-ff-warn',
+  accent: 'text-ff-accent',
+  muted: 'text-ff-muted',
+}
+const TONE_CHIP: Record<Tone, string> = {
+  neutral: 'border-ff-line bg-ff-sunken text-ff-text2',
+  pos: 'border-ff-pos/25 bg-ff-pos/[0.08] text-ff-pos',
+  neg: 'border-ff-neg/25 bg-ff-neg/[0.08] text-ff-neg',
+  warn: 'border-ff-warn/30 bg-ff-warn/10 text-ff-warn',
+  accent: 'border-ff-accent/25 bg-ff-accent/[0.08] text-ff-accent',
+}
+
 const TONE: Record<Tone, string> = {
   neutral: 'bg-ff-sunken text-ff-text2',
   pos: 'bg-ff-pos/10 text-ff-pos',
@@ -353,7 +370,7 @@ export const Figure = ({
         className={cx(
           'num leading-none',
           size === 'hero' ? 'text-[26px] font-medium tracking-[-0.03em]' : size === 'lg' ? 'text-[18px] font-medium tracking-[-0.02em]' : 'text-[14px]',
-          tone === 'pos' ? 'text-ff-pos' : tone === 'neg' ? 'text-ff-neg' : tone === 'warn' ? 'text-ff-warn' : tone === 'accent' ? 'text-ff-accent' : tone === 'muted' ? 'text-ff-muted' : 'text-ff-text',
+          tone ? TONE_TEXT[tone] : 'text-ff-text',
         )}
       >
         {value}
@@ -368,20 +385,7 @@ export const Figure = ({
 export const Chip = ({ children, tone = 'neutral', title, className }: { children: ReactNode; tone?: Tone; title?: string; className?: string }) => (
   <span
     title={title}
-    className={cx(
-      'inline-flex max-w-full items-center gap-1 whitespace-nowrap border px-1.5 py-[1px] text-[11.5px] leading-[18px]',
-      tone === 'pos'
-        ? 'border-ff-pos/25 bg-ff-pos/[0.08] text-ff-pos'
-        : tone === 'neg'
-          ? 'border-ff-neg/25 bg-ff-neg/[0.08] text-ff-neg'
-          : tone === 'warn'
-            ? 'border-ff-warn/30 bg-ff-warn/10 text-ff-warn'
-            : tone === 'accent'
-              ? 'border-ff-accent/25 bg-ff-accent/[0.08] text-ff-accent'
-              : 'border-ff-line bg-ff-sunken text-ff-text2',
-      title && 'cursor-help',
-      className,
-    )}
+    className={cx('inline-flex max-w-full items-center gap-1 whitespace-nowrap border px-1.5 py-[1px] text-[11.5px] leading-[18px]', TONE_CHIP[tone], title && 'cursor-help', className)}
   >
     <span className="truncate">{children}</span>
   </span>

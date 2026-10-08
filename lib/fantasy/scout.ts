@@ -38,12 +38,40 @@ const MIN = { slot: 0.75, efficiency: 1, injury: 1.5, luck: 0.6 }
 /** A win is worth roughly this many points a week over a season, for ranking luck beside points. */
 const PTS_PER_WIN = 4
 
+/** The surname, skipping a generational suffix: Marvin Harrison Jr. → Harrison. */
+export const surname = (full: string) => {
+  const parts = full.split(' ').filter(Boolean)
+  while (parts.length > 1 && /^(jr|sr|ii|iii|iv|v)\.?$/i.test(parts[parts.length - 1])) parts.pop()
+  return parts[parts.length - 1] ?? full
+}
+
+/**
+ * Points a week a lineup gains or loses from what the adjusted horizon prices
+ * in beyond Sleeper's own projection: expected absences, plus the work that
+ * passes to a player when a teammate is out. Your own reads apply to both
+ * sides, so they cancel.
+ */
+const dragCache = new WeakMap<Analysis, Map<string, number>>()
+export const availabilityDrag = (data: LeagueData, analysis: Analysis, ids: string[]) => {
+  if (!data.horizon.length || !data.rawHorizon.length) return 0
+  // Solved once per analysis and roster: My team's headline and its scouting report read the same number.
+  let byRoster = dragCache.get(analysis)
+  if (!byRoster) dragCache.set(analysis, (byRoster = new Map()))
+  const key = [...ids].sort().join(',')
+  const hit = byRoster.get(key)
+  if (hit !== undefined) return hit
+  const raw = makeHorizonEval(analysis.slots, data.players, data.rawHorizon, analysis.horizonReplacement).total(ids)
+  const adjusted = makeHorizonEval(analysis.slots, data.players, data.horizon, analysis.horizonReplacement).total(ids)
+  byRoster.set(key, adjusted - raw)
+  return adjusted - raw
+}
+
 const GROUP: Record<string, string> = { SUPER_FLEX: 'Superflex', FLEX: 'Flex', REC_FLEX: 'Flex', WRRB_FLEX: 'Flex' }
 
 export const scoutTeam = (data: LeagueData, analysis: Analysis, models: Models, rosterId: number): Scouting => {
   const facts: ScoutFact[] = []
   const players = data.players
-  const name = (id: string | null) => (id ? (players[id]?.name.split(' ').slice(-1)[0] ?? id) : 'waiver fill')
+  const name = (id: string | null) => (id ? (players[id] ? surname(players[id].name) : id) : 'waiver fill')
 
   // Position groups, from the lineup ahead.
   const need = analysis.needs[rosterId]
@@ -85,24 +113,23 @@ export const scoutTeam = (data: LeagueData, analysis: Analysis, models: Models, 
     }
   }
 
-  // Expected absences ahead.
+  // Availability ahead: expected absences, net of work passed on from injured teammates.
   const team = analysis.teamById[rosterId]
-  if (team && data.horizon.length && data.rawHorizon.length) {
-    const raw = makeHorizonEval(analysis.slots, players, data.rawHorizon, analysis.horizonReplacement).total(team.players)
-    const adjusted = makeHorizonEval(analysis.slots, players, data.horizon, analysis.horizonReplacement).total(team.players)
-    const drag = adjusted - raw
-    if (drag <= -MIN.injury) {
-      const hurt = team.players
-        .filter((id) => (data.context[id]?.lost ?? 0) >= 0.5)
-        .sort((a, b) => (data.context[b]?.lost ?? 0) - (data.context[a]?.lost ?? 0))
+  if (team) {
+    const drag = availabilityDrag(data, analysis, team.players)
+    if (Math.abs(drag) >= MIN.injury) {
+      const key = drag < 0 ? 'lost' : 'gained'
+      const who = team.players
+        .filter((id) => (data.context[id]?.[key] ?? 0) >= 0.5)
+        .sort((a, b) => (data.context[b]?.[key] ?? 0) - (data.context[a]?.[key] ?? 0))
         .slice(0, 3)
-      // The rooms above are measured after these absences, so this overlaps them rather than adding to them.
+      // The rooms above are measured after this, so it overlaps them rather than adding to them.
       facts.push({
-        key: 'injury',
-        label: 'Injuries',
+        key: 'availability',
+        label: drag < 0 ? 'Injuries' : 'Covering injuries',
         value: drag,
         unit: '/wk',
-        detail: `${hurt.length ? hurt.map(name).join(', ') : 'expected absences'} · already in the rooms`,
+        detail: `${who.length ? who.map(name).join(', ') : drag < 0 ? 'expected absences' : 'teammates out'} · already in the rooms`,
         weight: Math.abs(drag),
       })
     }
@@ -116,7 +143,7 @@ export const scoutTeam = (data: LeagueData, analysis: Analysis, models: Models, 
       label: 'Luck',
       value: season.luck,
       unit: 'wins',
-      detail: `${season.wins}-${season.losses} on scores that earn ${season.expectedWins.toFixed(1)} wins against everyone`,
+      detail: `${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''} on scores that earn ${season.expectedWins.toFixed(1)} wins against everyone`,
       weight: Math.abs(season.luck) * PTS_PER_WIN,
     })
   }
@@ -146,11 +173,13 @@ export const scoutTeam = (data: LeagueData, analysis: Analysis, models: Models, 
   const strengths = facts.filter((f) => f.value > 0).sort((a, b) => b.weight - a.weight)
   const weaknesses = facts.filter((f) => f.value < 0).sort((a, b) => b.weight - a.weight)
   const signed = (x: number) => `${x > 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}`
+  // Mid-sentence: position rooms keep their abbreviation (RB), everything else reads as plain words.
+  const phrase = (f: ScoutFact) => (f.key.startsWith('pos:') && /^[A-Z]{1,3}$/.test(f.key.slice(4)) ? f.key.slice(4) : f.label.toLowerCase())
   const lead = (f: ScoutFact | undefined) => {
     if (!f) return null
     if (f.key === 'luck') return `${f.value > 0 ? 'good' : 'bad'} luck (${signed(f.value)} wins)`
     if (f.key === 'schedule') return f.value > 0 ? 'an easy schedule ahead' : 'a hard schedule ahead'
-    return `${f.label.replace(' room', '')} (${signed(f.value)}/wk)`
+    return `${phrase(f)} (${signed(f.value)}/wk)`
   }
   const s = lead(strengths[0])
   const w = lead(weaknesses[0])

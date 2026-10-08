@@ -72,7 +72,7 @@ const TradesView = ({
 
   const { models } = useFantasy()
   const search = useMemo(() => searchTrades(data, analysis, { minTheirGain, maxValueAsk }), [data, analysis, minTheirGain, maxValueAsk])
-  const reads = useMemo(() => new Map(search.ideas.map((i) => [i, acceptRead(i, myRosterId ?? -1, models.behavior, models.perceived, analysis.currency)])), [search.ideas, myRosterId, models])
+  const reads = useMemo(() => new Map(search.ideas.map((i) => [i, acceptRead(i, myRosterId ?? -1, models.behavior, models.perceived, analysis.currency)])), [search.ideas, myRosterId, models, analysis.currency])
 
   const shown = useMemo(() => {
     let xs = search.ideas
@@ -232,7 +232,7 @@ const TradesView = ({
         onChange={setMaxValueAsk}
         defaultValue={DEFAULT_TRADE_CONFIG.maxValueAsk}
         format={(v) => `${v.toFixed(1)} /wk`}
-        hint="Most open-market value you may take beyond what you send before an offer reads as a lowball."
+        hint="Most trade value you may take beyond what you send before an offer reads as a lowball. Priced as managers price players: streamers count for little, and the players they drafted cost a premium."
       />
     </div>
   )

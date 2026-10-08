@@ -7,7 +7,7 @@ import { backtest, bracketOrder, clinchStatus, eloWinProb, gamesFrom, managedPoi
 import { applyAdjustments, liveAdjustments } from '../adjust'
 import type { Analysis } from '../analysis'
 import type { Models } from '../models'
-import { scoutTeam } from '../scout'
+import { scoutTeam, surname } from '../scout'
 import { ATTACHMENT, tradeCurrency, tradeValue } from '../currency'
 import type { TradeIdea } from '../trades'
 import type { LeagueData } from '../useLeagueData'
@@ -313,5 +313,13 @@ describe('scouting report', () => {
     // Luck (1.2 wins ≈ 4.8 pts) outranks a 1.5-point WR hole.
     expect(s.weaknesses.map((f) => f.key)).toEqual(['luck', 'pos:WR'])
     expect(s.summary).toBe('Built on RB (+3.5/wk); held back by bad luck (−1.2 wins).')
+  })
+})
+
+describe('surname', () => {
+  it('skips generational suffixes', () => {
+    expect(surname('Marvin Harrison Jr.')).toBe('Harrison')
+    expect(surname('Kenneth Walker III')).toBe('Walker')
+    expect(surname('Puka Nacua')).toBe('Nacua')
   })
 })

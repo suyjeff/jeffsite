@@ -69,9 +69,11 @@ export const tradeCurrency = (input: {
     const t = Math.min(1, Math.max(0, (rank - qbStarters) / (qbStarters / 2)))
     if (t > 0) factor[id] = 1 - t * (1 - STREAM_FACTOR.QB)
   })
-  for (const id of Object.keys(players)) {
-    const pos = players[id].pos
-    if (UNTRADED_POSITIONS.has(pos)) factor[id] = STREAM_FACTOR[pos] ?? 0
+  // Only players a trade can price: anyone with a market value, and anyone on a roster.
+  const priced = new Set([...Object.keys(market), ...input.rosters.flatMap((r) => r.players)])
+  for (const id of priced) {
+    const pos = players[id]?.pos
+    if (pos && UNTRADED_POSITIONS.has(pos)) factor[id] = STREAM_FACTOR[pos] ?? 0
   }
 
   // Who picked up whom this season: the last add of each player, by the roster that holds him now.

@@ -4,14 +4,14 @@ import { SIM } from '../../../lib/fantasy/forecast'
 import { opponentsByWeek, RESULTS_PRIOR_GAMES, type PowerWeights } from '../../../lib/fantasy/power'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DivergingStacks, Legend } from '../charts'
-import ModelExplainer from '../ModelExplainer'
+import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
 import { sectionCode } from '../Shell'
 import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
 
 type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'odds', 'standings', 'schedule']
-type RankModel = 'forecast' | 'composite' | 'elo'
+type RankModel = RankingModel
 
 export const COMPONENTS: { key: keyof PowerWeights; label: string; slot: string }[] = [
   { key: 'allPlay', label: 'All-play', slot: 's1' },
@@ -320,7 +320,7 @@ const PowerView = ({
                 </div>
               )}
             </Panel>
-            <ModelExplainer model={rankModel} />
+            <ModelExplainer model={rankModel === 'forecast' && !forecast ? 'composite' : rankModel} />
           </div>
         )}
 
