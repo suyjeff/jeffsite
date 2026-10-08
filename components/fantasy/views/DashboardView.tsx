@@ -170,7 +170,7 @@ const DashboardView = () => {
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50)
   }
   // Drag the corner: the widget snaps to whole columns and rows as the pointer moves.
-  const startResize = (e: React.PointerEvent<HTMLElement>, w: Widget) => {
+  const startResize = (e: React.PointerEvent<HTMLElement>, w: Widget, axes: 'x' | 'y' | 'xy') => {
     if (e.button !== 0 || !grid.current) return
     e.preventDefault()
     e.stopPropagation()
@@ -185,8 +185,8 @@ const DashboardView = () => {
     const onMove = (ev: PointerEvent) => {
       // Below xl the grid is two halves, so width steps between 6 and 12.
       // Width is the desktop column span; below xl the grid is two halves, so only height changes there.
-      const nextW = wide ? Math.max(MIN_W, Math.min(12, w0 + Math.round((ev.clientX - x0) / (colW + GAP)))) : w0
-      const nextH = Math.max(MIN_H, Math.min(MAX_H, h0 + Math.round((ev.clientY - y0) / (ROW + GAP))))
+      const nextW = wide && axes !== 'y' ? Math.max(MIN_W, Math.min(12, w0 + Math.round((ev.clientX - x0) / (colW + GAP)))) : w0
+      const nextH = axes !== 'x' ? Math.max(MIN_H, Math.min(MAX_H, h0 + Math.round((ev.clientY - y0) / (ROW + GAP)))) : h0
       setLayout((xs) => {
         const cur = xs.find((x) => x.id === w.id)
         // Most moves stay inside one cell: keep the same array so nothing re-renders or re-saves.
@@ -282,6 +282,7 @@ const DashboardView = () => {
                   drag?.id === w.id && 'ff-dragging',
                   drag && drag.over === w.id && drag.id !== w.id && 'ff-drop-before',
                   spanClass(w.w),
+                  'ff-widget',
                   resizing === w.id && 'ff-resizing',
                   editing && 'ff-editing',
                 )}
@@ -338,14 +339,28 @@ const DashboardView = () => {
                 <div className="ff-scroll min-h-0 flex-1 overflow-auto">
                   <Body sel={sel} select={(s) => setSelection((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...s } }))} w={w.w} h={w.h} />
                 </div>
-                <span
-                  role="separator"
-                  aria-label={`Resize ${meta.title}: ${w.w} columns by ${w.h} rows`}
-                  title="Drag to resize"
-                  onPointerDown={(e) => startResize(e, w)}
-                  className={cx('ff-resize absolute bottom-0 right-0 z-10 hidden h-4 w-4 cursor-nwse-resize md:block', editing && 'ff-resize-on')}
-                />
-                {resizing === w.id && <span className="pointer-events-none absolute bottom-1.5 right-5 z-10 bg-ff-text px-1.5 py-0.5 font-mono text-[10.5px] text-ff-panel">{w.w} × {w.h}</span>}
+                {/* Selection frame, in the manner of a design tool: an accent outline, square handles on the
+                    right edge (width), bottom edge (height) and corner (both), and the size under the frame. */}
+                <span aria-hidden className="ff-frame" />
+                {(
+                  [
+                    ['x', 'ff-handle-e', 'width'],
+                    ['y', 'ff-handle-s', 'height'],
+                    ['xy', 'ff-handle-se', 'size'],
+                  ] as const
+                ).map(([axes, cls, what]) => (
+                  <span
+                    key={axes}
+                    role="separator"
+                    aria-label={`Resize ${meta.title} ${what}: ${w.w} columns by ${w.h} rows`}
+                    title={`Drag to change ${what}`}
+                    onPointerDown={(e) => startResize(e, w, axes)}
+                    className={cx('ff-handle', cls, axes === 'x' && 'max-xl:!hidden')}
+                  />
+                ))}
+                <span aria-hidden className="ff-size num">
+                  {w.w} × {w.h}
+                </span>
               </section>
             )
           })}

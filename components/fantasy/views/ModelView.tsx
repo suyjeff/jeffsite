@@ -16,7 +16,7 @@ import { BacktestTab, BehaviorTab, ForecastTab, OverviewTab, SystemTab } from '.
 import { COMPONENTS } from './PowerView'
 
 type Sub = 'overview' | 'system' | 'value' | 'availability' | 'engine' | 'forecast' | 'backtest' | 'behavior' | 'power' | 'data'
-/** Readout: what the engine is saying and how well it has done. Tuning: what you can change, and the method behind it. */
+/** M.O.N.K.E.: what the engine is saying and how well it has done. Tuning: what you can change, and the method behind it. */
 export const READOUT: Sub[] = ['overview', 'system', 'forecast', 'backtest', 'behavior', 'data']
 export const TUNING: Sub[] = ['value', 'power', 'availability', 'engine']
 const LABEL: Record<Sub, string> = {
@@ -201,12 +201,7 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
     <>
       <PageHeader
         code={sectionCode(mode === 'readout' ? 'monke' : 'model')}
-        title={
-          <span title={MONKE.long}>
-            <span className="text-ff-muted">{MONKE.name} </span>
-            {mode === 'readout' ? 'Readout' : 'Tuning'}
-          </span>
-        }
+        title={mode === 'readout' ? <span title={MONKE.long}>{MONKE.name}</span> : 'Tuning'}
         actions={
           changed.length > 0 && (
             <>

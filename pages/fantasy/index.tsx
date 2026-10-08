@@ -69,7 +69,7 @@ const FantasyPage = () => {
   // Waivers moved out of My team into their own section; old links still land there.
   useEffect(() => {
     if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })
-    // The Model page split into Readout and Tuning; its read-only tabs moved to Readout.
+    // The Model page split into M.O.N.K.E. (read-only) and Tuning; its read-only tabs moved over.
     if (route.section === 'model' && route.sub && READOUT.includes(route.sub as (typeof READOUT)[number])) route.go('monke', route.sub, { replace: true })
   }, [route.section, route.sub]) // eslint-disable-line react-hooks/exhaustive-deps
 
