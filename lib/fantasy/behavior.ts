@@ -13,6 +13,7 @@
 //               is the one that gets accepted.
 
 import { tradeValue, type Currency } from './currency'
+import { faabSweetener, faabTradeValue, type Faab } from './faab'
 import type { LeagueHistory } from './useLeagueData'
 import type { TradeIdea } from './trades'
 import type { PlayerMap, SleeperTransaction } from './types'
@@ -151,6 +152,8 @@ export type AcceptRead = {
   band: 'long shot' | 'possible' | 'likely'
   /** Value they give minus value they get, as the consensus rankings price it. */
   perceivedAsk: number | null
+  /** FAAB to add so the deal reads as fair to them, in dollars, when money can close the gap. */
+  faab: number | null
   reasons: string[]
   /** The same reasons, each marked as helping (pos) or hurting (neg) the chance they say yes. */
   signals: { text: string; tone: 'pos' | 'neg' | 'neutral' }[]
@@ -169,18 +172,29 @@ const logistic = (x: number) => 1 / (1 + Math.exp(-x))
  *   trade history         +0.25 per trade, capped; +0.3 if they have traded with you
  *   extra bodies          −0.15 per player past a 1-for-1
  */
-export const acceptRead = (idea: TradeIdea, me: number, behavior: LeagueBehavior | null, perceived: Record<string, number> | null, currency?: Currency): AcceptRead => {
+export const acceptRead = (
+  idea: TradeIdea,
+  me: number,
+  behavior: LeagueBehavior | null,
+  perceived: Record<string, number> | null,
+  currency?: Currency,
+  faab?: Faab | null,
+): AcceptRead => {
   const signals: AcceptRead['signals'] = []
   const say = (text: string, tone: 'pos' | 'neg' | 'neutral') => signals.push({ text, tone })
   // Consensus value, priced the way people price it: streamers cheap, their own drafted players dear.
   const perceivedAsk = perceived ? tradeValue(idea.get, perceived, currency, true) - tradeValue(idea.give, perceived, currency, false) : null
   const ask = perceivedAsk ?? idea.valueAsk
-  let x = -0.1 + 0.9 * idea.theirGain - 0.45 * Math.max(0, ask) + 0.1 * Math.min(2, Math.max(0, -ask))
+  // A small overpay can be evened with FAAB; it counts for them at its (capped) trade value.
+  const sweetener = faab ? faabSweetener(faab, me, ask) : null
+  const askNet = sweetener ? ask - faabTradeValue(faab!, sweetener) : ask
+  let x = -0.1 + 0.9 * idea.theirGain - 0.45 * Math.max(0, askNet) + 0.1 * Math.min(2, Math.max(0, -askNet))
   if (perceivedAsk != null) {
-    if (perceivedAsk > 1.5) say('looks like an overpay to them by consensus', 'neg')
+    if (sweetener) say(`add $${sweetener} FAAB to even it by consensus`, 'pos')
+    else if (perceivedAsk > 1.5) say('looks like an overpay to them by consensus', 'neg')
     else if (perceivedAsk < -0.5) say('consensus says they win it', 'pos')
     else say('consensus calls it fair', 'neutral')
-  }
+  } else if (sweetener) say(`add $${sweetener} FAAB to even it`, 'pos')
   const team = behavior?.teams[idea.partnerId]
   if (team) {
     x += 0.8 * (team.engagement - 0.5)
@@ -201,6 +215,7 @@ export const acceptRead = (idea: TradeIdea, me: number, behavior: LeagueBehavior
     index,
     band: index >= 60 ? 'likely' : index >= 35 ? 'possible' : 'long shot',
     perceivedAsk: perceivedAsk == null ? null : Math.round(perceivedAsk * 100) / 100,
+    faab: sweetener,
     reasons: signals.map((s) => s.text),
     signals,
   }

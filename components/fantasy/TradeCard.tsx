@@ -122,7 +122,7 @@ const TradeCard = ({
   const season = analysis.seasonById[idea.partnerId]
   const players = data.players
   const nm = (id: string) => players[id]?.name ?? id
-  const read = useMemo(() => acceptRead(idea, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency), [idea, analysis, models])
+  const read = useMemo(() => acceptRead(idea, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab), [idea, analysis, models])
   const lev = useLeverage(idea)
   const odds = models.forecast?.sim[idea.partnerId]
   const need = analysis.needs[idea.partnerId]?.worstPos
@@ -171,6 +171,17 @@ const TradeCard = ({
           {idea.give.map((id) => (
             <PlayerLine key={id} id={id} data={data} analysis={analysis} />
           ))}
+          {read.faab != null && models.faab && (
+            <div className="flex items-center gap-2.5 py-1.5" title="Sleeper trades can carry FAAB. This much makes the deal read as fair to them without giving up another player.">
+              <span aria-hidden className="flex h-[34px] w-[34px] shrink-0 items-center justify-center border border-ff-line bg-ff-sunken font-mono text-[13px] text-ff-text2">
+                $
+              </span>
+              <div className="min-w-0 flex-1 leading-tight">
+                <div className="num text-[13.5px] font-medium text-ff-text">${read.faab} FAAB</div>
+                <div className="truncate font-mono text-[10.5px] text-ff-muted">evens it for them · you have ${models.faab.remaining[analysis.myRosterId ?? -1] ?? 0}</div>
+              </div>
+            </div>
+          )}
         </div>
         <div className="min-w-0 px-3 pb-1.5 pt-2">
           <div className="ff-label">You get</div>

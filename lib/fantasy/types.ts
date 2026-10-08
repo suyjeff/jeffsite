@@ -37,6 +37,12 @@ export type SleeperLeague = {
     last_scored_leg?: number
     start_week?: number
     type?: number // 0 redraft, 1 keeper, 2 dynasty
+    /** 2 = FAAB (blind bidding); otherwise rolling or reverse-standings priority. */
+    waiver_type?: number
+    /** Each team's FAAB for the season, in dollars. */
+    waiver_budget?: number
+    waiver_bid_min?: number
+    trade_deadline?: number
     [k: string]: unknown
   }
   previous_league_id?: string | null
@@ -140,4 +146,8 @@ export type SleeperTransaction = {
   created: number
   /** Week (Sleeper calls it the leg) the move was processed in. */
   leg: number
+  /** FAAB bid on a waiver claim, in dollars. */
+  bid?: number | null
+  /** FAAB moved in a trade. */
+  faab?: { sender: number; receiver: number; amount: number }[] | null
 }

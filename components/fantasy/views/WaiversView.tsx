@@ -17,14 +17,18 @@ import {
   type StreamRow,
   type TeamTotal,
 } from '../../../lib/fantasy/waivers'
-import { ContextNotes } from '../ContextNotes'
+import { suggestBid, type BidAdvice } from '../../../lib/fantasy/faab'
+import { ContextNotes, contextReasons } from '../ContextNotes'
+import { useFantasy } from '../FantasyContext'
+import WaiverMoves from './WaiverMoves'
 import PlayerName from '../PlayerName'
 import { sectionCode } from '../Shell'
-import { DeltaChip, Badge, CenterMeter, Empty, N, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, compact, cx, fmt, pct, type Column } from '../ui'
+import { DeltaChip, Badge, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, Tabs, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
 
-type Sub = 'stream' | 'adds'
-const SUBS: Sub[] = ['stream', 'adds']
+type Sub = 'moves' | 'stream' | 'adds'
+const SUBS: Sub[] = ['moves', 'stream', 'adds']
 const AHEAD = 3
+const POS_LABEL: Record<StreamPos, string> = { QB: 'quarterback', RB: 'running back', WR: 'receiver', TE: 'tight end', K: 'kicker', DEF: 'defense' }
 
 /** Stat lines (pts_allow, sacks, FGA, rush yards) for the weeks on screen. Cached a few hours, a few dozen KB a week. */
 const useStatLines = (season: string, weeks: number[]) => {
@@ -76,7 +80,8 @@ const TotalCell = ({ t, low }: { t: TeamTotal | null; low?: boolean }) =>
   )
 
 const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis: Analysis; sub: string | null; onSub: (s: string) => void }) => {
-  const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'stream'
+  const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'moves'
+  const { models } = useFantasy()
   const { players } = data
   const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
   const startable = useMemo(() => new Set(analysis.slots.flatMap((s) => s.eligible)), [analysis.slots])
@@ -151,15 +156,17 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   }, [stream.rows])
 
   // Everyone off the wire who would start for you, with the cut it forces already priced in.
-  const adds = useMemo(() => (tab === 'adds' && me ? waiverTargets(data, analysis) : []), [tab, me, data, analysis])
+  const adds = useMemo(() => ((tab === 'adds' || tab === 'moves') && me ? waiverTargets(data, analysis) : []), [tab, me, data, analysis])
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
   const dropCandidate = useMemo(() => {
     if (!me) return null
     const lineup = new Set(analysis.needs[me.rosterId]?.slots.map((s) => s.starter).filter(Boolean) ?? [])
-    return [...me.players].filter((id) => !lineup.has(id)).sort((a, b) => (analysis.market[a] ?? -99) - (analysis.market[b] ?? -99))[0] ?? null
-  }, [me, analysis])
+    // Worth the more of the model's value and the consensus price, so an injured star the experts still rank is never the cut.
+    const keep = (id: string) => Math.max(analysis.market[id] ?? -99, models.perceived?.[id] ?? -99)
+    return [...me.players].filter((id) => !lineup.has(id)).sort((a, b) => keep(a) - keep(b))[0] ?? null
+  }, [me, analysis, models.perceived])
 
-  const posLabel = pos === 'DEF' ? 'defense' : pos === 'K' ? 'kicker' : 'quarterback'
+  const posLabel = POS_LABEL[pos]
   const myProj = stream.mine
   const myOnBye = myProj && !(myProj.proj > 0)
 
@@ -169,19 +176,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       label: 'Player',
       sticky: true,
       sort: (r) => players[r.id]?.name ?? r.id,
-      render: (r) => {
-        const why = streamReasons(r, pos, teamCount)
-        return (
-          <span className="block min-w-0">
-            <PlayerName id={r.id} player={players[r.id]} size={24} sub={r.opp ? `${r.home === false ? '@' : 'vs'} ${r.opp}` : 'bye'} />
-            {why.length > 0 && (
-              <span title={why.join(' · ')} className="mt-0.5 hidden max-w-[360px] truncate pl-8 text-[11px] text-ff-muted md:block">
-                {why.join(' · ')}
-              </span>
-            )}
-          </span>
-        )
-      },
+      render: (r) => <PlayerName id={r.id} player={players[r.id]} size={24} sub={<span className="font-mono text-[10px]">{r.opp ? `${r.home === false ? '@' : 'vs'} ${r.opp}` : 'BYE'}</span>} />,
     },
     {
       key: 'proj',
@@ -267,14 +262,32 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
     },
     {
       key: 'adds',
-      label: 'Adds',
+      label: 'Sleeper adds',
       align: 'right',
       hideBelow: 'lg',
-      title: 'Sleeper-wide adds in the last 24 hours',
+      title: 'Sleeper managers (all leagues) who added him in the last 24 hours',
       sort: (r) => r.trending,
       render: (r) => (r.trending ? r.trending.toLocaleString() : <span className="text-ff-muted">–</span>),
     },
   ]
+
+  // A suggested bid for every listed add, against the teams weakest at his position.
+  const bids = useMemo(() => {
+    const f = models.faab
+    if (!f || !me) return {} as Record<string, BidAdvice>
+    const others = analysis.teams.map((t) => t.rosterId).filter((r) => r !== me.rosterId)
+    const out: Record<string, BidAdvice> = {}
+    for (const t of adds) {
+      const pos = players[t.id]?.pos ?? ''
+      const rivals = others.filter((r) => analysis.needs[r]?.worstPos === pos)
+      out[t.id] = suggestBid(f, me.rosterId, { gain: t.add, value: analysis.market[t.id] ?? 0, trending: trending[t.id] ?? 0, pos, rivals: rivals.length ? rivals : others })
+    }
+    return out
+  }, [models.faab, me, adds, analysis, players, trending])
+  const addWhy = (t: TradeTarget) => {
+    const items: Reason[] = [...contextReasons(data.context[t.id], players), ...(bids[t.id]?.reasons ?? [])]
+    return items.length ? <Reasons items={items} /> : null
+  }
 
   const addCols: Column<TradeTarget>[] = [
     {
@@ -290,7 +303,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       hideBelow: 'sm',
       render: (t) =>
         trending[t.id] ? (
-          <Badge tone="pos" title={`${trending[t.id].toLocaleString()} adds across Sleeper in the last 24h`}>
+          <Badge tone="pos" title={`${trending[t.id].toLocaleString()} Sleeper managers added him in the last 24 hours`}>
             ↑{compact(trending[t.id])}
           </Badge>
         ) : null,
@@ -332,11 +345,23 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       hideBelow: 'md',
       render: (t) => pct(data.context[t.id]?.play),
     },
+    ...(models.faab && me
+      ? [
+          {
+            key: 'bid',
+            label: 'Bid',
+            align: 'right' as const,
+            title: 'Suggested FAAB bid: the lower of what he is worth to you and what this league pays for his value, capped one dollar over the richest rival',
+            sort: (t: TradeTarget) => bids[t.id]?.bid ?? 0,
+            render: (t: TradeTarget) => (bids[t.id] ? <span className="text-ff-text">${bids[t.id].bid}</span> : <span className="text-ff-muted">–</span>),
+          },
+        ]
+      : []),
     {
       key: 'why',
       label: 'Context',
       hideBelow: 'lg',
-      render: (t) => <ContextNotes context={data.context[t.id]} players={players} max={3} />,
+      render: (t) => <ContextNotes context={data.context[t.id]} players={players} max={2} />,
     },
   ]
 
@@ -348,8 +373,9 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
         tabs={
           <Tabs<Sub>
             items={[
+              { key: 'moves', label: 'Moves' },
               { key: 'stream', label: 'Streamers' },
-              { key: 'adds', label: 'Adds' },
+              { key: 'adds', label: 'All adds' },
             ]}
             value={tab}
             onChange={onSub}
@@ -358,6 +384,8 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       />
       <div className="mt-4 space-y-3">
         {!me && <Empty title="You are not in this league">Waiver picks are read against your roster.</Empty>}
+
+        {me && tab === 'moves' && <WaiverMoves data={data} analysis={analysis} adds={adds} trending={trending} drop={dropCandidate} />}
 
         {me && tab === 'stream' && data.horizonSource !== 'projections' && (
           <Empty title="No projections to stream from">Streaming reads Sleeper&apos;s projections for the weeks ahead, and there are none right now (the season may be over).</Empty>
@@ -380,7 +408,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               )}
             </div>
             {!positions.length ? (
-              <Empty title="No streaming slots">This league starts no quarterback, kicker or defense slot to stream.</Empty>
+              <Empty title="No positions to stream">This league&apos;s lineup has no slot these positions fill.</Empty>
             ) : (
               <>
                 <StatGrid>
@@ -405,7 +433,16 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                 </StatGrid>
                 <Panel title={`Free-agent ${posLabel}s · week ${week}`} pad={false} actions={<span>{stream.rows.length} shown</span>}>
                   {stream.rows.length ? (
-                    <Table rows={stream.rows} rowKey={(r) => r.id} columns={streamCols} defaultSort="proj" />
+                    <Table
+                      rows={stream.rows}
+                      rowKey={(r) => r.id}
+                      columns={streamCols}
+                      defaultSort="proj"
+                      expand={(r) => {
+                        const items: Reason[] = [...streamReasons(r, pos, teamCount), ...contextReasons(data.context[r.id], players)]
+                        return items.length ? <Reasons items={items} /> : null
+                      }}
+                    />
                   ) : (
                     <div className="p-4 text-[13px] text-ff-muted">No free agent at this position has a projection for week {week}.</div>
                   )}
@@ -435,7 +472,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                 value={data.trending[0] ? data.trending[0].count.toLocaleString() : '–'}
                 sub={
                   data.trending[0]
-                    ? `${players[data.trending[0].player_id]?.name ?? '–'} · adds 24h${analysis.rosteredBy[data.trending[0].player_id] != null ? ' · rostered here' : ''}`
+                    ? `${players[data.trending[0].player_id]?.name ?? '–'} · Sleeper adds, last 24h${analysis.rosteredBy[data.trending[0].player_id] != null ? ' · rostered here' : ''}`
                     : 'no trend data'
                 }
               />
@@ -446,7 +483,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               />
             </StatGrid>
             <Panel title={`Free agents who would start for you · wks ${data.horizon[0]?.week ?? ''}–${data.horizon[data.horizon.length - 1]?.week ?? ''}`} pad={false}>
-              <Table rows={adds} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." />
+              <Table rows={adds} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." expand={addWhy} />
             </Panel>
             <p className="text-[11.5px] leading-relaxed text-ff-muted">
               Gain = your best lineup with him in and your weakest player cut, minus today&apos;s, week by week. Anything positive is a real upgrade; a bye fill counts only that

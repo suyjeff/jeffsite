@@ -336,7 +336,7 @@ const TradeIdeas = () => {
         <span className="hidden w-16 text-right sm:inline">odds</span>
       </Th>
       {top.map((i) => {
-        const read = acceptRead(i, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency)
+        const read = acceptRead(i, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab)
         return (
           <Row key={`${i.partnerId}-${i.give.join()}-${i.get.join()}`} onClick={() => go('trades')}>
             <span className="w-[120px] shrink-0">

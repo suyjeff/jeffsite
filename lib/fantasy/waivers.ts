@@ -21,8 +21,10 @@ import type { Schedule } from './context'
 import type { MarketWeek } from './lines'
 import type { PlayerMap, TrendingEntry, WeekStats } from './types'
 
-export type StreamPos = 'QB' | 'K' | 'DEF'
-export const STREAM_POSITIONS: StreamPos[] = ['QB', 'K', 'DEF']
+export type StreamPos = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF'
+export const STREAM_POSITIONS: StreamPos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
+/** Positions a whole team shares: what a defense allows to them is the sum over the room, not its best player. */
+const SHARED: StreamPos[] = ['RB', 'WR', 'TE']
 
 /** Week-to-week spread by position when there is too little to measure it (pts, typical leagues). */
 const FALLBACK_SD: Record<string, number> = {
@@ -61,8 +63,10 @@ export const ALLOWED_PRIOR_GAMES = 3
  * defense across from it (sacks, turnovers, points), so a high number is a
  * soft offense to stream against.
  *
- * Quarterbacks count the top scorer at the position on the team that week, so
- * a garbage-time backup does not halve the number.
+ * Quarterbacks and kickers count the top scorer at the position on the team
+ * that week, so a garbage-time backup does not halve the number. Running backs,
+ * receivers and tight ends count the whole room, since that is what a defense
+ * gives up to the position.
  *
  * Sleeper's weekly stat lines do not say which team a player played for, so a
  * player is read on his current team. A week where that team had no game (he
@@ -82,12 +86,13 @@ export const pointsAllowed = (
   for (const w of weeks) {
     const pts = weekPoints[w]
     if (!pts) continue
-    // Best score at the position per NFL team this week.
+    // Each NFL team's output at the position this week: its best player, or the whole room.
+    const shared = SHARED.includes(pos)
     const top: Record<string, number> = {}
     for (const [id, p] of Object.entries(pts)) {
       const pl = players[id]
       if (!pl?.team || pl.pos !== pos) continue
-      top[pl.team] = Math.max(top[pl.team] ?? -Infinity, p)
+      top[pl.team] = shared ? (top[pl.team] ?? 0) + p : Math.max(top[pl.team] ?? -Infinity, p)
     }
     for (const [team, p] of Object.entries(top)) {
       const opp = schedule.opp[team]?.[w]
@@ -243,7 +248,8 @@ export const streamRows = (input: {
     const opp = schedule?.opp[pl.team]?.[week] ?? null
     const line = statLines?.[id] ?? {}
     const stats: Record<string, number> = {}
-    for (const k of ['pass_yd', 'pass_td', 'rush_yd', 'pass_int', 'fga', 'xpa', 'sack', 'int', 'fum_rec', 'pts_allow']) if (typeof line[k] === 'number') stats[k] = line[k]
+    for (const k of ['pass_yd', 'pass_td', 'rush_yd', 'rush_att', 'rec_tgt', 'rec', 'pass_int', 'fga', 'xpa', 'sack', 'int', 'fum_rec', 'pts_allow'])
+      if (typeof line[k] === 'number') stats[k] = line[k]
     rows.push({
       id,
       week,
@@ -272,27 +278,34 @@ export const streamRows = (input: {
   return { rows: rows.slice(0, input.limit ?? 25), mine }
 }
 
+export type StreamReason = { text: string; tone: 'pos' | 'neg' | 'warn' | 'neutral' }
+
 /**
- * Why a streamer is on the list, in a line: only the signals that stand out
- * (top or bottom third of the league), strongest first.
+ * Why a player is on the list, as whole sentences with a tone each: the
+ * signals that stand out (top or bottom third of the league), strongest first.
  */
-export const streamReasons = (r: StreamRow, pos: StreamPos, teamCount = 32): string[] => {
-  const out: string[] = []
+export const streamReasons = (r: StreamRow, pos: StreamPos, teamCount = 32): StreamReason[] => {
+  const out: StreamReason[] = []
   const third = teamCount / 3
+  const src = (t: TeamTotal) => (t.source === 'market' ? 'from betting lines' : 'from Sleeper, on the Vegas line')
   if (pos === 'DEF') {
-    if (r.oppTotal) out.push(`${r.opp} implied ${r.oppTotal.pts.toFixed(1)}${r.oppTotal.source === 'market' ? ' (market)' : ''}`)
-    if (r.matchup && r.matchup.rank <= third) out.push(`${r.opp} gives DSTs ${r.matchup.ppg.toFixed(1)}/g (#${r.matchup.rank} most)`)
-    if ((r.stats.sack ?? 0) >= 2.8) out.push(`${r.stats.sack.toFixed(1)} sacks proj`)
+    if (r.oppTotal)
+      out.push({ text: `${r.opp} is projected to score ${r.oppTotal.pts.toFixed(1)} (${src(r.oppTotal)})`, tone: r.oppTotal.pts <= 19 ? 'pos' : r.oppTotal.pts >= 25 ? 'neg' : 'neutral' })
+    if (r.matchup && r.matchup.rank <= third) out.push({ text: `${r.opp} gives up ${r.matchup.ppg.toFixed(1)} fantasy pts a game to defenses, #${r.matchup.rank} most`, tone: 'pos' })
+    if (r.matchup && r.matchup.rank > teamCount - third) out.push({ text: `${r.opp} protects the ball: #${r.matchup.rank} in points allowed to defenses`, tone: 'neg' })
+    if ((r.stats.sack ?? 0) >= 2.8) out.push({ text: `${r.stats.sack.toFixed(1)} sacks projected`, tone: 'pos' })
     const takeaways = (r.stats.int ?? 0) + (r.stats.fum_rec ?? 0)
-    if (takeaways >= 1.3) out.push(`${takeaways.toFixed(1)} takeaways proj`)
+    if (takeaways >= 1.3) out.push({ text: `${takeaways.toFixed(1)} takeaways projected`, tone: 'pos' })
   } else {
-    if (r.teamTotal) out.push(`team implied ${r.teamTotal.pts.toFixed(1)}${r.teamTotal.source === 'market' ? ' (market)' : ''}`)
-    if (r.matchup && r.matchup.rank <= third) out.push(`${r.opp} allows ${r.matchup.ppg.toFixed(1)} to ${pos}s (#${r.matchup.rank})`)
-    if (r.matchup && r.matchup.rank > teamCount - third) out.push(`tough: ${r.opp} #${r.matchup.rank} vs ${pos}s`)
-    if (pos === 'QB' && (r.stats.rush_yd ?? 0) >= 25) out.push(`${Math.round(r.stats.rush_yd)} rush yds proj`)
-    if (pos === 'K' && (r.stats.fga ?? 0) >= 2.2) out.push(`${r.stats.fga.toFixed(1)} FGA proj`)
+    if (r.teamTotal) out.push({ text: `His team is projected to score ${r.teamTotal.pts.toFixed(1)} (${src(r.teamTotal)})`, tone: r.teamTotal.pts >= 26 ? 'pos' : r.teamTotal.pts <= 19 ? 'neg' : 'neutral' })
+    if (r.matchup && r.matchup.rank <= third) out.push({ text: `${r.opp} allows ${r.matchup.ppg.toFixed(1)} pts a game to ${pos}s, #${r.matchup.rank} most`, tone: 'pos' })
+    if (r.matchup && r.matchup.rank > teamCount - third) out.push({ text: `Tough draw: ${r.opp} is #${r.matchup.rank} of ${teamCount} against ${pos}s`, tone: 'neg' })
+    if (pos === 'QB' && (r.stats.rush_yd ?? 0) >= 25) out.push({ text: `${Math.round(r.stats.rush_yd)} rushing yards projected: a floor most QBs lack`, tone: 'pos' })
+    if (pos === 'K' && (r.stats.fga ?? 0) >= 2.2) out.push({ text: `${r.stats.fga.toFixed(1)} field-goal tries projected`, tone: 'pos' })
+    if (pos === 'RB' && (r.stats.rush_att ?? 0) >= 12) out.push({ text: `${Math.round(r.stats.rush_att)} carries projected: a real share of the backfield`, tone: 'pos' })
+    if ((pos === 'WR' || pos === 'TE' || pos === 'RB') && (r.stats.rec_tgt ?? 0) >= 5) out.push({ text: `${r.stats.rec_tgt.toFixed(1)} targets projected`, tone: 'pos' })
   }
-  if (r.home === true) out.push('home')
-  if (r.trending >= 500) out.push(`${r.trending.toLocaleString()} adds 24h`)
+  if (r.home === true) out.push({ text: 'Home game', tone: 'neutral' })
+  if (r.trending >= 500) out.push({ text: `${r.trending.toLocaleString()} Sleeper managers added him in the last 24 hours`, tone: r.trending >= 5000 ? 'warn' : 'neutral' })
   return out
 }

@@ -58,7 +58,7 @@ const PlayerName = ({
             </span>
           )}
         </span>
-        <span className="flex items-center gap-1.5 text-[11px] text-ff-muted">
+        <span className="flex items-baseline gap-1.5 text-[11px] text-ff-muted">
           {avatar && <span className="font-mono text-[10px] font-semibold text-ff-text2">{player.pos}</span>}
           <span className="font-mono text-[10px]">{player.team ?? 'FA'}</span>
           {sub ? <span className="truncate">· {sub}</span> : null}

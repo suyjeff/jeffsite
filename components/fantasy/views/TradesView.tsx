@@ -72,7 +72,7 @@ const TradesView = ({
 
   const { models } = useFantasy()
   const search = useMemo(() => searchTrades(data, analysis, { minTheirGain, maxValueAsk }), [data, analysis, minTheirGain, maxValueAsk])
-  const reads = useMemo(() => new Map(search.ideas.map((i) => [i, acceptRead(i, myRosterId ?? -1, models.behavior, models.perceived, analysis.currency)])), [search.ideas, myRosterId, models, analysis.currency])
+  const reads = useMemo(() => new Map(search.ideas.map((i) => [i, acceptRead(i, myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab)])), [search.ideas, myRosterId, models, analysis.currency])
 
   const shown = useMemo(() => {
     let xs = search.ideas

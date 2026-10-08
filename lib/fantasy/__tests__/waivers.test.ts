@@ -127,7 +127,8 @@ describe('streaming', () => {
       [1, 'DDD', 12],
       [2, 'AAA', 18],
     ])
-    expect(streamReasons(rows[1], 'QB')).toContain('home')
-    expect(streamReasons(rows[1], 'QB')).toContain('900 adds 24h')
+    const why = streamReasons(rows[1], 'QB').map((r) => r.text)
+    expect(why).toContain('Home game')
+    expect(why).toContain('900 Sleeper managers added him in the last 24 hours')
   })
 })

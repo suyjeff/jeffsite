@@ -87,6 +87,8 @@ export const purgeStaleCache = () => {
   if (purged) return
   purged = true
   removeKeys((k) => /^ff:v\d+:/.test(k) && !k.startsWith(CACHE_PREFIX))
+  // Transactions moved to tx2 (FAAB bids kept); the old copies are dead weight.
+  removeKeys((k) => k.startsWith(`${CACHE_PREFIX}tx:`))
 }
 
 export class SleeperError extends Error {
@@ -282,6 +284,8 @@ type RawTransaction = {
   draft_picks?: unknown[] | null
   created?: number
   leg?: number
+  settings?: { waiver_bid?: number } | null
+  waiver_budget?: { sender: number; receiver: number; amount: number }[] | null
 }
 
 /**
@@ -290,7 +294,8 @@ type RawTransaction = {
  */
 export const getTransactions = (leagueId: string, week: number, isPast: boolean) =>
   cachedGet<RawTransaction[], SleeperTransaction[]>(`/league/${leagueId}/transactions/${week}`, isPast ? 24 * HOUR : 10 * MINUTE, {
-    key: `tx:${leagueId}:${week}`,
+    // v2: keeps FAAB bids and FAAB moved in trades.
+    key: `tx2:${leagueId}:${week}`,
     transform: (raw) =>
       (Array.isArray(raw) ? raw : []).map((t) => ({
         type: t.type,
@@ -301,6 +306,8 @@ export const getTransactions = (leagueId: string, week: number, isPast: boolean)
         picks: t.draft_picks?.length ?? 0,
         created: t.created ?? 0,
         leg: t.leg ?? week,
+        bid: t.settings?.waiver_bid ?? null,
+        faab: t.waiver_budget?.length ? t.waiver_budget : null,
       })),
   })
 

@@ -392,18 +392,18 @@
   justify-content: center;
   gap: 0.35em;
   border-radius: 999px;
-  border: 1px solid #2f69b8;
+  border: 1px solid rgb(var(--ff-accent-deep));
   height: 26px;
   padding: 0 1.1em;
   font-size: 12px;
-  color: #04122a;
   font-weight: 500;
-  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
-  background: linear-gradient(180deg, #9fc8f5 0%, #6aa7ee 30%, #3d8ae6 50%, #2e7fe3 55%, #4b9bf0 78%, #86c8ff 100%);
+  /* Light text on the theme's accent, with a hairline shadow so it holds on the gloss. */
+  color: rgb(var(--ff-on-accent));
+  text-shadow: 0 -1px 0 rgb(0 0 0 / 0.18);
+  background: linear-gradient(180deg, rgb(var(--ff-accent) / 0.78) 0%, rgb(var(--ff-accent)) 52%, rgb(var(--ff-accent-deep)) 100%);
   box-shadow:
-    inset 0 -2px 3px rgba(170, 225, 255, 0.55),
-    inset 0 1px 1px rgba(255, 255, 255, 0.3),
-    0 1px 1.5px rgba(0, 30, 80, 0.22);
+    inset 0 -1px 2px rgb(255 255 255 / 0.22),
+    0 1px 1px rgb(0 0 0 / 0.12);
   transition: filter 120ms;
 }
 /* The throb: a wash of light that breathes. Opacity only, so it stays on the compositor. */
@@ -413,7 +413,7 @@
   z-index: -1;
   inset: 0;
   border-radius: 999px;
-  background: radial-gradient(ellipse at 50% 100%, rgba(190, 235, 255, 0.55), rgba(190, 235, 255, 0) 70%);
+  background: radial-gradient(ellipse at 50% 100%, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0) 70%);
   opacity: 0;
   pointer-events: none;
   will-change: opacity;
@@ -429,14 +429,16 @@
   top: 1.5px;
   height: 45%;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.28));
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.42), rgb(255 255 255 / 0.06));
   pointer-events: none;
 }
-.ff .ff-aqua:hover {
-  filter: brightness(1.06) saturate(1.05);
+@media (hover: hover) {
+  .ff .ff-aqua:hover {
+    filter: brightness(1.06);
+  }
 }
 .ff .ff-aqua:active {
-  filter: brightness(0.92) saturate(1.15);
+  filter: brightness(0.94);
 }
 .ff .ff-aqua:active::after {
   animation: none;
@@ -447,7 +449,7 @@
 }
 @keyframes ff-aqua-throb {
   to {
-    opacity: 1;
+    opacity: 0.7;
   }
 }
 @media (prefers-reduced-motion: reduce) {
