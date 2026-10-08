@@ -812,7 +812,7 @@ const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analy
       <Panel title="Cache">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="max-w-xl text-[12.5px] text-ff-muted">
-            Responses are cached in this browser under <code className="font-mono text-ff-text2">ff:v2:*</code>. Clearing forces every endpoint above to refetch.
+            Responses are cached in this browser under <code className="font-mono text-ff-text2">ff:v3:*</code>. Clearing forces every endpoint above to refetch.
           </p>
           <Button
             onClick={() => {

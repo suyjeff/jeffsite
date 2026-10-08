@@ -5,10 +5,11 @@ import { deadStarters } from '../../../lib/fantasy/lineup'
 import { isWaiverFill, makeLineupEval } from '../../../lib/fantasy/trades'
 import { PROP_LABEL } from '../../../lib/fantasy/lines'
 import { searchTrades, waiverTargets } from '../../../lib/fantasy/search'
+import AdjustControl from '../AdjustControl'
 import { describeNote } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, compact, cx, fmt, fmtSigned, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, odds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -178,11 +179,11 @@ const Odds = ({ sel, select }: WidgetProps) => {
             </span>
             <span className="num w-10 text-right text-ff-text">{fmt(r.rating)}</span>
             <span className="num hidden w-9 text-right text-ff-text2 sm:inline">{fmt(s.wins)}</span>
-            <span className={cx('num w-10 text-right', s.playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted')}>{pct(s.playoffs)}</span>
-            <span className="num hidden w-9 text-right text-ff-text2 sm:inline">{pct(s.bye)}</span>
+            <span className={cx('num w-10 text-right', s.playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted')}>{odds(s.playoffs, 0, s.clinch)}</span>
+            <span className="num hidden w-9 text-right text-ff-text2 sm:inline">{odds(s.bye, 0, s.clinch === 'out' ? 'out' : null)}</span>
             <span className="flex w-[78px] items-center justify-end gap-1.5">
               <Bar value={s.title} max={maxTitle} width={30} />
-              <span className="num w-9 text-right text-ff-text">{pct(s.title, s.title < 0.1 ? 1 : 0)}</span>
+              <span className="num w-9 text-right text-ff-text">{odds(s.title, s.title < 0.1 ? 1 : 0, s.clinch === 'out' ? 'out' : null)}</span>
             </span>
           </Row>
         )
@@ -532,6 +533,8 @@ const PlayerCard = ({ sel }: WidgetProps) => {
         ))}
       </div>
       <div className="flex-1 space-y-2 overflow-auto p-3">
+        <AdjustControl id={id} />
+        {p.newsAt ? <div className="font-mono text-[10.5px] text-ff-muted">sleeper news {ago(p.newsAt)} ago</div> : null}
         {v && v.weekly.length > 0 && (
           <div>
             <div className="ff-label mb-1">weekly · {v.games} g · ppg {fmt(v.ppg)} · faded = projected</div>
@@ -589,8 +592,8 @@ const TeamCard = ({ sel, select }: WidgetProps) => {
           <div className="grid grid-cols-3 gap-3 text-right">
             {[
               ['rtg', fmt(r.rating)],
-              ['po', pct(s.playoffs)],
-              ['title', pct(s.title, s.title < 0.1 ? 1 : 0)],
+              ['po', odds(s.playoffs, 0, s.clinch)],
+              ['title', odds(s.title, s.title < 0.1 ? 1 : 0, s.clinch === 'out' ? 'out' : null)],
             ].map(([k, v]) => (
               <div key={k}>
                 <div className="ff-label">{k}</div>
@@ -683,10 +686,6 @@ const Consensus = ({ sel, select }: WidgetProps) => {
   )
 }
 
-const ago = (ms: number) => {
-  const m = Math.max(0, Math.round((Date.now() - ms) / 60000))
-  return m < 60 ? `${m}m` : m < 60 * 24 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`
-}
 const Activity = ({ select }: WidgetProps) => {
   const { data, analysis } = useFantasy()
   const rows = useMemo(() => [...data.transactions].filter((t) => t.status === 'complete').sort((a, b) => b.created - a.created).slice(0, 40), [data.transactions])

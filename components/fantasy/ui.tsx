@@ -14,6 +14,27 @@ export const fmtSigned = (n: number | null | undefined, digits = 1) => {
 
 export const pct = (n: number | null | undefined, digits = 0) => (n === null || n === undefined || Number.isNaN(n) ? '–' : `${(n * 100).toFixed(digits)}%`)
 
+/**
+ * A simulated probability. It never rounds to a certainty the arithmetic has
+ * not settled: 99.7% reads ">99%", and 100% or 0% appear only when `settled`
+ * says the outcome is decided.
+ */
+export const odds = (p: number | null | undefined, digits = 0, settled?: 'in' | 'out' | null) => {
+  if (p === null || p === undefined || Number.isNaN(p)) return '–'
+  if (settled === 'in') return '100%'
+  if (settled === 'out') return '0%'
+  const unit = 10 ** -digits
+  if (p * 100 >= 100 - unit / 2) return `>${(100 - unit).toFixed(digits)}%`
+  if (p * 100 < unit / 2) return `<${unit.toFixed(digits)}%`
+  return `${(p * 100).toFixed(digits)}%`
+}
+
+/** How long ago a timestamp (ms) was, compactly: "40m", "5h", "3d". */
+export const ago = (ms: number, now = Date.now()) => {
+  const m = Math.max(0, Math.round((now - ms) / 60_000))
+  return m < 60 ? `${m}m` : m < 60 * 24 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`
+}
+
 /** 128255 -> 128k, for counts where only the order of magnitude matters. */
 export const compact = (n: number) => (n >= 9950 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))
 

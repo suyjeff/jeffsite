@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ELO, EFFICIENCY_PRIOR_GAMES, FORM_PRIOR_GAMES, FORM_WEIGHT, SIM, type BacktestModel, type BacktestScore } from '../../../lib/fantasy/forecast'
 import { gradeSnapshots, loadSnapshots, MARKET_WEIGHT, MEDIAN_TO_MEAN } from '../../../lib/fantasy/lines'
 import { useFantasy } from '../FantasyContext'
-import { Badge, Num, Panel, Stat, StatGrid, Table, cx, fmt, fmtSigned, pct } from '../ui'
+import { Badge, Num, Panel, Stat, StatGrid, Table, cx, fmt, fmtSigned, odds, pct } from '../ui'
 
 // ---------- System map ----------
 
@@ -106,7 +106,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
     { id: 'behavior', col: 3, label: 'Behaviour read', stat: `${models.behavior.trades.length} trades seen`, tab: 'behavior', note: 'Engagement, trade history, perceived fairness.' },
     { id: 'cards', col: 4, label: 'Trade cards', stat: 'Δ odds · yes-odds', note: 'Every suggestion carries leverage and acceptance.' },
     { id: 'power', col: 4, label: 'Power rankings', stat: '3 models', note: 'Choose Forecast, Composite or Elo.' },
-    { id: 'odds', col: 4, label: 'Playoff odds', stat: f && analysis.myRosterId != null ? `you ${pct(f.sim[analysis.myRosterId].playoffs)}` : '–', tab: 'forecast', note: 'Playoffs, byes, finals, titles, seeds.' },
+    { id: 'odds', col: 4, label: 'Playoff odds', stat: f && analysis.myRosterId != null ? `you ${odds(f.sim[analysis.myRosterId].playoffs, 0, f.sim[analysis.myRosterId].clinch)}` : '–', tab: 'forecast', note: 'Playoffs, byes, finals, titles, seeds.' },
     { id: 'backtest', col: 4, label: 'Backtest', stat: best ? `best: ${best.model} ${best.brier.toFixed(3)}` : '–', tab: 'backtest', note: 'Every model graded on games it had not seen.' },
   ]
 
@@ -230,7 +230,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
         </Panel>
         <Panel title="What is assumed" index={2}>
           <p className="text-[12.5px] leading-relaxed text-ff-text2">
-            The coming week blends prop lines and Sleeper {Math.round(MARKET_WEIGHT * 100)}/{Math.round((1 - MARKET_WEIGHT) * 100)}, with yardage lines read as medians (mean/median: rec {MEDIAN_TO_MEAN.rec_yd}, rush {MEDIAN_TO_MEAN.rush_yd}, pass {MEDIAN_TO_MEAN.pass_yd}). Season-long team uncertainty τ = {SIM.tauShare}·σ; Elo K {ELO.k} with a ⅓ summer regression (538’s NFL values); priors of {EFFICIENCY_PRIOR_GAMES} games on lineup efficiency and {FORM_PRIOR_GAMES} on form; the yes-odds weights. Each is labelled where it is used.
+            The coming week blends prop lines and Sleeper {Math.round(MARKET_WEIGHT * 100)}/{Math.round((1 - MARKET_WEIGHT) * 100)}, with yardage lines read as medians (mean/median: rec {MEDIAN_TO_MEAN.rec_yd}, rush {MEDIAN_TO_MEAN.rush_yd}, pass {MEDIAN_TO_MEAN.pass_yd}). Season-long team uncertainty τ = {SIM.tauShare}·σ, with {Math.round(SIM.persistence * 100)}% of each rating gap carried through the season (both fitted on 148 real 2025 leagues); Elo K {ELO.k} with a ⅓ summer regression (538’s NFL values); priors of {EFFICIENCY_PRIOR_GAMES} games on lineup efficiency and {FORM_PRIOR_GAMES} on form; the yes-odds weights. Each is labelled where it is used.
           </p>
         </Panel>
         <Panel title="What was decided by evidence" index={3}>
@@ -281,8 +281,8 @@ export const ForecastTab = () => {
             { key: 'r', label: 'Rating', align: 'right', sort: (r) => r.rating, render: (r) => <span className="text-ff-text">{fmt(r.rating)}</span> },
             { key: 'elo', label: 'Elo', align: 'right', sort: (r) => r.elo, render: (r) => r.elo },
             { key: 'w', label: 'Proj W', align: 'right', sort: (r) => f.sim[r.rosterId].wins, render: (r) => fmt(f.sim[r.rosterId].wins) },
-            { key: 'po', label: 'PO', align: 'right', sort: (r) => f.sim[r.rosterId].playoffs, render: (r) => pct(f.sim[r.rosterId].playoffs) },
-            { key: 'ti', label: 'Title', align: 'right', sort: (r) => f.sim[r.rosterId].title, render: (r) => pct(f.sim[r.rosterId].title, 1) },
+            { key: 'po', label: 'PO', align: 'right', sort: (r) => f.sim[r.rosterId].playoffs, render: (r) => odds(f.sim[r.rosterId].playoffs, 0, f.sim[r.rosterId].clinch) },
+            { key: 'ti', label: 'Title', align: 'right', sort: (r) => f.sim[r.rosterId].title, render: (r) => odds(f.sim[r.rosterId].title, 1, f.sim[r.rosterId].clinch === 'out' ? 'out' : null) },
           ]}
         />
       </Panel>

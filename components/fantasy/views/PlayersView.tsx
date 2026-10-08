@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { pastProjection, type Analysis } from '../../../lib/fantasy/analysis'
 import { applyTrade, makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
+import AdjustControl from '../AdjustControl'
 import { ContextNotes, PlayoffSchedule } from '../ContextNotes'
+import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import { sectionCode } from '../Shell'
-import { Badge, Button, Num, PageHeader, Panel, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, type Column } from '../ui'
+import { Badge, Button, Num, PageHeader, Panel, Segmented, Sparkline, Table, ago, compact, cx, fmt, fmtSigned, pct, type Column } from '../ui'
 
 const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
 type Pos = (typeof POSITIONS)[number]
@@ -24,6 +26,9 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   const perWeek = analysis.horizon.perWeek
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
   useEffect(() => setLimit(PAGE), [pos, own, query, basis])
+  const { adjust } = useFantasy()
+  const [picked, setPicked] = useState<string | null>(null)
+  const adjusted = Object.entries(adjust.all)
 
   const ids = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -237,14 +242,14 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
         meta={
           basis === 'ahead' ? (
             <>
-              <span className="num">{ids.length}</span> players · priced over wks{' '}
+              <span className="num">{ids.length}</span> {ids.length === 1 ? 'player' : 'players'} · priced over wks{' '}
               <span className="num">
                 {data.horizon[0]?.week}–{data.horizon[data.horizon.length - 1]?.week}
               </span>
             </>
           ) : (
             <>
-              <span className="num">{ids.length}</span> players · {data.valueSeason} wks{' '}
+              <span className="num">{ids.length}</span> {ids.length === 1 ? 'player' : 'players'} · {data.valueSeason} wks{' '}
               <span className="num">
                 {data.valueWeeks[0] ?? '–'}–{data.valueWeeks[data.valueWeeks.length - 1] ?? '–'}
               </span>
@@ -286,13 +291,54 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             className="h-8 min-w-[160px] rounded-sm md:max-w-[260px] md:flex-1 border border-ff-line bg-ff-panel px-2.5 text-[13px] text-ff-text outline-none placeholder:text-ff-muted focus-visible:ring-2 focus-visible:ring-ff-accent/40"
           />
         </div>
+        {adjusted.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border border-ff-accent/30 bg-ff-accent/[0.05] px-3 py-2 text-[12px]">
+            <span className="ff-label text-ff-accent">your reads</span>
+            {adjusted.map(([id, a]) => (
+              <span key={id} className="inline-flex items-center gap-1.5">
+                <button onClick={() => setPicked(id)} className="text-ff-text hover:underline">
+                  {players[id]?.name ?? id}
+                </button>
+                <span className="num text-ff-accent">
+                  {a.pct > 0 ? '+' : '−'}
+                  {Math.round(Math.abs(a.pct) * 100)}%
+                </span>
+                <span className="font-mono text-[10.5px] text-ff-muted">{a.scope === 'week' ? `wk ${a.week}` : 'season'}</span>
+                <button onClick={() => adjust.set(id, null)} aria-label={`Clear your read on ${players[id]?.name ?? id}`} className="px-1 font-mono text-[11px] text-ff-muted hover:text-ff-neg">
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        {!picked && !adjusted.length && <p className="text-[11.5px] text-ff-muted">Pick a player to see his context and set your own read on his projection.</p>}
+        {picked && players[picked] && (
+          <Panel
+            title="Selected"
+            actions={
+              <button onClick={() => setPicked(null)} className="font-mono text-[11px] text-ff-muted hover:text-ff-text">
+                close
+              </button>
+            }
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+              <div className="min-w-0 space-y-2">
+                <PlayerName player={players[picked]} id={picked} sub={owner(picked)} />
+                <ContextNotes context={data.context[picked]} players={players} max={6} />
+                {players[picked].newsAt ? <div className="font-mono text-[10.5px] text-ff-muted">sleeper news {ago(players[picked].newsAt!)} ago · check the story in the Sleeper app</div> : null}
+              </div>
+              <AdjustControl id={picked} />
+            </div>
+          </Panel>
+        )}
         <Panel pad={false}>
           <Table
             rows={visible}
             rowKey={(id) => id}
             columns={basis === 'ahead' ? ahead : todate}
             defaultSort={basis === 'ahead' ? 'val' : 'war'}
-            rowClass={(id) => cx(rosteredBy[id] === myRosterId && 'ff-mine')}
+            rowClass={(id) => cx(rosteredBy[id] === myRosterId && 'ff-mine', id === picked && 'bg-ff-accent/[0.06]')}
+            onRowClick={(id) => setPicked(id === picked ? null : id)}
             empty="No players match."
           />
         </Panel>

@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
+import { SIM } from '../../../lib/fantasy/forecast'
 import { opponentsByWeek, RESULTS_PRIOR_GAMES, type PowerWeights } from '../../../lib/fantasy/power'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DivergingStacks, Legend } from '../charts'
 import { useFantasy } from '../FantasyContext'
 import { sectionCode } from '../Shell'
-import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, type Column } from '../ui'
+import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, odds, pct, type Column } from '../ui'
 
 type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'odds', 'standings', 'schedule']
@@ -116,8 +117,8 @@ const PowerView = ({
       render: (r) => `${seasonById[r.rosterId].wins}-${seasonById[r.rosterId].losses}`,
     },
     { key: 'xw', label: 'Proj W', align: 'right', hideBelow: 'sm', title: 'Mean simulated wins at season end', sort: (r) => forecast!.sim[r.rosterId].wins, render: (r) => fmt(forecast!.sim[r.rosterId].wins) },
-    { key: 'po', label: 'Playoffs', align: 'right', sort: (r) => forecast!.sim[r.rosterId].playoffs, render: (r) => <span className={forecast!.sim[r.rosterId].playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted'}>{pct(forecast!.sim[r.rosterId].playoffs)}</span> },
-    { key: 'title', label: 'Title', align: 'right', sort: (r) => forecast!.sim[r.rosterId].title, render: (r) => pct(forecast!.sim[r.rosterId].title, forecast!.sim[r.rosterId].title < 0.1 ? 1 : 0) },
+    { key: 'po', label: 'Playoffs', align: 'right', sort: (r) => forecast!.sim[r.rosterId].playoffs, render: (r) => <span className={forecast!.sim[r.rosterId].playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted'}>{odds(forecast!.sim[r.rosterId].playoffs, 0, forecast!.sim[r.rosterId].clinch)}</span> },
+    { key: 'title', label: 'Title', align: 'right', sort: (r) => forecast!.sim[r.rosterId].title, render: (r) => odds(forecast!.sim[r.rosterId].title, forecast!.sim[r.rosterId].title < 0.1 ? 1 : 0, forecast!.sim[r.rosterId].clinch === 'out' ? 'out' : null) },
     { key: 'elo', label: 'Elo', align: 'right', hideBelow: 'lg', sort: (r) => models.elo.final[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-muted">{Math.round(models.elo.final[r.rosterId] ?? 1500)}</span> },
   ]
 
@@ -241,7 +242,7 @@ const PowerView = ({
         {me && (
           <StatGrid>
             <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.elo.final[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />
-            {forecast && <Stat label="Playoff odds" value={pct(forecast.sim[myRosterId!].playoffs)} sub={`title ${pct(forecast.sim[myRosterId!].title, 1)} · bye ${pct(forecast.sim[myRosterId!].bye)}`} />}
+            {forecast && <Stat label="Playoff odds" value={odds(forecast.sim[myRosterId!].playoffs, 0, forecast.sim[myRosterId!].clinch)} sub={`title ${odds(forecast.sim[myRosterId!].title, 1, forecast.sim[myRosterId!].clinch === 'out' ? 'out' : null)} · bye ${odds(forecast.sim[myRosterId!].bye, 0, forecast.sim[myRosterId!].clinch === 'out' ? 'out' : null)}`} />}
             <Stat label="Standing" value={standingRank ? `#${standingRank}` : '–'} sub={playoffTeams ? `top ${playoffTeams} make the playoffs` : undefined} />
             <Stat label="Record" value={`${me.season.wins}-${me.season.losses}${me.season.ties ? `-${me.season.ties}` : ''}`} sub={`all-play ${pct(me.season.allPlayPct)}`} />
             <Stat label="Points per game" value={fmt(me.season.ppg)} delta={<Num value={me.season.ppg - leagueAvgPpg} signed />} sub="vs league average" />
@@ -413,10 +414,10 @@ const OddsGrid = ({ onTeam }: { onTeam: (id: number) => void }) => {
                     )
                   })}
                   <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{fmt(s.wins)}</td>
-                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text">{pct(s.playoffs)}</td>
-                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{pct(s.bye)}</td>
-                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{pct(s.final)}</td>
-                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text">{pct(s.title, 1)}</td>
+                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text">{odds(s.playoffs, 0, s.clinch)}</td>
+                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{odds(s.bye, 0, s.clinch === 'out' ? 'out' : null)}</td>
+                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{odds(s.final, 0, s.clinch === 'out' ? 'out' : null)}</td>
+                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text">{odds(s.title, 1, s.clinch === 'out' ? 'out' : null)}</td>
                 </tr>
               )
             })}
@@ -424,7 +425,7 @@ const OddsGrid = ({ onTeam }: { onTeam: (id: number) => void }) => {
         </table>
       </div>
       <p className="border-t border-ff-line px-3 py-2 font-mono text-[10.5px] text-ff-muted">
-        Each season plays out week by week: weekly scores ~ N(rating, σ={fmt(f.sigma)}) around a team level drawn once per season (τ={fmt(f.tau)}), then the bracket. The rule after seed {cut} is the playoff line.
+        Each season plays out week by week: weekly scores ~ N(rating, σ={fmt(f.sigma)}) around a team level drawn once per season (τ={fmt(f.tau)}), with {Math.round(SIM.persistence * 100)}% of each team&apos;s gap to average carried forward, since rosters drift toward the middle; then the bracket. Both settings were fitted on how 148 real 2025 leagues finished. Odds never read 100% or 0% until the win arithmetic settles it. The rule after seed {cut} is the playoff line.
       </p>
     </Panel>
   )

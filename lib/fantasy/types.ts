@@ -96,6 +96,8 @@ export type SleeperPlayer = {
   depth_chart_position?: string | null
   injury_body_part?: string | null
   injury_start_date?: string | null
+  /** When Sleeper last attached news to the player, ms since epoch. */
+  news_updated?: number | null
   active?: boolean
 }
 
@@ -112,6 +114,8 @@ export type TrimmedPlayer = {
   /** Place on the team's depth chart at his spot (1 = starter), when Sleeper has one. */
   depth?: number | null
   injuryBody?: string | null
+  /** When Sleeper last attached news to him, ms since epoch. */
+  newsAt?: number | null
 }
 
 export type PlayerMap = Record<string, TrimmedPlayer>

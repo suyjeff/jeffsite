@@ -115,6 +115,10 @@ describe('usageFromStats', () => {
     expect(u.snaps).toBeCloseTo(0.5)
     expect(u.recentSnaps).toBeCloseTo(0.625, 1)
     expect(u.recentOpps).toBeCloseTo(15)
+    // The last game against the ones before it: 18 vs (6 + 12) / 2.
+    expect(u.lastOpps).toBe(18)
+    expect(u.priorOpps).toBeCloseTo(9)
+    expect(u.lastSnaps).toBeCloseTo(0.75)
     expect(u.games).toBe(3)
   })
 })

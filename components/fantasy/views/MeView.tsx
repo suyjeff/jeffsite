@@ -6,7 +6,7 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import { sectionCode } from '../Shell'
-import { Badge, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, cx, fmt, pct } from '../ui'
+import { Badge, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Table, Tabs, ago, cx, fmt, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Sub = 'overview' | 'roster'
@@ -50,6 +50,13 @@ const MeView = ({
       assignments: best.assignments,
     }
   }, [me, data.projections, players, slots])
+
+  // ---- Fresh news: players on your roster Sleeper flagged in the last day ----
+  const fresh = useMemo(() => {
+    if (!me) return []
+    const cutoff = Date.now() - 24 * 3600_000
+    return me.players.filter((id) => (players[id]?.newsAt ?? 0) > cutoff).sort((a, b) => (players[b].newsAt ?? 0) - (players[a].newsAt ?? 0))
+  }, [me, players])
 
   // ---- Headline numbers ----
   const kpis = useMemo(() => {
@@ -144,6 +151,22 @@ const MeView = ({
                   <Stat label="Points per game" value={fmt(season.ppg)} />
                 )}
               </StatGrid>
+            )}
+
+            {fresh.length > 0 && (
+              <Panel title="News in the last day" actions={<span>{fresh.length} on your roster</span>} pad={false}>
+                {fresh.map((id) => (
+                  <div key={id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-ff-line/60 px-3 py-2 last:border-b-0">
+                    <span className="min-w-0 flex-1">
+                      <PlayerName player={players[id]} id={id} size={22} sub={`news ${ago(players[id].newsAt!)} ago`} />
+                    </span>
+                    <ContextNotes context={data.context[id]} players={players} max={2} />
+                  </div>
+                ))}
+                <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
+                  Sleeper flags when a player has news but not what it says; read it in the Sleeper app. If it changes your view, set your read on him from Players or the dashboard player card.
+                </p>
+              </Panel>
             )}
 
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">

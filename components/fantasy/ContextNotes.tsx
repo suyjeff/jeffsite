@@ -56,11 +56,11 @@ export const describeNote = (note: ContextNote, players: PlayerMap): { tone: Ton
         ? { tone: 'bad', label: `out until wk ${note.week}`, title: `Projected to return in week ${note.week}.` }
         : { tone: 'bad', label: 'out all horizon', title: 'Not projected to play in any week of the horizon.' }
     case 'usage': {
-      const up = note.recentSnaps > note.snaps
+      const up = note.last > note.prior
       return {
         tone: up ? 'good' : 'warn',
-        label: `snaps ${Math.round(note.snaps * 100)}→${Math.round(note.recentSnaps * 100)}%`,
-        title: `Offensive snap share: ${Math.round(note.snaps * 100)}% on the season, ${Math.round(note.recentSnaps * 100)}% over his last two games. Projections catch up to role changes slowly.`,
+        label: `work ${Math.round(note.prior)}→${note.last}`,
+        title: `Carries plus targets: ${note.prior.toFixed(1)} a game before, ${note.last} last game (${Math.round(note.lastSnaps * 100)}% of snaps). In 2024–25 about ${Math.round(note.carryover * 100)}% of a one-game swing like this showed up again the next week, and Sleeper's projection already moves by about that much. If the news says more (or less) than that, set your read on the player.`,
       }
     }
     case 'playoffs':

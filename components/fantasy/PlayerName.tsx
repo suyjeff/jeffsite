@@ -1,5 +1,6 @@
 import React from 'react'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
+import { useFantasyMaybe } from './FantasyContext'
 import { PlayerAvatar, PosTag, cx } from './ui'
 
 const injuryTone = (injury: string | null) => {
@@ -24,6 +25,7 @@ const PlayerName = ({
   size?: number
   className?: string
 }) => {
+  const adj = useFantasyMaybe()?.adjust.all[id]
   if (!player) return <span className="text-ff-muted">{id}</span>
   const tone = injuryTone(player.injury)
   return (
@@ -33,6 +35,15 @@ const PlayerName = ({
         <span className="flex items-center gap-1.5">
           <span className="truncate text-[13px] tracking-tight text-ff-text">{player.name}</span>
           {player.injury && <span className={cx('shrink-0 font-mono text-[9.5px] font-semibold uppercase', tone)}>{player.injury.slice(0, 3)}</span>}
+          {adj && (
+            <span
+              className="shrink-0 font-mono text-[9.5px] font-semibold text-ff-accent"
+              title={`Your read: ${adj.pct > 0 ? '+' : ''}${Math.round(adj.pct * 100)}% on his projection, ${adj.scope === 'week' ? `week ${adj.week} only` : 'every week ahead'}`}
+            >
+              {adj.pct > 0 ? '+' : '−'}
+              {Math.round(Math.abs(adj.pct) * 100)}%
+            </span>
+          )}
         </span>
         <span className="flex items-center gap-1.5 text-[11px] text-ff-muted">
           {avatar && <span className="font-mono text-[10px] font-semibold text-ff-text2">{player.pos}</span>}
