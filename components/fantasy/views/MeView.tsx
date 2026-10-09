@@ -9,6 +9,7 @@ import FreeAgentPick from '../FreeAgentPick'
 import ScoutReport from '../ScoutReport'
 import MovesPanel from '../Moves'
 import { Badge, Button, DeltaChip, Empty, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone } from '../ui'
+import { Callout } from '../Callout'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Sub = 'overview' | 'roster' | 'news' | 'lineup' | 'slots'
@@ -128,9 +129,9 @@ const MeView = ({
         })}
         <GridFill n={fresh.length} wide="2xl" />
       </div>
-      <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
+      <Callout kind="instruction" className="m-3">
         Sleeper flags news but not what it says, once a day. Read it in Sleeper, then click a name to set your read.
-      </p>
+      </Callout>
     </Panel>
   ) : null
   const lineupPanel = lineupCheck ? (

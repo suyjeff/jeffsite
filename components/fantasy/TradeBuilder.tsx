@@ -3,9 +3,10 @@ import { readDeal, rostersOf, tidyDeal, type Deal, type DealSide } from '../../l
 import type { TradeIdea } from '../../lib/fantasy/trades'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { AddIcon, TradeIcon } from './icons'
+import { Callout } from './Callout'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
-import { Badge, Button, Dropdown, Empty, Panel, PlayerAvatar, WeekBars, cx, fmt, fmtSigned } from './ui'
+import { Badge, Button, Dropdown, Panel, PlayerAvatar, WeekBars, cx, fmt, fmtSigned } from './ui'
 
 const MAX_TEAMS = 4
 
@@ -381,11 +382,11 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
       >
         {!active || !read ? (
           <div className="p-3">
-            <Empty title={deal.teams.length < 2 ? 'Add a partner to start' : 'Pick players to move'}>
+            <Callout kind="instruction" title={deal.teams.length < 2 ? 'Add a partner to start' : 'Pick players to move'}>
               {deal.teams.length < 2
                 ? 'Any team in the league; add more for a three- or four-way deal.'
                 : 'Tap players in the rosters below. Each goes to the other side, or to the team you choose in a bigger deal. Add FAAB to any side.'}
-            </Empty>
+            </Callout>
           </div>
         ) : (
           <div

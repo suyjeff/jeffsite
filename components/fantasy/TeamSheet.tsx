@@ -137,7 +137,7 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
           </SheetBody>
 
           <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-ff-line px-4 py-2.5">
-            <span className="min-w-0 truncate text-[11.5px] text-ff-muted">Roster detail, results and slots on the team page</span>
+            <span className="min-w-0 truncate text-[11.5px] text-ff-muted">Roster, results and slots on the team page</span>
             <Button size="sm" variant="primary" onClick={open}>
               Open team page →
             </Button>

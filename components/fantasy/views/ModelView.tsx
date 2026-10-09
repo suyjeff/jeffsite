@@ -11,7 +11,8 @@ import { HBars, Histogram, Legend, MiniLines } from '../charts'
 import PlayerName from '../PlayerName'
 import { MONKE } from '../Shell'
 import { useFantasy } from '../FantasyContext'
-import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Stat, StatGrid, Table, TabSection, Tabs, cx, spyTo, usePhone, fmt, fmtSigned, pct, type Column } from '../ui'
+import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Sentences, Stat, StatGrid, Table, TabSection, Tabs, cx, spyTo, usePhone, fmt, fmtSigned, pct, type Column } from '../ui'
+import { Callout } from '../Callout'
 import { BacktestTab, BehaviorTab, ForecastTab, OverviewTab, SystemTab } from './ModelSystem'
 import { COMPONENTS } from './PowerView'
 
@@ -34,9 +35,12 @@ const LABEL: Record<Sub, string> = {
 /** Tuning tabs with controls; the rest show their working. */
 const TUNABLE: Sub[] = ['value', 'power']
 
-/** Each tab in one line: what it is for, and what, if anything, you can change there. */
-const INTRO: Partial<Record<Sub, { what: string; you: string | null }>> = {
-  system: { what: 'Every input and model, and what feeds what. Hover a box to trace it; click to open it.', you: null },
+/**
+ * Each tab in one line: what it is for, and what, if anything, you can change there. A tab you can tune or work
+ * (`you`, `how`) gets its line as an instruction; the rest are plain descriptions.
+ */
+const INTRO: Partial<Record<Sub, { what: string; you: string | null; how?: string }>> = {
+  system: { what: 'Every input and model, and what feeds what.', how: 'Hover a box to trace it; click to open it.', you: null },
   forecast: { what: 'The team ratings and simulated seasons behind playoff odds and Power.', you: null },
   backtest: { what: 'Each model graded on games it had not seen. Lower Brier is better; a coin flip scores 0.250.', you: null },
   behavior: { what: 'How each manager trades, read from the league’s transactions. Feeds the yes-odds on trade cards.', you: null },
@@ -231,13 +235,16 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
       <div className="mt-4 space-y-3">
         {subs.map((k) => (
           <TabSection key={k} id={k} label={LABEL[k]} active={tab === k} stacked={stacked}>
-            {INTRO[k] && (
+            {INTRO[k] && (INTRO[k]!.you || INTRO[k]!.how) ? (
+              <Callout kind="instruction" action={<span className={cx('font-mono text-[10.5px]', INTRO[k]!.you ? 'text-ff-accent' : 'text-ff-muted')}>{INTRO[k]!.you ? 'tunable' : 'read-only'}</span>}>
+                {INTRO[k]!.what}
+                {INTRO[k]!.how && ` ${INTRO[k]!.how}`}
+                {INTRO[k]!.you && <span className="text-ff-text"> Yours to set: {INTRO[k]!.you}</span>}
+              </Callout>
+            ) : INTRO[k] && (
               <div className="flex flex-col gap-1 border-l-2 border-ff-line2 pl-3 text-[12.5px] leading-snug sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
-                <span className="text-ff-text2">
-                  {INTRO[k]!.what}
-                  {INTRO[k]!.you && <span className="text-ff-text"> Yours to set: {INTRO[k]!.you}</span>}
-                </span>
-                <span className={cx('shrink-0 font-mono text-[10.5px]', INTRO[k]!.you ? 'text-ff-accent' : 'text-ff-muted')}>{INTRO[k]!.you ? 'tunable' : 'read-only'}</span>
+                <span className="text-ff-text2">{INTRO[k]!.what}</span>
+                <span className="shrink-0 font-mono text-[10.5px] text-ff-muted">read-only</span>
               </div>
             )}
             {k === 'overview' && <OverviewTab open={open} />}
@@ -843,12 +850,14 @@ const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analy
         />
       </Panel>
       {data.warnings.length > 0 && (
-        <Panel title="Warnings">
-          <ul className="space-y-1 text-[12.5px] text-ff-warn">
+        <Panel title="Warnings" pad={false}>
+          <Sentences>
             {data.warnings.map((w) => (
-              <li key={w}>{w}</li>
+              <li key={w} className="text-ff-warn">
+                {w}
+              </li>
             ))}
-          </ul>
+          </Sentences>
         </Panel>
       )}
       <Panel title="Cache">

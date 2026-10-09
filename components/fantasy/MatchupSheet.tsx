@@ -1,8 +1,10 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useFantasy } from './FantasyContext'
+import PlayerName from './PlayerName'
+import { useRosterRows } from './RosterTable'
 import { Deciders, MatchupScore, SlotTable, decidedBy, useMatchups } from './matchup'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
-import { Avatar, Badge, fmtSigned, pct } from './ui'
+import { Avatar, Badge, fmt, fmtSigned, pct } from './ui'
 
 /**
  * One fantasy matchup over the page: the score as it stands and where it is heading, what it is worth to each side,
@@ -16,6 +18,21 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
   const A = analysis.teamById[a]
   const B = analysis.teamById[b]
   const surname = (id: string) => data.players[id]?.name.split(' ').slice(-1)[0] ?? id
+  // Each side's bench, best first: who could still be swapped in.
+  const rowsA = useRosterRows(a)
+  const rowsB = useRosterRows(b)
+  const benches = useMemo(() => {
+    const per = analysis.horizon.perWeek
+    const bench = (rows: typeof rowsA) =>
+      rows
+        .filter((r) => r.slot === 'BN')
+        .map((r) => r.id)
+        .sort((x, y) => (per[y] ?? 0) - (per[x] ?? 0))
+    return [
+      { id: a, name: A?.name ?? '', ids: bench(rowsA) },
+      { id: b, name: B?.name ?? '', ids: bench(rowsB) },
+    ]
+  }, [rowsA, rowsB, analysis.horizon.perWeek, a, b, A?.name, B?.name])
 
   const header = (
     <SheetHeader
@@ -97,15 +114,40 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
         )}
         <SheetSection title="What decides it" aside="± win odds, bad game to good">
           {deciding && m.deciders.length > 0 && <p className="mb-2 text-[12.5px] text-ff-text2">Comes down to {deciding}.</p>}
-          <div className="-mx-4">
+          <div className="-mx-4 [&_li]:!px-4 [&_p]:!px-4">
             <Deciders m={m} limit={5} />
           </div>
         </SheetSection>
         <SheetSection title="Slot by slot" aside="green: left side ahead">
-          <div className="-mx-4">
+          <div className="-mx-4 [&_li]:!px-4">
             <SlotTable m={m} compact />
           </div>
         </SheetSection>
+        {benches.some((s) => s.ids.length > 0) && (
+          <SheetSection title="Benches" aside="pts/wk ahead">
+            <div className="grid grid-cols-2 gap-x-4">
+              {benches.map((s) => (
+                <div key={s.id} className="min-w-0">
+                  <div className="mb-1 truncate font-mono text-[10.5px] text-ff-muted">{s.name}</div>
+                  {s.ids.length ? (
+                    <ul className="divide-y divide-ff-line/60">
+                      {s.ids.map((id) => (
+                        <li key={id} className="flex h-8 items-center gap-2 text-[12.5px]">
+                          <span className="min-w-0 flex-1">
+                            <PlayerName player={data.players[id]} id={id} size={18} />
+                          </span>
+                          <span className="num shrink-0 text-ff-text2">{fmt(analysis.horizon.perWeek[id])}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-[12px] text-ff-muted">Nobody on the bench.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </SheetSection>
+        )}
       </SheetBody>
       <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-ff-line px-4 py-2.5">
         <span className="min-w-0 truncate text-[11.5px] text-ff-muted">Select a manager or player to open theirs.</span>
