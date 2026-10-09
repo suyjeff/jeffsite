@@ -78,7 +78,7 @@ const Feed = ({ stories, run }: { stories: Story[]; run: number }) => (
           'ff-rise grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 px-3 py-2.5',
           s.kind === 'you' && 'bg-ff-accent/[0.06] shadow-[inset_2px_0_0_rgb(var(--ff-accent))]',
         )}
-        style={{ animationDelay: `${120 + i * 90}ms` }}
+        style={{ animationDelay: `${100 + i * 100}ms` }}
       >
         <FaceOff a={s.a} b={s.b} />
         <div className="min-w-0">
@@ -133,7 +133,7 @@ const Bracket = ({ t, run }: { t: Trace; run: number }) => {
     <div className="ff-scroll overflow-x-auto">
       <div className="flex min-w-max items-stretch gap-3 p-3">
         {t.rounds.map((rd, i) => (
-          <div key={`${run}:${i}`} className="ff-rise flex w-[160px] flex-col" style={{ animationDelay: `${200 + i * 260}ms` }}>
+          <div key={`${run}:${i}`} className="ff-rise flex w-[160px] flex-col" style={{ animationDelay: `${100 + i * 100}ms` }}>
             <div className="ff-label mb-1.5 flex justify-between">
               <span>{rd.name}</span>
               <span className="num">wk {rd.week}</span>
@@ -146,7 +146,7 @@ const Bracket = ({ t, run }: { t: Trace; run: number }) => {
           </div>
         ))}
         {champ && (
-          <div key={`${run}:champ`} className="ff-rise flex w-[112px] flex-col" style={{ animationDelay: `${200 + t.rounds.length * 260}ms` }}>
+          <div key={`${run}:champ`} className="ff-rise flex w-[112px] flex-col" style={{ animationDelay: `${100 + t.rounds.length * 100}ms` }}>
             <div className="ff-label mb-1.5">Champion</div>
             <div className="flex flex-1 flex-col items-center justify-center gap-2 border border-ff-accent/50 bg-ff-accent/[0.07] px-2 py-3 text-center">
               <Avatar src={champ.avatar} name={champ.name} size={40} />
@@ -422,7 +422,7 @@ const PlayoffLab = () => {
                       <td className="h-8 whitespace-nowrap border-b border-ff-line/60 px-2 text-right">
                         <span className="inline-flex items-center justify-end gap-1.5">
                           <span className="hidden h-1 w-12 bg-ff-line md:inline-block" aria-hidden>
-                            <span className="block h-full bg-ff-accent transition-[width] duration-300 ease-out" style={{ width: `${(s?.playoffs ?? 0) * 100}%` }} />
+                            <span className="block h-full origin-left bg-ff-accent transition-transform duration-300 ease-out" style={{ transform: `scaleX(${s?.playoffs ?? 0})` }} />
                           </span>
                           <span className="num w-10 text-right text-ff-text">{odds(s?.playoffs, 0, s?.clinch)}</span>
                           {tweaked && <Delta v={(s?.playoffs ?? 0) - (b?.playoffs ?? 0)} />}
@@ -460,7 +460,7 @@ const PlayoffLab = () => {
                         aria-selected={w === week}
                         onClick={() => setWeek(w)}
                         className={cx(
-                          'relative h-7 min-w-[40px] shrink-0 border px-2 font-mono text-[11px] transition-colors',
+                          'ff-press relative h-7 min-w-[40px] shrink-0 border px-2 font-mono text-[11px]',
                           w === week ? 'border-ff-text bg-ff-text text-ff-panel' : 'border-ff-line text-ff-text2 hover:border-ff-line2',
                         )}
                       >
@@ -498,7 +498,7 @@ const PlayoffLab = () => {
                         aria-pressed={on}
                         onClick={() => pick(g, id)}
                         className={cx(
-                          'flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border px-2 py-1.5 text-left transition-colors duration-150',
+                          'ff-press flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border px-2 py-1.5 text-left',
                           align === 'right' && 'flex-row-reverse text-right',
                           on
                             ? 'border-ff-accent bg-ff-accent/10'
@@ -545,7 +545,7 @@ const PlayoffLab = () => {
         actions={trace ? <span className="num">season #{trace.t.seed.toString(36).toUpperCase()}</span> : <span>one draw of many</span>}
       >
         <div className="flex flex-wrap items-center gap-3 border-b border-ff-line px-3 py-2.5">
-          <Button variant="primary" onClick={play}>
+          <Button variant="primary" onClick={play} className="ff-press">
             {trace ? 'Play another season' : 'Play out a season'}
           </Button>
           <span className="min-w-0 flex-1 text-[12px] text-ff-muted">
