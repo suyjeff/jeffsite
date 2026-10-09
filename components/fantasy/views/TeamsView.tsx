@@ -84,7 +84,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
       label: 'Last 5',
       hideBelow: 'md',
       render: (t) => (
-        <span className="flex gap-0.5" aria-label={(seasonById[t.rosterId]?.weeks ?? []).slice(-5).map((w) => w.result ?? '–').join(' ')}>
+        <span className="flex gap-0.5" role="img" aria-label={(seasonById[t.rosterId]?.weeks ?? []).slice(-5).map((w) => w.result ?? '–').join(' ')}>
           {(seasonById[t.rosterId]?.weeks ?? []).slice(-5).map((w) => (
             <span
               key={w.week}
@@ -143,7 +143,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
       key: 'next',
       label: next[0] ? `Wk ${next[0].week}` : 'Next',
       hideBelow: 'lg',
-      title: 'Next opponent and your win odds against them',
+      title: 'Next opponent, and the win odds against them',
       render: (t) => {
         const g = game(t.rosterId)
         if (!g) return <span className="text-ff-muted">–</span>

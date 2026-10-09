@@ -215,19 +215,19 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
         </div>
 
         {/* What it does for this team, in the order to read it. */}
-        <dl className="mt-auto grid grid-cols-2 gap-px border-t border-ff-line bg-ff-line">
+        <div className="mt-auto grid grid-cols-2 gap-px border-t border-ff-line bg-ff-line">
           <div className="bg-ff-panel px-3 py-2">
-            <dt className="ff-label">Lineup</dt>
-            <dd className="mt-1">
+            <div className="ff-label">Lineup</div>
+            <div className="mt-1">
               <Figure v={s.lineup} />
               <span className="mt-1 block text-[10.5px] text-ff-muted">
                 better {s.weeksBetter} of {s.perWeek.length} weeks
               </span>
-            </dd>
+            </div>
           </div>
           <div className="bg-ff-panel px-3 py-2">
-            <dt className="ff-label">{s.faab ? 'With FAAB' : 'Trade value'}</dt>
-            <dd className="mt-1">
+            <div className="ff-label">{s.faab ? 'With FAAB' : 'Trade value'}</div>
+            <div className="mt-1">
               {s.faab ? (
                 <Figure v={s.net.mid} range={[s.net.low, s.net.high]} />
               ) : (
@@ -236,7 +236,7 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
                   <span className="mt-1 block text-[10.5px] text-ff-muted">{s.value > 0.2 ? 'gets more than it gives' : s.value < -0.2 ? 'gives more than it gets' : 'fair by value'}</span>
                 </>
               )}
-            </dd>
+            </div>
           </div>
           <div className="col-span-2 flex items-center justify-between gap-2 bg-ff-panel px-3 py-2">
             <WeekBars weeks={s.perWeek.map((w) => ({ week: w.week, value: w.delta }))} highlight={data.playoffWeeks} barWidth={7} height={26} />
@@ -248,10 +248,10 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
           {!mineSide && r && (
             <div className="col-span-2 bg-ff-panel px-3 py-2">
               <div className="flex items-baseline justify-between gap-2">
-                <dt className="ff-label">Would they?</dt>
-                <dd className={cx('num text-[13px] font-medium', r.band === 'likely' ? 'text-ff-pos' : r.band === 'possible' ? 'text-ff-text' : 'text-ff-neg')}>
+                <div className="ff-label">Would they?</div>
+                <div className={cx('num text-[13px] font-medium', r.band === 'likely' ? 'text-ff-pos' : r.band === 'possible' ? 'text-ff-text' : 'text-ff-neg')}>
                   {r.index}% · {r.band}
-                </dd>
+                </div>
               </div>
               {r.signals[0] && <p className="mt-0.5 text-[11px] text-ff-muted">{r.signals.map((x) => x.text).slice(0, 2).join('; ')}</p>}
             </div>
@@ -266,7 +266,7 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
               ))}
             </div>
           )}
-        </dl>
+        </div>
       </section>
     )
   }
@@ -385,7 +385,7 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
                 <PlayerAvatar id={id} player={players[id]} size={26} />
                 <span className="min-w-0 flex-1 leading-tight">
                   <span className="block truncate text-[12.5px] text-ff-text">{players[id]?.name}</span>
-                  <span className="block font-mono text-[10px] text-ff-muted">
+                  <span className={cx('block font-mono text-[10px]', move ? 'text-ff-text2' : 'text-ff-muted')}>
                     {players[id]?.pos} · {fmt(perWeek[id])}/wk
                   </span>
                 </span>

@@ -289,13 +289,13 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
                     className={cx(
                       'ff-press flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border px-2 py-1.5 text-left',
                       align === 'right' && 'flex-row-reverse text-right',
-                      on ? 'border-ff-accent bg-ff-accent/10' : off ? 'border-ff-line bg-ff-sunken/50 opacity-60' : 'border-ff-line bg-ff-panel hover:border-ff-line2 hover:bg-ff-raised/50',
+                      on ? 'border-ff-accent bg-ff-accent/10' : off ? 'border-dashed border-ff-line bg-ff-sunken/50 [&_.truncate]:text-ff-text2' : 'border-ff-line bg-ff-panel hover:border-ff-line2 hover:bg-ff-raised/50',
                     )}
                   >
                     <Avatar src={t?.avatar ?? null} name={t?.name ?? '?'} size={22} />
                     <span className="min-w-0 flex-1 leading-tight">
                       <span className={cx('block truncate text-[12.5px]', id === me ? 'font-medium text-ff-accent' : 'text-ff-text')}>{t?.name}</span>
-                      <span className="num block text-[10.5px] text-ff-muted">{on ? '✓ wins' : off ? 'loses' : `${pct(p)} to win`}</span>
+                      <span className={cx('num block text-[10.5px]', on ? 'text-ff-text2' : 'text-ff-muted')}>{on ? '✓ wins' : off ? 'loses' : `${pct(p)} to win`}</span>
                     </span>
                   </button>
                 )
@@ -406,11 +406,11 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
           )}
           {tweaked && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-ff-accent/40 bg-ff-accent/[0.06] px-3 py-2 text-[12.5px] text-ff-text2">
-              <span className="ff-label text-ff-accent">Scenario</span>
+              <span className="ff-label !text-ff-accent">Scenario</span>
               <span className="min-w-0 flex-1">
                 {[nLocks ? `${nLocks} result${nLocks === 1 ? '' : 's'} picked` : '', chaosLabel].filter(Boolean).join(' · ')}. Odds below are as if these happened.
               </span>
-              <Button size="sm" variant="ghost" onClick={reset}>
+              <Button size="sm" variant="ghost" onClick={reset} className="!text-ff-text2 hover:!text-ff-text">
                 Back to the model
               </Button>
             </div>
