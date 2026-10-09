@@ -349,6 +349,7 @@ const TradesView = ({
             <Table
               rows={shownTargets}
               rowKey={(t) => t.id}
+              canExpand={(t) => !!data.context[t.id]?.notes.length}
               expand={(t) => {
                 const items = contextReasons(data.context[t.id], players)
                 return items.length ? <Reasons items={items} /> : null
@@ -466,6 +467,7 @@ const TradesView = ({
             <Table
               rows={shownSituations}
               rowKey={(r) => r.id}
+              canExpand={(r) => !!data.context[r.id]?.notes.length}
               expand={(r) => {
                 const items = contextReasons(data.context[r.id], players)
                 return items.length ? <Reasons items={items} /> : null

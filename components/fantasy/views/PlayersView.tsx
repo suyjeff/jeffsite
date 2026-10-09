@@ -297,6 +297,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             defaultSort={basis === 'ahead' ? 'val' : 'war'}
             rowClass={(id) => cx(rosteredBy[id] === myRosterId && 'ff-mine')}
             onRowClick={(id) => openPlayer(id)}
+            canExpand={(id) => !!data.context[id]?.notes.length}
             expand={(id) => {
               const items = contextReasons(data.context[id], players)
               return items.length ? <Reasons items={items} /> : null

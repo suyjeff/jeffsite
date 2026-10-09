@@ -122,6 +122,8 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       }),
     [week, data.schedule, lines, data.market, players],
   )
+  const posSlots = (data.league.roster_positions ?? []).filter((s) => s === pos).length || 1
+  const mineLabel = posSlots > 1 ? `your weakest starting ${POS_LABEL[pos]}` : `your ${POS_LABEL[pos]}`
   const stream = useMemo(
     () =>
       streamRows({
@@ -139,8 +141,9 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
         starter,
         sd,
         trending: data.trending,
+        starts: posSlots,
       }),
-    [pos, week, weeks, players, analysis.rosteredBy, me, data.horizon, data.schedule, totals, allowed, lines, starter, sd, data.trending],
+    [pos, week, weeks, players, analysis.rosteredBy, me, data.horizon, data.schedule, totals, allowed, lines, starter, sd, data.trending, posSlots],
   )
   const teamCount = Object.keys(data.schedule?.opp ?? {}).length || 32
 
@@ -161,8 +164,12 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   const dropCandidate = useMemo(() => {
     if (!me) return null
     const lineup = new Set(analysis.needs[me.rosterId]?.slots.map((s) => s.starter).filter(Boolean) ?? [])
-    // Worth the more of the model's value and the consensus price, so an injured star the experts still rank is never the cut.
-    const keep = (id: string) => Math.max(analysis.market[id] ?? -99, models.perceived?.[id] ?? -99)
+    // The model's value, lifted to the consensus price where that is higher, so an injured star the experts still rank is never the cut.
+    // Consensus floors at zero, so it only lifts: below zero the model's order stands.
+    const keep = (id: string) => {
+      const market = analysis.market[id] ?? -99
+      return market + Math.max(0, (models.perceived?.[id] ?? 0) - Math.max(0, market))
+    }
     return [...me.players].filter((id) => !lineup.has(id)).sort((a, b) => keep(a) - keep(b))[0] ?? null
   }, [me, analysis, models.perceived])
 
@@ -191,7 +198,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       align: 'right',
       // A constant offset from the projection: the headline tile carries it on phones.
       hideBelow: 'sm',
-      title: `Projection minus your best ${posLabel} this week`,
+      title: `Projection minus ${mineLabel} this week`,
       sort: (r) => r.vsMine ?? -99,
       render: (r) => (r.vsMine != null ? <Num value={r.vsMine} signed /> : <span className="text-ff-muted">–</span>),
     },
@@ -271,19 +278,14 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
     },
   ]
 
-  // A suggested bid for every listed add, against the teams weakest at his position.
+  // A suggested bid for every listed add. Moves prices its own few.
   const bids = useMemo(() => {
     const f = models.faab
-    if (!f || !me) return {} as Record<string, BidAdvice>
-    const others = analysis.teams.map((t) => t.rosterId).filter((r) => r !== me.rosterId)
+    if (!f || !me || tab !== 'adds') return {} as Record<string, BidAdvice>
     const out: Record<string, BidAdvice> = {}
-    for (const t of adds) {
-      const pos = players[t.id]?.pos ?? ''
-      const rivals = others.filter((r) => analysis.needs[r]?.worstPos === pos)
-      out[t.id] = suggestBid(f, me.rosterId, { gain: t.add, value: analysis.market[t.id] ?? 0, trending: trending[t.id] ?? 0, pos, rivals: rivals.length ? rivals : others })
-    }
+    for (const t of adds) out[t.id] = suggestBid(f, me.rosterId, { gain: t.add, value: analysis.market[t.id] ?? 0, trending: trending[t.id] ?? 0, pos: players[t.id]?.pos ?? '' })
     return out
-  }, [models.faab, me, adds, analysis, players, trending])
+  }, [models.faab, me, tab, adds, analysis.market, players, trending])
   const addWhy = (t: TradeTarget) => {
     const items: Reason[] = [...contextReasons(data.context[t.id], players), ...(bids[t.id]?.reasons ?? [])]
     return items.length ? <Reasons items={items} /> : null
@@ -413,7 +415,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               <>
                 <StatGrid>
                   <Stat
-                    label={`Your ${posLabel}`}
+                    label={posSlots > 1 ? `Your ${pos}${posSlots}` : `Your ${posLabel}`}
                     value={myProj ? fmt(myProj.proj) : '–'}
                     sub={myProj ? `${players[myProj.id]?.name ?? myProj.id}${myOnBye ? ' · bye or out' : ''}` : 'none rostered'}
                     delta={myOnBye ? <Badge tone="warn">need one</Badge> : undefined}
@@ -422,7 +424,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                     label="Best this week"
                     value={picks ? fmt(picks.week.proj) : '–'}
                     sub={picks ? players[picks.week.id]?.name : 'no free agents projected'}
-                    delta={picks?.week.vsMine != null ? <DeltaChip value={picks.week.vsMine} title="Against your best at the position" /> : undefined}
+                    delta={picks?.week.vsMine != null ? <DeltaChip value={picks.week.vsMine} title={`Against ${mineLabel}`} /> : undefined}
                   />
                   <Stat label="Most upside" value={picks ? pct(picks.upside.boom) : '–'} sub={picks ? `${players[picks.upside.id]?.name} · boom odds` : '–'} />
                   <Stat
@@ -483,7 +485,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               />
             </StatGrid>
             <Panel title={`Free agents who would start for you · wks ${data.horizon[0]?.week ?? ''}–${data.horizon[data.horizon.length - 1]?.week ?? ''}`} pad={false}>
-              <Table rows={adds} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." expand={addWhy} />
+              <Table rows={adds} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." expand={addWhy} canExpand={(t) => !!bids[t.id]?.reasons.length || !!data.context[t.id]?.notes.length} />
             </Panel>
             <p className="text-[11.5px] leading-relaxed text-ff-muted">
               Gain = your best lineup with him in and your weakest player cut, minus today&apos;s, week by week. Anything positive is a real upgrade; a bye fill counts only that

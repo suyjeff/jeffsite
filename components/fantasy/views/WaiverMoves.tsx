@@ -14,7 +14,19 @@ type Move = { target: TradeTarget; drop: string | null; bid: BidAdvice | null; w
  * The waiver moves worth making, ranked, each with the case for it: what it does to your lineup (Sleeper's projections, blended with
  * prop lines), what FantasyPros and the rest of Sleeper think of him, his role, and what to bid given how this league spends.
  */
-const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueData; analysis: Analysis; adds: TradeTarget[]; trending: Record<string, number>; drop: string | null }) => {
+const WaiverMoves = ({
+  data,
+  analysis,
+  adds,
+  trending,
+  drop,
+}: {
+  data: LeagueData
+  analysis: Analysis
+  adds: TradeTarget[]
+  trending: Record<string, number>
+  drop: string | null
+}) => {
   const { models } = useFantasy()
   const faab = models.faab
   const me = analysis.myRosterId
@@ -50,18 +62,21 @@ const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueDat
         const p = players[t.id]
         const pos = p?.pos ?? ''
         // A kicker or defense replaces yours at the spot; anyone else costs your least valuable bench player.
-        const sameSpot = pos === 'K' || pos === 'DEF' ? mine.filter((id) => players[id]?.pos === pos).sort((a, b) => (analysis.horizon.perWeek[a] ?? 0) - (analysis.horizon.perWeek[b] ?? 0))[0] : undefined
-        // Rivals for him: teams whose weakest spot is his position.
+        const sameSpot =
+          pos === 'K' || pos === 'DEF'
+            ? mine.filter((id) => players[id]?.pos === pos).sort((a, b) => (analysis.horizon.perWeek[a] ?? 0) - (analysis.horizon.perWeek[b] ?? 0))[0]
+            : undefined
+        // Teams whose weakest spot is his position: the likeliest to bid against you.
         const rivals = others.filter((r) => analysis.needs[r]?.worstPos === pos)
         const value = analysis.market[t.id] ?? 0
-        const bid = faab ? suggestBid(faab, me, { gain: t.add, value, trending: trending[t.id] ?? 0, pos, rivals: rivals.length ? rivals : others }) : null
+        const bid = faab ? suggestBid(faab, me, { gain: t.add, value, trending: trending[t.id] ?? 0, pos }) : null
         const ecr = data.consensus?.byId[t.id]
         const why: Reason[] = [
           {
             text: (
               <>
-                Adds <N tone="pos">{fmtSigned(t.add, 1)}</N> pts/wk to your best lineup{t.slot ? ` at ${t.slot.replace('SUPER_FLEX', 'SF')}` : ''}, on Sleeper&apos;s projections blended with
-                prop lines
+                Adds <N tone="pos">{fmtSigned(t.add, 1)}</N> pts/wk to your best lineup{t.slot ? ` at ${t.slot.replace('SUPER_FLEX', 'SF')}` : ''}, on Sleeper&apos;s projections
+                blended with prop lines
               </>
             ),
             tone: 'pos',
@@ -78,7 +93,8 @@ const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueDat
                   {pos}
                   {Math.round(ecr.posRank)}
                 </N>{' '}
-                rest of season{m ? (
+                rest of season
+                {m ? (
                   <>
                     {' '}
                     (this model:{' '}
@@ -140,7 +156,12 @@ const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueDat
     <div className="space-y-3">
       {faab && (
         <StatGrid>
-          <Stat label="Your FAAB" value={`$${mine}`} meter={mine / faab.budget} sub={`of $${faab.budget} · ${richer === 0 ? 'most in the league' : `${richer} ${richer === 1 ? 'team has' : 'teams have'} more`}`} />
+          <Stat
+            label="Your FAAB"
+            value={`$${mine}`}
+            meter={mine / faab.budget}
+            sub={`of $${faab.budget} · ${richer === 0 ? 'most in the league' : `${richer} ${richer === 1 ? 'team has' : 'teams have'} more`}`}
+          />
           <Stat
             label="League going rate"
             value={faab.going.n ? `$${faab.going.p50}` : '–'}
@@ -228,7 +249,14 @@ const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueDat
             defaultSort="adds"
             columns={[
               { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} size={24} /> },
-              { key: 'adds', label: 'Adds', align: 'right', title: 'Sleeper managers, across all leagues, who added him in the last 24 hours', sort: (t) => t.count, render: (t) => t.count.toLocaleString() },
+              {
+                key: 'adds',
+                label: 'Adds',
+                align: 'right',
+                title: 'Sleeper managers, across all leagues, who added him in the last 24 hours',
+                sort: (t) => t.count,
+                render: (t) => t.count.toLocaleString(),
+              },
               {
                 key: 'ecr',
                 label: 'FantasyPros',
@@ -240,7 +268,14 @@ const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueDat
                   return r != null ? `${players[t.id]?.pos}${Math.round(r)}` : <span className="text-ff-muted">–</span>
                 },
               },
-              { key: 'exp', label: 'Exp/wk', align: 'right', hideBelow: 'sm', sort: (t) => analysis.horizon.perWeek[t.id] ?? 0, render: (t) => fmt(analysis.horizon.perWeek[t.id]) },
+              {
+                key: 'exp',
+                label: 'Exp/wk',
+                align: 'right',
+                hideBelow: 'sm',
+                sort: (t) => analysis.horizon.perWeek[t.id] ?? 0,
+                render: (t) => fmt(analysis.horizon.perWeek[t.id]),
+              },
               {
                 key: 'gain',
                 label: 'For you',
@@ -250,11 +285,10 @@ const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueDat
                 render: (t) => (gainById[t.id] ? <span className="text-ff-pos">{fmtSigned(gainById[t.id], 1)}</span> : <span className="text-ff-muted">bench</span>),
               },
             ]}
+            canExpand={() => true}
             expand={(t) => {
               const items = contextReasons(data.context[t.id], players)
-              const why: Reason[] = gainById[t.id]
-                ? items
-                : [{ text: 'Would not start for you over the horizon: a stash or a block, not an upgrade', tone: 'neutral' }, ...items]
+              const why: Reason[] = gainById[t.id] ? items : [{ text: 'Would not start for you over the horizon: a stash or a block, not an upgrade', tone: 'neutral' }, ...items]
               return <Reasons items={why} />
             }}
           />
@@ -267,13 +301,12 @@ const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueDat
         </p>
       )}
       <p className="text-[11.5px] leading-relaxed text-ff-muted">
-        Gain comes from your lineup re-solved week by week with him in and your weakest player out. Bids weigh what he is worth to you against what this league has paid for
-        similar value{faab ? `, at about $${Math.round(faab.rate)} per pt/wk${faab.rateN ? ` (${faab.rateN} of this season's bids)` : ' (a default until more bids land)'}` : ''}, and
-        never go past one dollar over the richest rival.
+        Gain comes from your lineup re-solved week by week with him in and your weakest player out. Bids weigh what he is worth to you against what this league has paid for similar
+        value{faab ? `, at about $${Math.round(faab.rate)} per pt/wk${faab.rateN ? ` (${faab.rateN} of this season's bids)` : ' (a default until more bids land)'}` : ''}, and never
+        go past one dollar over the richest rival.
       </p>
     </div>
   )
 }
 
 export default WaiverMoves
-

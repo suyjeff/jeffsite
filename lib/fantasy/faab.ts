@@ -10,7 +10,7 @@
 // agents, and the best free agent is rarely a starter for long. So in trades it
 // counts for little and is capped (no amount of it is worth a lineup regular),
 // and a bid never exceeds what winning requires: one dollar over the richest
-// rival who could want the player.
+// other team.
 
 import type { Analysis } from './analysis'
 import type { LeagueData } from './useLeagueData'
@@ -62,9 +62,7 @@ export const faabState = (data: LeagueData, analysis: Analysis): Faab | null => 
   const won = (txs: LeagueData['transactions'], season: string, map?: Record<number, number>): FaabBid[] =>
     txs
       .filter((t) => t.type === 'waiver' && t.status === 'complete' && typeof t.bid === 'number' && t.adds)
-      .flatMap((t) =>
-        Object.entries(t.adds!).map(([player, rid]) => ({ player, bid: t.bid as number, rosterId: map?.[rid] ?? rid, week: t.leg, season })),
-      )
+      .flatMap((t) => Object.entries(t.adds!).map(([player, rid]) => ({ player, bid: t.bid as number, rosterId: map?.[rid] ?? rid, week: t.leg, season })))
   const now = won(data.transactions, data.league.season)
   const last = data.history ? won(data.history.transactions, data.history.season, data.history.rosterMap) : []
   const sample = now.length >= MIN_BIDS ? now : last.length >= MIN_BIDS ? last : now
@@ -124,16 +122,12 @@ export type BidAdvice = {
  * you (his gain to your lineup at the league's exchange rate), and what it
  * takes to win him (the league's price for his value, nudged up when Sleeper
  * shows a rush on him). Bid the lower, never more than one dollar over the
- * richest rival, and never more than you have.
+ * richest other team (any of them can claim him), and never more than you have.
  */
-export const suggestBid = (
-  f: Faab,
-  me: number,
-  input: { gain: number; value: number; trending: number; pos: string; rivals: number[] },
-): BidAdvice => {
+export const suggestBid = (f: Faab, me: number, input: { gain: number; value: number; trending: number; pos: string }): BidAdvice => {
   const reasons: BidAdvice['reasons'] = []
   const mine = f.remaining[me] ?? 0
-  const rich = Math.max(0, ...input.rivals.map((r) => f.remaining[r] ?? 0))
+  const rich = Math.max(0, ...Object.entries(f.remaining).map(([r, left]) => (Number(r) === me ? 0 : left)))
   const minBid = f.minBid || 0
   const streamer = input.pos === 'K' || input.pos === 'DEF'
 
@@ -145,21 +139,25 @@ export const suggestBid = (
   const worth = Math.max(0, input.gain) * f.rate * late
   let bid = Math.round(Math.min(worth, market * 1.1))
   if (streamer) bid = minBid
-  bid = Math.max(minBid, Math.min(bid, mine, rich + 1))
+  // The league minimum is a floor only while you can afford it.
+  bid = Math.min(mine, Math.max(minBid, Math.min(bid, rich + 1)))
+  const broke = mine < Math.max(minBid, 1)
 
   const tier: BidTier = streamer ? 'stream' : input.gain >= 2 ? 'priority' : input.gain >= 0.75 ? 'solid' : 'depth'
   const low = Math.max(minBid, Math.round(market * 0.8))
   const high = Math.max(low, Math.round(market * 1.25))
 
+  if (broke)
+    reasons.push({ text: minBid ? `You have $${mine} left, under the league's $${minBid} minimum bid` : 'You have no FAAB left, so only a $0 bid is possible', tone: 'neg' })
   if (streamer) {
     reasons.push({ text: 'Kickers and defenses turn over weekly and nobody pays up for them, so bid the minimum', tone: 'neutral' })
-    return { bid, low: minBid, high: Math.max(minBid, bid), tier, reasons }
+    return { bid, low: Math.min(mine, minBid), high: Math.max(Math.min(mine, minBid), bid), tier, reasons }
   }
   if (f.going.n) reasons.push({ text: `League pays $${low}–${high} for a player worth ${signed(input.value)}/wk (${f.going.n} winning bids, ${f.going.source})`, tone: 'neutral' })
   reasons.push({ text: `Worth about $${Math.round(worth)} to you: ${signed(input.gain)} pts/wk to your lineup`, tone: input.gain >= 0.75 ? 'pos' : 'neutral' })
   if (rush > 1) reasons.push({ text: `${input.trending.toLocaleString()} Sleeper managers added him in the last day: expect competition`, tone: 'warn' })
-  if (rich + 1 < Math.min(worth, market * 1.1)) reasons.push({ text: `No rival has more than $${rich}, so $${rich + 1} wins outright`, tone: 'pos' })
+  if (rich + 1 < Math.min(worth, market * 1.1) && rich + 1 <= mine) reasons.push({ text: `No other team has more than $${rich}, so $${rich + 1} wins outright`, tone: 'pos' })
   if (f.weeksLeft <= 3) reasons.push({ text: `${f.weeksLeft} regular-season weeks left: unspent FAAB is worth little now`, tone: 'warn' })
-  if (bid >= mine && mine > 0) reasons.push({ text: `That is all of your remaining $${mine}`, tone: 'neg' })
+  if (bid >= mine && mine > 0 && !broke) reasons.push({ text: `That is all of your remaining $${mine}`, tone: 'neg' })
   return { bid, low, high, tier, reasons }
 }

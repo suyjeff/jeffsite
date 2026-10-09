@@ -1031,6 +1031,7 @@ export function Table<T>({
   maxHeight,
   dense = false,
   expand,
+  canExpand,
 }: {
   rows: T[]
   columns: Column<T>[]
@@ -1040,6 +1041,11 @@ export function Table<T>({
    * row instead of truncating the reasons into a cell. Return null for rows with nothing to add.
    */
   expand?: (row: T) => ReactNode | null
+  /**
+   * Whether a row has details, answered cheaply. With it, `expand` runs only for open rows; without
+   * it, every row's details are built up front to find the ones that are empty.
+   */
+  canExpand?: (row: T) => boolean
   defaultSort?: string
   defaultDesc?: boolean
   rowClass?: (row: T) => string
@@ -1095,8 +1101,9 @@ export function Table<T>({
     }
   }
   const align = (c: Column<T>) => (c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left')
-  const details = expand ? new Map(sorted.map((r) => [rowKey(r), expand(r)])) : null
-  const expandable = details ? [...details.entries()].filter(([, d]) => d != null).map(([k]) => k) : []
+  const details = !!expand
+  const expandable = expand ? sorted.filter((r) => (canExpand ? canExpand(r) : expand(r) != null)).map(rowKey) : []
+  const hasDetail = new Set(expandable)
   const allOpen = expandable.length > 0 && expandable.every((k) => open.has(k))
   const flip = (k: string | number) =>
     setOpen((o) => {
@@ -1161,8 +1168,8 @@ export function Table<T>({
             )}
             {sorted.map((row) => {
               const k = rowKey(row)
-              const detail = details?.get(k) ?? null
-              const isOpen = detail != null && open.has(k)
+              const isOpen = hasDetail.has(k) && open.has(k)
+              const detail = isOpen && expand ? expand(row) : null
               return (
               <React.Fragment key={k}>
               <tr
@@ -1188,7 +1195,7 @@ export function Table<T>({
               >
                 {details && (
                   <td className={cx('sticky left-0 z-[1] w-7 p-0 align-middle group-hover:bg-ff-raised', isOpen ? 'bg-ff-raised' : 'bg-ff-panel')}>
-                    {detail != null && (
+                    {hasDetail.has(k) && (
                       <button
                         type="button"
                         onClick={(e) => {

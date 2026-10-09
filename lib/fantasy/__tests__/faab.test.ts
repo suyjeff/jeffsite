@@ -3,7 +3,17 @@ import type { Analysis } from '../analysis'
 import { FAAB_TRADE_CAP, faabState, faabSweetener, faabTradeValue, suggestBid } from '../faab'
 import type { LeagueData } from '../useLeagueData'
 
-const bid = (player: string, amount: number, rid: number, leg = 2) => ({ type: 'waiver', status: 'complete', roster_ids: [rid], adds: { [player]: rid }, drops: null, picks: 0, created: leg, leg, bid: amount })
+const bid = (player: string, amount: number, rid: number, leg = 2) => ({
+  type: 'waiver',
+  status: 'complete',
+  roster_ids: [rid],
+  adds: { [player]: rid },
+  drops: null,
+  picks: 0,
+  created: leg,
+  leg,
+  bid: amount,
+})
 
 const league = (over: Partial<{ waiver_type: number; used: number[]; txs: ReturnType<typeof bid>[]; week: number }> = {}) =>
   ({
@@ -33,24 +43,32 @@ describe('FAAB', () => {
     expect(f.weeksLeft).toBe(10)
   })
 
-  it('never bids past what wins: one dollar over the richest rival', () => {
+  it('never bids past what wins: one dollar over the richest other team', () => {
     const f = faabState(league({ used: [0, 190, 195] }), analysis)!
-    const b = suggestBid(f, 1, { gain: 6, value: 5, trending: 0, pos: 'RB', rivals: [2, 3] })
+    const b = suggestBid(f, 1, { gain: 6, value: 5, trending: 0, pos: 'RB' })
     expect(b.bid).toBe(11)
     expect(b.reasons.some((r) => r.text.includes('wins outright'))).toBe(true)
   })
 
   it('bids the lower of what he is worth to you and what the league pays, never more than you have', () => {
     const f = faabState(league(), analysis)!
-    const small = suggestBid(f, 1, { gain: 0.5, value: 3, trending: 0, pos: 'WR', rivals: [2, 3] })
+    const small = suggestBid(f, 1, { gain: 0.5, value: 3, trending: 0, pos: 'WR' })
     expect(small.bid).toBe(5)
-    const big = suggestBid(f, 1, { gain: 20, value: 20, trending: 0, pos: 'WR', rivals: [2, 3] })
+    const big = suggestBid(f, 1, { gain: 20, value: 20, trending: 0, pos: 'WR' })
     expect(big.bid).toBe(100)
   })
 
   it('bids the minimum on kickers and defenses', () => {
     const f = faabState(league(), analysis)!
-    expect(suggestBid(f, 1, { gain: 2, value: 1, trending: 0, pos: 'DEF', rivals: [2, 3] }).bid).toBe(1)
+    expect(suggestBid(f, 1, { gain: 2, value: 1, trending: 0, pos: 'DEF' }).bid).toBe(1)
+  })
+
+  it('never suggests more than you have, even below the league minimum', () => {
+    const f = faabState(league({ used: [200, 20, 0] }), analysis)!
+    const b = suggestBid(f, 1, { gain: 6, value: 5, trending: 0, pos: 'RB' })
+    expect(b.bid).toBe(0)
+    expect(b.reasons[0].tone).toBe('neg')
+    expect(suggestBid(f, 1, { gain: 2, value: 1, trending: 0, pos: 'K' }).bid).toBe(0)
   })
 
   it('counts FAAB in trades at a discount, capped below a starter', () => {

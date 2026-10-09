@@ -201,7 +201,7 @@ export type StreamRow = {
   matchup: Allowed | null
   /** P(at least a league-average starter's week). */
   boom: number
-  /** Projection minus your best option at the position this week. */
+  /** Projection minus the player he would replace: your weakest starter at the position this week. */
   vsMine: number | null
   /** Weeks ahead: projection and matchup, for streamers worth holding. */
   ahead: {
@@ -230,6 +230,8 @@ export const streamRows = (input: {
   starter: number
   sd: number
   trending: TrendingEntry[]
+  /** Lineup slots for the position alone (no flex); defaults to one. */
+  starts?: number
   limit?: number
 }): { rows: StreamRow[]; mine: { id: string; proj: number } | null } => {
   const { pos, week, players, rosteredBy, horizon, schedule, totals, allowed, statLines, starter, sd } = input
@@ -238,7 +240,9 @@ export const streamRows = (input: {
   const trend: Record<string, number> = {}
   for (const t of input.trending) trend[t.player_id] = t.count
   const myAtPos = input.myPlayers.filter((id) => players[id]?.pos === pos).map((id) => ({ id, proj: h.pts[id] ?? 0 }))
-  const mine = myAtPos.sort((a, b) => b.proj - a.proj)[0] ?? null
+  // A streamer replaces your weakest starter at the spot, not your best: RB2 when you start two.
+  const ranked = myAtPos.sort((a, b) => b.proj - a.proj)
+  const mine = ranked[Math.min(Math.max(1, input.starts ?? 1), ranked.length) - 1] ?? null
   const projAt = (id: string, w: number) => horizon.find((x) => x.week === w)?.pts[id] ?? 0
   const rows: StreamRow[] = []
   for (const [id, pl] of Object.entries(players)) {

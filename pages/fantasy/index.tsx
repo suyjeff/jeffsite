@@ -75,7 +75,7 @@ const loadPrefs = (): Prefs => {
 const FantasyPage = () => {
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const route = useRoute(SECTION_KEYS, 'dash')
-  useTheme(prefs?.theme, prefs?.scheme ?? 'system')
+  useTheme(prefs?.theme, prefs?.scheme ?? 'system', prefs != null)
   // Waivers moved out of My team into their own section; old links still land there.
   useEffect(() => {
     if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })
@@ -155,9 +155,16 @@ const FantasyPage = () => {
   // Cmd/Ctrl+K opens the command palette from anywhere, fields included; again closes it.
   const [palette, setPalette] = useState(false)
   const closePalette = useCallback(() => setPalette(false), [])
+  // Only once the app is up: on the loader or onboarding there is nothing to jump to, and a press there must not open it later.
+  const appUp = !!(data && analysis && models && prefs)
+  const canPalette = useRef(appUp)
+  canPalette.current = appUp
+  useEffect(() => {
+    if (!appUp) setPalette(false)
+  }, [appUp])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+      if (canPalette.current && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setPalette((x) => !x)
       }
@@ -373,6 +380,7 @@ const FantasyPage = () => {
         <CommandPalette
           open={palette}
           onClose={closePalette}
+          theme={prefs.theme}
           scheme={prefs.scheme}
           onTheme={(t) => update({ theme: t })}
           onScheme={(m) => update({ scheme: m })}

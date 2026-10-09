@@ -5,10 +5,12 @@ import { resolveMode, themeBg, themeById, themeVars, type Mode, type Scheme } fr
  * Applies a theme to every `.ff` root: one injected stylesheet, `html .ff { … }`, which outranks
  * the defaults in fantasy.css (`.ff`) and their dark-mode media query, so the onboarding screen,
  * the loader and the app all follow without passing anything down. Follows the system's light or
- * dark setting live when the theme has both and the scheme is "system".
+ * dark setting live when the theme has both and the scheme is "system". Until `ready` (saved
+ * preferences read), nothing is injected and the stylesheet defaults hold, so a dark system or a
+ * saved theme never flashes the default light theme first.
  */
-export const useTheme = (id: string | null | undefined, scheme: Scheme): Mode => {
-  const [systemDark, setSystemDark] = useState(false)
+export const useTheme = (id: string | null | undefined, scheme: Scheme, ready = true): Mode => {
+  const [systemDark, setSystemDark] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const on = () => setSystemDark(mq.matches)
@@ -19,6 +21,7 @@ export const useTheme = (id: string | null | undefined, scheme: Scheme): Mode =>
   const theme = themeById(id)
   const mode = resolveMode(theme, scheme, systemDark)
   useEffect(() => {
+    if (!ready) return
     const vars = themeVars(theme, mode)
     const css = `html .ff{${Object.entries(vars)
       .map(([k, v]) => (k === 'colorScheme' ? `color-scheme:${v}` : `${k}:${v}`))
@@ -32,7 +35,7 @@ export const useTheme = (id: string | null | undefined, scheme: Scheme): Mode =>
     el.textContent = css
     // The browser chrome (address bar, overscroll) takes the page colour.
     for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) m.content = themeBg(theme, mode)
-  }, [theme, mode])
+  }, [theme, mode, ready])
   useEffect(() => () => document.getElementById('ff-theme')?.remove(), [])
   return mode
 }

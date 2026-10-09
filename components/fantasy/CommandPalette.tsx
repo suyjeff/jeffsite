@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import { THEMES, type Scheme } from '../../lib/fantasy/themes'
+import { THEMES, themeById, type Scheme } from '../../lib/fantasy/themes'
 import { useFantasy } from './FantasyContext'
 import { SECTIONS, sectionCode, type SectionKey } from './Shell'
 import { Swatch } from './ThemePicker'
@@ -66,11 +66,7 @@ const TABS: Partial<Record<SectionKey, [string, string][]>> = {
   ],
 }
 
-const norm = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 
 /** How well `q` matches `text`: 0 for no match, higher is better. */
 export const matchScore = (q: string, text: string) => {
@@ -101,6 +97,7 @@ const loadRecent = (): string[] => {
 const CommandPalette = ({
   open,
   onClose,
+  theme,
   scheme,
   onTheme,
   onScheme,
@@ -110,6 +107,7 @@ const CommandPalette = ({
 }: {
   open: boolean
   onClose: () => void
+  theme: string | undefined
   scheme: Scheme
   onTheme: (id: string) => void
   onScheme: (s: Scheme) => void
@@ -118,6 +116,7 @@ const CommandPalette = ({
   onLeague: (id: string) => void
 }) => {
   const { data, analysis, go, openPlayer } = useFantasy()
+  const current = themeById(theme)
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
   const [recent, setRecent] = useState<string[]>([])
@@ -154,19 +153,27 @@ const CommandPalette = ({
         weight: t.rosterId === analysis.myRosterId ? 2 : 1,
         run: () => go('teams', String(t.rosterId)),
       })
-    for (const th of THEMES)
-      items.push({ id: `theme:${th.id}`, group: 'Actions', label: `Theme: ${th.label}`, keywords: `color colour ${th.family}`, icon: <Swatch theme={th} />, run: () => onTheme(th.id) })
+    for (const th of THEMES.filter((x) => x !== current))
+      items.push({
+        id: `theme:${th.id}`,
+        group: 'Actions',
+        label: `Theme: ${th.label}`,
+        keywords: `color colour ${th.family}`,
+        icon: <Swatch theme={th} />,
+        run: () => onTheme(th.id),
+      })
     for (const [m, label] of [
       ['system', 'Follow the system'],
       ['light', 'Light mode'],
       ['dark', 'Dark mode'],
     ] as [Scheme, string][])
-      if (m !== scheme) items.push({ id: `scheme:${m}`, group: 'Actions', label, keywords: 'theme appearance', run: () => onScheme(m) })
+      // A theme with one mode ignores the setting, so offer it only where it does something.
+      if (m !== scheme && current.light && current.dark) items.push({ id: `scheme:${m}`, group: 'Actions', label, keywords: 'theme appearance', run: () => onScheme(m) })
     items.push({ id: 'reload', group: 'Actions', label: 'Reload from Sleeper', keywords: 'refresh sync', hint: 'R', run: onReload })
     for (const l of leagues)
       if (l.id !== data.league.league_id) items.push({ id: `league:${l.id}`, group: 'Actions', label: `Switch league: ${l.name}`, keywords: 'league', run: () => onLeague(l.id) })
     return items
-  }, [analysis, go, onTheme, onScheme, scheme, onReload, leagues, onLeague, data.league.league_id])
+  }, [analysis, go, onTheme, onScheme, current, scheme, onReload, leagues, onLeague, data.league.league_id])
 
   // Players worth finding: anyone rostered here or with a value or a projection ahead.
   const pool = useMemo(
