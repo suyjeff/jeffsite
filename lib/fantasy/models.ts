@@ -6,7 +6,7 @@
 import type { Analysis } from './analysis'
 import { leagueBehavior, type LeagueBehavior } from './behavior'
 import { perceivedValues } from './consensus'
-import { backtest, buildForecast, gamesFrom, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
+import { backtest, buildForecast, ELO, gamesFrom, lineupEdge, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
 import { faabState, type Faab } from './faab'
 import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, type TeamWeek } from './power'
 import type { LeagueData } from './useLeagueData'
@@ -15,6 +15,11 @@ export type Models = {
   forecast: Forecast | null
   forecastInput: ForecastInput
   elo: EloRun
+  /**
+   * Elo as read today: the results-based rating plus the Elo credit for each team's projected lineup ahead, against
+   * the league's average lineup (lib/fantasy/forecast lineupEdge). What Power and the dashboard show as Elo.
+   */
+  eloRated: Record<number, number>
   /** Elo going into this season: last season's close, regressed, or flat. */
   eloPrior: Record<number, number>
   /** Last season's games, for showing where the prior came from. */
@@ -57,7 +62,7 @@ const powerMargin = (sigma: number) => (teamWeeks: Record<number, TeamWeek[]>, w
 }
 
 /** The parts built on results and history alone: they do not move when a projection does. */
-export type HistoryModels = Pick<Models, 'elo' | 'eloPrior' | 'lastSeasonGames' | 'backtest' | 'behavior'> & {
+export type HistoryModels = Pick<Models, 'elo' | 'eloRated' | 'eloPrior' | 'lastSeasonGames' | 'backtest' | 'behavior'> & {
   /** Each team's projected optimal lineup in each completed week (see pastByWeek). */
   past: Record<number, Record<number, number>>
 }
@@ -104,11 +109,17 @@ export const buildHistory = (data: LeagueData, analysis: Analysis): HistoryModel
     lastSeasonGames = prevGames.length
     eloPrior = preseasonElo(runElo(prevGames, ids, {}, marginSd).final)
   }
-  const elo = runElo(gamesFrom(analysis.teamWeeks, data.regularWeeks), ids, eloPrior, marginSd)
+  // Each team's projected lineup in the weeks played: Elo judges every result against it.
+  const pastInput0 = { ...forecastInputFor(data, analysis, eloPrior), horizon: [] }
+  const past = pastByWeek(pastInput0)
+  const elo = runElo(gamesFrom(analysis.teamWeeks, data.regularWeeks), ids, eloPrior, marginSd, past)
+  // Read today, with each lineup ahead credited against the league's average one.
+  const lineups = ids.map((r) => analysis.needs[r]?.lineup ?? 0).filter((x) => x > 0)
+  const avgLineup = lineups.reduce((a, b) => a + b, 0) / (lineups.length || 1)
+  const eloRated = Object.fromEntries(ids.map((r) => [r, (elo.final[r] ?? ELO.base) + lineupEdge(analysis.needs[r]?.lineup, avgLineup, analysis.sigma)])) as Record<number, number>
 
   // Weekly noise around expectations, measured on completed weeks only; the backtest grades on it.
-  const pastInput = { ...forecastInputFor(data, analysis, elo.final), horizon: [] }
-  const past = pastByWeek(pastInput)
+  const pastInput = { ...forecastInputFor(data, analysis, eloRated), horizon: [] }
   const sigma = teamRatings(pastInput, past).noise.sigma
 
   const bt = backtest(
@@ -127,13 +138,13 @@ export const buildHistory = (data: LeagueData, analysis: Analysis): HistoryModel
     players: data.players,
     market: analysis.market,
   })
-  return { elo, eloPrior, lastSeasonGames, backtest: bt, behavior, past }
+  return { elo, eloRated, eloPrior, lastSeasonGames, backtest: bt, behavior, past }
 }
 
 /** The forward-looking parts: ratings, the season simulation, past expectations and consensus prices. */
 export const buildModels = (data: LeagueData, analysis: Analysis, history: HistoryModels = buildHistory(data, analysis)): Models => {
   const { past } = history
-  const forecastInput = forecastInputFor(data, analysis, history.elo.final)
+  const forecastInput = forecastInputFor(data, analysis, history.eloRated)
   const forecast = data.horizon.length && data.horizonSource === 'projections' ? buildForecast(forecastInput, SIM.sims, past) : null
   const ratings = forecast?.ratings ?? teamRatings({ ...forecastInput, horizon: [] }, past).ratings
   const expectedPast: Models['expectedPast'] = {}

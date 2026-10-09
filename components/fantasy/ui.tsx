@@ -1591,31 +1591,51 @@ export function Table<T>({
   )
 }
 
-export type Reason = { text: ReactNode; tone?: 'pos' | 'neg' | 'warn' | 'neutral' | 'accent' }
+export type Reason = {
+  text: ReactNode
+  tone?: 'pos' | 'neg' | 'warn' | 'neutral' | 'accent'
+  /** A short claim shown on its own line above the text, which then reads as the explanation. */
+  label?: ReactNode
+}
+
+const REASON_MARK: Record<NonNullable<Reason['tone']>, { glyph: string; sr: string; cls: string }> = {
+  pos: { glyph: '+', sr: 'Helps: ', cls: 'bg-ff-pos/15 text-ff-pos' },
+  neg: { glyph: '−', sr: 'Hurts: ', cls: 'bg-ff-neg/12 text-ff-neg' },
+  warn: { glyph: '!', sr: 'Caution: ', cls: 'bg-ff-warn/15 text-ff-warn' },
+  accent: { glyph: '›', sr: '', cls: 'bg-ff-accent/12 text-ff-accent' },
+  neutral: { glyph: 'i', sr: '', cls: 'bg-ff-sunken text-ff-muted' },
+}
 
 /**
  * The case for something, one line per reason, each led by a square in its tone: green helps,
  * red hurts, amber is a caution. Sits in a table's expanded row or anywhere a justification goes.
  */
 export const Reasons = ({ items, title, columns = 2 }: { items: Reason[]; title?: ReactNode; columns?: 1 | 2 }) => (
-  <div className="border-l-2 border-ff-accent/50 bg-ff-panel py-2 pl-3 pr-2">
-    {title && <div className="ff-label mb-1.5">{title}</div>}
-    <ul className={cx('grid gap-x-6 gap-y-1 text-[12.5px] leading-[1.45] text-ff-text2', columns === 2 && 'md:grid-cols-2')}>
-      {items.map((r, i) => (
-        <li key={i} className="flex items-baseline gap-2 whitespace-normal">
-          {/* A mark per tone, in its colour: + helps, − hurts, ! caution, · neutral. Shape carries it too, not colour alone (1.4.1). */}
-          <span
-            className={cx(
-              'w-3 shrink-0 text-center font-mono text-[12px] font-semibold leading-none',
-              r.tone === 'pos' ? 'text-ff-pos' : r.tone === 'neg' ? 'text-ff-neg' : r.tone === 'warn' ? 'text-ff-warn' : r.tone === 'accent' ? 'text-ff-accent' : 'text-ff-muted',
-            )}
-          >
-            <span aria-hidden>{r.tone === 'pos' ? '+' : r.tone === 'neg' ? '−' : r.tone === 'warn' ? '!' : '·'}</span>
-            <span className="sr-only">{r.tone === 'pos' ? 'Helps: ' : r.tone === 'neg' ? 'Hurts: ' : r.tone === 'warn' ? 'Caution: ' : ''}</span>
-          </span>
-          <span className="min-w-0">{r.text}</span>
-        </li>
-      ))}
+  <div className="bg-ff-sunken/40 px-3 py-2.5">
+    {title && <div className="ff-label mb-2">{title}</div>}
+    <ul className={cx('grid gap-x-6 gap-y-2.5 text-[12.5px] leading-[1.45]', columns === 2 && 'md:grid-cols-2')}>
+      {items.map((r, i) => {
+        const m = REASON_MARK[r.tone ?? 'neutral']
+        return (
+          <li key={i} className="flex min-w-0 items-start gap-2.5">
+            {/* A square per tone, in its colour, with a glyph so the shape carries it too, not colour alone (1.4.1). */}
+            <span className={cx('mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center font-mono text-[12px] font-semibold leading-none', m.cls)}>
+              <span aria-hidden>{m.glyph}</span>
+              {m.sr && <span className="sr-only">{m.sr}</span>}
+            </span>
+            <span className="min-w-0">
+              {r.label != null ? (
+                <>
+                  <span className="block font-medium text-ff-text">{r.label}</span>
+                  <span className="mt-0.5 block text-[12px] text-ff-text2">{r.text}</span>
+                </>
+              ) : (
+                <span className="text-ff-text2">{r.text}</span>
+              )}
+            </span>
+          </li>
+        )
+      })}
     </ul>
   </div>
 )

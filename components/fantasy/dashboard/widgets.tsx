@@ -412,7 +412,7 @@ const Power = ({ sel, select }: WidgetProps) => {
   const { models, analysis } = useFantasy()
   const [m, setM] = useState<PowerModel>(models.forecast ? 'forecast' : 'composite')
   const rows = analysis.teams.map((t) => {
-    const v = m === 'forecast' ? (models.forecast?.byId[t.rosterId]?.rating ?? 0) : m === 'elo' ? (models.elo.final[t.rosterId] ?? 1500) : analysis.powerById[t.rosterId].score
+    const v = m === 'forecast' ? (models.forecast?.byId[t.rosterId]?.rating ?? 0) : m === 'elo' ? (models.eloRated[t.rosterId] ?? 1500) : analysis.powerById[t.rosterId].score
     return { id: t.rosterId, v }
   })
   rows.sort((a, b) => b.v - a.v)

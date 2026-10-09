@@ -76,7 +76,7 @@ const PowerView = ({
   const weightSum = COMPONENTS.reduce((a, c) => a + Math.max(0, weights[c.key]), 0) || 1
   const me = myRosterId != null ? { season: seasonById[myRosterId], power: powerById[myRosterId] } : null
   const forecastOrder = useMemo(() => (forecast ? [...forecast.ratings].sort((a, b) => b.rating - a.rating).map((r) => r.rosterId) : []), [forecast])
-  const eloOrder = useMemo(() => [...teams].sort((a, b) => (models.elo.final[b.rosterId] ?? 0) - (models.elo.final[a.rosterId] ?? 0)).map((t) => t.rosterId), [teams, models.elo])
+  const eloOrder = useMemo(() => [...teams].sort((a, b) => (models.eloRated[b.rosterId] ?? 0) - (models.eloRated[a.rosterId] ?? 0)).map((t) => t.rosterId), [teams, models.elo])
   const rankIn = (order: number[], id: number) => order.indexOf(id) + 1
   // Rating bars grow from the league average, so a gap shows at its real size rather than stretched end to end.
   const ratingAvg = forecast ? forecast.ratings.reduce((a, r) => a + r.rating, 0) / (forecast.ratings.length || 1) : 0
@@ -119,13 +119,13 @@ const PowerView = ({
     { key: 'xw', label: 'Proj W', align: 'right', hideBelow: 'sm', title: 'Mean simulated wins at season end', sort: (r) => forecast!.sim[r.rosterId].wins, render: (r) => fmt(forecast!.sim[r.rosterId].wins) },
     { key: 'po', label: 'Playoffs', align: 'right', sort: (r) => forecast!.sim[r.rosterId].playoffs, render: (r) => <span className={forecast!.sim[r.rosterId].playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted'}>{simOdds(forecast!.sim[r.rosterId], 'playoffs')}</span> },
     { key: 'title', label: 'Title', align: 'right', sort: (r) => forecast!.sim[r.rosterId].title, render: (r) => simOdds(forecast!.sim[r.rosterId], 'title', forecast!.sim[r.rosterId].title < 0.1 ? 1 : 0) },
-    { key: 'elo', label: 'Elo', align: 'right', hideBelow: 'xl', sort: (r) => models.elo.final[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-muted">{Math.round(models.elo.final[r.rosterId] ?? 1500)}</span> },
+    { key: 'elo', label: 'Elo', align: 'right', hideBelow: 'xl', sort: (r) => models.eloRated[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-muted">{Math.round(models.eloRated[r.rosterId] ?? 1500)}</span> },
   ]
 
   const eloColumns: Column<{ rosterId: number }>[] = [
     { key: 'rank', label: '#', sort: (r) => -rankIn(eloOrder, r.rosterId), render: (r) => <span className="num text-ff-muted">{rankIn(eloOrder, r.rosterId)}</span> },
     { key: 'team', label: 'Team', sticky: true, render: (r) => <TeamCell analysis={analysis} rosterId={r.rosterId} /> },
-    { key: 'elo', label: 'Elo', align: 'right', sort: (r) => models.elo.final[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-text">{Math.round(models.elo.final[r.rosterId] ?? 1500)}</span> },
+    { key: 'elo', label: 'Elo', align: 'right', sort: (r) => models.eloRated[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-text">{Math.round(models.eloRated[r.rosterId] ?? 1500)}</span> },
     {
       key: 'prior',
       label: 'Preseason',
@@ -234,7 +234,7 @@ const PowerView = ({
       <div className="mt-4 space-y-3">
         {me && (
           <StatGrid>
-            <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.elo.final[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />
+            <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.eloRated[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />
             {forecast && (
               <Stat
                 label="Playoff odds"

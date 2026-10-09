@@ -62,7 +62,7 @@ const TeamName = ({
         e.stopPropagation()
         ctx.openTeam(id)
       }}
-      className={cx(cls, 'ff-tn relative rounded-[2px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ff-accent [&:hover_.truncate]:underline [&:hover_.truncate]:underline-offset-2')}
+      className={cx(cls, 'ff-tn relative rounded-[2px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ff-accent [&:hover_.truncate]:text-ff-accent [&:hover_.truncate]:underline [&:hover_.truncate]:decoration-ff-accent/40 [&:hover_.truncate]:underline-offset-[3px]')}
       title={`${t.name}${t.owner && t.owner !== t.name ? ` · @${t.owner}` : ''}: open summary`}
     >
       {body}

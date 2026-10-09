@@ -100,11 +100,8 @@ export const contextReasons = (context: PlayerContext | undefined, players: Play
         .map((n) => {
           const d = describeNote(n, players)
           return {
-            text: (
-              <>
-                <span className="font-medium text-ff-text">{d.label}.</span> {d.title}
-              </>
-            ),
+            label: d.label.charAt(0).toUpperCase() + d.label.slice(1),
+            text: d.title,
             tone: d.tone === 'bad' ? 'neg' : d.tone === 'good' ? 'pos' : d.tone === 'warn' ? 'warn' : 'neutral',
           } satisfies Reason
         })
