@@ -62,7 +62,7 @@ const powerMargin = (sigma: number) => (teamWeeks: Record<number, TeamWeek[]>, w
 }
 
 /** The parts built on results and history alone: they do not move when a projection does. */
-export type HistoryModels = Pick<Models, 'elo' | 'eloRated' | 'eloPrior' | 'lastSeasonGames' | 'backtest' | 'behavior'> & {
+export type HistoryModels = Pick<Models, 'elo' | 'eloPrior' | 'lastSeasonGames' | 'backtest' | 'behavior'> & {
   /** Each team's projected optimal lineup in each completed week (see pastByWeek). */
   past: Record<number, Record<number, number>>
 }
@@ -113,13 +113,8 @@ export const buildHistory = (data: LeagueData, analysis: Analysis): HistoryModel
   const pastInput0 = { ...forecastInputFor(data, analysis, eloPrior), horizon: [] }
   const past = pastByWeek(pastInput0)
   const elo = runElo(gamesFrom(analysis.teamWeeks, data.regularWeeks), ids, eloPrior, marginSd, past)
-  // Read today, with each lineup ahead credited against the league's average one.
-  const lineups = ids.map((r) => analysis.needs[r]?.lineup ?? 0).filter((x) => x > 0)
-  const avgLineup = lineups.reduce((a, b) => a + b, 0) / (lineups.length || 1)
-  const eloRated = Object.fromEntries(ids.map((r) => [r, (elo.final[r] ?? ELO.base) + lineupEdge(analysis.needs[r]?.lineup, avgLineup, analysis.sigma)])) as Record<number, number>
-
   // Weekly noise around expectations, measured on completed weeks only; the backtest grades on it.
-  const pastInput = { ...forecastInputFor(data, analysis, eloRated), horizon: [] }
+  const pastInput = { ...forecastInputFor(data, analysis, elo.final), horizon: [] }
   const sigma = teamRatings(pastInput, past).noise.sigma
 
   const bt = backtest(
@@ -138,13 +133,19 @@ export const buildHistory = (data: LeagueData, analysis: Analysis): HistoryModel
     players: data.players,
     market: analysis.market,
   })
-  return { elo, eloRated, eloPrior, lastSeasonGames, backtest: bt, behavior, past }
+  return { elo, eloPrior, lastSeasonGames, backtest: bt, behavior, past }
 }
 
 /** The forward-looking parts: ratings, the season simulation, past expectations and consensus prices. */
 export const buildModels = (data: LeagueData, analysis: Analysis, history: HistoryModels = buildHistory(data, analysis)): Models => {
   const { past } = history
-  const forecastInput = forecastInputFor(data, analysis, history.eloRated)
+  // Elo read today: each lineup ahead credited against the league's average one. It moves with your projection
+  // nudges, so it is built here, not with the history.
+  const ids = analysis.teams.map((t) => t.rosterId)
+  const lineups = ids.map((r) => analysis.needs[r]?.lineup ?? 0).filter((x) => x > 0)
+  const avgLineup = lineups.reduce((a, b) => a + b, 0) / (lineups.length || 1)
+  const eloRated = Object.fromEntries(ids.map((r) => [r, (history.elo.final[r] ?? ELO.base) + lineupEdge(analysis.needs[r]?.lineup, avgLineup, analysis.sigma)])) as Record<number, number>
+  const forecastInput = forecastInputFor(data, analysis, eloRated)
   const forecast = data.horizon.length && data.horizonSource === 'projections' ? buildForecast(forecastInput, SIM.sims, past) : null
   const ratings = forecast?.ratings ?? teamRatings({ ...forecastInput, horizon: [] }, past).ratings
   const expectedPast: Models['expectedPast'] = {}
@@ -158,5 +159,5 @@ export const buildModels = (data: LeagueData, analysis: Analysis, history: Histo
   // model's own value rather than zero, so a miss never looks like a free player.
   const perceived = data.consensus ? { ...Object.fromEntries(Object.entries(analysis.market).map(([id, v]) => [id, Math.max(0, v)])), ...perceivedValues(data.consensus, analysis.market) } : null
 
-  return { ...history, forecast, forecastInput, perceived, expectedPast, faab: faabState(data, analysis) }
+  return { ...history, eloRated, forecast, forecastInput, perceived, expectedPast, faab: faabState(data, analysis) }
 }

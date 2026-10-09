@@ -36,7 +36,8 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
   const baseline = useMemo(() => (f ? simulateSeason(simInputFor(input, f, { sims: SIMS, seed: SEED })) : {}), [input, f]) as Record<number, SimTeam>
   // Untouched, the scenario is the baseline: no second run of the same seasons.
   const scenario = useMemo(
-    () => (f && (Object.keys(dLocks).length || dChaos !== 'normal') ? simulateSeason(simInputFor(input, f, { locks: dLocks, chaos: CHAOS[dChaos], sims: SIMS, seed: SEED })) : baseline),
+    () =>
+      f && (Object.keys(dLocks).length || dChaos !== 'normal') ? simulateSeason(simInputFor(input, f, { locks: dLocks, chaos: CHAOS[dChaos], sims: SIMS, seed: SEED })) : baseline,
     [input, f, dLocks, dChaos, baseline],
   ) as Record<number, SimTeam>
   const nLocks = Object.keys(locks).length
@@ -208,8 +209,8 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
   const whatIf = (
     <Panel title="What if…" pad={false} actions={nLocks ? <span className="text-ff-accent">{nLocks} picked</span> : <span>no picks yet</span>}>
       <p className="border-b border-ff-line px-3 py-2.5 text-[12.5px] leading-[1.5] text-ff-text2">
-        Choose who wins games not played yet. <b className="font-medium text-ff-text">The race reruns as if those results happened</b>, and shows how every team&apos;s odds
-        move. Tap a team to make it the winner; tap again to undo.
+        Choose who wins games not played yet. <b className="font-medium text-ff-text">The race reruns as if those results happened</b>, and shows how every team&apos;s odds move.
+        Tap a team to make it the winner; tap again to undo.
       </p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-ff-line px-3 py-2">
         <span className="flex items-center gap-2">
@@ -247,7 +248,11 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
         <p className="px-3 py-3 text-[12.5px] text-ff-muted">The regular season is over: the seeds are set. Play out the bracket under Play a season.</p>
       ) : (
         <>
-          <div className="no-scrollbar flex gap-1 overflow-x-auto border-b border-ff-line px-3 py-2 [mask-image:linear-gradient(to_right,black_90%,transparent)]" role="tablist" aria-label="Week">
+          <div
+            className="no-scrollbar flex gap-1 overflow-x-auto border-b border-ff-line px-3 py-2 [mask-image:linear-gradient(to_right,black_90%,transparent)]"
+            role="tablist"
+            aria-label="Week"
+          >
             {weeks.map((w) => {
               const n = input.schedule.filter((g) => g.week === w && locks[lockKey(g)] !== undefined).length
               return (
@@ -263,7 +268,10 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
                 >
                   wk {w}
                   {n > 0 && (
-                    <span className="absolute -right-px -top-px flex h-3.5 min-w-3.5 items-center justify-center bg-ff-accent px-0.5 text-[9px] leading-none text-white" aria-label={`${n} picked`}>
+                    <span
+                      className="absolute -right-px -top-px flex h-3.5 min-w-3.5 items-center justify-center bg-ff-accent px-0.5 text-[9px] leading-none text-white"
+                      aria-label={`${n} picked`}
+                    >
                       {n}
                     </span>
                   )}
@@ -289,7 +297,11 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
                     className={cx(
                       'ff-press flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border px-2 py-1.5 text-left',
                       align === 'right' && 'flex-row-reverse text-right',
-                      on ? 'border-ff-accent bg-ff-accent/10' : off ? 'border-dashed border-ff-line bg-ff-sunken/50 [&_.truncate]:text-ff-text2' : 'border-ff-line bg-ff-panel hover:border-ff-line2 hover:bg-ff-raised/50',
+                      on
+                        ? 'border-ff-accent bg-ff-accent/10'
+                        : off
+                          ? 'border-dashed border-ff-line bg-ff-sunken/50 [&_.truncate]:text-ff-text2'
+                          : 'border-ff-line bg-ff-panel hover:border-ff-line2 hover:bg-ff-raised/50',
                     )}
                   >
                     <Avatar src={t?.avatar ?? null} name={t?.name ?? '?'} size={22} />
@@ -396,7 +408,14 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
                 label="Your playoff odds"
                 value={odds(mine.playoffs, 0, mine.clinch)}
                 meter={mine.playoffs}
-                badge={tweaked && base ? { text: `${Math.round((mine.playoffs - base.playoffs) * 100) >= 0 ? '+' : ''}${Math.round((mine.playoffs - base.playoffs) * 100)} with what-ifs`, tone: mine.playoffs >= base.playoffs ? 'pos' : 'neg' } : undefined}
+                badge={
+                  tweaked && base
+                    ? {
+                        text: `${Math.round((mine.playoffs - base.playoffs) * 100) >= 0 ? '+' : ''}${Math.round((mine.playoffs - base.playoffs) * 100)} with what-ifs`,
+                        tone: mine.playoffs >= base.playoffs ? 'pos' : 'neg',
+                      }
+                    : undefined
+                }
                 sub={`${fmt(mine.wins)} wins on average`}
               />
               <Stat label="Bye" value={odds(mine.bye)} sub="a top seed, skipping round one" />

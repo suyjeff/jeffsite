@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { readDeal, rostersOf, tidyDeal, type Deal, type DealSide } from '../../lib/fantasy/deal'
 import type { TradeIdea } from '../../lib/fantasy/trades'
 import { useFantasy, useTradeRead } from './FantasyContext'
@@ -37,6 +37,11 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
   const faab = models.faab
   const rosters = useMemo(() => rostersOf(analysis), [analysis])
   const [view, setView] = useState<number>(deal.teams.find((t) => t !== me) ?? me)
+  // A deal loaded from elsewhere (a suggested trade) brings its own partner: show that roster, not the last one.
+  const teamsKey = deal.teams.join(',')
+  useEffect(() => {
+    if (!deal.teams.includes(view)) setView(deal.teams.find((t) => t !== me) ?? me)
+  }, [teamsKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const shown = deal.teams.includes(view) ? view : deal.teams[0]
 
   const read = useMemo(
@@ -57,7 +62,7 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
         : null,
     [deal, data.horizon, analysis, players, perWeek, rosters, faab],
   )
-  const active = deal.moves.length + deal.faab.length > 0
+  const active = deal.moves.length > 0 || deal.faab.some((x) => x.dollars > 0)
 
   // How each other team's manager would read their side, from the same read the suggested trades use.
   const accept = useMemo(() => {
@@ -102,10 +107,11 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
     setDeal({ ...deal, moves: [...deal.moves, { player: id, from, to }] })
   }
   const redirect = (id: string, to: number) => setDeal({ ...deal, moves: deal.moves.map((m) => (m.player === id ? { ...m, to } : m)) })
+  // Each team sends at most one FAAB payment; picking its destination before the amount is remembered as a $0 payment.
   const setFaab = (from: number, dollars: number, to?: number) => {
     const rest = deal.faab.filter((x) => x.from !== from)
     const dest = to ?? deal.faab.find((x) => x.from === from)?.to ?? deal.teams.find((t) => t !== from)!
-    setDeal({ ...deal, faab: dollars > 0 ? [...rest, { from, to: dest, dollars }] : rest })
+    setDeal({ ...deal, faab: dollars > 0 || to != null ? [...rest, { from, to: dest, dollars }] : rest })
   }
   const addTeam = (id: number) => {
     setDeal(tidyDeal({ ...deal, teams: [...deal.teams, id] }))
@@ -117,7 +123,8 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
   const sideCard = (s: DealSide) => {
     const r = accept[s.rosterId]
     const mineSide = s.rosterId === me
-    const out = deal.faab.find((x) => x.from === s.rosterId)
+    const out = deal.faab.find((x) => x.from === s.rosterId && x.dollars > 0)
+    const outAny = deal.faab.find((x) => x.from === s.rosterId)
     const left = faab?.remaining[s.rosterId] ?? 0
     const verdict = s.net.mid > 0.25 ? 'better' : s.net.mid < -0.25 ? 'worse' : 'about even'
     return (
@@ -139,7 +146,20 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
                   return (
                     <li key={id} className="flex items-center gap-2">
                       <span className="min-w-0 flex-1">
-                        <PlayerName player={players[id]} id={id} size={22} sub={deal.teams.length > 2 && from != null ? <>from <TeamName id={from} avatar={false} /></> : `${fmt(perWeek[id])}/wk`} />
+                        <PlayerName
+                          player={players[id]}
+                          id={id}
+                          size={22}
+                          sub={
+                            deal.teams.length > 2 && from != null ? (
+                              <>
+                                from <TeamName id={from} avatar={false} />
+                              </>
+                            ) : (
+                              `${fmt(perWeek[id])}/wk`
+                            )
+                          }
+                        />
                       </span>
                     </li>
                   )
@@ -202,7 +222,7 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
                   inputMode="numeric"
                   min={0}
                   max={left}
-                  value={out?.dollars ?? ''}
+                  value={out?.dollars || ''}
                   placeholder="0"
                   onChange={(e) => setFaab(s.rosterId, Math.max(0, Math.min(left, Math.round(Number(e.target.value) || 0))))}
                   className="num h-full w-14 appearance-none bg-transparent px-1 text-[16px] text-ff-text outline-none [-moz-appearance:textfield] sm:text-[12.5px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
@@ -210,6 +230,24 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
                 />
               </span>
               <span className="font-mono text-[10.5px] text-ff-muted">of ${left}</span>
+              {deal.teams.length > 2 && (
+                <Dropdown
+                  label={`Send ${analysis.teamById[s.rosterId]?.name}'s FAAB to`}
+                  value={String(outAny?.to ?? deal.teams.find((t) => t !== s.rosterId))}
+                  onChange={(v) => setFaab(s.rosterId, outAny?.dollars ?? 0, Number(v))}
+                  options={deal.teams.filter((t) => t !== s.rosterId).map((t) => ({ value: String(t), label: analysis.teamById[t]?.name ?? String(t) }))}
+                  menuClassName="!right-0 !left-auto w-[200px]"
+                  renderButton={(cur, open) => (
+                    <span className="flex h-7 max-w-[120px] items-center gap-1 border border-ff-line px-1.5 font-mono text-[10.5px] text-ff-text2 hover:border-ff-line2">
+                      <span className="text-ff-muted">to</span>
+                      <span className="truncate">{cur?.label}</span>
+                      <span aria-hidden className="text-ff-muted">
+                        {open ? '▴' : '▾'}
+                      </span>
+                    </span>
+                  )}
+                />
+              )}
             </label>
           )}
         </div>
@@ -233,7 +271,9 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
               ) : (
                 <>
                   <Figure v={s.value} unit=" value" />
-                  <span className="mt-1 block text-[10.5px] text-ff-muted">{s.value > 0.2 ? 'gets more than it gives' : s.value < -0.2 ? 'gives more than it gets' : 'fair by value'}</span>
+                  <span className="mt-1 block text-[10.5px] text-ff-muted">
+                    {s.value > 0.2 ? 'gets more than it gives' : s.value < -0.2 ? 'gives more than it gets' : 'fair by value'}
+                  </span>
                 </>
               )}
             </div>
@@ -253,7 +293,14 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
                   {r.index}% · {r.band}
                 </div>
               </div>
-              {r.signals[0] && <p className="mt-0.5 text-[11px] text-ff-muted">{r.signals.map((x) => x.text).slice(0, 2).join('; ')}</p>}
+              {r.signals[0] && (
+                <p className="mt-0.5 text-[11px] text-ff-muted">
+                  {r.signals
+                    .map((x) => x.text)
+                    .slice(0, 2)
+                    .join('; ')}
+                </p>
+              )}
             </div>
           )}
           {(s.cuts.length > 0 || s.problems.length > 0) && (
@@ -283,7 +330,12 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
           <span key={t} className="flex h-8 items-center gap-1 border border-ff-line bg-ff-panel pl-2 pr-0.5">
             <TeamName id={t} size={18} plain className="text-[12.5px]" />
             {t !== me && (
-              <button type="button" onClick={() => removeTeam(t)} aria-label={`Take ${analysis.teamById[t]?.name} out of the trade`} className="flex h-7 w-6 items-center justify-center font-mono text-[12px] text-ff-muted hover:text-ff-neg">
+              <button
+                type="button"
+                onClick={() => removeTeam(t)}
+                aria-label={`Take ${analysis.teamById[t]?.name} out of the trade`}
+                className="flex h-7 w-6 items-center justify-center font-mono text-[12px] text-ff-muted hover:text-ff-neg"
+              >
                 ×
               </button>
             )}
@@ -336,7 +388,12 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
             </Empty>
           </div>
         ) : (
-          <div className={cx('grid grid-cols-1 gap-2 p-2', deal.teams.length === 2 ? 'md:grid-cols-2' : deal.teams.length === 3 ? 'md:grid-cols-2 xl:grid-cols-3' : 'md:grid-cols-2 2xl:grid-cols-4')}>
+          <div
+            className={cx(
+              'grid grid-cols-1 gap-2 p-2',
+              deal.teams.length === 2 ? 'md:grid-cols-2' : deal.teams.length === 3 ? 'md:grid-cols-2 xl:grid-cols-3' : 'md:grid-cols-2 2xl:grid-cols-4',
+            )}
+          >
             {read.sides.map(sideCard)}
           </div>
         )}
@@ -360,7 +417,10 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
                 type="button"
                 onClick={() => setView(t)}
                 aria-pressed={t === shown}
-                className={cx('h-7 max-w-[140px] truncate border px-2 font-sans text-[11.5px]', t === shown ? 'border-ff-text bg-ff-text text-ff-panel' : 'border-ff-line text-ff-text2 hover:border-ff-line2')}
+                className={cx(
+                  'h-7 max-w-[140px] truncate border px-2 font-sans text-[11.5px]',
+                  t === shown ? 'border-ff-text bg-ff-text text-ff-panel' : 'border-ff-line text-ff-text2 hover:border-ff-line2',
+                )}
               >
                 {t === me ? 'You' : analysis.teamById[t]?.name}
               </button>

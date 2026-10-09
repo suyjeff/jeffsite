@@ -19,7 +19,8 @@ export const sheetKey = (r: SheetRef) =>
 const SheetHost = ({ stack, onBack, onClose }: { stack: SheetRef[]; onBack: () => void; onClose: () => void }) => {
   const { data, analysis } = useFantasy()
   const top = stack[stack.length - 1]
-  if (!top) return null
+  // A ref to something no longer in the league (a switch mid-render, a stale link) opens nothing rather than an empty sheet.
+  if (!top || (top.kind === 'player' && !data.players[top.id]) || (top.kind === 'team' && !analysis.teamById[top.id])) return null
   const name = (r: SheetRef | undefined): string => {
     if (!r) return ''
     if (r.kind === 'player') return data.players[r.id]?.name.split(' ').slice(-1)[0] ?? 'player'

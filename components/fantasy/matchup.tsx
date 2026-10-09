@@ -152,7 +152,11 @@ export const SlotTable = ({ m, compact }: { m: MatchupRead; compact?: boolean })
   const { data } = useFantasy()
   const maxEdge = Math.max(4, ...m.rows.map((r) => Math.abs(r.edge)))
   const name = (id: string | null, align: 'left' | 'right') =>
-    id ? <PlayerName player={data.players[id]} id={id} size={compact ? 20 : 24} className={align === 'right' ? 'flex-row-reverse text-right' : undefined} /> : <span className="text-[12px] text-ff-neg">empty</span>
+    id ? (
+      <PlayerName player={data.players[id]} id={id} size={compact ? 20 : 24} className={align === 'right' ? 'flex-row-reverse text-right' : undefined} />
+    ) : (
+      <span className="text-[12px] text-ff-neg">empty</span>
+    )
   return (
     <ul>
       {m.rows.map((r, i) => (
@@ -166,7 +170,10 @@ export const SlotTable = ({ m, compact }: { m: MatchupRead; compact?: boolean })
             </span>
             <span className="relative block h-1 w-full bg-ff-sunken" aria-hidden>
               <span className="absolute inset-y-0 left-1/2 w-px bg-ff-line2" />
-              <span className={cx('absolute inset-y-0', r.edge >= 0 ? 'left-1/2 bg-ff-pos' : 'right-1/2 bg-ff-neg')} style={{ width: `${(Math.min(Math.abs(r.edge), maxEdge) / maxEdge) * 50}%` }} />
+              <span
+                className={cx('absolute inset-y-0', r.edge >= 0 ? 'left-1/2 bg-ff-pos' : 'right-1/2 bg-ff-neg')}
+                style={{ width: `${(Math.min(Math.abs(r.edge), maxEdge) / maxEdge) * 50}%` }}
+              />
             </span>
           </span>
           <span className="flex min-w-0 justify-end">{name(r.b, 'right')}</span>

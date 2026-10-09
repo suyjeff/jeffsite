@@ -2,7 +2,7 @@ import React from 'react'
 import type { SlateGame, SlatePlayer } from '../../lib/fantasy/slate'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
-import { SheetBody, SheetClose, SheetContent, SheetSection, useSheet } from './Sheet'
+import { SheetBody, SheetClose, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
 import { ManagerTag, RangeBar, dayOf, pts } from './slateBits'
 import { Badge, Pts, cx, fmt, fmtSigned } from './ui'
 import { useSlate } from './useSlate'
@@ -55,7 +55,13 @@ const GameSheet = ({ gameKey }: { gameKey: string }) => {
   const { slate, week } = useSlate(data, analysis)
   const casts = useBroadcasts(data.league.season, week)
   const g: SlateGame | undefined = slate.games.find((x) => x.key === gameKey)
-  if (!g) return null
+  if (!g)
+    return (
+      <SheetContent>
+        <SheetHeader title={gameKey.split(':')[1]?.replace('@', ' @ ') ?? 'Game'} eyebrow={<span>not on this week&apos;s slate</span>} />
+        <p className="border-t border-ff-line px-4 py-4 text-[12.5px] text-ff-muted">This game is not in the current week. Close the sheet and open it from Gameday.</p>
+      </SheetContent>
+    )
   const me = analysis.myRosterId
   const mine = me != null ? slate.managers[me] : null
   const opp = mine?.opponent ?? null
@@ -64,7 +70,8 @@ const GameSheet = ({ gameKey }: { gameKey: string }) => {
   const side = (team: string) => g.players.filter((p) => p.team === team)
   const total = (t: SlateGame['totals']['home']) => (t ? fmt(t.pts) : '–')
   const cast = casts[`${g.away}@${g.home}`]
-  const played = (g.final || g.live) && cast?.away != null && cast?.home != null
+  // ESPN's score only once ESPN itself has the game under way or over, and only for a game Sleeper agrees has started.
+  const played = (g.final || g.live) && (cast?.state === 'in' || cast?.state === 'post') && cast?.away != null && cast?.home != null
   const source = g.totals.home?.source === 'market' || g.totals.away?.source === 'market' ? 'betting lines' : "Sleeper's projections"
 
   return (

@@ -76,7 +76,7 @@ const PowerView = ({
   const weightSum = COMPONENTS.reduce((a, c) => a + Math.max(0, weights[c.key]), 0) || 1
   const me = myRosterId != null ? { season: seasonById[myRosterId], power: powerById[myRosterId] } : null
   const forecastOrder = useMemo(() => (forecast ? [...forecast.ratings].sort((a, b) => b.rating - a.rating).map((r) => r.rosterId) : []), [forecast])
-  const eloOrder = useMemo(() => [...teams].sort((a, b) => (models.eloRated[b.rosterId] ?? 0) - (models.eloRated[a.rosterId] ?? 0)).map((t) => t.rosterId), [teams, models.elo])
+  const eloOrder = useMemo(() => [...teams].sort((a, b) => (models.eloRated[b.rosterId] ?? 0) - (models.eloRated[a.rosterId] ?? 0)).map((t) => t.rosterId), [teams, models.eloRated])
   const rankIn = (order: number[], id: number) => order.indexOf(id) + 1
   // Rating bars grow from the league average, so a gap shows at its real size rather than stretched end to end.
   const ratingAvg = forecast ? forecast.ratings.reduce((a, r) => a + r.rating, 0) / (forecast.ratings.length || 1) : 0
@@ -134,7 +134,15 @@ const PowerView = ({
       sort: (r) => models.eloPrior[r.rosterId] ?? 1500,
       render: (r) => <span className="text-ff-muted">{Math.round(models.eloPrior[r.rosterId] ?? 1500)}</span>,
     },
-    { key: 'delta', label: 'Season Δ', align: 'right', sort: (r) => (models.elo.final[r.rosterId] ?? 1500) - (models.eloPrior[r.rosterId] ?? 1500), render: (r) => <Num value={(models.elo.final[r.rosterId] ?? 1500) - (models.eloPrior[r.rosterId] ?? 1500)} signed digits={0} /> },
+    { key: 'delta', label: 'Season Δ', align: 'right', title: 'Earned from results this season, judged against both lineups', sort: (r) => (models.elo.final[r.rosterId] ?? 1500) - (models.eloPrior[r.rosterId] ?? 1500), render: (r) => <Num value={(models.elo.final[r.rosterId] ?? 1500) - (models.eloPrior[r.rosterId] ?? 1500)} signed digits={0} /> },
+    {
+      key: 'lineup',
+      label: 'Lineup',
+      align: 'right',
+      title: 'Credit for the projected lineup ahead against an average one. Preseason + season Δ + lineup = Elo',
+      sort: (r) => (models.eloRated[r.rosterId] ?? 1500) - (models.elo.final[r.rosterId] ?? 1500),
+      render: (r) => <Num value={(models.eloRated[r.rosterId] ?? 1500) - (models.elo.final[r.rosterId] ?? 1500)} signed digits={0} />,
+    },
     { key: 'record', label: 'W-L', align: 'right', render: (r) => `${seasonById[r.rosterId].wins}-${seasonById[r.rosterId].losses}` },
     { key: 'pf', label: 'PF/G', align: 'right', render: (r) => fmt(seasonById[r.rosterId].ppg) },
   ]

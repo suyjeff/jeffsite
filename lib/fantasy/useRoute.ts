@@ -10,7 +10,8 @@ export type Route<S extends string> = { section: S; sub: string | null }
 const parse = <S extends string>(hash: string, sections: readonly S[], fallback: S, aliases: Record<string, string> = {}): Route<S> => {
   const raw = hash.replace(/^#\/?/, '')
   // An old link to a section that moved lands where it went.
-  const [section, sub] = (aliases[raw.split('/')[0]] ?? raw).split('/')
+  const head = raw.split('/')[0]
+  const [section, sub] = (Object.hasOwn(aliases, head) ? aliases[head] : raw).split('/')
   return sections.includes(section as S) ? { section: section as S, sub: sub || null } : { section: fallback, sub: null }
 }
 

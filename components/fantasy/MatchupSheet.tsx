@@ -30,7 +30,14 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
         <>
           <span>wk {week}</span>
           {m?.close && <Badge tone="warn">close</Badge>}
-          {m && (m.kindA === 'final' && m.kindB === 'final' ? <span className="text-ff-text2">final</span> : m.started ? <span className="text-ff-warn">live</span> : <span>projected</span>)}
+          {m &&
+            (m.kindA === 'final' && m.kindB === 'final' ? (
+              <span className="text-ff-text2">final</span>
+            ) : m.started ? (
+              <span className="text-ff-warn">live</span>
+            ) : (
+              <span>projected</span>
+            ))}
         </>
       }
       title={
@@ -89,7 +96,7 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
           </p>
         )}
         <SheetSection title="What decides it" aside="± win odds, bad game to good">
-          {deciding && <p className="mb-2 text-[12.5px] text-ff-text2">Comes down to {deciding}.</p>}
+          {deciding && m.deciders.length > 0 && <p className="mb-2 text-[12.5px] text-ff-text2">Comes down to {deciding}.</p>}
           <div className="-mx-4">
             <Deciders m={m} limit={5} />
           </div>

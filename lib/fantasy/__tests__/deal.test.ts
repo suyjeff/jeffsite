@@ -45,7 +45,14 @@ const faab: Faab = {
 
 describe('readDeal', () => {
   it('prices a two-team swap from both sides', () => {
-    const deal: Deal = { teams: [1, 2], moves: [{ player: 'r2', from: 1, to: 2 }, { player: 'r1', from: 2, to: 1 }], faab: [] }
+    const deal: Deal = {
+      teams: [1, 2],
+      moves: [
+        { player: 'r2', from: 1, to: 2 },
+        { player: 'r1', from: 2, to: 1 },
+      ],
+      faab: [],
+    }
     const [a, b] = readDeal(deal, input).sides
     expect(a.receives).toEqual(['r1'])
     expect(a.lineup).toBeCloseTo(8)
@@ -84,6 +91,21 @@ describe('readDeal', () => {
     expect(broke.sides[1].problems.length).toBe(1)
   })
 
+  it('checks what a team sends against its budget, whatever it also receives', () => {
+    const deal: Deal = {
+      teams: [1, 2, 3],
+      moves: [],
+      faab: [
+        { from: 2, to: 1, dollars: 50 },
+        { from: 3, to: 2, dollars: 50 },
+      ],
+    }
+    const read = readDeal(deal, { ...input, faab })
+    expect(read.sides.find((x) => x.rosterId === 2)!.faab).toBe(0)
+    expect(read.sides.find((x) => x.rosterId === 2)!.problems.length).toBe(1)
+    expect(read.valid).toBe(false)
+  })
+
   it('counts FAAB for more to a team nearly out of it', () => {
     expect(faabCare(faab, 2)).toBeGreaterThan(faabCare(faab, 1))
     expect(faabCare(faab, 1)).toBeGreaterThanOrEqual(0.35)
@@ -91,7 +113,14 @@ describe('readDeal', () => {
   })
 
   it('drops moves to teams no longer in the deal', () => {
-    const deal: Deal = { teams: [1, 2], moves: [{ player: 'w1', from: 3, to: 1 }, { player: 'r2', from: 1, to: 2 }], faab: [{ from: 1, to: 1, dollars: 5 }] }
+    const deal: Deal = {
+      teams: [1, 2],
+      moves: [
+        { player: 'w1', from: 3, to: 1 },
+        { player: 'r2', from: 1, to: 2 },
+      ],
+      faab: [{ from: 1, to: 1, dollars: 5 }],
+    }
     const t = tidyDeal(deal)
     expect(t.moves).toEqual([{ player: 'r2', from: 1, to: 2 }])
     expect(t.faab).toEqual([])

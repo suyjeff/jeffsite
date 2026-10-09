@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { parseScoreboard, type Broadcast } from '../../lib/fantasy/nfl'
 
-const TTL = 20 * 60_000
+// Short, so a score shown mid-game is never far behind; networks do not change, but they come in the same payload.
+const TTL = 90_000
 const memory = new Map<string, { at: number; data: Record<string, Broadcast> }>()
 
 /**
  * Where to watch each NFL game of a week, from ESPN's public scoreboard. It is a nicety: if the request fails or is
- * blocked, games simply show no network. Cached for 20 minutes in memory and this tab's session storage.
+ * blocked, games simply show no network. Cached for 90 seconds in memory and this tab’s session storage, and read again each time a sheet opens.
  */
 export const useBroadcasts = (season: string, week: number | null) => {
   const key = `ff:espn:${season}:${week}`

@@ -42,7 +42,7 @@ export const teamLogo = (abbr: string) => `https://sleepercdn.com/images/team_lo
 /** ESPN abbreviations that differ from Sleeper's. */
 const ESPN_TO_SLEEPER: Record<string, string> = { WSH: 'WAS', LA: 'LAR' }
 
-export type Broadcast = { networks: string[]; away?: number; home?: number }
+export type Broadcast = { networks: string[]; away?: number; home?: number; /** ESPN's game state: before, during or after. */ state?: 'pre' | 'in' | 'post' }
 
 /** Networks (and, once played, scores) by "AWAY@HOME", from ESPN's scoreboard payload. Anything unexpected is skipped. */
 export const parseScoreboard = (json: unknown): Record<string, Broadcast> => {
@@ -50,7 +50,15 @@ export const parseScoreboard = (json: unknown): Record<string, Broadcast> => {
   const events = (json as { events?: unknown[] })?.events
   if (!Array.isArray(events)) return out
   for (const e of events) {
-    const c = (e as { competitions?: { competitors?: { homeAway?: string; score?: string; team?: { abbreviation?: string } }[]; broadcasts?: { names?: string[] }[] }[] })?.competitions?.[0]
+    const c = (
+      e as {
+        competitions?: {
+          competitors?: { homeAway?: string; score?: string; team?: { abbreviation?: string } }[]
+          broadcasts?: { names?: string[] }[]
+          status?: { type?: { state?: string } }
+        }[]
+      }
+    )?.competitions?.[0]
     if (!c?.competitors) continue
     const side = (k: 'home' | 'away') => c.competitors!.find((x) => x.homeAway === k)
     const abbr = (x?: { team?: { abbreviation?: string } }) => {
@@ -65,6 +73,7 @@ export const parseScoreboard = (json: unknown): Record<string, Broadcast> => {
       networks: [...new Set((c.broadcasts ?? []).flatMap((b) => b.names ?? []))],
       away: num(away.score),
       home: num(home.score),
+      state: c.status?.type?.state === 'in' ? 'in' : c.status?.type?.state === 'post' ? 'post' : 'pre',
     }
   }
   return out

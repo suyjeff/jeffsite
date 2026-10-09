@@ -80,9 +80,17 @@ export const readDeal = (deal: Deal, input: DealInput): DealRead => {
     const base = ev.perWeek(roster)
     const next = ev.perWeek(after)
     const perWeek = weeks.map((week, i) => ({ week, delta: Math.round((next[i] - base[i]) * 100) / 100 }))
-    const lineup = Math.round(wmean(perWeek.map((w) => w.delta), ev.weights) * 100) / 100
+    const lineup =
+      Math.round(
+        wmean(
+          perWeek.map((w) => w.delta),
+          ev.weights,
+        ) * 100,
+      ) / 100
     const dollars = deal.faab.reduce((a, x) => a + (x.to === rid ? x.dollars : 0) - (x.from === rid ? x.dollars : 0), 0)
-    if (faab && deal.faab.some((x) => x.from === rid) && -dollars > (faab.remaining[rid] ?? 0)) problems.push(`only $${faab.remaining[rid] ?? 0} of FAAB left`)
+    // Each transfer moves on its own, so what a team sends must be in its budget, whatever it also receives.
+    const sent = deal.faab.reduce((a, x) => a + (x.from === rid ? x.dollars : 0), 0)
+    if (faab && sent > (faab.remaining[rid] ?? 0)) problems.push(`only $${faab.remaining[rid] ?? 0} of FAAB left`)
     const care = faab ? faabCare(faab, rid) / 0.6 : 0
     const mid = faab && dollars ? Math.sign(dollars) * Math.min(FAAB_TRADE_CAP, faabTradeValue(faab, Math.abs(dollars)) * care) : 0
     const faabValue = { low: mid * (mid >= 0 ? 0.5 : 1.5), mid, high: mid * (mid >= 0 ? 1.5 : 0.5) }
@@ -101,7 +109,7 @@ export const readDeal = (deal: Deal, input: DealInput): DealRead => {
       problems,
     }
   })
-  const valid = deal.moves.length + deal.faab.length > 0 && sides.every((s) => !s.problems.length)
+  const valid = (deal.moves.length > 0 || deal.faab.some((x) => x.dollars > 0)) && sides.every((s) => !s.problems.length)
   return { sides, valid, weeks }
 }
 

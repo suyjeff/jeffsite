@@ -6,7 +6,6 @@ import { Badge, Button, Empty, PageHeader, Panel, Pts, PtsKey, RowCover, Segment
 
 type View = 'list' | 'grid'
 
-
 const Score = ({ m, side }: { m: MatchupRead; side: 'a' | 'b' }) => {
   const s = side === 'a' ? m.a : m.b
   return <Pts value={m.started ? s.banked : s.mu} kind={m.started ? (side === 'a' ? m.kindA : m.kindB) : 'proj'} />
