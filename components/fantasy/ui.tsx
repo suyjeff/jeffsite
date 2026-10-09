@@ -226,6 +226,9 @@ export const Segmented = <K extends string>({
   </div>
 )
 
+/** The command palette's shortcut as this platform writes it. */
+export const shortcutLabel = () => (typeof navigator !== 'undefined' && /Mac|iP(hone|ad|od)/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K')
+
 /** Whether the viewport is phone-width (below md), kept live across rotation and resizing. */
 export const usePhone = () => {
   const query = '(max-width: 767px)'
@@ -302,7 +305,7 @@ export const Swap = ({ k, children, className }: { k: string; children: ReactNod
   )
 }
 
-export type DropdownOption = { value: string; label: ReactNode; sub?: ReactNode; disabled?: boolean }
+export type DropdownOption = { value: string; label: ReactNode; sub?: ReactNode; disabled?: boolean; /** A heading shown above the first option of each group. */ group?: string; /** Plain text for type-ahead when the label is not a string. */ text?: string; /** A shorter face for the closed button. */ face?: ReactNode }
 
 /**
  * A listbox in the app's own skin: square, hairline, mono caret, a check on
@@ -393,7 +396,7 @@ export const Dropdown = ({
     } else if (e.key === 'Tab') setOpen(false)
     else if (e.key.length === 1) {
       const k = e.key.toLowerCase()
-      const text = (o: DropdownOption) => (typeof o.label === 'string' ? o.label : o.value).toLowerCase()
+      const text = (o: DropdownOption) => (o.text ?? (typeof o.label === 'string' ? o.label : o.value)).toLowerCase()
       const from = options.findIndex((o, i) => i > active && text(o).startsWith(k))
       const i = from >= 0 ? from : options.findIndex((o) => text(o).startsWith(k))
       if (i >= 0) setActive(i)
@@ -421,7 +424,7 @@ export const Dropdown = ({
           renderButton(current, open)
         ) : (
           <>
-            <span className="min-w-0 flex-1 truncate pl-2.5 pr-2">{current?.label ?? '—'}</span>
+            <span className="min-w-0 flex-1 truncate pl-2.5 pr-2">{current?.face ?? current?.label ?? '—'}</span>
             <span aria-hidden className="flex h-full w-7 shrink-0 items-center justify-center border-l border-ff-line font-mono text-[10px] text-ff-muted">
               {open ? '▴' : '▾'}
             </span>
@@ -442,9 +445,15 @@ export const Dropdown = ({
         >
           {options.map((o, i) => {
             const selected = o.value === value
+            const heading = o.group && o.group !== options[i - 1]?.group ? o.group : null
             return (
+              <React.Fragment key={o.value}>
+              {heading && (
+                <div role="presentation" className="ff-label px-3 pb-1 pt-2 first:pt-1">
+                  {heading}
+                </div>
+              )}
               <div
-                key={o.value}
                 id={`${id}-${i}`}
                 data-i={i}
                 role="option"
@@ -466,6 +475,7 @@ export const Dropdown = ({
                   {o.sub && <span className="block whitespace-nowrap font-mono text-[10.5px] text-ff-muted">{o.sub}</span>}
                 </span>
               </div>
+              </React.Fragment>
             )
           })}
         </div>

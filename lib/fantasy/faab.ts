@@ -144,7 +144,7 @@ export const suggestBid = (
   const late = f.weeksLeft <= 3 ? 1.5 : f.weeksLeft <= 6 ? 1.2 : 1
   const worth = Math.max(0, input.gain) * f.rate * late
   let bid = Math.round(Math.min(worth, market * 1.1))
-  if (streamer) bid = Math.min(bid, Math.max(minBid, Math.round(f.going.p50 * 0.1)))
+  if (streamer) bid = minBid
   bid = Math.max(minBid, Math.min(bid, mine, rich + 1))
 
   const tier: BidTier = streamer ? 'stream' : input.gain >= 2 ? 'priority' : input.gain >= 0.75 ? 'solid' : 'depth'

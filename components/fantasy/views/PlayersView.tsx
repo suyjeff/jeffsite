@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { pastProjection, type Analysis } from '../../../lib/fantasy/analysis'
 import { applyTrade, makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
-import { ContextNotes, PlayoffSchedule } from '../ContextNotes'
+import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import { sectionCode } from '../Shell'
-import { Badge, Button, Num, PageHeader, Panel, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, type Column } from '../ui'
+import { Badge, Button, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, type Column } from '../ui'
 
 const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
 type Pos = (typeof POSITIONS)[number]
@@ -297,6 +297,10 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             defaultSort={basis === 'ahead' ? 'val' : 'war'}
             rowClass={(id) => cx(rosteredBy[id] === myRosterId && 'ff-mine')}
             onRowClick={(id) => openPlayer(id)}
+            expand={(id) => {
+              const items = contextReasons(data.context[id], players)
+              return items.length ? <Reasons items={items} /> : null
+            }}
             empty="No players match."
           />
         </Panel>

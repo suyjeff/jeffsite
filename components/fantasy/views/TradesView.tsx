@@ -4,7 +4,7 @@ import { acceptRead } from '../../../lib/fantasy/behavior'
 import { searchTrades, tradeBase } from '../../../lib/fantasy/search'
 import { DEFAULT_TRADE_CONFIG, findTargets, scoreTrade, type TradeIdea, type TradeShape } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
-import { ContextNotes, PlayoffSchedule } from '../ContextNotes'
+import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import TradeCard, { SHAPE_LABEL } from '../TradeCard'
 import { useFantasy } from '../FantasyContext'
@@ -20,6 +20,7 @@ import {
   PageHeader,
   Panel,
   PlayerAvatar,
+  Reasons,
   Segmented,
   Select,
   Slider,
@@ -348,6 +349,10 @@ const TradesView = ({
             <Table
               rows={shownTargets}
               rowKey={(t) => t.id}
+              expand={(t) => {
+                const items = contextReasons(data.context[t.id], players)
+                return items.length ? <Reasons items={items} /> : null
+              }}
               defaultSort="add"
               empty="Nobody outside your roster would improve your lineup."
               columns={[
@@ -461,6 +466,10 @@ const TradesView = ({
             <Table
               rows={shownSituations}
               rowKey={(r) => r.id}
+              expand={(r) => {
+                const items = contextReasons(data.context[r.id], players)
+                return items.length ? <Reasons items={items} /> : null
+              }}
               empty="Nothing to flag."
               columns={[
                 {
