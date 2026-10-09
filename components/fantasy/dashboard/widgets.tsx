@@ -326,12 +326,19 @@ const Matchup = ({ select }: WidgetProps) => {
 }
 
 const TradeIdeas = () => {
-  const { data, analysis, models, go } = useFantasy()
+  const { data, analysis, models, go, grades } = useFantasy()
   const ideas = useMemo(() => searchTrades(data, analysis).ideas, [data, analysis])
+  const reads = useMemo(
+    () => new Map(ideas.map((i) => [i, grades.apply(acceptRead(i, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab), i)])),
+    [ideas, grades, analysis, models],
+  )
   if (!ideas.length) return <Empty title="No deals clear the bar">Loosen the limits on the Trades page.</Empty>
-  // One per partner, best for you first.
+  // One per partner, best for you first, leaving out what your grades ruled out.
   const seen = new Set<number>()
-  const top = [...ideas].sort((a, b) => b.myGain - a.myGain).filter((i) => (seen.has(i.partnerId) ? false : (seen.add(i.partnerId), true)))
+  const top = [...ideas]
+    .filter((i) => !reads.get(i)?.ruledOut)
+    .sort((a, b) => b.myGain - a.myGain)
+    .filter((i) => (seen.has(i.partnerId) ? false : (seen.add(i.partnerId), true)))
   const name = (id: string) => data.players[id]?.name.split(' ').slice(-1)[0] ?? id
   return (
     <div>
@@ -343,7 +350,7 @@ const TradeIdeas = () => {
         <span className="hidden w-16 text-right sm:inline">odds</span>
       </Th>
       {top.map((i) => {
-        const read = acceptRead(i, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab)
+        const read = reads.get(i)!
         return (
           <Row key={`${i.partnerId}-${i.give.join()}-${i.get.join()}`} onClick={() => go('trades')} label={`Open trades with ${analysis.teamById[i.partnerId]?.name ?? 'this team'}`}>
             <span className="w-[120px] shrink-0">

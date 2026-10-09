@@ -12,6 +12,9 @@ import PowerView from '../../components/fantasy/views/PowerView'
 import TeamsView from '../../components/fantasy/views/TeamsView'
 import WaiversView from '../../components/fantasy/views/WaiversView'
 import TradesView from '../../components/fantasy/views/TradesView'
+import type { AcceptRead } from '../../lib/fantasy/behavior'
+import { applyLessons, ideaKey, learn, loadGrades, saveGrades, type GradeRecord, type Grades } from '../../lib/fantasy/grades'
+import type { TradeIdea } from '../../lib/fantasy/trades'
 import { applyAdjustments, liveAdjustments, loadAdjustments, saveAdjustments, type Adjustment, type Adjustments } from '../../lib/fantasy/adjust'
 import { analyze, withWeights } from '../../lib/fantasy/analysis'
 import { buildHistory, buildModels } from '../../lib/fantasy/models'
@@ -146,6 +149,29 @@ const FantasyPage = () => {
     }),
     [live, firstWeek, leagueKey],
   )
+  // Your grades of suggested trades, per league, and what they teach the trade read.
+  const storedGrades = useMemo(() => (leagueKey ? loadGrades(leagueKey) : {}), [leagueKey])
+  const [editedGrades, setEditedGrades] = useState<{ key: string | null; g: Grades } | null>(null)
+  const gradeMap = editedGrades && editedGrades.key === leagueKey ? editedGrades.g : storedGrades
+  const grades = useMemo(() => {
+    const players = loaded?.players ?? {}
+    const posOf = (id: string) => players[id]?.pos
+    const name = (id: string) => players[id]?.name ?? id
+    const lessons = learn(gradeMap, posOf)
+    return {
+      all: gradeMap,
+      lessons,
+      set: (idea: TradeIdea, rec: Omit<GradeRecord, 'partnerId' | 'give' | 'get' | 'at'> | null) => {
+        const next = { ...gradeMap }
+        const k = ideaKey(idea)
+        if (rec) next[k] = { ...rec, partnerId: idea.partnerId, give: idea.give, get: idea.get, at: Date.now() }
+        else delete next[k]
+        if (leagueKey) saveGrades(leagueKey, next)
+        setEditedGrades({ key: leagueKey, g: next })
+      },
+      apply: (read: AcceptRead, idea: TradeIdea) => applyLessons(read, idea, lessons, name, posOf),
+    }
+  }, [gradeMap, leagueKey, loaded?.players])
   // Everything but the composite ranking depends on the data and the value model;
   // weights only re-rank. Models and the trade search key on the core, so moving
   // a weight slider never reruns the season simulation or the backtest.
@@ -367,7 +393,7 @@ const FantasyPage = () => {
       )}
 
       {data && analysis && models && prefs ? (
-        <FantasyProvider value={{ data, analysis, models, adjust, go: (s, sub) => route.go(s, sub ?? undefined), openPlayer: setSheet }}>
+        <FantasyProvider value={{ data, analysis, models, adjust, grades, go: (s, sub) => route.go(s, sub ?? undefined), openPlayer: setSheet }}>
         <div key={data.league.league_id} ref={view} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}

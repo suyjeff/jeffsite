@@ -4,6 +4,9 @@ import type { Analysis } from '../../lib/fantasy/analysis'
 import type { Models } from '../../lib/fantasy/models'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import type { SectionKey } from './Shell'
+import type { AcceptRead } from '../../lib/fantasy/behavior'
+import type { GradeRecord, Grades, Lessons } from '../../lib/fantasy/grades'
+import type { TradeIdea } from '../../lib/fantasy/trades'
 
 /** What every view reads: the raw league, the core analysis, and the models built on it. */
 export type FantasyCtx = {
@@ -15,6 +18,14 @@ export type FantasyCtx = {
   go: (section: SectionKey, sub?: string | null) => void
   /** Open a player's detail sheet. */
   openPlayer: (id: string) => void
+  /** Your grades of suggested trades and what they teach the trade read (see lib/fantasy/grades). */
+  grades: {
+    all: Grades
+    lessons: Lessons
+    set: (idea: TradeIdea, rec: Omit<GradeRecord, 'partnerId' | 'give' | 'get' | 'at'> | null) => void
+    /** A read with your grades applied. */
+    apply: (read: AcceptRead, idea: TradeIdea) => AcceptRead
+  }
 }
 
 const Ctx = createContext<FantasyCtx | null>(null)

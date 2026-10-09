@@ -157,6 +157,12 @@ export type AcceptRead = {
   reasons: string[]
   /** The same reasons, each marked as helping (pos) or hurting (neg) the chance they say yes. */
   signals: { text: string; tone: 'pos' | 'neg' | 'neutral' }[]
+  /** The log-odds behind `index`, so your grades can move it (lib/fantasy/grades). */
+  logit: number
+  /** Your own grade of this deal, once applied. */
+  graded?: 'yes' | 'maybe' | 'no' | null
+  /** Graded "no way", or it asks for a player you said they won't move. */
+  ruledOut?: boolean
 }
 
 const logistic = (x: number) => 1 / (1 + Math.exp(-x))
@@ -218,5 +224,6 @@ export const acceptRead = (
     faab: sweetener,
     reasons: signals.map((s) => s.text),
     signals,
+    logit: x,
   }
 }

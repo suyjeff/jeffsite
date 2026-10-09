@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { acceptRead } from '../../../lib/fantasy/behavior'
+import { ideaKey } from '../../../lib/fantasy/grades'
 import { searchTrades, tradeBase } from '../../../lib/fantasy/search'
 import { DEFAULT_TRADE_CONFIG, findTargets, scoreTrade, type TradeIdea, type TradeShape } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
@@ -79,12 +80,21 @@ const TradesView = ({
   )
   const base = useMemo(() => tradeBase(data, analysis), [data, analysis])
 
-  const { models } = useFantasy()
+  const { models, grades } = useFantasy()
   const search = useMemo(() => searchTrades(data, analysis, { minTheirGain, maxValueAsk }), [data, analysis, minTheirGain, maxValueAsk])
-  const reads = useMemo(() => new Map(search.ideas.map((i) => [i, acceptRead(i, myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab)])), [search.ideas, myRosterId, models, analysis.currency])
+  const reads = useMemo(
+    () => new Map(search.ideas.map((i) => [i, grades.apply(acceptRead(i, myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab), i)])),
+    [search.ideas, myRosterId, models, analysis.currency, grades],
+  )
+  // Deals your grades rule out (a "no way", or a player you said they keep) step aside unless asked for.
+  const [showRuledOut, setShowRuledOut] = useState(false)
+  const openedAt = useRef(Date.now())
+  const ruledOut = useMemo(() => search.ideas.filter((i) => reads.get(i)?.ruledOut).length, [search.ideas, reads])
 
   const shown = useMemo(() => {
     let xs = search.ideas
+    // A deal you grade stays where it is until you leave, so it never vanishes under the pointer.
+    if (!showRuledOut) xs = xs.filter((i) => !reads.get(i)?.ruledOut || (grades.all[ideaKey(i)]?.at ?? 0) >= openedAt.current)
     if (makeup !== 'any') xs = xs.filter((i) => i.shape === makeup)
     if (partner !== 'all') xs = xs.filter((i) => i.partnerId === partner)
     const key: Record<Sort, (i: TradeIdea) => number> = {
@@ -103,7 +113,7 @@ const TradesView = ({
       else groups.set(k, [i])
     }
     return [...groups.values()]
-  }, [search.ideas, makeup, partner, sort, reads])
+  }, [search.ideas, makeup, partner, sort, reads, showRuledOut, grades.all])
   useEffect(() => setVisible(10), [makeup, partner, sort, minTheirGain, maxValueAsk])
 
   const tags = useMemo(() => {
@@ -119,6 +129,22 @@ const TradesView = ({
     if (balanced && !out.has(balanced)) out.set(balanced, 'Most even')
     return out
   }, [search.ideas])
+
+  // What the grades changed, in a sentence: whose odds moved, and what is off the table.
+  const gradeSummary = useMemo(() => {
+    const L = grades.lessons
+    const name = (id: number) => teamById[id]?.name ?? 'a team'
+    const up = Object.entries(L.partner).filter(([, p]) => p.offset >= 0.2 && !p.dormant).map(([id]) => name(Number(id)))
+    const down = Object.entries(L.partner).filter(([, p]) => p.offset <= -0.2 || p.dormant).map(([id]) => name(Number(id)))
+    const kept = Object.values(L.untouchable).reduce((a, xs) => a + xs.length, 0)
+    const parts = [
+      up.length ? `raise the odds for ${up.join(', ')}` : '',
+      down.length ? `lower them for ${down.join(', ')}` : '',
+      kept ? `take ${kept} player${kept === 1 ? '' : 's'} off the table` : '',
+      Math.abs(L.global) >= 0.15 ? `make every read ${L.global > 0 ? 'a little more hopeful' : 'a little harsher'}` : '',
+    ].filter(Boolean)
+    return parts.length ? `${parts.join('; ')}.` : 'are saved; a few more and they start to move the odds.'
+  }, [grades.lessons, teamById])
 
   const shapeCounts = useMemo(() => {
     const c: Record<string, number> = { any: search.ideas.length }
@@ -355,6 +381,18 @@ const TradesView = ({
               </Button>
             </div>
             {showFilters && <Panel title="Search limits">{filterControls}</Panel>}
+            {grades.lessons.n > 0 && (
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-l-2 border-ff-accent/50 pl-3 text-[12px] leading-[1.45] text-ff-text2">
+                <span>
+                  <span className="text-ff-text">Your {grades.lessons.n} grade{grades.lessons.n === 1 ? '' : 's'}</span> {gradeSummary}
+                </span>
+                {ruledOut > 0 && (
+                  <button type="button" onClick={() => setShowRuledOut((x) => !x)} className="font-mono text-[11px] text-ff-accent hover:underline">
+                    {showRuledOut ? `hide the ${ruledOut} ruled out` : `${ruledOut} ruled out · show`}
+                  </button>
+                )}
+              </div>
+            )}
 
             {shown.length === 0 ? (
               <Empty title={search.ideas.length ? 'No deals match these filters' : 'No deal here makes both lineups better'}>
