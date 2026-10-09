@@ -58,15 +58,15 @@ export const TOUR: TourStep[] = [
   {
     key: 'power',
     title: 'Power',
-    what: 'Rankings, standings and playoff odds.',
-    can: ['Rank teams three ways', 'See playoff and title odds for everyone', 'Check who has the easier schedule'],
+    what: 'Rankings, standings and the playoff race.',
+    can: ['Rank teams three ways', 'Pick results and watch everyone’s playoff odds move', 'Play out a season, bracket and all'],
     why: 'Where you really stand, not just your record.',
   },
   {
     key: 'teams',
     title: 'Teams',
-    what: 'Every roster in the league, in detail.',
-    can: ['Scout any team’s strengths and holes', 'Review results week by week'],
+    what: 'Every team at a glance, and any roster in full.',
+    can: ['Compare records, form, odds and needs in one table', 'Open a team for a quick summary', 'Scout any team’s strengths and holes'],
     why: 'Know your opponents and trade partners.',
   },
   {

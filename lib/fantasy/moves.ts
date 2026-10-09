@@ -1,6 +1,7 @@
 import type { Analysis } from './analysis'
 import { optimalLineup, type LineupPlayer, type Slot } from './lineup'
 import { waiverTargets } from './search'
+import type { PlayerMap } from './types'
 import type { LeagueData } from './useLeagueData'
 
 /**
@@ -44,32 +45,56 @@ const lp = (data: LeagueData, ids: string[], pts: Record<string, number>): Lineu
 
 const slotLabel = (s: Slot) => s.name.replace('SUPER_FLEX', 'SF')
 
-/** Free agents by expected points in a week, best first, at any of a slot's positions. */
-const bestFree = (data: LeagueData, analysis: Analysis, eligible: string[], pts: Record<string, number>, skip: Set<string>) => {
+// Free agents by position, best first, for one week's points and one set of rosters. One sort per week's numbers
+// and rosters, shared by every slot (and every component) that asks.
+const faIndex = new WeakMap<Record<string, number>, WeakMap<Record<string, number>, Record<string, string[]>>>()
+export const freeAgentsByPos = (players: PlayerMap, rosteredBy: Record<string, number>, pts: Record<string, number>) => {
+  let byRosters = faIndex.get(pts)
+  if (!byRosters) faIndex.set(pts, (byRosters = new WeakMap()))
+  let out = byRosters.get(rosteredBy)
+  if (!out) {
+    out = {}
+    for (const [id, v] of Object.entries(pts)) {
+      const p = players[id]
+      if (!p || rosteredBy[id] != null || !(v > 0)) continue
+      for (const pos of p.fpos ?? [p.pos]) (out[pos] ??= []).push(id)
+    }
+    for (const ids of Object.values(out)) ids.sort((a, b) => (pts[b] ?? 0) - (pts[a] ?? 0))
+    byRosters.set(rosteredBy, out)
+  }
+  return out
+}
+
+/** The best free agent at any of a slot's positions in a week, passing over anyone in `skip`. */
+export const bestFreeAgent = (players: PlayerMap, rosteredBy: Record<string, number>, eligible: string[], pts: Record<string, number>, skip?: Set<string>) => {
+  const lists = freeAgentsByPos(players, rosteredBy, pts)
   let best: string | null = null
-  for (const [id, v] of Object.entries(pts)) {
-    const p = data.players[id]
-    if (!p || analysis.rosteredBy[id] != null || skip.has(id) || !(v > 0)) continue
-    if (!(p.fpos ?? [p.pos]).some((pos) => eligible.includes(pos))) continue
-    if (best == null || v > (pts[best] ?? 0)) best = id
+  for (const pos of eligible) {
+    const top = (lists[pos] ?? []).find((id) => !skip?.has(id))
+    if (top && (best == null || (pts[top] ?? 0) > (pts[best] ?? 0))) best = top
   }
   return best
 }
 
+const bestFree = (data: LeagueData, analysis: Analysis, eligible: string[], pts: Record<string, number>, skip: Set<string>) =>
+  bestFreeAgent(data.players, analysis.rosteredBy, eligible, pts, skip)
+
 /**
- * The bench player to cut for an add: lowest value, with the consensus price as a floor so an injured star the
+ * Bench players to cut for an add, first to go first: lowest value, with the consensus price as a floor so an injured star the
  * experts still rank is never the one to go.
  */
-export const dropCandidate = (analysis: Analysis, rosterId: number, perceived?: Record<string, number> | null) => {
+export const dropCandidates = (analysis: Analysis, rosterId: number, perceived?: Record<string, number> | null) => {
   const team = analysis.teamById[rosterId]
-  if (!team) return null
+  if (!team) return []
   const lineup = new Set(analysis.needs[rosterId]?.slots.map((s) => s.starter).filter(Boolean) ?? [])
   const keep = (id: string) => {
     const market = analysis.market[id] ?? -99
     return market + Math.max(0, (perceived?.[id] ?? 0) - Math.max(0, market))
   }
-  return [...team.players].filter((id) => !lineup.has(id)).sort((a, b) => keep(a) - keep(b))[0] ?? null
+  return [...team.players].filter((id) => !lineup.has(id)).sort((a, b) => keep(a) - keep(b))
 }
+
+export const dropCandidate = (analysis: Analysis, rosterId: number, perceived?: Record<string, number> | null) => dropCandidates(analysis, rosterId, perceived)[0] ?? null
 
 export const findMoves = (data: LeagueData, analysis: Analysis, rosterId: number, opts: { perceived?: Record<string, number> | null; limit?: number } = {}): Move[] => {
   const team = analysis.teamById[rosterId]
@@ -115,11 +140,13 @@ export const findMoves = (data: LeagueData, analysis: Analysis, rosterId: number
 
   // ---- Slots even the best lineup cannot fill this week: pick someone up ----
   const weekPts = h0.pts
+  const added: string[] = []
   best.assignments.forEach((p, i) => {
     if (p && p.pts > 0) return
     const fa = bestFree(data, analysis, slots[i].eligible, weekPts, used)
     if (!fa) return
     used.add(fa)
+    added.push(fa)
     const who = p?.id ?? set[i] ?? null
     moves.push({ kind: 'fill', key: `fill:${i}`, week, gain: weekPts[fa] ?? 0, urgency: 2, inId: fa, outId: who, slot: slotLabel(slots[i]), inPts: weekPts[fa] ?? 0, outPts: 0 })
   })
@@ -134,18 +161,22 @@ export const findMoves = (data: LeagueData, analysis: Analysis, rosterId: number
     const bench = roster
       .filter((id) => !bestIds.has(id) && (proj[id] ?? 0) > 0 && (data.players[id]?.fpos ?? []).some((pos) => slots[i].eligible.includes(pos)))
       .sort((a, b) => (proj[b] ?? 0) - (proj[a] ?? 0))[0]
-    const benchPts = bench ? (proj[bench] ?? 0) : 0
+    // Bench and free agent compared on the same numbers, the week's expected points.
+    const benchPts = bench ? (weekPts[bench] ?? 0) : 0
     // A bench player close to the free-agent best is cover enough; otherwise the cover is a pickup.
     const fa = bestFree(data, analysis, slots[i].eligible, weekPts, used)
     const faPts = fa ? (weekPts[fa] ?? 0) : 0
     const pickup = fa && faPts > benchPts + 1.5 ? fa : null
     if (!pickup && !bench) return
-    if (pickup) used.add(pickup)
+    if (pickup) {
+      used.add(pickup)
+      added.push(pickup)
+    }
     moves.push({
       kind: 'cover',
       key: `cover:${p.id}`,
       week,
-      gain: (1 - note.play) * Math.max(benchPts, faPts),
+      gain: (1 - note.play) * (pickup ? faPts : benchPts),
       urgency: 2,
       inId: pickup,
       outId: p.id,
@@ -162,11 +193,12 @@ export const findMoves = (data: LeagueData, analysis: Analysis, rosterId: number
   // ---- Next week: holes a bye or an absence opens that the bench cannot fill ----
   const h1 = data.horizon.find((h) => h.week === week + 1)
   if (h1) {
-    const next = optimalLineup(slots, lp(data, roster, h1.pts))
+    // This week's pickups count: a hole they already cover is not a second move.
+    const next = optimalLineup(slots, lp(data, [...roster, ...added], h1.pts))
     next.assignments.forEach((p, i) => {
       if (p && p.pts > 0) return
-      // Who normally holds the slot: this week's best starter there, if he is the one missing.
-      const regular = best.assignments[i]?.id ?? null
+      // Who is missing: the player the lineup is left with there, else this week's starter in the slot.
+      const regular = p?.id ?? best.assignments[i]?.id ?? null
       const fa = bestFree(data, analysis, slots[i].eligible, h1.pts, used)
       if (!fa) return
       used.add(fa)
@@ -176,7 +208,8 @@ export const findMoves = (data: LeagueData, analysis: Analysis, rosterId: number
 
   // ---- The best adds for the rest of the season ----
   if (rosterId === analysis.myRosterId) {
-    const drop = dropCandidate(analysis, rosterId, opts.perceived)
+    // Each add costs a different bench player, so two adds read as two moves you can make together.
+    const drops = dropCandidates(analysis, rosterId, opts.perceived)
     const byPos = new Set<string>()
     for (const t of waiverTargets(data, analysis, { pool: 120, limit: 12 })) {
       if (t.add < 0.5 || used.has(t.id)) continue
@@ -189,7 +222,9 @@ export const findMoves = (data: LeagueData, analysis: Analysis, rosterId: number
         pos === 'K' || pos === 'DEF'
           ? roster.filter((id) => data.players[id]?.pos === pos).sort((a, b) => (analysis.horizon.perWeek[a] ?? 0) - (analysis.horizon.perWeek[b] ?? 0))[0]
           : undefined
-      moves.push({ kind: 'add', key: `add:${t.id}`, week: null, gain: t.add, urgency: 0, inId: t.id, outId: same ?? drop, slot: t.slot ?? undefined })
+      const drop = same ?? drops.find((id) => !used.has(id)) ?? null
+      if (drop) used.add(drop)
+      moves.push({ kind: 'add', key: `add:${t.id}`, week: null, gain: t.add, urgency: 0, inId: t.id, outId: drop, slot: t.slot ?? undefined })
       if (byPos.size >= 2) break
     }
   }

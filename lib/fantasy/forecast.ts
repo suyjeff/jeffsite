@@ -406,6 +406,9 @@ export type SimInput = {
   locks?: Record<string, number>
 }
 
+/** The seed of the separate stream locked results redraw from. */
+export const lockStream = (seed: number) => (seed ^ 0x9e3779b9) >>> 0
+
 /** A regular-season game's key for `locks`, the same whichever side is listed first. */
 export const lockKey = (g: { week: number; a: number; b: number }) => `${g.week}:${Math.min(g.a, g.b)}:${Math.max(g.a, g.b)}`
 
@@ -461,6 +464,9 @@ export const simulateSeason = (input: SimInput): Record<number, SimTeam> => {
   const settled = clinchStatus(teams, record, schedule, nPlayoff, input.weeksLeft ?? 0)
   for (const t of teams) out[t] = { rosterId: t, wins: 0, playoffs: 0, bye: 0, final: 0, title: 0, seeds: Array(teams.length + 1).fill(0), clinch: settled[t] }
   const z = normals(rng(input.seed ?? 20240917))
+  // Redraws for locked results come from their own stream, so a pick never shifts the draws every other game
+  // gets: the same season with and without it differs only where the pick does.
+  const zl = normals(rng(lockStream(input.seed ?? 20240917)))
   // Means are fixed per sim input; read them once.
   const meanCache = new Map<string, number>()
   const mean = (t: number, w: number) => {
@@ -488,7 +494,7 @@ export const simulateSeason = (input: SimInput): Record<number, SimTeam> => {
       let sa = mean(g.a, g.week) + level[ia] + sigma * z()
       let sb = mean(g.b, g.week) + level[ib] + sigma * z()
       const lock = input.locks?.[lockKey(g)]
-      if (lock !== undefined) [sa, sb] = lockedScores(lock === g.a, sa, sb, () => mean(g.a, g.week) + level[ia] + sigma * z(), () => mean(g.b, g.week) + level[ib] + sigma * z())
+      if (lock !== undefined) [sa, sb] = lockedScores(lock === g.a, sa, sb, () => mean(g.a, g.week) + level[ia] + sigma * zl(), () => mean(g.b, g.week) + level[ib] + sigma * zl())
       pf[ia] += sa
       pf[ib] += sb
       if (sa > sb) wins[ia]++

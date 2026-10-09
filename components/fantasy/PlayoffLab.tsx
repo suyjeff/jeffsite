@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useMemo, useState } from 'react'
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { lockKey, simulateSeason, winProb, type SimTeam } from '../../lib/fantasy/forecast'
 import { seasonStories, simInputFor, simulateOnce, type BracketGame, type Story, type Trace } from '../../lib/fantasy/playoffSim'
 import { useFantasy } from './FantasyContext'
@@ -11,6 +11,12 @@ const LEVER_SIMS = 600
 
 type Chaos = 'calm' | 'normal' | 'chaos'
 const CHAOS: Record<Chaos, number> = { calm: 0.7, normal: 1, chaos: 1.5 }
+/** The picks and luck a season was played under, compared by content so undoing a pick is no change. */
+const setupKey = (locks: Record<string, number>, chaos: Chaos) =>
+  `${chaos}|${Object.entries(locks)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join(',')}`
 
 /** A change in a probability, in points: "+12", "−3", nothing when it rounds to zero. */
 const Delta = ({ v, className }: { v: number; className?: string }) => {
@@ -252,28 +258,43 @@ const PlayoffLab = () => {
   const [week, setWeek] = useState<number | null>(weeks[0] ?? null)
   const [locks, setLocks] = useState<Record<string, number>>({})
   const [chaos, setChaos] = useState<Chaos>('normal')
-  // Picks land at once; the simulations behind them catch up a beat later, so taps never wait on arithmetic.
+  // Picks land at once; the simulations behind them run in a deferred render a beat later.
   const dLocks = useDeferredValue(locks)
   const dChaos = useDeferredValue(chaos)
   const pending = dLocks !== locks || dChaos !== chaos
 
   const baseline = useMemo(() => simulateSeason(simInputFor(input, f, { sims: SIMS, seed: SEED })), [input, f])
-  const scenario = useMemo(() => simulateSeason(simInputFor(input, f, { locks: dLocks, chaos: CHAOS[dChaos], sims: SIMS, seed: SEED })), [input, f, dLocks, dChaos])
+  // Untouched, the scenario is the baseline: no second run of the same seasons.
+  const scenario = useMemo(
+    () => (Object.keys(dLocks).length || dChaos !== 'normal' ? simulateSeason(simInputFor(input, f, { locks: dLocks, chaos: CHAOS[dChaos], sims: SIMS, seed: SEED })) : baseline),
+    [input, f, dLocks, dChaos, baseline],
+  )
   const nLocks = Object.keys(locks).length
   const tweaked = nLocks > 0 || chaos !== 'normal'
 
   // What each result in the chosen week does to your playoff odds, on top of the picks already made.
   const dWeek = useDeferredValue(week)
   const games = useMemo(() => input.schedule.filter((g) => g.week === week), [input.schedule, week])
-  const lever = useMemo(() => {
-    if (me == null || dWeek == null) return {} as Record<string, { a: number; b: number }>
+  // Run a game at a time, yielding to the page between games, so a tap is never stuck behind them.
+  const [lever, setLever] = useState<Record<string, { a: number; b: number }>>({})
+  useEffect(() => {
+    setLever({})
+    if (me == null || dWeek == null) return
+    let live = true
     const out: Record<string, { a: number; b: number }> = {}
-    for (const g of input.schedule.filter((x) => x.week === dWeek)) {
-      const k = lockKey(g)
-      const run = (w: number) => simulateSeason(simInputFor(input, f, { locks: { ...dLocks, [k]: w }, chaos: CHAOS[dChaos], sims: LEVER_SIMS, seed: SEED }))[me]?.playoffs ?? 0
-      out[k] = { a: run(g.a), b: run(g.b) }
+    ;(async () => {
+      for (const g of input.schedule.filter((x) => x.week === dWeek)) {
+        await new Promise<void>((r) => window.setTimeout(r, 0))
+        if (!live) return
+        const k = lockKey(g)
+        const run = (w: number) => simulateSeason(simInputFor(input, f, { locks: { ...dLocks, [k]: w }, chaos: CHAOS[dChaos], sims: LEVER_SIMS, seed: SEED }))[me]?.playoffs ?? 0
+        out[k] = { a: run(g.a), b: run(g.b) }
+        setLever({ ...out })
+      }
+    })()
+    return () => {
+      live = false
     }
-    return out
   }, [me, dWeek, input, f, dLocks, dChaos])
 
   const pick = (g: { week: number; a: number; b: number }, w: number) =>
@@ -294,18 +315,18 @@ const PlayoffLab = () => {
 
   // One season, played out on demand.
   const [run, setRun] = useState(0)
-  const [trace, setTrace] = useState<{ t: Trace; stories: Story[]; picks: Record<string, number>; chaos: Chaos } | null>(null)
+  const [trace, setTrace] = useState<{ t: Trace; stories: Story[]; setup: string } | null>(null)
   // A running tally of the seasons played this visit: how often you got in, and how often you won it all.
   const [tally, setTally] = useState({ n: 0, in: 0, titles: 0 })
   const play = () => {
     const seed = Math.floor(Math.random() * 1e9)
     const t = simulateOnce(simInputFor(input, f, { locks, chaos: CHAOS[chaos] }), seed)
-    setTrace({ t, stories: seasonStories(t, me, 7), picks: locks, chaos })
+    setTrace({ t, stories: seasonStories(t, me, 7), setup: setupKey(locks, chaos) })
     setRun((r) => r + 1)
     const mineRow = me != null ? t.standings.find((r) => r.rosterId === me) : null
     setTally((x) => ({ n: x.n + 1, in: x.in + (mineRow && mineRow.seed <= t.nPlayoff ? 1 : 0), titles: x.titles + (t.champion === me ? 1 : 0) }))
   }
-  const stale = trace && (trace.picks !== locks || trace.chaos !== chaos)
+  const stale = trace && trace.setup !== setupKey(locks, chaos)
 
   const name = (id: number) => analysis.teamById[id]?.name ?? `#${id}`
   const rows = useMemo(
@@ -422,7 +443,10 @@ const PlayoffLab = () => {
                       <td className="h-8 whitespace-nowrap border-b border-ff-line/60 px-2 text-right">
                         <span className="inline-flex items-center justify-end gap-1.5">
                           <span className="hidden h-1 w-12 bg-ff-line md:inline-block" aria-hidden>
-                            <span className="block h-full origin-left bg-ff-accent transition-transform duration-300 ease-out" style={{ transform: `scaleX(${s?.playoffs ?? 0})` }} />
+                            <span
+                              className="block h-full origin-left bg-ff-accent transition-transform duration-300 ease-out"
+                              style={{ transform: `scaleX(${s?.playoffs ?? 0})` }}
+                            />
                           </span>
                           <span className="num w-10 text-right text-ff-text">{odds(s?.playoffs, 0, s?.clinch)}</span>
                           {tweaked && <Delta v={(s?.playoffs ?? 0) - (b?.playoffs ?? 0)} />}

@@ -4,7 +4,7 @@
 // The odds are the average over thousands of these. A trace is one of them: any single season is unlikely, which is
 // the point. Locked results hold in both.
 
-import { bracketOrder, lockKey, lockedScores, normals, persistMean, rng, type Forecast, type ForecastInput, type SimInput } from './forecast'
+import { bracketOrder, lockKey, lockStream, lockedScores, normals, persistMean, rng, type Forecast, type ForecastInput, type SimInput } from './forecast'
 
 /** The simulation's input from the forecast, as the odds use it, with locked results and a chaos factor on the noise. */
 export const simInputFor = (input: ForecastInput, f: Forecast, opts: { locks?: Record<string, number>; chaos?: number; sims?: number; seed?: number } = {}): SimInput => {
@@ -55,6 +55,7 @@ export const roundName = (teamsLeft: number) => (teamsLeft === 2 ? 'Final' : tea
 export const simulateOnce = (input: SimInput, seed: number): Trace => {
   const { teams, schedule, record, sigma, tau, playoffWeeks } = input
   const z = normals(rng(seed))
+  const zl = normals(rng(lockStream(seed)))
   const level: Record<number, number> = {}
   const rows: Record<number, TraceRow> = {}
   for (const t of teams) {
@@ -62,7 +63,7 @@ export const simulateOnce = (input: SimInput, seed: number): Trace => {
     rows[t] = { rosterId: t, seed: 0, wins: r.wins, losses: r.losses, ties: r.ties, pf: r.pf, was: { wins: r.wins, losses: r.losses } }
     level[t] = tau * z()
   }
-  const score = (t: number, w: number) => input.mean(t, w) + level[t] + sigma * z()
+  const score = (t: number, w: number, draw = z) => input.mean(t, w) + level[t] + sigma * draw()
   const regular: TraceGame[] = []
   for (const g of [...schedule].sort((x, y) => x.week - y.week)) {
     if (!rows[g.a] || !rows[g.b]) continue
@@ -74,8 +75,8 @@ export const simulateOnce = (input: SimInput, seed: number): Trace => {
         lock === g.a,
         sa,
         sb,
-        () => score(g.a, g.week),
-        () => score(g.b, g.week),
+        () => score(g.a, g.week, zl),
+        () => score(g.b, g.week, zl),
       )
     rows[g.a].pf += sa
     rows[g.b].pf += sb

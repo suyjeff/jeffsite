@@ -40,6 +40,17 @@ describe('locked results', () => {
     }
   })
 
+  it('a pick changes only its own game: every other game keeps its draws', () => {
+    // Redraws come from their own stream, so forcing the other result leaves the rest of the season's dice alone.
+    for (let seed = 0; seed < 20; seed++) {
+      const free = simulateOnce(base, seed)
+      const g = free.regular[0]
+      const flipped = simulateOnce({ ...base, locks: { [lockKey(g)]: g.sa > g.sb ? g.b : g.a } }, seed)
+      expect(flipped.regular[0].sa > flipped.regular[0].sb).toBe(g.sb >= g.sa)
+      expect(flipped.regular.slice(1)).toEqual(free.regular.slice(1))
+    }
+  })
+
   it('the key is the same whichever side is listed first', () => {
     expect(lockKey({ week: 3, a: 9, b: 2 })).toBe(lockKey({ week: 3, a: 2, b: 9 }))
   })
