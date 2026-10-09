@@ -6,17 +6,19 @@ import { Segmented, cx, fmt, signedPct } from './ui'
 const STEPS = [-0.5, -0.25, -0.1, 0, 0.1, 0.25, 0.5]
 
 /**
- * The selected step takes its sign's colour, stronger with size. Light and
- * middling steps are tints under normal text; the largest is solid with the
- * panel colour on top (both clear 4.5:1 in every theme). Zero stays neutral.
+ * The selected step takes its sign's colour, stronger with size. Light and middling steps are tints under normal
+ * text with a 1px ring in the same colour, because a tint alone sits near 1.3:1 on the panel and would not read as
+ * selected; the largest is solid with the panel colour on top (all clear 4.5:1 in every theme). Zero stays neutral.
  * Written out in full so Tailwind sees every class.
  */
+const NEG_RING = 'shadow-[inset_0_0_0_1px_rgb(var(--ff-neg))]'
+const POS_RING = 'shadow-[inset_0_0_0_1px_rgb(var(--ff-pos))]'
 const TONE: Record<string, string> = {
   '-0.5': 'bg-ff-neg text-ff-panel',
-  '-0.25': 'bg-ff-neg/35 text-ff-text',
-  '-0.1': 'bg-ff-neg/15 text-ff-text',
-  '0.1': 'bg-ff-pos/15 text-ff-text',
-  '0.25': 'bg-ff-pos/35 text-ff-text',
+  '-0.25': `bg-ff-neg/35 text-ff-text ${NEG_RING}`,
+  '-0.1': `bg-ff-neg/15 text-ff-text ${NEG_RING}`,
+  '0.1': `bg-ff-pos/15 text-ff-text ${POS_RING}`,
+  '0.25': `bg-ff-pos/35 text-ff-text ${POS_RING}`,
   '0.5': 'bg-ff-pos text-ff-panel',
 }
 

@@ -563,25 +563,27 @@ html:has(body .ff) body {
   right: 12px;
   top: 2px;
 }
-/* The secondary Aqua: the same gel, lifted toward white so it sits behind the floating one. The label band stays
-   about 3:1 against the white text. Dark mode has a lighter accent, so it mixes from the deep accent instead. */
 /* The secondary Aqua (Open in builder): the same glass, lighter. The top and bottom carry more white, so it reads
-   as the quieter button beside the floating one, while the band behind the label stays on the deep step so light
-   text holds (about 5:1 in the default theme, light or dark). */
+   as the quieter button beside the floating one. The deep band starts above the label's cap height and runs below
+   its baseline, and the gloss is halved, so light text holds over its whole height (about 4.5:1 or better in the
+   default theme, light or dark). */
 .ff .ff-aqua.ff-aqua-soft {
   background: linear-gradient(
     180deg,
     color-mix(in oklab, rgb(var(--ff-accent)) 45%, white) 0%,
-    color-mix(in oklab, rgb(var(--ff-accent)) 78%, white) 30%,
-    color-mix(in oklab, rgb(var(--ff-accent-deep)) 92%, white) 46%,
-    color-mix(in oklab, rgb(var(--ff-accent-deep)) 92%, white) 60%,
-    color-mix(in oklab, rgb(var(--ff-accent)) 80%, white) 84%,
+    color-mix(in oklab, rgb(var(--ff-accent)) 78%, white) 18%,
+    color-mix(in oklab, rgb(var(--ff-accent-deep)) 97%, white) 28%,
+    color-mix(in oklab, rgb(var(--ff-accent-deep)) 97%, white) 68%,
+    color-mix(in oklab, rgb(var(--ff-accent)) 80%, white) 86%,
     color-mix(in oklab, rgb(var(--ff-accent)) 50%, white) 100%
   );
   box-shadow:
     inset 0 -2px 4px color-mix(in oklab, rgb(var(--ff-accent)) 35%, rgb(255 255 255 / 0.8)),
     inset 0 1px 1px rgb(255 255 255 / 0.4),
     0 1px 2px rgb(0 0 0 / 0.16);
+}
+.ff .ff-aqua.ff-aqua-soft::before {
+  opacity: 0.5;
 }
 @keyframes ff-aqua-throb {
   to {
