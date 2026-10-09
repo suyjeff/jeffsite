@@ -2,7 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState, type ReactNode } fr
 import { THEMES, themeById, type Scheme } from '../../lib/fantasy/themes'
 import { useFantasy } from './FantasyContext'
 import { SECTIONS, sectionCode, type SectionKey } from './Shell'
-import { Swatch } from './ThemePicker'
+import { Swatch, type Density } from './ThemePicker'
 import { Avatar, PlayerAvatar, cx, fmt, ownerLabel, shortcutLabel } from './ui'
 
 // Cmd/Ctrl+K: one box that reaches every section and tab, every player in the
@@ -24,6 +24,11 @@ type Item = {
 }
 
 const TABS: Partial<Record<SectionKey, [string, string][]>> = {
+  slate: [
+    ['week', 'Your week'],
+    ['games', 'Games'],
+    ['managers', 'Every manager'],
+  ],
   trades: [
     ['suggested', 'Suggested trades'],
     ['targets', 'Trade targets'],
@@ -101,6 +106,8 @@ const CommandPalette = ({
   scheme,
   onTheme,
   onScheme,
+  density,
+  onDensity,
   onReload,
   leagues,
   onLeague,
@@ -111,6 +118,8 @@ const CommandPalette = ({
   scheme: Scheme
   onTheme: (id: string) => void
   onScheme: (s: Scheme) => void
+  density: Density
+  onDensity: (d: Density) => void
   onReload: () => void
   leagues: { id: string; name: string }[]
   onLeague: (id: string) => void
@@ -169,11 +178,16 @@ const CommandPalette = ({
     ] as [Scheme, string][])
       // A theme with one mode ignores the setting, so offer it only where it does something.
       if (m !== scheme && current.light && current.dark) items.push({ id: `scheme:${m}`, group: 'Actions', label, keywords: 'theme appearance', run: () => onScheme(m) })
+    items.push(
+      density === 'compact'
+        ? { id: 'density:comfortable', group: 'Actions', label: 'Comfortable density', keywords: 'larger text type size bigger rows spacing', run: () => onDensity('comfortable') }
+        : { id: 'density:compact', group: 'Actions', label: 'Compact density', keywords: 'smaller text type size dense rows spacing', run: () => onDensity('compact') },
+    )
     items.push({ id: 'reload', group: 'Actions', label: 'Reload from Sleeper', keywords: 'refresh sync', hint: 'R', run: onReload })
     for (const l of leagues)
       if (l.id !== data.league.league_id) items.push({ id: `league:${l.id}`, group: 'Actions', label: `Switch league: ${l.name}`, keywords: 'league', run: () => onLeague(l.id) })
     return items
-  }, [analysis, go, onTheme, onScheme, current, scheme, onReload, leagues, onLeague, data.league.league_id])
+  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, leagues, onLeague, data.league.league_id])
 
   // Players worth finding: anyone rostered here or with a value or a projection ahead.
   const pool = useMemo(

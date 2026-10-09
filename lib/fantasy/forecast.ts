@@ -571,6 +571,38 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = past
   return { ratings, byId, sim, sigma: round2(noise.sigma), noiseN: noise.n, tau: round2(tau), leagueEff: round3(leagueEff), sims, nextWeek, mean }
 }
 
+export type Stakes = { win: { playoffs: number; title: number }; loss: { playoffs: number; title: number } }
+
+/**
+ * What this week's result is worth: each team's playoff and title odds if it wins this week's game and if
+ * it loses, the rest of the season simulated on the same draws both times, so the gap is the result and not
+ * the dice. The week's other games stay simulated.
+ */
+export const weekStakes = (input: ForecastInput, base: Forecast, sims = 1500): Record<number, Stakes> => {
+  const out: Record<number, Stakes> = {}
+  const ids = input.teams.map((t) => t.rosterId)
+  const mean = persistMean(base.mean, ids)
+  const pick = (t: SimTeam | undefined) => ({ playoffs: t?.playoffs ?? 0, title: t?.title ?? 0 })
+  for (const g of base.nextWeek) {
+    const rest = input.schedule.filter((x) => !(x.week === g.week && ((x.a === g.a && x.b === g.b) || (x.a === g.b && x.b === g.a))))
+    const run = (aWins: boolean) => {
+      const record = { ...input.record }
+      const add = (t: number, won: boolean, pts: number) => {
+        const r = record[t] ?? { wins: 0, losses: 0, ties: 0, pf: 0 }
+        record[t] = { ...r, wins: r.wins + (won ? 1 : 0), losses: r.losses + (won ? 0 : 1), pf: r.pf + pts }
+      }
+      add(g.a, aWins, g.muA)
+      add(g.b, !aWins, g.muB)
+      return simulateSeason({ teams: ids, record, schedule: rest, playoffWeeks: input.playoffWeeks, playoffTeams: input.playoffTeams, mean, sigma: base.sigma, tau: base.tau, weeksLeft: input.weeksLeft, sims })
+    }
+    const aWon = run(true)
+    const bWon = run(false)
+    out[g.a] = { win: pick(aWon[g.a]), loss: pick(bWon[g.a]) }
+    out[g.b] = { win: pick(bWon[g.b]), loss: pick(aWon[g.b]) }
+  }
+  return out
+}
+
 /**
  * What a trade does to both teams' seasons: the same simulation run twice on
  * the same random draws, before and after, so the difference is the trade and

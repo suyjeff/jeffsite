@@ -147,42 +147,274 @@ export const PageHeader = ({
   /** Show the title on phones too, where the top bar only names the section. */
   mobileTitle?: boolean
 }) => (
-  <div className="ff-pagehead sticky top-12 z-20 -mx-3 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-0 md:-mx-5">
-    <div className={cx('items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5', actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden')}>
-      <div className="flex min-w-0 items-baseline gap-2.5">
-        {code && <span className="num hidden text-[10.5px] text-ff-muted md:inline">{code}</span>}
-        <h1 className={cx('min-w-0 truncate text-[15px] font-medium leading-tight tracking-[-0.01em] text-ff-text md:block', mobileTitle ? 'block' : 'hidden')}>{title}</h1>
-        {meta && <span className="min-w-0 truncate font-mono text-[10.5px] text-ff-muted">{meta}</span>}
+  <>
+    {/* On phones the title row scrolls away and only the tabs stay pinned under the top bar; on wide screens both stay. */}
+    <div
+      className={cx(
+        'ff-pagehead z-20 -mx-3 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:sticky md:top-0 md:-mx-5',
+        !tabs && 'sticky top-12',
+        actions || meta || mobileTitle ? '' : 'hidden md:block',
+      )}
+    >
+      <div className={cx('items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5', actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden')}>
+        <div className="flex min-w-0 items-baseline gap-2.5">
+          {code && <span className="num hidden text-[10.5px] text-ff-muted md:inline">{code}</span>}
+          <h1 className={cx('min-w-0 truncate text-[15px] font-medium leading-tight tracking-[-0.01em] text-ff-text md:block', mobileTitle ? 'block' : 'hidden')}>{title}</h1>
+          {meta && <span className="min-w-0 truncate font-mono text-[10.5px] text-ff-muted">{meta}</span>}
+        </div>
+        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>
-    {tabs && <div className="px-3 md:px-5">{tabs}</div>}
-  </div>
+    {tabs && <div className="ff-pagehead ff-pagetabs sticky top-12 z-20 -mx-3 bg-ff-bg/90 px-3 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-11 md:-mx-5 md:px-5">{tabs}</div>}
+  </>
 )
 
 export type TabItem<K extends string> = { key: K; label: string; count?: number | null; /** A small mono tag after the label, e.g. "tune". */ mark?: string }
 
-export const Tabs = <K extends string>({ items, value, onChange }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void }) => (
-  <div role="tablist" className="no-scrollbar -mb-px flex overflow-x-auto border-b border-ff-line [mask-image:linear-gradient(to_right,black_88%,transparent)] md:[mask-image:none]">
-    {items.map((t) => {
-      const active = t.key === value
-      return (
-        <button
-          key={t.key}
-          role="tab"
-          aria-selected={active}
-          onClick={() => onChange(t.key)}
-          className={cx('relative h-9 shrink-0 px-3 text-[13px] transition-colors first:pl-0.5', active ? 'text-ff-text' : 'text-ff-muted hover:text-ff-text')}
-        >
-          {t.label}
-          {t.count != null && <span className="num ml-1.5 text-[10.5px] text-ff-muted">{t.count}</span>}
-          {t.mark && <span className="ml-1.5 bg-ff-accent/10 px-1 py-px align-[1px] font-mono text-[9.5px] text-ff-accent">{t.mark}</span>}
-          {active && <span className="absolute inset-x-0 -bottom-px h-[2px] bg-ff-text" />}
-        </button>
-      )
-    })}
-  </div>
+const tabLabel = (t: TabItem<string>) => (
+  <>
+    {t.label}
+    {t.count != null && <span className="num ml-1.5 text-[10.5px] text-ff-muted">{t.count}</span>}
+    {t.mark && <span className="ml-1.5 bg-ff-accent/10 px-1 py-px align-[1px] font-mono text-[9.5px] text-ff-accent">{t.mark}</span>}
+  </>
 )
+
+/**
+ * A page's sub-views. On wide screens they are tabs, one view at a time. With `stacked` (phones),
+ * the page shows every view in one scroll and this becomes a scrollspy: a sticky strip whose
+ * underline follows the scroll position continuously and jumps to a section on tap.
+ */
+export const Tabs = <K extends string>({ items, value, onChange, stacked }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void; stacked?: boolean }) =>
+  stacked ? (
+    <SpyStrip items={items} value={value} />
+  ) : (
+    <div role="tablist" className="no-scrollbar -mb-px flex overflow-x-auto border-b border-ff-line [mask-image:linear-gradient(to_right,black_88%,transparent)] md:[mask-image:none]">
+      {items.map((t) => {
+        const active = t.key === value
+        return (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(t.key)}
+            className={cx('relative h-9 shrink-0 px-3 text-[13px] transition-colors first:pl-0.5', active ? 'text-ff-text' : 'text-ff-muted hover:text-ff-text')}
+          >
+            {tabLabel(t)}
+            {active && <span className="absolute inset-x-0 -bottom-px h-[2px] bg-ff-text" />}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
+const spySection = (key: string) => document.querySelector<HTMLElement>(`[data-spy="${CSS.escape(key)}"]`)
+/** Where a section counts as reached: just under the sticky page header. */
+const spyLine = () => (document.querySelector('.ff-pagetabs')?.getBoundingClientRect().bottom ?? 0) + 12
+
+/** Scroll a stacked page to one of its sections, and put focus on its heading for keyboards and screen readers. */
+export const spyTo = (key: string) => {
+  const el = spySection(key)
+  if (!el) return
+  const target = () => window.scrollY + el.getBoundingClientRect().top - (spyLine() - 12) + 1
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  window.scrollTo({ top: Math.max(0, target()), behavior: reduce ? 'auto' : 'smooth' })
+  el.querySelector<HTMLElement>('[data-spy-head]')?.focus({ preventScroll: true })
+  // Sections mount as the scroll passes them, which can move the target; once the scroll settles, land on it exactly.
+  let tries = 0
+  const settle = () => {
+    const off = target() - window.scrollY
+    if (Math.abs(off) > 4 && tries++ < 3) {
+      window.scrollTo({ top: Math.max(0, target()) })
+      window.setTimeout(settle, 200)
+    }
+  }
+  let last = -1
+  const wait = () => {
+    // Settled when the position stops changing between two checks.
+    if (window.scrollY === last) return settle()
+    last = window.scrollY
+    window.setTimeout(wait, 120)
+  }
+  window.setTimeout(wait, reduce ? 0 : 160)
+}
+
+const SpyStrip = <K extends string>({ items, value }: { items: TabItem<K>[]; value: K }) => {
+  const strip = useRef<HTMLDivElement>(null)
+  const bar = useRef<HTMLSpanElement>(null)
+  const btns = useRef<(HTMLButtonElement | null)[]>([])
+  const [active, setActive] = useState(0)
+  const keys = items.map((t) => t.key).join('|')
+
+  useEffect(() => {
+    let raf = 0
+    let anim = 0
+    let lastY = NaN
+    // Where the scroll says the underline belongs, and where it is drawn. The drawn one eases toward the
+    // target (a critically damped follow, ~60 ms), so even a fling that crosses a section in two frames glides.
+    const tgt = { x: 0, w: 0 }
+    const cur = { x: NaN, w: NaN }
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let prev = 0
+    const draw = () => {
+      const s = strip.current
+      const b = bar.current
+      if (!s || !b) return
+      b.style.transform = `translateX(${cur.x}px) scaleX(${cur.w})`
+      b.style.opacity = '1'
+      // Keep the current label in view, but leave the strip alone while only it is being swiped.
+      if (window.scrollY !== lastY || anim) s.scrollLeft = cur.x + cur.w / 2 - s.clientWidth / 2
+    }
+    const step = (t: number) => {
+      const dt = prev ? Math.min(64, t - prev) : 16
+      prev = t
+      const k = 1 - Math.exp(-dt / 60)
+      cur.x += (tgt.x - cur.x) * k
+      cur.w += (tgt.w - cur.w) * k
+      const done = Math.abs(tgt.x - cur.x) < 0.25 && Math.abs(tgt.w - cur.w) < 0.25
+      if (done) {
+        cur.x = tgt.x
+        cur.w = tgt.w
+      }
+      draw()
+      anim = done ? 0 : requestAnimationFrame(step)
+      if (done) prev = 0
+    }
+    const update = () => {
+      raf = 0
+      const H = window.innerHeight
+      const line0 = spyLine()
+      // Near the bottom the reading line slides down the screen, so short last sections still get their turn.
+      const remaining = document.documentElement.scrollHeight - (window.scrollY + H)
+      const line = line0 + clamp01(1 - remaining / (H * 0.4)) * (H - 72 - line0)
+      const tops = keys.split('|').map((k) => spySection(k)?.getBoundingClientRect().top ?? Infinity)
+      let i = 0
+      tops.forEach((t, j) => t <= line && (i = j))
+      // Between two sections the underline travels with the scroll across a zone, rather than snapping at a threshold.
+      const zone = Math.max(96, H * 0.28)
+      const next = tops[i + 1]
+      const f = next != null && Number.isFinite(next) ? clamp01(1 - (next - line) / zone) : 0
+      const a = btns.current[i]
+      const c = btns.current[i + 1] ?? a
+      if (!a || !c) return
+      tgt.x = a.offsetLeft + (c.offsetLeft - a.offsetLeft) * f
+      tgt.w = a.offsetWidth + (c.offsetWidth - a.offsetWidth) * f
+      setActive(f > 0.5 ? i + 1 : i)
+      if (reduce || Number.isNaN(cur.x)) {
+        cur.x = tgt.x
+        cur.w = tgt.w
+        draw()
+      } else if (!anim) anim = requestAnimationFrame(step)
+      lastY = window.scrollY
+    }
+    const on = () => {
+      if (!raf) raf = requestAnimationFrame(update)
+    }
+    on()
+    window.addEventListener('scroll', on, { passive: true })
+    window.addEventListener('resize', on)
+    const ro = new ResizeObserver(on)
+    const main = document.querySelector('main')
+    if (main) ro.observe(main)
+    return () => {
+      cancelAnimationFrame(raf)
+      cancelAnimationFrame(anim)
+      window.removeEventListener('scroll', on)
+      window.removeEventListener('resize', on)
+      ro.disconnect()
+    }
+  }, [keys])
+
+  // Arriving with a section named (a link, the palette), go to it once the page has laid out.
+  const shown = useRef<string | null>(null)
+  useEffect(() => {
+    const first = shown.current == null
+    shown.current = value
+    if (first && value === items[0]?.key) return
+    const t = window.setTimeout(() => spyTo(value), first ? 120 : 0)
+    return () => window.clearTimeout(t)
+  }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <nav aria-label="Sections on this page" className="relative -mb-px border-b border-ff-line">
+      <div ref={strip} className="no-scrollbar relative flex overflow-x-auto [mask-image:linear-gradient(to_right,black_85%,transparent)]">
+        {items.map((t, i) => (
+          <button
+            key={t.key}
+            ref={(el) => {
+              btns.current[i] = el
+            }}
+            type="button"
+            aria-current={i === active ? 'location' : undefined}
+            onClick={() => spyTo(t.key)}
+            className={cx('relative h-9 shrink-0 px-3 text-[13px] transition-colors duration-150 first:pl-0.5', i === active ? 'text-ff-text' : 'text-ff-muted')}
+          >
+            {tabLabel(t)}
+          </button>
+        ))}
+        <span ref={bar} aria-hidden className="pointer-events-none absolute bottom-0 left-0 h-[2px] w-px origin-left bg-ff-text opacity-0" />
+      </div>
+    </nav>
+  )
+}
+
+/**
+ * One tab's content. Alone on wide screens when its tab is picked; on stacked (phone) pages always
+ * rendered, under a heading the scrollspy steers by.
+ */
+export const TabSection = ({
+  id,
+  label,
+  count,
+  active,
+  stacked,
+  bare,
+  children,
+  className,
+}: {
+  id: string
+  label: string
+  count?: number | null
+  active: boolean
+  stacked?: boolean
+  /** No heading of its own: for a section that is already one titled panel. */
+  bare?: boolean
+  children: ReactNode
+  className?: string
+}) => {
+  // Stacked, a section mounts once it comes within a screen of view and then stays: a phone opening a long page
+  // builds the top of it, not every panel at once. Its heading is there from the start, so the strip can steer to it.
+  const ref = useRef<HTMLElement>(null)
+  const [near, setNear] = useState(false)
+  useEffect(() => {
+    if (!stacked || near) return
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return setNear(true)
+    const io = new IntersectionObserver(([e]) => e.isIntersecting && setNear(true), { rootMargin: '100% 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [stacked, near])
+  if (!stacked) return active ? <>{children}</> : null
+  const body = near ? children : <div aria-hidden className="min-h-[60vh]" />
+  if (bare)
+    return (
+      <section ref={ref} data-spy={id} aria-label={label} aria-busy={!near || undefined} className={cx('space-y-3', className)}>
+        <span data-spy-head tabIndex={-1} className="sr-only">
+          {label}
+        </span>
+        {body}
+      </section>
+    )
+  return (
+    <section ref={ref} data-spy={id} aria-labelledby={`spy-${id}`} aria-busy={!near || undefined} className={cx('space-y-3 pt-5 first:pt-0', className)}>
+      <h2 id={`spy-${id}`} data-spy-head tabIndex={-1} className="flex items-baseline gap-2 border-b border-ff-line pb-2 text-[15px] font-medium tracking-[-0.01em] text-ff-text outline-none">
+        {label}
+        {count != null && <span className="num text-[11px] font-normal text-ff-muted">{count}</span>}
+      </h2>
+      {body}
+    </section>
+  )
+}
 
 export type SegOption<K extends string> = { key: K; label: ReactNode; title?: string }
 
@@ -194,6 +426,7 @@ export const Segmented = <K extends string>({
   size = 'md',
   label,
   block,
+  manual,
 }: {
   options: SegOption<NoInfer<K>>[]
   value: K
@@ -202,17 +435,31 @@ export const Segmented = <K extends string>({
   label?: string
   /** Fill the row, splitting it evenly between the options. */
   block?: boolean
+  /** Arrows move focus only; Enter or Space picks. For choices that save something (a grade), not a view switch. */
+  manual?: boolean
 }) => (
   <div role="radiogroup" aria-label={label} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex')}>
-    {options.map((o) => {
+    {options.map((o, i) => {
       const active = o.key === value
       return (
         <button
           key={o.key}
           role="radio"
           aria-checked={active}
+          tabIndex={active || (i === 0 && !options.some((x) => x.key === value)) ? 0 : -1}
           title={o.title}
           onClick={() => onChange(o.key)}
+          onKeyDown={(e) => {
+            // Radio-group keys: arrows move the choice along and take focus with it.
+            const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
+            if (!step) return
+            e.preventDefault()
+            // From the focused option (with nothing picked, the first or last for the direction).
+            const at = manual ? i : options.findIndex((x) => x.key === value)
+            const next = at < 0 ? (step > 0 ? 0 : options.length - 1) : (at + step + options.length) % options.length
+            if (!manual) onChange(options[next].key)
+            ;(e.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus()
+          }}
           className={cx(
             'min-w-6 shrink-0 whitespace-nowrap border-r border-ff-line transition-colors last:border-r-0',
             size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[12px]',
@@ -546,6 +793,47 @@ export const Button = ({
   >
     {children}
   </button>
+)
+
+/**
+ * Fills the last row of a hairline grid (cells on a `gap-px` line-coloured background, two columns
+ * from `sm`, three from `wide`), so the rules never end in a block of line colour.
+ */
+export const GridFill = ({ n, wide }: { n: number; wide: 'xl' | '2xl' }) => (
+  <>
+    {n % 2 === 1 && <div aria-hidden className={cx('hidden bg-ff-panel sm:block', wide === 'xl' ? 'xl:hidden' : '2xl:hidden')} />}
+    {n % 3 !== 0 && (
+      <div aria-hidden className={cx('hidden bg-ff-panel', wide === 'xl' ? 'xl:block' : '2xl:block', n % 3 === 1 && (wide === 'xl' ? 'xl:col-span-2' : '2xl:col-span-2'))} />
+    )}
+  </>
+)
+
+/** "Build": three blocks stacked, for the trade builder. Square, like the rest of the system. */
+export const BuildGlyph = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden className={cx('shrink-0', className)}>
+    <rect x="0.75" y="6.75" width="4.5" height="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="6.75" y="6.75" width="4.5" height="4.5" fill="currentColor" />
+    <rect x="3.75" y="0.75" width="4.5" height="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+)
+
+/**
+ * A floating action button for phones, above the tab bar: the one action a page exists for, kept in
+ * reach without taking a row of the page. `hidden` fades it out (when its target is already on screen).
+ */
+export const Fab = ({ children, onClick, hidden, label }: { children: ReactNode; onClick: () => void; hidden?: boolean; label?: string }) => (
+  <div
+    className={cx(
+      'pointer-events-none fixed right-3 z-30 md:hidden',
+      'bottom-[calc(48px+env(safe-area-inset-bottom)+14px)]',
+      'motion-safe:transition-[opacity,transform] motion-safe:duration-200 motion-safe:ease-out',
+      hidden ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100',
+    )}
+  >
+    <button type="button" onClick={onClick} aria-label={label} tabIndex={hidden ? -1 : undefined} aria-hidden={hidden || undefined} className={cx('ff-aqua ff-aqua-fab', !hidden && 'pointer-events-auto')}>
+      {children}
+    </button>
+  </div>
 )
 
 // ---------- Figures ----------
@@ -1062,6 +1350,8 @@ export function Table<T>({
   const [open, setOpen] = useState<Set<string | number>>(() => new Set())
   // The band under an open row spans the visible width, not the table's, so it reads without scrolling sideways.
   const [viewW, setViewW] = useState<number | null>(null)
+  // A table wider (or taller) than its box must scroll from the keyboard too, so it joins the tab order (2.1.1).
+  const [scrolls, setScrolls] = useState(false)
   const id = useId()
   useEffect(() => {
     const el = scroller.current
@@ -1069,6 +1359,7 @@ export function Table<T>({
     const check = () => {
       setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
       setViewW(el.clientWidth)
+      setScrolls(el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
     }
     check()
     const ro = new ResizeObserver(check)
@@ -1118,7 +1409,12 @@ export function Table<T>({
   return (
     <div className="relative">
       {more && <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 z-30 w-8 bg-gradient-to-l from-ff-panel to-transparent" />}
-      <div ref={scroller} className="ff-scroll overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
+      <div
+        ref={scroller}
+        tabIndex={scrolls ? 0 : undefined}
+        className="ff-scroll overflow-auto focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
+        style={maxHeight ? { maxHeight } : undefined}
+      >
         <table className="w-full border-collapse text-[13px]">
           <thead className="sticky top-0 z-10">
             <tr>

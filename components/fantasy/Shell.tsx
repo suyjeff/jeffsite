@@ -3,7 +3,7 @@ import Head from 'next/head'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { Avatar, Dropdown, cx, shortcutLabel, usePhone } from './ui'
 
-export const SECTION_KEYS = ['dash', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
+export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 type Group = 'Overview' | 'Your team' | 'League' | 'Engine'
@@ -12,6 +12,7 @@ type Section = { key: SectionKey; label: string; short: string; group: Group }
 /** Order is the register: the number beside each entry is also its keyboard shortcut. */
 export const SECTIONS: Section[] = [
   { key: 'dash', label: 'Dashboard', short: 'Dash', group: 'Overview' },
+  { key: 'slate', label: 'Gameday', short: 'Gameday', group: 'Overview' },
   { key: 'trades', label: 'Trades', short: 'Trades', group: 'Your team' },
   { key: 'me', label: 'My team', short: 'Team', group: 'Your team' },
   { key: 'waivers', label: 'Waivers', short: 'Waivers', group: 'Your team' },
@@ -168,7 +169,7 @@ const SidebarBody = ({
                 key={key}
                 onClick={() => onNavigate(key)}
                 aria-current={active ? 'page' : undefined}
-                aria-keyshortcuts={String(i)}
+                aria-keyshortcuts={i <= 9 ? String(i) : i === 10 ? '0' : undefined}
                 title={key === 'monke' ? MONKE.long : undefined}
                 className={cx(
                   'group flex h-7 w-full items-center gap-3 px-3 text-left text-[13px] transition-colors',
@@ -246,8 +247,9 @@ const Shell = (props: ShellProps) => {
       if (e.metaKey || e.ctrlKey || e.altKey || typing(e)) return
       // A sheet over the page owns the keyboard.
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
-      const n = Number(e.key)
-      if (n >= 1 && n <= SECTIONS.length) {
+      // 1–9 open the first nine sections and 0 the tenth, like the number row reads.
+      const n = e.key === '0' ? 10 : Number(e.key)
+      if (n >= 1 && n <= SECTIONS.length && /^[0-9]$/.test(e.key)) {
         e.preventDefault()
         onNavigate(SECTIONS[n - 1].key)
         window.scrollTo({ top: 0 })
@@ -330,13 +332,13 @@ const Shell = (props: ShellProps) => {
               aria-current={active ? 'page' : undefined}
               className={cx('flex h-12 flex-col items-center justify-center gap-0.5 border-r border-ff-line text-[11.5px]', active ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted')}
             >
-              <span className="num text-[9.5px] opacity-70">{String(SECTIONS.findIndex((x) => x.key === key) + 1).padStart(2, '0')}</span>
+              <span className="num text-[9.5px] text-ff-muted">{String(SECTIONS.findIndex((x) => x.key === key) + 1).padStart(2, '0')}</span>
               {s.short}
             </button>
           )
         })}
         <button onClick={() => setDrawer(true)} className={cx('flex h-12 flex-col items-center justify-center gap-0.5 text-[11.5px]', !TAB_BAR.includes(section) ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted')}>
-          <span className="num text-[9.5px] opacity-70">··</span>
+          <span className="num text-[9.5px] text-ff-muted">··</span>
           More
         </button>
       </nav>

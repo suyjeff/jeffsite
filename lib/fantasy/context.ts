@@ -48,6 +48,8 @@ export type Schedule = {
   /** team -> week -> true when at home. */
   home?: Record<string, Record<number, boolean>>
   weeks: number[]
+  /** The games themselves, with Sleeper's date and status ("pre_game", "complete"). */
+  games?: ScheduleGame[]
 }
 
 export const buildSchedule = (games: ScheduleGame[]): Schedule => {
@@ -65,7 +67,7 @@ export const buildSchedule = (games: ScheduleGame[]): Schedule => {
   const weeks = [...weekSet].sort((a, b) => a - b)
   const byes: Record<string, number[]> = {}
   for (const team of Object.keys(opp)) byes[team] = weeks.filter((w) => !opp[team][w])
-  return { opp, byes, home, weeks }
+  return { opp, byes, home, weeks, games: games.filter((g) => g?.home && g?.away && typeof g.week === 'number') }
 }
 
 // ---------- Availability from injury history ----------

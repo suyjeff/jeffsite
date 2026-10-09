@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
-import { acceptRead, type AcceptRead } from '../../lib/fantasy/behavior'
+import type { AcceptRead } from '../../lib/fantasy/behavior'
 import { tradeLeverage } from '../../lib/fantasy/forecast'
 import { applyTrade, type TradeIdea } from '../../lib/fantasy/trades'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { ContextNotes } from './ContextNotes'
-import { useFantasy } from './FantasyContext'
-import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, WeekBars, cx, fmtSigned, isOut, simOdds } from './ui'
+import { useFantasy, useTradeRead } from './FantasyContext'
+import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../../lib/fantasy/grades'
+import { Avatar, Badge, BuildGlyph, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, simOdds } from './ui'
 
 export const SHAPE_LABEL: Record<TradeIdea['shape'], string> = {
   'one-for-one': 'Straight swap',
@@ -99,6 +100,69 @@ const pt = (v: number | undefined) => (v === undefined ? '···' : fmtSigned(v 
 
 type Signal = AcceptRead['signals'][number]
 
+/**
+ * Your call on whether they would take it. A grade pulls this manager's odds toward it from now on;
+ * a reason ("won't move him", "asks too much") becomes a rule the trade read applies to every deal.
+ */
+const GradeBar = ({ idea, base, nm, posOf }: { idea: TradeIdea; base: AcceptRead; nm: (id: string) => string; posOf: (id: string) => string | undefined }) => {
+  const { grades } = useFantasy()
+  const rec = grades.all[ideaKey(idea)]
+  const pick = (g: Grade) =>
+    // Picking the grade you already gave takes it back.
+    rec?.grade === g ? grades.set(idea, null) : grades.set(idea, { grade: g, x: base.logit, ask: base.perceivedAsk, why: g === 'yes' ? undefined : rec?.why, player: g === 'yes' ? undefined : rec?.player })
+  const because = (why: GradeWhy, player?: string) =>
+    rec && grades.set(idea, { grade: rec.grade, x: rec.x, ask: rec.ask, ...(rec.why === why && rec.player === player ? {} : { why, player }) })
+  const givePos = [...new Set(idea.give.map(posOf).filter(Boolean))].join('/')
+  const reasons: { why: GradeWhy; player?: string; label: string }[] = [
+    ...idea.get.map((id) => ({ why: 'untouchable' as const, player: id, label: `won't move ${nm(id).split(' ').slice(-1)[0]}` })),
+    { why: 'lopsided', label: WHY_LABEL.lopsided },
+    { why: 'fit', label: `doesn't need ${givePos || 'it'}` },
+    { why: 'dormant', label: WHY_LABEL.dormant },
+  ]
+  return (
+    <div className="space-y-1.5 border-t border-ff-line px-3 py-2">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <span className="ff-label">Would they?</span>
+        <Segmented<Grade | ''>
+          size="sm"
+          label="Would they take it?"
+          manual
+          value={rec?.grade ?? ''}
+          onChange={(g) => g && pick(g)}
+          options={[
+            { key: 'yes', label: 'Likely', title: 'They would take this or close to it' },
+            { key: 'maybe', label: 'Maybe', title: 'Worth a message, not a sure thing' },
+            { key: 'no', label: 'No way', title: 'Not happening' },
+          ]}
+        />
+        <span className="ml-auto text-[10.5px] text-ff-muted">{rec ? 'saved · the odds learn from it' : 'your answer tunes the odds'}</span>
+      </div>
+      {rec && rec.grade !== 'yes' && (
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Why not">
+          <span className="mr-0.5 text-[11px] text-ff-muted">Why?</span>
+          {reasons.map((r) => {
+            const on = rec.why === r.why && (r.why !== 'untouchable' || rec.player === r.player)
+            return (
+              <button
+                key={`${r.why}:${r.player ?? ''}`}
+                type="button"
+                aria-pressed={on}
+                onClick={() => because(r.why, r.player)}
+                className={cx(
+                  'border px-1.5 py-0.5 text-[11px] transition-colors',
+                  on ? 'border-ff-accent bg-ff-accent/10 text-ff-text' : 'border-ff-line text-ff-text2 hover:border-ff-line2 hover:text-ff-text',
+                )}
+              >
+                {r.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const TradeCard = ({
   versions,
   data,
@@ -114,7 +178,7 @@ const TradeCard = ({
   tag?: string
   onBuild?: (idea: TradeIdea) => void
 }) => {
-  const { models } = useFantasy()
+  const { models, grades } = useFantasy()
   const [v, setV] = useState(0)
   const [open, setOpen] = useState(false)
   const idea = versions[Math.min(v, versions.length - 1)]
@@ -122,7 +186,10 @@ const TradeCard = ({
   const season = analysis.seasonById[idea.partnerId]
   const players = data.players
   const nm = (id: string) => players[id]?.name ?? id
-  const read = useMemo(() => acceptRead(idea, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab), [idea, analysis, models])
+  const readOf = useTradeRead()
+  // The bare read is what a new grade is measured against; the card shows it with your grades applied.
+  const base = useMemo(() => readOf(idea, false), [readOf, idea])
+  const read = useMemo(() => grades.apply(base, idea), [grades, base, idea])
   const lev = useLeverage(idea)
   const odds = models.forecast?.sim[idea.partnerId]
   const need = analysis.needs[idea.partnerId]?.worstPos
@@ -139,7 +206,7 @@ const TradeCard = ({
   const playoffTone = lev && lev.me.playoffs > 0.002 ? 'pos' : lev && lev.me.playoffs < -0.002 ? 'neg' : undefined
 
   return (
-    <article className="flex min-w-0 flex-col border border-ff-line bg-ff-panel">
+    <article className={cx('flex min-w-0 flex-col border border-ff-line bg-ff-panel transition-opacity', read.ruledOut && 'opacity-60 hover:opacity-100 focus-within:opacity-100')}>
       <header className="flex items-center justify-between gap-2 border-b border-ff-line px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <Avatar src={team?.avatar ?? null} name={team?.name ?? '?'} size={24} />
@@ -216,8 +283,10 @@ const TradeCard = ({
           />
         </div>
         <div className={cx('min-w-0 px-3 py-2.5', WASH[bandTone])} title={`Yes-odds ${read.index}/100: their gain, how the deal looks by consensus, and how they trade`}>
-          <div className="ff-label">Will they</div>
-          <div className={cx('mt-1 text-[16px] font-medium leading-none', bandTone === 'pos' ? 'text-ff-pos' : bandTone === 'warn' ? 'text-ff-warn' : 'text-ff-neg')}>{read.band}</div>
+          <div className="ff-label">{read.graded ? 'You said' : 'Will they'}</div>
+          <div className={cx('mt-1 text-[16px] font-medium leading-none', bandTone === 'pos' ? 'text-ff-pos' : bandTone === 'warn' ? 'text-ff-warn' : 'text-ff-neg')}>
+            {read.graded ? GRADE_LABEL[read.graded].toLowerCase() : read.band}
+          </div>
           <span className="mt-2 block h-1 w-full max-w-[72px] bg-ff-text/10">
             <span className={cx('block h-full', bandTone === 'pos' ? 'bg-ff-pos' : bandTone === 'warn' ? 'bg-ff-warn' : 'bg-ff-neg')} style={{ width: `${Math.max(4, read.index)}%` }} />
           </span>
@@ -278,6 +347,8 @@ const TradeCard = ({
         </div>
       )}
 
+      <GradeBar idea={idea} base={base} nm={nm} posOf={(id) => players[id]?.pos} />
+
       <footer className="mt-auto flex items-center justify-between gap-2 border-t border-ff-line px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text">
@@ -299,7 +370,8 @@ const TradeCard = ({
         </div>
         {onBuild && (
           <Button size="sm" variant="aqua" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
-            Build this trade →
+            <BuildGlyph />
+            Open in builder
           </Button>
         )}
       </footer>

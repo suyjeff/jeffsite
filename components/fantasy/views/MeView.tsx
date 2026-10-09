@@ -3,14 +3,14 @@ import type { Analysis } from '../../../lib/fantasy/analysis'
 import { optimalLineup, type LineupPlayer } from '../../../lib/fantasy/lineup'
 import { availabilityDrag } from '../../../lib/fantasy/scout'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
-import { ContextNotes } from '../ContextNotes'
+import { ContextNotes, contextReasons } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import ScoutReport from '../ScoutReport'
 import { sectionCode } from '../Shell'
-import { Badge, Button, DeltaChip, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Swap, Table, Tabs, ago, cx, fmt, fmtSigned, pct } from '../ui'
+import { Badge, Button, DeltaChip, Empty, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
-type Sub = 'overview' | 'roster'
+type Sub = 'overview' | 'roster' | 'news' | 'lineup' | 'slots'
 const SUBS: Sub[] = ['overview', 'roster']
 
 const MeView = ({
@@ -28,6 +28,8 @@ const MeView = ({
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'overview'
   const [basis, setBasis] = useState<Basis>('ahead')
+  // Phones stack every section in one scroll, steered by the tab strip.
+  const stacked = usePhone()
   const [slotBasis, setSlotBasis] = useState<Basis>('ahead')
   const { myRosterId, teamById, needs, slots } = analysis
   const players = data.players
@@ -110,83 +112,28 @@ const MeView = ({
   }
   const season = analysis.seasonById[me.rosterId]
 
-  return (
-    <>
-      <PageHeader
-        code={sectionCode('me')}
-        title={me.name}
-        actions={
-          <Button size="sm" variant="ghost" onClick={() => onTeam(me.rosterId)} title="The same team as the league sees it">
-            Team page →
-          </Button>
-        }
-        tabs={
-          <Tabs<Sub>
-            value={tab}
-            onChange={onSub}
-            items={[
-              { key: 'overview', label: 'Overview' },
-              { key: 'roster', label: 'Roster', count: me.players.length },
-            ]}
-          />
-        }
-      />
-      <div className="mt-4 space-y-3">
-        {tab === 'overview' && (
-          <>
-            {kpis && (
-              <StatGrid>
-                <Stat
-                  label="Projected lineup"
-                  value={fmt(kpis.mine)}
-                  delta={<DeltaChip value={kpis.mine - kpis.avg} title="Against the league's average lineup" />}
-                  badge={{ text: `#${kpis.rank} of ${analysis.teams.length}`, tone: kpis.rank <= Math.ceil(analysis.teams.length / 3) ? 'pos' : kpis.rank > analysis.teams.length - Math.ceil(analysis.teams.length / 3) ? 'neg' : 'neutral' }}
-                  sub={`pts/wk · league ${fmt(kpis.avg)}`}
-                />
-                <Stat label="Injury drag" value={fmtSigned(-kpis.drag, 1)} tone={kpis.drag > 1.5 ? 'neg' : undefined} sub="pts/wk to expected absences, net" />
-                <Stat label="Biggest hole" value={kpis.hole ?? '–'} tone={kpis.hole ? 'warn' : undefined} sub={kpis.hole ? `an average starter adds ${fmt(kpis.holePts)}/wk` : undefined} />
-                <Stat
-                  label="All-play"
-                  value={pct(season.allPlayPct)}
-                  meter={season.allPlayPct}
-                  badge={Math.abs(season.luck) >= 0.5 ? { text: `${season.luck > 0 ? 'lucky' : 'unlucky'} ${fmtSigned(season.luck, 1)} W`, tone: season.luck > 0 ? 'warn' : 'neutral' } : undefined}
-                  sub="win rate against every team, every week"
-                />
-                {lineupCheck ? (
-                  <Stat
-                    label={`Week ${data.projectionWeek} optimal`}
-                    value={fmt(lineupCheck.best)}
-                    delta={<DeltaChip value={lineupCheck.best - lineupCheck.current} title="Against the lineup you have set" />}
-                    badge={lineupCheck.start.length ? { text: `${lineupCheck.start.length} swap${lineupCheck.start.length === 1 ? '' : 's'} to make`, tone: 'warn' } : { text: 'lineup is optimal', tone: 'pos' }}
-                    sub="vs your set lineup"
-                  />
-                ) : (
-                  <Stat label="Points per game" value={fmt(season.ppg)} />
-                )}
-              </StatGrid>
-            )}
-
-            <ScoutReport rosterId={me.rosterId} mine />
-
-            {fresh.length > 0 && (
-              <Panel title="Recent news on your roster" actions={<span>player file {ago(newsAsOf)} old</span>} pad={false}>
-                {fresh.map((id) => (
-                  <div key={id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-ff-line/60 px-3 py-2 last:border-b-0">
-                    <span className="min-w-0 flex-1">
-                      <PlayerName player={players[id]} id={id} size={22} sub={`news ${ago(players[id].newsAt!)} ago`} />
-                    </span>
-                    <ContextNotes context={data.context[id]} players={players} max={2} />
-                  </div>
-                ))}
-                <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-                  Sleeper flags that a player has news, not what it says, and refreshes once a day. Read the story in Sleeper; if it changes your view, click his name to set a read.
-                </p>
-              </Panel>
-            )}
-
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-              {lineupCheck && (
-                <Panel title={`Week ${data.projectionWeek} lineup`} actions={<span>Sleeper projections</span>} pad={false}>
+  const newsPanel = fresh.length > 0 ? (
+    <Panel title="Recent news on your roster" actions={<span>player file {ago(newsAsOf)} old</span>} pad={false}>
+      {/* A card per player: the name, then what it means in full sentences, rather than one stretched row. */}
+      <div className="grid grid-cols-1 gap-px bg-ff-line/60 sm:grid-cols-2 2xl:grid-cols-3">
+        {fresh.map((id) => {
+          const why = contextReasons(data.context[id], players).slice(0, 3)
+          return (
+            <div key={id} className="min-w-0 space-y-2 bg-ff-panel px-3 py-2.5">
+              <PlayerName player={players[id]} id={id} size={24} sub={`news ${ago(players[id].newsAt!)} ago`} />
+              {why.length ? <Reasons items={why} columns={1} /> : <p className="text-[12px] text-ff-muted">No change to his role or availability on file yet.</p>}
+            </div>
+          )
+        })}
+        <GridFill n={fresh.length} wide="2xl" />
+      </div>
+      <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
+        Sleeper flags that a player has news, not what it says, and refreshes once a day. Read the story in Sleeper; if it changes your view, click his name to set a read.
+      </p>
+    </Panel>
+  ) : null
+  const lineupPanel = lineupCheck ? (
+    <Panel title={`Week ${data.projectionWeek} lineup`} actions={<span>Sleeper projections</span>} pad={false}>
                   {lineupCheck.start.length === 0 ? (
                     <div className="flex items-center gap-2 border-b border-ff-line px-3 py-2 text-[12.5px] text-ff-pos">
                       <span className="h-1.5 w-1.5  bg-ff-pos" />
@@ -221,9 +168,9 @@ const MeView = ({
                     ]}
                   />
                 </Panel>
-              )}
-
-              <Panel
+  ) : null
+  const slotsPanel = (
+    <Panel
                 title="Slots vs league"
                 pad={false}
                 actions={
@@ -258,12 +205,9 @@ const MeView = ({
                   {slotBasis === 'ahead' ? 'Points per week each slot is expected to produce over the horizon, against the league average.' : 'Average points each slot of your best possible lineup produced in weeks played.'}
                 </p>
               </Panel>
-            </div>
-          </>
-        )}
-
-        {tab === 'roster' && (
-          <Panel
+  )
+  const rosterPanel = (
+    <Panel
             title="Roster"
             pad={false}
             actions={
@@ -282,8 +226,101 @@ const MeView = ({
               <RosterTable data={data} analysis={analysis} rosterId={me.rosterId} basis={basis} />
             </Swap>
           </Panel>
-        )}
+  )
 
+  return (
+    <>
+      <PageHeader
+        code={sectionCode('me')}
+        title={me.name}
+        actions={
+          <Button size="sm" variant="ghost" onClick={() => onTeam(me.rosterId)} title="The same team as the league sees it">
+            Team page →
+          </Button>
+        }
+        tabs={
+          <Tabs<Sub>
+            value={tab}
+            onChange={onSub}
+            stacked={stacked}
+            items={
+              stacked
+                ? [
+                    { key: 'overview', label: 'Overview' },
+                    ...(newsPanel ? [{ key: 'news' as Sub, label: 'News', count: fresh.length }] : []),
+                    ...(lineupPanel ? [{ key: 'lineup' as Sub, label: 'Lineup' }] : []),
+                    { key: 'slots', label: 'Slots' },
+                    { key: 'roster', label: 'Roster', count: me.players.length },
+                  ]
+                : [
+                    { key: 'overview', label: 'Overview' },
+                    { key: 'roster', label: 'Roster', count: me.players.length },
+                  ]
+            }
+          />
+        }
+      />
+      <div className="mt-4 space-y-3">
+        <TabSection id="overview" label="Overview" active={tab === 'overview'} stacked={stacked} bare>
+            {kpis && (
+              <StatGrid>
+                <Stat
+                  label="Projected lineup"
+                  value={fmt(kpis.mine)}
+                  delta={<DeltaChip value={kpis.mine - kpis.avg} title="Against the league's average lineup" />}
+                  badge={{ text: `#${kpis.rank} of ${analysis.teams.length}`, tone: kpis.rank <= Math.ceil(analysis.teams.length / 3) ? 'pos' : kpis.rank > analysis.teams.length - Math.ceil(analysis.teams.length / 3) ? 'neg' : 'neutral' }}
+                  sub={`pts/wk · league ${fmt(kpis.avg)}`}
+                />
+                <Stat label="Injury drag" value={fmtSigned(-kpis.drag, 1)} tone={kpis.drag > 1.5 ? 'neg' : undefined} sub="pts/wk to expected absences, net" />
+                <Stat label="Biggest hole" value={kpis.hole ?? '–'} tone={kpis.hole ? 'warn' : undefined} sub={kpis.hole ? `an average starter adds ${fmt(kpis.holePts)}/wk` : undefined} />
+                <Stat
+                  label="All-play"
+                  value={pct(season.allPlayPct)}
+                  meter={season.allPlayPct}
+                  badge={Math.abs(season.luck) >= 0.5 ? { text: `${season.luck > 0 ? 'lucky' : 'unlucky'} ${fmtSigned(season.luck, 1)} W`, tone: season.luck > 0 ? 'warn' : 'neutral' } : undefined}
+                  sub="win rate against every team, every week"
+                />
+                {lineupCheck ? (
+                  <Stat
+                    label={`Week ${data.projectionWeek} optimal`}
+                    value={fmt(lineupCheck.best)}
+                    delta={<DeltaChip value={lineupCheck.best - lineupCheck.current} title="Against the lineup you have set" />}
+                    badge={lineupCheck.start.length ? { text: `${lineupCheck.start.length} swap${lineupCheck.start.length === 1 ? '' : 's'} to make`, tone: 'warn' } : { text: 'lineup is optimal', tone: 'pos' }}
+                    sub="vs your set lineup"
+                  />
+                ) : (
+                  <Stat label="Points per game" value={fmt(season.ppg)} />
+                )}
+              </StatGrid>
+            )}
+
+            <ScoutReport rosterId={me.rosterId} mine />
+          {!stacked && newsPanel}
+          {!stacked && (lineupPanel || slotsPanel) && (
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+              {lineupPanel}
+              {slotsPanel}
+            </div>
+          )}
+        </TabSection>
+        {stacked && newsPanel && (
+          <TabSection id="news" label="News" active stacked bare>
+            {newsPanel}
+          </TabSection>
+        )}
+        {stacked && lineupPanel && (
+          <TabSection id="lineup" label="Lineup" active stacked bare>
+            {lineupPanel}
+          </TabSection>
+        )}
+        {stacked && (
+          <TabSection id="slots" label="Slots" active stacked bare>
+            {slotsPanel}
+          </TabSection>
+        )}
+        <TabSection id="roster" label="Roster" active={tab === 'roster'} stacked={stacked} bare>
+          {rosterPanel}
+        </TabSection>
       </div>
     </>
   )

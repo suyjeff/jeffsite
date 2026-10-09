@@ -26,8 +26,26 @@ const PlayerName = ({
   if (!player) return <span className="text-ff-muted">{id}</span>
   const tone = injuryTone(player.injury)
   return (
-    <span className={cx('flex min-w-0 items-center gap-2', className)}>
-      {avatar ? <PlayerAvatar id={id} player={player} size={size} /> : <PosTag pos={player.pos} />}
+    <span className={cx('ff-pn flex min-w-0 items-center gap-2', className)}>
+      {avatar && ctx ? (
+        // The portrait opens him too, for the pointer; the name is the one keyboard stop.
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden
+          onClick={(e) => {
+            e.stopPropagation()
+            ctx.openPlayer(id)
+          }}
+          className="ff-pn-hit ff-pn-av relative z-[1] shrink-0"
+        >
+          <PlayerAvatar id={id} player={player} size={size} />
+        </button>
+      ) : avatar ? (
+        <PlayerAvatar id={id} player={player} size={size} />
+      ) : (
+        <PosTag pos={player.pos} />
+      )}
       <span className="min-w-0 leading-tight">
         <span className="flex items-center gap-1.5">
           {ctx ? (
@@ -41,7 +59,7 @@ const PlayerName = ({
               // Rows act on Enter and Space too; the key belongs to the name.
               onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && e.stopPropagation()}
               // Above a row's own select button; padding takes the target to 24px tall (WCAG 2.5.8) and a matching negative margin keeps the line where it was.
-              className="relative z-[1] -my-1 truncate py-1 text-left text-[13px] tracking-tight text-ff-text decoration-ff-line2 underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none"
+              className="ff-pn-hit ff-pn-name relative z-[1] -my-1 truncate py-1 text-left text-[13px] tracking-tight text-ff-text underline-offset-[3px] focus-visible:underline focus-visible:outline-none"
               title={`${player.name}: details and your read`}
             >
               {player.name}

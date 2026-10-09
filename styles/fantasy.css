@@ -452,6 +452,22 @@
   outline: 2px solid rgb(var(--ff-accent) / 0.6);
   outline-offset: 2px;
 }
+/* The floating version: thumb-sized, lifted off the page. */
+.ff .ff-aqua.ff-aqua-fab {
+  height: 44px;
+  padding: 0 1.25em 0 1.05em;
+  gap: 0.55em;
+  font-size: 13.5px;
+  box-shadow:
+    inset 0 -1px 2px rgb(255 255 255 / 0.22),
+    0 1px 2px rgb(0 0 0 / 0.16),
+    0 6px 18px -4px rgb(var(--ff-accent-deep) / 0.45);
+}
+.ff .ff-aqua.ff-aqua-fab::before {
+  left: 12px;
+  right: 12px;
+  top: 2px;
+}
 @keyframes ff-aqua-throb {
   to {
     opacity: 0.7;
@@ -485,5 +501,87 @@
   .ff .ff-fade-in,
   .ff .ff-sheet {
     animation: none;
+  }
+}
+
+/* A stacked page's first section sits right under the strip that already names it: keep its heading for
+   screen readers and focus, hide it from view. */
+.ff section[data-spy]:first-child > h2[data-spy-head] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+.ff section[data-spy]:first-child {
+  padding-top: 0;
+}
+
+/* ---------- Density: comfortable ----------
+ * The app is set compact. Comfortable is one switch on the root that scales every type size the components
+ * use by about a tenth and opens up rows, controls and panel padding, so it reaches every screen without each
+ * component knowing about it. */
+html[data-ff-density="comfortable"] .ff .text-\[8px\] { font-size: 9px; }
+html[data-ff-density="comfortable"] .ff .text-\[8\.5px\] { font-size: 9.5px; }
+html[data-ff-density="comfortable"] .ff .text-\[9px\] { font-size: 10px; }
+html[data-ff-density="comfortable"] .ff .text-\[9\.5px\] { font-size: 10.5px; }
+html[data-ff-density="comfortable"] .ff .text-\[10px\] { font-size: 11px; }
+html[data-ff-density="comfortable"] .ff .text-\[10\.5px\] { font-size: 11.5px; }
+html[data-ff-density="comfortable"] .ff .text-\[11px\] { font-size: 12px; }
+html[data-ff-density="comfortable"] .ff .text-\[11\.5px\] { font-size: 12.5px; }
+html[data-ff-density="comfortable"] .ff .text-\[12px\] { font-size: 13px; }
+html[data-ff-density="comfortable"] .ff .text-\[12\.5px\] { font-size: 13.5px; }
+html[data-ff-density="comfortable"] .ff .text-\[13px\] { font-size: 14px; }
+html[data-ff-density="comfortable"] .ff .text-\[13\.5px\] { font-size: 14.5px; }
+html[data-ff-density="comfortable"] .ff .text-\[14px\] { font-size: 15px; }
+html[data-ff-density="comfortable"] .ff .text-\[15px\] { font-size: 16px; }
+html[data-ff-density="comfortable"] .ff .text-\[16px\] { font-size: 17px; }
+html[data-ff-density="comfortable"] .ff .text-\[17px\] { font-size: 18px; }
+html[data-ff-density="comfortable"] .ff .text-\[18px\] { font-size: 19px; }
+html[data-ff-density="comfortable"] .ff .text-\[19px\] { font-size: 20px; }
+html[data-ff-density="comfortable"] .ff .text-\[20px\] { font-size: 21px; }
+html[data-ff-density="comfortable"] .ff .text-\[21px\] { font-size: 22px; }
+html[data-ff-density="comfortable"] .ff .text-\[22px\] { font-size: 23px; }
+html[data-ff-density="comfortable"] .ff .text-\[26px\] { font-size: 27px; }
+@media (min-width: 640px) { html[data-ff-density="comfortable"] .ff .sm\:text-\[11px\] { font-size: 12px; } html[data-ff-density="comfortable"] .ff .sm\:text-\[21px\] { font-size: 22px; } }
+html[data-ff-density="comfortable"] .ff .text-xs { font-size: 13px; }
+html[data-ff-density="comfortable"] .ff .text-sm { font-size: 15px; }
+/* Rows and controls. */
+html[data-ff-density="comfortable"] .ff td.h-\[38px\] { height: 46px; }
+html[data-ff-density="comfortable"] .ff td.h-8 { height: 38px; }
+html[data-ff-density="comfortable"] .ff th.h-8 { height: 36px; }
+html[data-ff-density="comfortable"] .ff :is(button, a, select).h-7 { height: 32px; }
+html[data-ff-density="comfortable"] .ff :is(button, a, select).h-8 { height: 36px; }
+html[data-ff-density="comfortable"] .ff :is(button, a).h-9 { height: 40px; }
+html[data-ff-density="comfortable"] .ff .ff-aqua:not(.ff-aqua-fab) { height: 30px; }
+/* Panel and cell padding. */
+html[data-ff-density="comfortable"] .ff .px-3:not([class*=":px-"]) { padding-left: 14px; padding-right: 14px; }
+html[data-ff-density="comfortable"] .ff .py-2:not([class*=":py-"]) { padding-top: 10px; padding-bottom: 10px; }
+html[data-ff-density="comfortable"] .ff .py-2\.5:not([class*=":py-"]) { padding-top: 12px; padding-bottom: 12px; }
+html[data-ff-density="comfortable"] .ff .py-1\.5:not([class*=":py-"]) { padding-top: 7px; padding-bottom: 7px; }
+html[data-ff-density="comfortable"] .ff .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 16px; }
+html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px; }
+
+/* A player name opens his sheet. On hover the name takes the accent with a faint underline and the portrait
+   a hairline ring, together, whichever of the two the pointer is on. */
+.ff .ff-pn-name {
+  text-decoration-color: rgb(var(--ff-accent) / 0.4);
+  text-decoration-thickness: 1px;
+  transition: color 120ms ease-out;
+}
+.ff .ff-pn-av {
+  transition: box-shadow 120ms ease-out;
+}
+@media (hover: hover) {
+  .ff .ff-pn:has(.ff-pn-hit:hover) .ff-pn-name {
+    color: rgb(var(--ff-accent));
+    text-decoration-line: underline;
+  }
+  .ff .ff-pn:has(.ff-pn-hit:hover) .ff-pn-av {
+    box-shadow: 0 0 0 1px rgb(var(--ff-accent) / 0.65);
   }
 }

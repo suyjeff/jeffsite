@@ -7,11 +7,15 @@ import DashboardView from '../../components/fantasy/views/DashboardView'
 import Onboarding from '../../components/fantasy/Onboarding'
 import MeView from '../../components/fantasy/views/MeView'
 import ModelView, { READOUT } from '../../components/fantasy/views/ModelView'
+import SlateView from '../../components/fantasy/views/SlateView'
 import PlayersView from '../../components/fantasy/views/PlayersView'
 import PowerView from '../../components/fantasy/views/PowerView'
 import TeamsView from '../../components/fantasy/views/TeamsView'
 import WaiversView from '../../components/fantasy/views/WaiversView'
 import TradesView from '../../components/fantasy/views/TradesView'
+import type { AcceptRead } from '../../lib/fantasy/behavior'
+import { applyLessons, ideaKey, learn, loadGrades, saveGrades, type GradeRecord, type Grades } from '../../lib/fantasy/grades'
+import type { TradeIdea } from '../../lib/fantasy/trades'
 import { applyAdjustments, liveAdjustments, loadAdjustments, saveAdjustments, type Adjustment, type Adjustments } from '../../lib/fantasy/adjust'
 import { analyze, withWeights } from '../../lib/fantasy/analysis'
 import { buildHistory, buildModels } from '../../lib/fantasy/models'
@@ -27,7 +31,7 @@ import {
 import { useRoute } from '../../lib/fantasy/useRoute'
 import { DEFAULT_MODEL, type ModelConfig } from '../../lib/fantasy/war'
 import { DEFAULT_THEME, themeById, type Scheme } from '../../lib/fantasy/themes'
-import ThemePicker from '../../components/fantasy/ThemePicker'
+import DisplayMenu, { type Density } from '../../components/fantasy/ThemePicker'
 import CommandPalette from '../../components/fantasy/CommandPalette'
 import { useTheme } from '../../lib/fantasy/useTheme'
 
@@ -46,6 +50,8 @@ export type Prefs = {
   /** Colour theme id (lib/fantasy/themes.ts) and, for themes with both, light, dark or the system's. */
   theme: string
   scheme: Scheme
+  /** Compact (the default) or comfortable: type size and row height across the app. */
+  density: Density
 }
 
 const loadPrefs = (): Prefs => {
@@ -60,6 +66,7 @@ const loadPrefs = (): Prefs => {
     weights: DEFAULT_POWER_WEIGHTS,
     theme: DEFAULT_THEME,
     scheme: 'system',
+    density: 'compact',
   }
   try {
     const raw = window.localStorage.getItem(PREFS_KEY)
@@ -76,6 +83,14 @@ const FantasyPage = () => {
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const route = useRoute(SECTION_KEYS, 'dash')
   useTheme(prefs?.theme, prefs?.scheme ?? 'system', prefs != null)
+  // Density is one attribute on the root; styles/fantasy.css scales type and rows from it.
+  useEffect(() => {
+    if (!prefs) return
+    document.documentElement.dataset.ffDensity = prefs.density
+    return () => {
+      delete document.documentElement.dataset.ffDensity
+    }
+  }, [prefs?.density]) // eslint-disable-line react-hooks/exhaustive-deps
   // Waivers moved out of My team into their own section; old links still land there.
   useEffect(() => {
     if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })
@@ -135,6 +150,29 @@ const FantasyPage = () => {
     }),
     [live, firstWeek, leagueKey],
   )
+  // Your grades of suggested trades, per league, and what they teach the trade read.
+  const storedGrades = useMemo(() => (leagueKey ? loadGrades(leagueKey) : {}), [leagueKey])
+  const [editedGrades, setEditedGrades] = useState<{ key: string | null; g: Grades } | null>(null)
+  const gradeMap = editedGrades && editedGrades.key === leagueKey ? editedGrades.g : storedGrades
+  const grades = useMemo(() => {
+    const players = loaded?.players ?? {}
+    const posOf = (id: string) => players[id]?.pos
+    const name = (id: string) => players[id]?.name ?? id
+    const lessons = learn(gradeMap, posOf)
+    return {
+      all: gradeMap,
+      lessons,
+      set: (idea: TradeIdea, rec: Omit<GradeRecord, 'partnerId' | 'give' | 'get' | 'at'> | null) => {
+        const next = { ...gradeMap }
+        const k = ideaKey(idea)
+        if (rec) next[k] = { ...rec, partnerId: idea.partnerId, give: idea.give, get: idea.get, at: Date.now() }
+        else delete next[k]
+        if (leagueKey) saveGrades(leagueKey, next)
+        setEditedGrades({ key: leagueKey, g: next })
+      },
+      apply: (read: AcceptRead, idea: TradeIdea) => applyLessons(read, idea, lessons, name, posOf),
+    }
+  }, [gradeMap, leagueKey, loaded?.players])
   // Everything but the composite ranking depends on the data and the value model;
   // weights only re-rank. Models and the trade search key on the core, so moving
   // a weight slider never reruns the season simulation or the backtest.
@@ -286,8 +324,15 @@ const FantasyPage = () => {
           </Select>
         </div>
         <div className={row}>
-          <span className={key}>Theme</span>
-          <ThemePicker value={prefs.theme} onChange={(t) => update({ theme: t })} scheme={prefs.scheme} onScheme={(m) => update({ scheme: m })} />
+          <span className={key}>Display</span>
+          <DisplayMenu
+            theme={prefs.theme}
+            onTheme={(t) => update({ theme: t })}
+            scheme={prefs.scheme}
+            onScheme={(m) => update({ scheme: m })}
+            density={prefs.density}
+            onDensity={(d) => update({ density: d })}
+          />
         </div>
       </div>
     </>
@@ -349,7 +394,7 @@ const FantasyPage = () => {
       )}
 
       {data && analysis && models && prefs ? (
-        <FantasyProvider value={{ data, analysis, models, adjust, go: (s, sub) => route.go(s, sub ?? undefined), openPlayer: setSheet }}>
+        <FantasyProvider value={{ data, analysis, models, adjust, grades, go: (s, sub) => route.go(s, sub ?? undefined), openPlayer: setSheet }}>
         <div key={data.league.league_id} ref={view} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
@@ -360,6 +405,7 @@ const FantasyPage = () => {
           )}
           {section === 'teams' && <TeamsView data={data} analysis={analysis} sub={route.sub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'players' && <PlayersView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
+          {section === 'slate' && <SlateView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {(section === 'model' || section === 'monke') && (
             <ModelView
               key={section}
@@ -384,6 +430,8 @@ const FantasyPage = () => {
           scheme={prefs.scheme}
           onTheme={(t) => update({ theme: t })}
           onScheme={(m) => update({ scheme: m })}
+          density={prefs.density}
+          onDensity={(d) => update({ density: d })}
           onReload={reload}
           leagues={(data.leagues ?? []).map((l) => ({ id: l.league_id, name: l.name }))}
           onLeague={(id) => update({ leagueId: id })}
