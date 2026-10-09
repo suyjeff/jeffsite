@@ -54,7 +54,7 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
             floor: analysis.horizonReplacement,
             capacity: analysis.capacity,
             pts: perWeek,
-            market: analysis.market,
+            tradeMarket: analysis.tradeMarket,
             rosters,
             currency: analysis.currency,
             faab,
@@ -399,7 +399,7 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
         )}
         {active && (
           <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-            Lineup: each team&apos;s best lineup week by week, before and after, extra bodies cut. Trade value: as managers price players. FAAB counts at a fraction of what it buys
+            Lineup: each team&apos;s best lineup week by week, before and after, extra bodies cut. Trade value: as managers price players (reputation, stars, streamers). FAAB counts at a fraction of what it buys
             on waivers, more for a team nearly out of it, shown as a range.
           </p>
         )}

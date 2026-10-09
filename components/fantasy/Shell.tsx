@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import Head from 'next/head'
+import { MONKE } from './brand'
 import Tour, { TOUR } from './Tour'
 import { PanelIcon } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
@@ -28,8 +29,7 @@ export const SECTIONS: Section[] = [
 ]
 const GROUPS: Group[] = ['Overview', 'Your team', 'League', 'Engine']
 
-/** The engine's name, and what it stands for. */
-export const MONKE = { name: 'M.O.N.K.E.', long: 'Many Orangutans Nervously Keyboarding Estimates' }
+export { MONKE }
 
 /** The two-digit register number shown beside a section, which is also its keyboard shortcut. */
 export const sectionCode = (key: SectionKey) => String(SECTIONS.findIndex((s) => s.key === key) + 1).padStart(2, '0')
@@ -71,6 +71,7 @@ export type ShellProps = {
 /** The wordmark. Shared by the shell and onboarding. */
 export const Brand = () => <span className="text-[14px] font-semibold tracking-[-0.01em] text-ff-text">Fantasy</span>
 
+/** One button that never moves: the sidebar slides under it, and the icon only shades or clears its sidebar side. */
 const SidebarToggle = ({ open, onClick, className }: { open: boolean; onClick: () => void; className?: string }) => (
   <button
     type="button"
@@ -78,9 +79,9 @@ const SidebarToggle = ({ open, onClick, className }: { open: boolean; onClick: (
     aria-label={open ? 'Hide sidebar' : 'Show sidebar'}
     aria-keyshortcuts="["
     title={`${open ? 'Hide' : 'Show'} sidebar ([)`}
-    className={cx('flex h-7 w-7 items-center justify-center text-ff-muted hover:bg-ff-raised hover:text-ff-text', className)}
+    className={cx('flex h-7 w-7 items-center justify-center rounded text-ff-muted/60 transition-colors hover:bg-ff-raised hover:text-ff-text2', className)}
   >
-    <PanelIcon />
+    <PanelIcon open={open} />
   </button>
 )
 
@@ -116,16 +117,15 @@ const SidebarBody = ({
   onClose,
   onSearch,
   tourKey,
-  onHide,
+  clearToggle,
   controlsOpen,
   onControls,
   controlsSummary,
-}: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void; tourKey?: string | null; onHide?: () => void }) => (
+}: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void; tourKey?: string | null; /** Leave room at the left of the header for the fixed sidebar toggle. */ clearToggle?: boolean }) => (
   <div className="flex h-full flex-col">
-    <div className="flex h-11 shrink-0 items-center justify-between border-b border-ff-line pl-3 pr-2">
+    <div className={cx('flex h-11 shrink-0 items-center justify-between border-b border-ff-line pr-2', clearToggle ? 'pl-11' : 'pl-3')}>
       <Brand />
       <span className="flex items-center gap-1">
-        {onHide && <SidebarToggle open onClick={onHide} className="-mr-1" />}
         {onClose && (
           <button onClick={onClose} className="h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close menu">
             ESC
@@ -360,7 +360,7 @@ const Shell = (props: ShellProps) => {
     // A page narrower than the window sits centred, so it moves half the sidebar's width, not all of it.
     const left = (pad: number) => pad + Math.max(0, (main.clientWidth - pad - max) / 2)
     const dx = left(sidebarOpen ? 0 : 220) - left(sidebarOpen ? 220 : 0)
-    el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 240, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' })
+    el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 170, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' })
   }, [sidebarOpen, phone])
   const current = SECTIONS.find((s) => s.key === section)
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
@@ -374,15 +374,16 @@ const Shell = (props: ShellProps) => {
       <aside
         inert={!sidebarOpen}
         className={cx(
-          'fixed inset-y-0 left-0 z-30 hidden w-[calc(220px+env(safe-area-inset-left))] border-r border-ff-line bg-ff-panel pl-[env(safe-area-inset-left)] motion-safe:transition-transform motion-safe:duration-[240ms] motion-safe:ease-ff-drawer md:block',
+          'fixed inset-y-0 left-0 z-30 hidden w-[calc(220px+env(safe-area-inset-left))] border-r border-ff-line bg-ff-panel pl-[env(safe-area-inset-left)] motion-safe:transition-transform motion-safe:duration-[170ms] motion-safe:ease-ff-drawer md:block',
           !sidebarOpen && '-translate-x-full',
         )}
       >
-        <SidebarBody {...props} onNavigate={navigate} tourKey={tourKey} onHide={onSidebar && !props.tour ? () => onSidebar(false) : undefined} />
+        <SidebarBody {...props} onNavigate={navigate} tourKey={tourKey} clearToggle={!!onSidebar && !props.tour} />
       </aside>
-      {!sidebarOpen && onSidebar && (
-        <div className="fixed left-0 top-0 z-30 hidden h-11 items-center pl-[calc(8px+env(safe-area-inset-left))] md:flex">
-          <SidebarToggle open={false} onClick={() => onSidebar(true)} />
+      {/* The toggle is fixed over the sidebar's header row and the page's, so it stays put as the sidebar goes. */}
+      {onSidebar && !props.tour && (
+        <div className="fixed left-0 top-0 z-40 hidden h-11 items-center pl-[calc(8px+env(safe-area-inset-left))] md:flex">
+          <SidebarToggle open={sidebarOpen} onClick={() => onSidebar(!sidebarOpen)} />
         </div>
       )}
       {props.tour && props.onTourEnd && <Tour step={tourStep} setStep={setTourStep} onClose={endTour} phone={phone} />}

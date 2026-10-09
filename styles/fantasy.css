@@ -728,6 +728,14 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   .ff .ff-pn:has(.ff-pn-hit:hover) .ff-pn-av > * {
     --tw-ring-color: rgb(var(--ff-accent) / 0.75);
   }
+  /* A cell that is a whole player (the slot table's): hovering anywhere on it lights him the same way. */
+  .ff .ff-pn-host:hover .ff-pn-name {
+    color: rgb(var(--ff-accent));
+    text-decoration-line: underline;
+  }
+  .ff .ff-pn-host:hover .ff-pn-av > * {
+    --tw-ring-color: rgb(var(--ff-accent) / 0.75);
+  }
 }
 
 /* ---------- Tour diagrams ----------

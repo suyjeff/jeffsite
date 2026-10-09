@@ -131,7 +131,7 @@ export const buildHistory = (data: LeagueData, analysis: Analysis): HistoryModel
     transactions: data.transactions,
     history: data.history,
     players: data.players,
-    market: analysis.market,
+    market: analysis.tradeMarket,
   })
   return { elo, eloPrior, lastSeasonGames, backtest: bt, behavior, past }
 }

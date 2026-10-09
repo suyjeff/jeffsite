@@ -151,3 +151,11 @@ export type SleeperTransaction = {
   /** FAAB moved in a trade. */
   faab?: { sender: number; receiver: number; amount: number }[] | null
 }
+
+/** The league draft as managers lived it: each player's place in the order, 1 the first one off the board. */
+export type DraftBoard = {
+  type: string
+  /** Overall order by player id. Auction drafts rank by price paid, since pick order there is only nomination order. */
+  rank: Record<string, number>
+  picks: number
+}

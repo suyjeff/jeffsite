@@ -156,7 +156,7 @@ export const PageHeader = ({
     >
       <div
         className={cx(
-          'ff-gutter items-center justify-between gap-3 md:flex md:h-11 md:border-b md:border-ff-line md:group-data-[sidebar=closed]/shell:pl-12',
+          'ff-gutter items-center justify-between gap-3 md:flex md:h-11 md:border-b md:border-ff-line md:group-data-[sidebar=closed]/shell:pl-12 motion-safe:md:transition-[padding] motion-safe:md:duration-[170ms] motion-safe:md:ease-ff-drawer',
           actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden',
         )}
       >
@@ -538,7 +538,7 @@ export const Swap = ({ k, children, className }: { k: string; children: ReactNod
     el.style.height = `${from}px`
     el.style.overflow = 'hidden'
     void el.offsetHeight
-    el.style.transition = 'height 160ms cubic-bezier(0.2, 0, 0, 1)'
+    el.style.transition = 'height 160ms var(--ff-ease-out)'
     el.style.height = `${to}px`
     timer.current = window.setTimeout(() => {
       el.style.height = ''

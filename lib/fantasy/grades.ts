@@ -18,6 +18,7 @@
 // Grades live in this browser, per league.
 
 import type { AcceptRead } from './behavior'
+import { PRICING_VERSION } from './currency'
 import type { TradeIdea } from './trades'
 
 export type Grade = 'yes' | 'maybe' | 'no'
@@ -35,6 +36,8 @@ export type GradeRecord = {
   x: number
   /** Value you asked of them by consensus, pts/wk. */
   ask: number | null
+  /** The trade-value scale `ask` is in (currency.ts PRICING_VERSION); a grade from before there was one has none, and its ask is not comparable. */
+  v?: number
   at: number
 }
 
@@ -113,7 +116,7 @@ export const learn = (grades: Grades, posOf: (id: string) => string | undefined)
     }
     if (r.why === 'dormant') p.dormant = true
     if (r.why === 'untouchable' && r.player) untouchable[r.partnerId] = [...new Set([...(untouchable[r.partnerId] ?? []), r.player])]
-    if (r.why === 'lopsided' && r.ask != null) askCap[r.partnerId] = Math.min(askCap[r.partnerId] ?? Infinity, r.ask)
+    if (r.why === 'lopsided' && r.ask != null && r.v === PRICING_VERSION) askCap[r.partnerId] = Math.min(askCap[r.partnerId] ?? Infinity, r.ask)
     if (r.why === 'fit') {
       const pos = r.give.map(posOf).filter((x): x is string => !!x)
       noUse[r.partnerId] = [...new Set([...(noUse[r.partnerId] ?? []), ...pos])]

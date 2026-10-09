@@ -1,4 +1,5 @@
 import React, { type CSSProperties, type ReactNode } from 'react'
+import { MONKE } from './brand'
 
 // Diagrams for the tour, one per section, in the house style: hairline wires, square nodes, mono labels,
 // and a little signal moving through. Drawn on a 480 × 168 grid; styles and motion live in fantasy.css (.ff-dg).
@@ -68,7 +69,7 @@ const Frame = ({ children, title }: { children: ReactNode; title: string }) => (
 )
 
 const Welcome = () => (
-  <Frame title="Sleeper data flows into one model, which feeds every page">
+  <Frame title={`Sleeper data flows into one model, ${MONKE.name} (${MONKE.long}), which feeds every page`}>
     <Box x={16} y={62} w={110} h={44} label="SLEEPER" sub="league · stats" at={0} />
     <Box x={194} y={50} w={92} h={68} label="M.O.N.K.E." sub="one model" hot at={250} />
     <Box x={364} y={20} w={92} h={30} label="ODDS" at={700} />
@@ -79,6 +80,12 @@ const Welcome = () => (
     <Wire path="M286 84H364" at={650} flow />
     <Wire path="M286 84H325V133H364" at={700} flow />
     <Node x={325} y={84} hot at={600} />
+    {/* The name, spelled out under its box: three short lines so it stays clear of the wires. */}
+    {['MANY ORANGUTANS', 'NERVOUSLY KEYBOARDING', 'ESTIMATES'].map((line, i) => (
+      <Label key={line} x={240} y={134 + i * 10} anchor="middle" tone={i === 0 ? 'hot' : undefined} at={420 + i * 80}>
+        {line}
+      </Label>
+    ))}
   </Frame>
 )
 
@@ -292,6 +299,9 @@ const Monke = () => (
       <Wire key={i} path={`M${94 + i * 92} 84H${116 + i * 92}`} hot={i === 2} at={300 + i * 120} flow />
     ))}
     <Wire path="M335 104V136H151V104" at={900} />
+    <Label x={243} y={40} anchor="middle" tone="hot" at={0}>
+      {MONKE.long.toUpperCase()}
+    </Label>
     <Label x={243} y={150} anchor="middle" at={1000}>
       BACKTEST · CHECKS IT AGAINST REAL WEEKS
     </Label>

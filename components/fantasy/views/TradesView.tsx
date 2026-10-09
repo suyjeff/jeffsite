@@ -298,7 +298,7 @@ const TradesView = ({
         onChange={setMaxValueAsk}
         defaultValue={DEFAULT_TRADE_CONFIG.maxValueAsk}
         format={(v) => `${v.toFixed(1)} /wk`}
-        hint="Most trade value you may take beyond what you send before an offer reads as a lowball. Priced as managers price players: streamers count for little, and the players they drafted cost a premium."
+        hint="Most trade value you may take beyond what you send before an offer reads as a lowball. Priced as managers price players: reputation counts (consensus rank, draft slot), stars cost more than their points, streamers count for little, and the players they drafted cost a premium. Deals that send much more than they get back are dropped too."
       />
     </div>
   )

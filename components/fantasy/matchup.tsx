@@ -149,20 +149,24 @@ export const MatchupScore = ({ m, size = 'lg' }: { m: MatchupRead; size?: 'lg' |
 
 /** Every slot against its opposite, with the edge between them. */
 export const SlotTable = ({ m, compact }: { m: MatchupRead; compact?: boolean }) => {
-  const { data } = useFantasy()
+  const { data, openPlayer } = useFantasy()
   const maxEdge = Math.max(4, ...m.rows.map((r) => Math.abs(r.edge)))
+  // Each player is a cell of his own: it lights on hover, wherever the pointer is on it, and a click anywhere on it opens him.
   const name = (id: string | null, align: 'left' | 'right') =>
     id ? (
-      <PlayerName player={data.players[id]} id={id} size={compact ? 20 : 24} className={align === 'right' ? 'flex-row-reverse text-right' : undefined} />
+      <span className={cx('ff-pn-host relative -mx-1.5 flex min-w-0 items-center self-stretch px-1.5 py-1.5 transition-colors hover:bg-ff-raised/60', align === 'right' && 'justify-end')}>
+        <button type="button" tabIndex={-1} aria-hidden onClick={() => openPlayer(id)} className="absolute inset-0 cursor-pointer" />
+        <PlayerName player={data.players[id]} id={id} size={compact ? 20 : 24} className={align === 'right' ? 'flex-row-reverse text-right' : undefined} />
+      </span>
     ) : (
-      <span className="text-[12px] text-ff-neg">empty</span>
+      <span className="py-1.5 text-[12px] text-ff-neg">empty</span>
     )
   return (
     <ul>
       {m.rows.map((r, i) => (
-        <li key={i} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-ff-line/60 px-3 py-1.5 last:border-0">
-          <span className="min-w-0">{name(r.a, 'left')}</span>
-          <span className="flex w-[104px] flex-col items-center gap-0.5" title={`Edge ${fmtSigned(r.edge)}: expected points, left minus right`}>
+        <li key={i} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 border-b border-ff-line/60 px-3 last:border-0">
+          <span className="flex min-w-0 items-stretch">{name(r.a, 'left')}</span>
+          <span className="flex w-[104px] flex-col items-center justify-center gap-0.5" title={`Edge ${fmtSigned(r.edge)}: expected points, left minus right`}>
             <span className="flex w-full items-baseline justify-between text-[12.5px]">
               <span>{r.sa ? <Pts value={r.sa.value} kind={r.sa.kind} /> : '–'}</span>
               <span className="font-mono text-[9.5px] text-ff-muted">{r.slot}</span>
@@ -170,13 +174,14 @@ export const SlotTable = ({ m, compact }: { m: MatchupRead; compact?: boolean })
             </span>
             <span className="relative block h-1 w-full bg-ff-sunken" aria-hidden>
               <span className="absolute inset-y-0 left-1/2 w-px bg-ff-line2" />
+              {/* The bar grows toward the side that is ahead, as a tug of war: green pulls toward the left side, red away from it. */}
               <span
-                className={cx('absolute inset-y-0', r.edge >= 0 ? 'left-1/2 bg-ff-pos' : 'right-1/2 bg-ff-neg')}
+                className={cx('absolute inset-y-0', r.edge >= 0 ? 'right-1/2 bg-ff-pos' : 'left-1/2 bg-ff-neg')}
                 style={{ width: `${(Math.min(Math.abs(r.edge), maxEdge) / maxEdge) * 50}%` }}
               />
             </span>
           </span>
-          <span className="flex min-w-0 justify-end">{name(r.b, 'right')}</span>
+          <span className="flex min-w-0 items-stretch justify-end">{name(r.b, 'right')}</span>
         </li>
       ))}
     </ul>
