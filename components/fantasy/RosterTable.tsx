@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
-import { Table, cx, fmt, type Column } from './ui'
+import { Table, cx, fmt, pct, type Column } from './ui'
 
 type Row = { id: string; slot: string; starter: boolean; n: number }
 
@@ -29,8 +29,8 @@ export const useRosterRows = (rosterId: number): Row[] => {
 }
 
 /**
- * A team's whole roster in a sheet, dense: slot, player (opens his sheet), NFL team, next bye and points a week
- * ahead. Runs edge to edge in its section; the first and last cells keep the sheet's inset so the slot column lines
+ * A team's whole roster in a sheet, dense: slot, player (opens his sheet; his NFL team and injury tag ride with the
+ * name), next bye, how likely he plays and points a week ahead. Runs edge to edge in its section; the first and last cells keep the sheet's inset so the slot column lines
  * up with the section title above it.
  */
 const RosterTable = ({ rosterId }: { rosterId: number }) => {
@@ -57,12 +57,6 @@ const RosterTable = ({ rosterId }: { rosterId: number }) => {
         render: (r) => <PlayerName player={players[r.id]} id={r.id} size={20} />,
       },
       {
-        key: 'team',
-        label: 'Tm',
-        title: 'NFL team',
-        render: (r) => <span className="font-mono text-[11px] text-ff-muted">{players[r.id]?.team ?? 'FA'}</span>,
-      },
-      {
         key: 'bye',
         label: 'Bye',
         title: 'His next bye week',
@@ -72,6 +66,17 @@ const RosterTable = ({ rosterId }: { rosterId: number }) => {
           const bye = data.context[r.id]?.byes.find((w) => w >= week)
           if (bye == null) return <span className="text-ff-muted">–</span>
           return <span className={bye === week ? 'text-ff-warn' : 'text-ff-muted'}>{bye}</span>
+        },
+      },
+      {
+        key: 'play',
+        label: 'Plays',
+        title: 'Share of the weeks ahead he is expected to play',
+        align: 'right',
+        sort: (r) => data.context[r.id]?.play ?? 1,
+        render: (r) => {
+          const play = data.context[r.id]?.play
+          return <span className={play != null && play < 0.8 ? 'text-ff-neg' : 'text-ff-muted'}>{pct(play)}</span>
         },
       },
       {

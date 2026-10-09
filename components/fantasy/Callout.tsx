@@ -39,7 +39,11 @@ export const Callout = ({
 }) => {
   const k = KIND[kind]
   return (
-    <div role="note" className={cx('flex items-start gap-2.5 border px-3 py-2 text-[12.5px] leading-[1.45] text-ff-text2', k.box, className)}>
+    // Muted ink drops just under 4.5:1 on a tint over the light page, so inside a note it steps up to the body ink.
+    <div
+      role="note"
+      className={cx('flex items-start gap-2.5 border px-3 py-2 text-[12.5px] leading-[1.45] text-ff-text2 [&_.text-ff-muted]:text-ff-text2', k.box, className)}
+    >
       {/* The icon sits on the first line: 18px of line, 14px of icon. */}
       <k.Icon className={cx('mt-0.5', k.icon)} />
       <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
