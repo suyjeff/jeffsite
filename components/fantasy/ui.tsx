@@ -216,10 +216,27 @@ const spyLine = () => (document.querySelector('.ff-pagetabs')?.getBoundingClient
 export const spyTo = (key: string) => {
   const el = spySection(key)
   if (!el) return
-  const top = window.scrollY + el.getBoundingClientRect().top - (spyLine() - 12) + 1
+  const target = () => window.scrollY + el.getBoundingClientRect().top - (spyLine() - 12) + 1
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  window.scrollTo({ top: Math.max(0, top), behavior: reduce ? 'auto' : 'smooth' })
+  window.scrollTo({ top: Math.max(0, target()), behavior: reduce ? 'auto' : 'smooth' })
   el.querySelector<HTMLElement>('[data-spy-head]')?.focus({ preventScroll: true })
+  // Sections mount as the scroll passes them, which can move the target; once the scroll settles, land on it exactly.
+  let tries = 0
+  const settle = () => {
+    const off = target() - window.scrollY
+    if (Math.abs(off) > 4 && tries++ < 3) {
+      window.scrollTo({ top: Math.max(0, target()) })
+      window.setTimeout(settle, 200)
+    }
+  }
+  let last = -1
+  const wait = () => {
+    // Settled when the position stops changing between two checks.
+    if (window.scrollY === last) return settle()
+    last = window.scrollY
+    window.setTimeout(wait, 120)
+  }
+  window.setTimeout(wait, reduce ? 0 : 160)
 }
 
 const SpyStrip = <K extends string>({ items, value }: { items: TabItem<K>[]; value: K }) => {
@@ -365,23 +382,36 @@ export const TabSection = ({
   children: ReactNode
   className?: string
 }) => {
+  // Stacked, a section mounts once it comes within a screen of view and then stays: a phone opening a long page
+  // builds the top of it, not every panel at once. Its heading is there from the start, so the strip can steer to it.
+  const ref = useRef<HTMLElement>(null)
+  const [near, setNear] = useState(false)
+  useEffect(() => {
+    if (!stacked || near) return
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return setNear(true)
+    const io = new IntersectionObserver(([e]) => e.isIntersecting && setNear(true), { rootMargin: '100% 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [stacked, near])
   if (!stacked) return active ? <>{children}</> : null
+  const body = near ? children : <div aria-hidden className="min-h-[60vh]" />
   if (bare)
     return (
-      <section data-spy={id} aria-label={label} className={cx('space-y-3', className)}>
+      <section ref={ref} data-spy={id} aria-label={label} aria-busy={!near || undefined} className={cx('space-y-3', className)}>
         <span data-spy-head tabIndex={-1} className="sr-only">
           {label}
         </span>
-        {children}
+        {body}
       </section>
     )
   return (
-    <section data-spy={id} aria-labelledby={`spy-${id}`} className={cx('space-y-3 pt-5 first:pt-0', className)}>
+    <section ref={ref} data-spy={id} aria-labelledby={`spy-${id}`} aria-busy={!near || undefined} className={cx('space-y-3 pt-5 first:pt-0', className)}>
       <h2 id={`spy-${id}`} data-spy-head tabIndex={-1} className="flex items-baseline gap-2 border-b border-ff-line pb-2 text-[15px] font-medium tracking-[-0.01em] text-ff-text outline-none">
         {label}
         {count != null && <span className="num text-[11px] font-normal text-ff-muted">{count}</span>}
       </h2>
-      {children}
+      {body}
     </section>
   )
 }
@@ -396,6 +426,7 @@ export const Segmented = <K extends string>({
   size = 'md',
   label,
   block,
+  manual,
 }: {
   options: SegOption<NoInfer<K>>[]
   value: K
@@ -404,6 +435,8 @@ export const Segmented = <K extends string>({
   label?: string
   /** Fill the row, splitting it evenly between the options. */
   block?: boolean
+  /** Arrows move focus only; Enter or Space picks. For choices that save something (a grade), not a view switch. */
+  manual?: boolean
 }) => (
   <div role="radiogroup" aria-label={label} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex')}>
     {options.map((o, i) => {
@@ -421,9 +454,11 @@ export const Segmented = <K extends string>({
             const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
             if (!step) return
             e.preventDefault()
-            const i = (options.findIndex((x) => x.key === value) + step + options.length) % options.length
-            onChange(options[i].key)
-            ;(e.currentTarget.parentElement?.children[i] as HTMLElement | undefined)?.focus()
+            // From the focused option (with nothing picked, the first or last for the direction).
+            const at = manual ? i : options.findIndex((x) => x.key === value)
+            const next = at < 0 ? (step > 0 ? 0 : options.length - 1) : (at + step + options.length) % options.length
+            if (!manual) onChange(options[next].key)
+            ;(e.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus()
           }}
           className={cx(
             'min-w-6 shrink-0 whitespace-nowrap border-r border-ff-line transition-colors last:border-r-0',

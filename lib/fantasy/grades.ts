@@ -95,16 +95,22 @@ export const learn = (grades: Grades, posOf: (id: string) => string | undefined)
   const partner: Lessons['partner'] = {}
   const sums: Record<number, number> = {}
   let all = 0
+  let nAll = 0
   const untouchable: Record<number, string[]> = {}
   const askCap: Record<number, number> = {}
   const noUse: Record<number, string[]> = {}
   for (const r of recs) {
     // A reason explains the grade with a rule of its own, so it does not also drag the manager's whole curve.
-    const residual = r.why === 'untouchable' || r.why === 'fit' ? 0 : logit(TARGET[r.grade]) - r.x
-    sums[r.partnerId] = (sums[r.partnerId] ?? 0) + residual
-    all += residual
+    // Those grades count toward neither the residual nor its sample, so they never dilute the real ones.
+    const rule = r.why === 'untouchable' || r.why === 'fit'
     const p = (partner[r.partnerId] ??= { offset: 0, n: 0, dormant: false })
-    p.n++
+    if (!rule) {
+      const residual = logit(TARGET[r.grade]) - r.x
+      sums[r.partnerId] = (sums[r.partnerId] ?? 0) + residual
+      all += residual
+      nAll++
+      p.n++
+    }
     if (r.why === 'dormant') p.dormant = true
     if (r.why === 'untouchable' && r.player) untouchable[r.partnerId] = [...new Set([...(untouchable[r.partnerId] ?? []), r.player])]
     if (r.why === 'lopsided' && r.ask != null) askCap[r.partnerId] = Math.min(askCap[r.partnerId] ?? Infinity, r.ask)
@@ -114,7 +120,13 @@ export const learn = (grades: Grades, posOf: (id: string) => string | undefined)
     }
   }
   for (const [id, p] of Object.entries(partner)) p.offset = (sums[Number(id)] ?? 0) / (p.n + 2)
-  return { n: recs.length, global: recs.length ? all / (recs.length + 6) : 0, partner, untouchable, askCap, noUse, grades }
+  return { n: recs.length, global: nAll ? all / (nAll + 6) : 0, partner, untouchable, askCap, noUse, grades }
+}
+
+/** Whether your grades rule a deal out, without scoring it: your own "no way", or a player you said they keep. */
+export const ruledOutBy = (idea: Pick<TradeIdea, 'partnerId' | 'give' | 'get'>, lessons: Lessons) => {
+  const own = lessons.grades[ideaKey(idea)]
+  return own ? own.grade === 'no' : (lessons.untouchable[idea.partnerId] ?? []).some((id) => idea.get.includes(id))
 }
 
 /** A read with your grades applied: the same terms, then the lessons on top, each one said out loud. */
@@ -165,6 +177,7 @@ export const applyLessons = (
     reasons: signals.map((s) => s.text),
     signals,
     graded: own ? own.grade : null,
-    ruledOut: !!own && own.grade === 'no' ? true : kept.length > 0,
+    // Your grade of this deal decides; a player you said they keep rules out the deals you have not graded.
+    ruledOut: ruledOutBy(idea, lessons),
   }
 }

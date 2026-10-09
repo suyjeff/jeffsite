@@ -66,6 +66,8 @@ export type SlatePlayer = {
   high: number
   /** Points, once his game is final. */
   actual: number | null
+  /** Points so far in a game under way. */
+  live: number | null
   /** His manager's win odds, a bad game against a good one (0–1). */
   swing: number
   /** Final games: his manager's win odds now, minus with him at projection. */
@@ -80,6 +82,8 @@ export type SlateGame = {
   date: string | null
   status: string
   final: boolean
+  /** Under way: points are on the board but the game is not final. */
+  live: boolean
   home: string
   away: string
   totals: { home: TeamTotal | null; away: TeamTotal | null }
@@ -143,6 +147,8 @@ export type SlateInput = {
   sigma: number
   totals: Record<string, TeamTotal>
   stakes: Record<number, Stakes> | null
+  /** YYYY-MM-DD, for tests; defaults to today (UTC). */
+  today?: string
 }
 
 const gameKey = (g: ScheduleGame) => `${g.week}:${g.away}@${g.home}`
@@ -152,7 +158,11 @@ export const buildSlate = (input: SlateInput): Slate => {
   const games = input.games.filter((g) => g.week === input.week && g.status !== 'canceled')
   const gameOf: Record<string, ScheduleGame> = {}
   for (const g of games) gameOf[g.home] = gameOf[g.away] = g
-  const isFinal = (g: ScheduleGame | undefined) => g?.status === 'complete'
+  // Final by Sleeper's status, or by the calendar once the game's date is past (the status can lag).
+  const today = input.today ?? new Date().toISOString().slice(0, 10)
+  const isFinal = (g: ScheduleGame | undefined) => g?.status === 'complete' || (!!g?.date && g.date < today)
+  // Under way: Sleeper says so, or points are already on the board for its players.
+  const isLive = (g: ScheduleGame | undefined) => g?.status === 'in_game' || g?.status === 'in_progress'
 
   // Pairings and lineups, from Sleeper's own matchups when the week has them.
   const byMatchup = new Map<number, SleeperMatchup[]>()
@@ -167,17 +177,23 @@ export const buildSlate = (input: SlateInput): Slate => {
     const parts = starters.map((id, i) => {
       const g = gameOf[players[id].team ?? '']
       const final = isFinal(g)
-      const actual = final ? (m.players_points?.[id] ?? 0) : null
-      return { id, final, actual, proj: g ? (proj[id] ?? 0) : 0, sd: final || !g ? 0 : raw[i] * k, sd0: raw[i] * k }
+      const posted = m.players_points?.[id]
+      const actual = final ? (posted ?? 0) : null
+      const p = g ? (proj[id] ?? 0) : 0
+      // A game under way: what he has plus half his projection still to come (the clock is not in the data, so
+      // halftime is the assumption), and the spread of half a game.
+      const live = !final && (isLive(g) || (posted != null && posted !== 0)) ? (posted ?? 0) : null
+      if (live != null) return { id, final, actual, live, proj: p, mu: live + 0.5 * p, sd: raw[i] * k * Math.SQRT1_2, sd0: raw[i] * k }
+      return { id, final, actual, live, proj: p, mu: final ? (posted ?? 0) : p, sd: final || !g ? 0 : raw[i] * k, sd0: raw[i] * k }
     })
-    const mu = parts.reduce((a, p) => a + (p.final ? p.actual! : p.proj), 0)
+    const mu = parts.reduce((a, p) => a + p.mu, 0)
     const v = parts.reduce((a, p) => a + p.sd ** 2, 0)
     return {
       side: {
         rosterId: m.roster_id,
         mu,
         sd: Math.sqrt(v),
-        banked: parts.reduce((a, p) => a + (p.actual ?? 0), 0),
+        banked: parts.reduce((a, p) => a + (p.actual ?? p.live ?? 0), 0),
         left: parts.filter((p) => !p.final && p.proj > 0).length,
         starters,
       },
@@ -219,8 +235,9 @@ export const buildSlate = (input: SlateInput): Slate => {
           owner: me.side.rosterId,
           proj: p.proj,
           sd: p.sd,
-          low: Math.max(0, p.proj - Z80 * p.sd),
-          high: p.proj + Z80 * p.sd,
+          low: Math.max(p.live ?? 0, p.mu - Z80 * p.sd),
+          high: p.mu + Z80 * p.sd,
+          live: p.live,
           actual: p.actual,
           swing,
           realized,
@@ -280,6 +297,7 @@ export const buildSlate = (input: SlateInput): Slate => {
         date: g.date ?? null,
         status: g.status ?? 'pre_game',
         final: isFinal(g),
+        live: !isFinal(g) && (isLive(g) || ps.some((p) => p.live != null)),
         home: g.home,
         away: g.away,
         totals: { home: input.totals[g.home] ?? null, away: input.totals[g.away] ?? null },

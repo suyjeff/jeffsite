@@ -22,6 +22,7 @@ const m = (roster_id: number, starters: string[], pts: Record<string, number> = 
   players_points: pts,
 })
 const base = {
+  today: '2026-10-10',
   week: 5,
   games,
   players,
@@ -72,6 +73,19 @@ describe('slate', () => {
     expect(s.matchups[0].a.banked).toBe(37)
     expect(s.matchups[0].a.left).toBe(0)
     expect(s.matchups[0].b.left).toBe(1)
+  })
+
+  it('a game under way counts what is on the board, and a past date counts as final when the status lags', () => {
+    const live = buildSlate({ ...base, today: '2026-10-11', matchups: [m(1, ['a1', 'a2'], { a1: 22 }), m(2, ['b1', 'b2'])] })
+    // 22 on the board plus half of his 20 still to come.
+    expect(live.byId.a1.live).toBe(22)
+    expect(live.matchups[0].a.mu).toBeCloseTo(22 + 10 + 12, 6)
+    expect(live.matchups[0].a.banked).toBe(22)
+    expect(live.games.find((g) => g.home === 'ARI')!.live).toBe(true)
+    const stale = buildSlate({ ...base, today: '2026-10-13', matchups: [m(1, ['a1', 'a2'], { a1: 22, a2: 9 }), m(2, ['b1', 'b2'], { b1: 15, b2: 7 })] })
+    expect(stale.games.every((g) => g.final)).toBe(true)
+    expect(stale.matchups[0].a.mu).toBe(31)
+    expect(stale.matchups[0].pA).toBe(1)
   })
 
   it('measures position spread on this season, shrunk toward the long-run figure', () => {

@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
-import { acceptRead, type AcceptRead } from '../../lib/fantasy/behavior'
+import type { AcceptRead } from '../../lib/fantasy/behavior'
 import { tradeLeverage } from '../../lib/fantasy/forecast'
 import { applyTrade, type TradeIdea } from '../../lib/fantasy/trades'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { ContextNotes } from './ContextNotes'
-import { useFantasy } from './FantasyContext'
+import { useFantasy, useTradeRead } from './FantasyContext'
 import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../../lib/fantasy/grades'
 import { Avatar, Badge, BuildGlyph, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, simOdds } from './ui'
 
@@ -126,6 +126,7 @@ const GradeBar = ({ idea, base, nm, posOf }: { idea: TradeIdea; base: AcceptRead
         <Segmented<Grade | ''>
           size="sm"
           label="Would they take it?"
+          manual
           value={rec?.grade ?? ''}
           onChange={(g) => g && pick(g)}
           options={[
@@ -185,8 +186,9 @@ const TradeCard = ({
   const season = analysis.seasonById[idea.partnerId]
   const players = data.players
   const nm = (id: string) => players[id]?.name ?? id
-  const base = useMemo(() => acceptRead(idea, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab), [idea, analysis, models])
-  // The same read with your grades applied; `base` is what a new grade is measured against.
+  const readOf = useTradeRead()
+  // The bare read is what a new grade is measured against; the card shows it with your grades applied.
+  const base = useMemo(() => readOf(idea, false), [readOf, idea])
   const read = useMemo(() => grades.apply(base, idea), [grades, base, idea])
   const lev = useLeverage(idea)
   const odds = models.forecast?.sim[idea.partnerId]

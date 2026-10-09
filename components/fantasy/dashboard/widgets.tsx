@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react'
-import { acceptRead } from '../../../lib/fantasy/behavior'
 import { pastProjection } from '../../../lib/fantasy/analysis'
 import { deadStarters } from '../../../lib/fantasy/lineup'
 import { surname } from '../../../lib/fantasy/scout'
@@ -8,8 +7,9 @@ import { searchTrades, waiverTargets } from '../../../lib/fantasy/search'
 import AdjustControl from '../AdjustControl'
 import LinesBlock from '../LinesBlock'
 import { describeNote } from '../ContextNotes'
-import { useFantasy } from '../FantasyContext'
+import { useFantasy, useTradeRead } from '../FantasyContext'
 import { useSlate } from '../useSlate'
+import { ruledOutBy } from '../../../lib/fantasy/grades'
 import PlayerName from '../PlayerName'
 import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
 
@@ -328,19 +328,19 @@ const Matchup = ({ select }: WidgetProps) => {
 }
 
 const TradeIdeas = () => {
-  const { data, analysis, models, go, grades } = useFantasy()
+  const { data, analysis, go, grades } = useFantasy()
   const ideas = useMemo(() => searchTrades(data, analysis).ideas, [data, analysis])
-  const reads = useMemo(
-    () => new Map(ideas.map((i) => [i, grades.apply(acceptRead(i, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab), i)])),
-    [ideas, grades, analysis, models],
-  )
+  // One per partner, best for you first, leaving out what your grades ruled out; only those few get a full read.
+  const top = useMemo(() => {
+    const seen = new Set<number>()
+    return [...ideas]
+      .filter((i) => !ruledOutBy(i, grades.lessons))
+      .sort((a, b) => b.myGain - a.myGain)
+      .filter((i) => (seen.has(i.partnerId) ? false : (seen.add(i.partnerId), true)))
+  }, [ideas, grades.lessons])
+  const readOf = useTradeRead()
+  const reads = useMemo(() => new Map(top.map((i) => [i, readOf(i)])), [top, readOf])
   if (!ideas.length) return <Empty title="No deals clear the bar">Loosen the limits on the Trades page.</Empty>
-  // One per partner, best for you first, leaving out what your grades ruled out.
-  const seen = new Set<number>()
-  const top = [...ideas]
-    .filter((i) => !reads.get(i)?.ruledOut)
-    .sort((a, b) => b.myGain - a.myGain)
-    .filter((i) => (seen.has(i.partnerId) ? false : (seen.add(i.partnerId), true)))
   const name = (id: string) => data.players[id]?.name.split(' ').slice(-1)[0] ?? id
   return (
     <div>

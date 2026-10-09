@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AcceptRead } from '../behavior'
-import { applyLessons, ideaKey, learn, type Grades } from '../grades'
+import { applyLessons, ideaKey, learn, ruledOutBy, type Grades } from '../grades'
 import type { TradeIdea } from '../trades'
 
 const idea = (partnerId: number, give: string[], get: string[]) => ({ partnerId, give, get }) as unknown as TradeIdea
@@ -70,5 +70,26 @@ describe('trade grades', () => {
     const big = applyLessons(read(0, 2.5), idea(2, ['c'], ['d']), L, name, posOf)
     const small = applyLessons(read(0, 0.5), idea(2, ['c'], ['d']), L, name, posOf)
     expect(big.index).toBeLessThan(small.index)
+  })
+
+  it('your own grade of a deal outranks the rule its reason sets', () => {
+    const i = idea(2, ['a'], ['b'])
+    const g: Grades = { [ideaKey(i)]: { partnerId: 2, give: ['a'], get: ['b'], grade: 'maybe', why: 'untouchable', player: 'b', x: -1, ask: 0, at: 1 } }
+    const L = learn(g, posOf)
+    expect(applyLessons(read(-1), i, L, name, posOf).ruledOut).toBe(false)
+    expect(ruledOutBy(i, L)).toBe(false)
+    // Another deal for him, ungraded, is off the table.
+    expect(ruledOutBy(idea(2, ['c'], ['b']), L)).toBe(true)
+  })
+
+  it("a rule-only grade does not dilute the manager's curve", () => {
+    const plain = idea(3, ['a'], ['b'])
+    const rules = [idea(3, ['c'], ['d']), idea(3, ['e'], ['b'])]
+    const g: Grades = { [ideaKey(plain)]: { partnerId: 3, give: ['a'], get: ['b'], grade: 'no', x: 0.5, ask: 0, at: 1 } }
+    const one = learn(g, posOf).partner[3].offset
+    for (const r of rules) g[ideaKey(r)] = { partnerId: 3, give: r.give, get: r.get, grade: 'no', why: 'untouchable', player: r.get[0], x: 0.5, ask: 0, at: 1 }
+    const L = learn(g, posOf)
+    expect(L.partner[3].offset).toBeCloseTo(one, 9)
+    expect(L.partner[3].n).toBe(1)
   })
 })

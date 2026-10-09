@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
-import { acceptRead } from '../../../lib/fantasy/behavior'
 import { ideaKey } from '../../../lib/fantasy/grades'
 import { searchTrades, tradeBase } from '../../../lib/fantasy/search'
 import { DEFAULT_TRADE_CONFIG, findTargets, scoreTrade, type TradeIdea, type TradeShape } from '../../../lib/fantasy/trades'
@@ -8,7 +7,7 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import TradeCard, { SHAPE_LABEL } from '../TradeCard'
-import { useFantasy } from '../FantasyContext'
+import { useFantasy, useTradeRead } from '../FantasyContext'
 import { sectionCode } from '../Shell'
 import {
   Avatar,
@@ -80,12 +79,10 @@ const TradesView = ({
   )
   const base = useMemo(() => tradeBase(data, analysis), [data, analysis])
 
-  const { models, grades } = useFantasy()
+  const { grades } = useFantasy()
   const search = useMemo(() => searchTrades(data, analysis, { minTheirGain, maxValueAsk }), [data, analysis, minTheirGain, maxValueAsk])
-  const reads = useMemo(
-    () => new Map(search.ideas.map((i) => [i, grades.apply(acceptRead(i, myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab), i)])),
-    [search.ideas, myRosterId, models, analysis.currency, grades],
-  )
+  const readOf = useTradeRead()
+  const reads = useMemo(() => new Map(search.ideas.map((i) => [i, readOf(i)])), [search.ideas, readOf])
   // Deals your grades rule out (a "no way", or a player you said they keep) step aside unless asked for.
   const [showRuledOut, setShowRuledOut] = useState(false)
   const openedAt = useRef(Date.now())

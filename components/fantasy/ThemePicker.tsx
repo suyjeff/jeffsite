@@ -74,21 +74,21 @@ const DisplayMenu = ({
       setOpen(false)
       button.current?.focus()
     }
+    // Tabbing out closes it, like a menu. Focus landing outside is the signal, not a blur: a click on padding or on a
+    // control that takes no focus (Safari buttons) blurs with no target and must not close the panel under the pointer.
+    const focusOut = (e: FocusEvent) => !wrap.current?.contains(e.target as Node) && setOpen(false)
     document.addEventListener('pointerdown', away)
     document.addEventListener('keydown', key, true)
+    document.addEventListener('focusin', focusOut)
     return () => {
+      document.removeEventListener('focusin', focusOut)
       document.removeEventListener('pointerdown', away)
       document.removeEventListener('keydown', key, true)
     }
   }, [open])
 
   return (
-    <div
-      ref={wrap}
-      className="relative min-w-0 flex-1"
-      // Tabbing out of the panel closes it, like a menu.
-      onBlur={(e) => open && !wrap.current?.contains(e.relatedTarget as Node) && setOpen(false)}
-    >
+    <div ref={wrap} className="relative min-w-0 flex-1">
       <button
         ref={button}
         type="button"
@@ -96,7 +96,10 @@ const DisplayMenu = ({
         aria-expanded={open}
         aria-controls={`${id}-panel`}
         onClick={() => setOpen((x) => !x)}
-        className={cx('flex h-7 w-full min-w-0 items-center gap-1.5 border bg-ff-panel pl-2 pr-1.5 text-left text-[12px] text-ff-text transition-colors', open ? 'border-ff-line2' : 'border-ff-line hover:border-ff-line2')}
+        className={cx(
+          'flex h-7 w-full min-w-0 items-center gap-1.5 border bg-ff-panel pl-2 pr-1.5 text-left text-[12px] text-ff-text transition-colors',
+          open ? 'border-ff-line2' : 'border-ff-line hover:border-ff-line2',
+        )}
       >
         <Swatch theme={theme} compact />
         <span className="min-w-0 flex-1 truncate">
@@ -131,7 +134,9 @@ const DisplayMenu = ({
                   ]}
                 />
               ) : (
-                <span className="font-mono text-[11px] text-ff-muted">{theme.label} is {theme.light ? 'light' : 'dark'} only</span>
+                <span className="font-mono text-[11px] text-ff-muted">
+                  {theme.label} is {theme.light ? 'light' : 'dark'} only
+                </span>
               )}
             </div>
             <div className="flex items-center justify-between gap-3">

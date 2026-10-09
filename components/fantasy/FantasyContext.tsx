@@ -1,10 +1,10 @@
-import { createContext, useContext } from 'react'
+import { createContext, useCallback, useContext } from 'react'
 import type { Adjustment, Adjustments } from '../../lib/fantasy/adjust'
 import type { Analysis } from '../../lib/fantasy/analysis'
 import type { Models } from '../../lib/fantasy/models'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import type { SectionKey } from './Shell'
-import type { AcceptRead } from '../../lib/fantasy/behavior'
+import { acceptRead, type AcceptRead } from '../../lib/fantasy/behavior'
 import type { GradeRecord, Grades, Lessons } from '../../lib/fantasy/grades'
 import type { TradeIdea } from '../../lib/fantasy/trades'
 
@@ -38,4 +38,19 @@ export const useFantasy = () => {
   const c = useContext(Ctx)
   if (!c) throw new Error('useFantasy outside FantasyProvider')
   return c
+}
+
+/**
+ * How a trade is likely to land for you: the trade read, with your grades applied unless `graded` is false
+ * (the bare read is what a new grade is measured against).
+ */
+export const useTradeRead = () => {
+  const { analysis, models, grades } = useFantasy()
+  return useCallback(
+    (idea: TradeIdea, graded = true) => {
+      const base = acceptRead(idea, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab)
+      return graded ? grades.apply(base, idea) : base
+    },
+    [analysis, models, grades],
+  )
 }

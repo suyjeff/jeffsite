@@ -255,7 +255,8 @@ export const getScoredProjections = (
  * is missing from it.
  */
 export const getSchedule = (season: string) =>
-  cachedGet<ScheduleGame[]>(`/schedule/nfl/regular/${season}`, 12 * HOUR, { base: 'https://api.sleeper.app' })
+  // Short-lived: the rows carry each game's status, which Gameday reads to know what is final.
+  cachedGet<ScheduleGame[]>(`/schedule/nfl/regular/${season}`, 20 * MINUTE, { base: 'https://api.sleeper.app' })
 
 /**
  * Games played per player across a whole regular season, from the season-total

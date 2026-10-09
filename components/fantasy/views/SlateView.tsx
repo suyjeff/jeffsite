@@ -103,7 +103,7 @@ const GameCard = ({
       actions={
         <span className="flex items-center gap-2">
           {involved && <Badge tone="accent">decides your week</Badge>}
-          {g.final ? <span className="text-ff-text2">Final</span> : <span>{dayOf(g.date)}</span>}
+          {g.final ? <span className="text-ff-text2">Final</span> : g.live ? <span className="text-ff-warn">Live</span> : <span>{dayOf(g.date)}</span>}
         </span>
       }
     >
@@ -296,6 +296,11 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
           <span className="inline-flex flex-col items-end leading-tight">
             <span className="text-ff-text">{fmt(p.actual)}</span>
             <span className={cx('text-[10px]', p.actual >= p.proj ? 'text-ff-pos' : 'text-ff-neg')}>{fmtSigned(p.actual - p.proj)} vs proj</span>
+          </span>
+        ) : p.live != null ? (
+          <span className="inline-flex flex-col items-end leading-tight">
+            <span className="text-ff-text">{fmt(p.live)}</span>
+            <span className="text-[10px] text-ff-warn">live · proj {fmt(p.proj)}</span>
           </span>
         ) : (
           <span className="inline-flex flex-col items-end leading-tight">

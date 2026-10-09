@@ -169,7 +169,7 @@ const SidebarBody = ({
                 key={key}
                 onClick={() => onNavigate(key)}
                 aria-current={active ? 'page' : undefined}
-                aria-keyshortcuts={String(i)}
+                aria-keyshortcuts={i <= 9 ? String(i) : i === 10 ? '0' : undefined}
                 title={key === 'monke' ? MONKE.long : undefined}
                 className={cx(
                   'group flex h-7 w-full items-center gap-3 px-3 text-left text-[13px] transition-colors',
@@ -247,8 +247,9 @@ const Shell = (props: ShellProps) => {
       if (e.metaKey || e.ctrlKey || e.altKey || typing(e)) return
       // A sheet over the page owns the keyboard.
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
-      const n = Number(e.key)
-      if (n >= 1 && n <= SECTIONS.length) {
+      // 1–9 open the first nine sections and 0 the tenth, like the number row reads.
+      const n = e.key === '0' ? 10 : Number(e.key)
+      if (n >= 1 && n <= SECTIONS.length && /^[0-9]$/.test(e.key)) {
         e.preventDefault()
         onNavigate(SECTIONS[n - 1].key)
         window.scrollTo({ top: 0 })
