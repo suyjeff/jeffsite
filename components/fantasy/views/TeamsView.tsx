@@ -14,6 +14,7 @@ import {
   Badge,
   DeltaChip,
   Dropdown,
+  Meter,
   Num,
   PageHeader,
   Panel,
@@ -116,9 +117,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
             sort: (t: TeamInfo) => sim[t.rosterId]?.playoffs ?? 0,
             render: (t: TeamInfo) => (
               <span className="inline-flex items-center gap-2">
-                <span className="hidden h-1 w-10 bg-ff-line lg:inline-block" aria-hidden>
-                  <span className="block h-full bg-ff-accent" style={{ width: `${(sim[t.rosterId]?.playoffs ?? 0) * 100}%` }} />
-                </span>
+                <Meter value={sim[t.rosterId]?.playoffs ?? 0} max={1} width={40} thin className="hidden lg:inline-block" />
                 <span className="w-9 text-right text-ff-text">{simOdds(sim[t.rosterId], 'playoffs')}</span>
               </span>
             ),
@@ -144,7 +143,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
       key: 'next',
       label: next[0] ? `Wk ${next[0].week}` : 'Next',
       hideBelow: 'lg',
-      title: 'Next opponent and chance to win',
+      title: 'Next opponent and your win odds against them',
       render: (t) => {
         const g = game(t.rosterId)
         if (!g) return <span className="text-ff-muted">–</span>

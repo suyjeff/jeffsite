@@ -168,6 +168,22 @@ export const SheetClose = () => {
   )
 }
 
+/**
+ * The top of every sheet: a leading picture (portrait, logo, avatars), a small mono line of facts, the title, a
+ * line under it, then back and close at the trailing edge.
+ */
+export const SheetHeader = ({ lead, eyebrow, title, sub }: { lead?: ReactNode; eyebrow?: ReactNode; title: ReactNode; sub?: ReactNode }) => (
+  <header className="flex items-start gap-3 px-4 pb-3 pt-4">
+    {lead && <span className="shrink-0">{lead}</span>}
+    <div className="min-w-0 flex-1">
+      {eyebrow && <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-ff-muted">{eyebrow}</div>}
+      <h2 className="mt-0.5 truncate text-[18px] font-medium leading-tight tracking-[-0.01em] text-ff-text">{title}</h2>
+      {sub && <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-ff-muted">{sub}</div>}
+    </div>
+    <SheetClose />
+  </header>
+)
+
 /** A sheet's content, swapped in place: a quick fade so the change reads as a new page, not a flicker. */
 export const SheetContent = ({ children }: { children: ReactNode }) => <div className="ff-fade-in flex min-h-0 flex-1 flex-col">{children}</div>
 

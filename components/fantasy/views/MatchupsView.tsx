@@ -2,53 +2,74 @@ import React, { useEffect, useState } from 'react'
 import { useFantasy } from '../FantasyContext'
 import { Deciders, MatchupScore, OddsBar, decidedBy, useMatchups, type MatchupRead } from '../matchup'
 import TeamName from '../TeamName'
-import { Badge, Button, Empty, PageHeader, Panel, Pts, PtsKey, Segmented, cx, pct } from '../ui'
+import { Badge, Button, Empty, PageHeader, Panel, Pts, PtsKey, RowCover, Segmented, cx, pct } from '../ui'
 
 type View = 'list' | 'grid'
 
-/** The full-card button behind a row or card, so the names on it stay their own buttons. */
-const Cover = ({ label, onClick }: { label: string; onClick: () => void }) => (
-  <button
-    type="button"
-    aria-label={label}
-    onClick={onClick}
-    className="absolute inset-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
-  />
-)
 
 const Score = ({ m, side }: { m: MatchupRead; side: 'a' | 'b' }) => {
   const s = side === 'a' ? m.a : m.b
   return <Pts value={m.started ? s.banked : s.mu} kind={m.started ? (side === 'a' ? m.kindA : m.kindB) : 'proj'} />
 }
 
-/** One matchup as a list row: both managers, the scores, the odds between them, and who decides it. */
-const Row = ({ m, mine, surname, open }: { m: MatchupRead; mine: boolean; surname: (id: string) => string; open: () => void }) => {
+/** One matchup as a list row: both managers, the scores, the odds between them, and who decides it. Phones stack the two sides. */
+const Row = ({ m, surname, open }: { m: MatchupRead; surname: (id: string) => string; open: () => void }) => {
   const { analysis } = useFantasy()
   const by = decidedBy(m, surname)
+  const label = `Open ${analysis.teamById[m.a.rosterId]?.name} vs ${analysis.teamById[m.b.rosterId]?.name}`
+  const side = (k: 'a' | 'b') => {
+    const s = k === 'a' ? m.a : m.b
+    const p = k === 'a' ? m.p : 1 - m.p
+    return (
+      <span className="flex items-center gap-2">
+        <span className="relative flex min-w-0 flex-1">
+          <TeamName id={s.rosterId} size={20} className="text-[13px]" />
+        </span>
+        <span className="num w-9 text-right text-[10.5px] text-ff-muted">{pct(p)}</span>
+        <span className="w-12 text-right text-[14px] font-medium">
+          <Score m={m} side={k} />
+        </span>
+      </span>
+    )
+  }
   return (
-    <li className={cx('relative grid grid-cols-[minmax(0,1fr)_3.25rem_minmax(56px,7rem)_3.25rem_minmax(0,1fr)] items-center gap-2 px-3 py-2 hover:bg-ff-raised/50 lg:grid-cols-[minmax(0,1fr)_3.5rem_8rem_3.5rem_minmax(0,1fr)_minmax(0,14rem)]', mine && 'bg-ff-accent/[0.04]')}>
-      <Cover label={`Open ${analysis.teamById[m.a.rosterId]?.name} vs ${analysis.teamById[m.b.rosterId]?.name}`} onClick={open} />
-      <span className="relative flex min-w-0">
-        <TeamName id={m.a.rosterId} size={20} className="text-[13px]" />
-      </span>
-      <span className="text-right text-[13.5px] font-medium">
-        <Score m={m} side="a" />
-      </span>
-      <span className="flex items-center gap-1.5">
-        <span className="num hidden w-8 text-right text-[10.5px] text-ff-muted sm:inline">{pct(m.p)}</span>
-        <OddsBar p={m.p} />
-        <span className="num hidden w-8 text-[10.5px] text-ff-muted sm:inline">{pct(1 - m.p)}</span>
-      </span>
-      <span className="text-[13.5px] font-medium">
-        <Score m={m} side="b" />
-      </span>
-      <span className="relative flex min-w-0 justify-end">
-        <TeamName id={m.b.rosterId} size={20} reverse className="text-[13px]" />
-      </span>
-      <span className="hidden min-w-0 items-center gap-1.5 truncate pl-2 text-[11.5px] text-ff-muted lg:flex">
-        {m.close && <Badge tone="warn">close</Badge>}
-        <span className="truncate">{by ? (m.deciders.length ? `on ${by}` : by) : ''}</span>
-      </span>
+    <li className="relative px-3 py-2 hover:bg-ff-raised/50">
+      <RowCover label={label} onClick={open} />
+      {/* Phones: the two sides stacked, the odds between them. */}
+      <div className="space-y-1.5 sm:hidden">
+        {side('a')}
+        <OddsBar p={m.p} height="h-1" />
+        {side('b')}
+        {(m.close || by) && (
+          <div className="flex items-center gap-1.5 text-[11px] text-ff-muted">
+            {m.close && <Badge tone="warn">close</Badge>}
+            <span className="truncate">{by ? (m.deciders.length ? `on ${by}` : by) : ''}</span>
+          </div>
+        )}
+      </div>
+      <div className="hidden grid-cols-[minmax(0,1fr)_3.25rem_minmax(56px,7rem)_3.25rem_minmax(0,1fr)] items-center gap-2 sm:grid lg:grid-cols-[minmax(0,1fr)_3.5rem_8rem_3.5rem_minmax(0,1fr)_minmax(0,14rem)]">
+        <span className="relative flex min-w-0">
+          <TeamName id={m.a.rosterId} size={20} className="text-[13px]" />
+        </span>
+        <span className="text-right text-[13.5px] font-medium">
+          <Score m={m} side="a" />
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="num w-8 text-right text-[10.5px] text-ff-muted">{pct(m.p)}</span>
+          <OddsBar p={m.p} />
+          <span className="num w-8 text-[10.5px] text-ff-muted">{pct(1 - m.p)}</span>
+        </span>
+        <span className="text-[13.5px] font-medium">
+          <Score m={m} side="b" />
+        </span>
+        <span className="relative flex min-w-0 justify-end">
+          <TeamName id={m.b.rosterId} size={20} reverse className="text-[13px]" />
+        </span>
+        <span className="hidden min-w-0 items-center gap-1.5 truncate pl-2 text-[11.5px] text-ff-muted lg:flex">
+          {m.close && <Badge tone="warn">close</Badge>}
+          <span className="truncate">{by ? (m.deciders.length ? `on ${by}` : by) : ''}</span>
+        </span>
+      </div>
     </li>
   )
 }
@@ -74,7 +95,7 @@ const Card = ({ m, mine, surname, open }: { m: MatchupRead; mine: boolean; surna
   }
   return (
     <li className={cx('relative flex flex-col gap-2 border bg-ff-panel px-3 py-2.5 transition-colors hover:border-ff-line2', mine ? 'border-ff-accent/50' : 'border-ff-line')}>
-      <Cover label={`Open ${analysis.teamById[m.a.rosterId]?.name} vs ${analysis.teamById[m.b.rosterId]?.name}`} onClick={open} />
+      <RowCover label={`Open ${analysis.teamById[m.a.rosterId]?.name} vs ${analysis.teamById[m.b.rosterId]?.name}`} onClick={open} />
       {line('a')}
       <OddsBar p={m.p} height="h-1" />
       {line('b')}
@@ -146,10 +167,10 @@ const MatchupsView = () => {
               <span className="ff-label text-ff-text2">Your matchup</span>
               <span className="flex items-center gap-1">
                 <Button size="sm" variant="ghost" onClick={() => open(mine)}>
-                  Details
+                  Open matchup
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => go('slate', 'week')}>
-                  Slot by slot →
+                  Slot by slot on Gameday →
                 </Button>
               </span>
             </header>
@@ -187,7 +208,7 @@ const MatchupsView = () => {
           {view === 'list' ? (
             <ul className="divide-y divide-ff-line/60">
               {(mine ? rest : all).map((m) => (
-                <Row key={`${m.a.rosterId}-${m.b.rosterId}`} m={m} mine={false} surname={surname} open={() => open(m)} />
+                <Row key={`${m.a.rosterId}-${m.b.rosterId}`} m={m} surname={surname} open={() => open(m)} />
               ))}
             </ul>
           ) : (

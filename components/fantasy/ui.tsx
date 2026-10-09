@@ -1102,13 +1102,58 @@ export const PlayerAvatar = ({ id, player, size = 28, className }: { id: string;
 // ---------- Small charts ----------
 
 /** Horizontal meter. The track is a lighter step of the fill's own hue. */
-export const Meter = ({ value, max, width = 64, tone = 'accent' }: { value: number; max: number; width?: number; tone?: 'accent' | 'neg' | 'pos' }) => (
-  <span className={cx('inline-block h-1.5 shrink-0  align-middle', tone === 'accent' ? 'bg-ff-accent/15' : tone === 'neg' ? 'bg-ff-neg/15' : 'bg-ff-pos/15')} style={{ width }}>
+export const Meter = ({
+  value,
+  max,
+  width = 64,
+  tone = 'accent',
+  thin,
+  className,
+}: {
+  value: number
+  max: number
+  width?: number
+  tone?: 'accent' | 'neg' | 'pos'
+  /** 4px instead of 6px, for a bar inside a table cell. */
+  thin?: boolean
+  className?: string
+}) => (
+  <span
+    aria-hidden
+    className={cx('inline-block shrink-0 overflow-hidden align-middle', thin ? 'h-1' : 'h-1.5', tone === 'accent' ? 'bg-ff-accent/15' : tone === 'neg' ? 'bg-ff-neg/15' : 'bg-ff-pos/15', className)}
+    style={{ width }}
+  >
+    {/* Scaled, not resized, so a change animates without reflowing the row. */}
     <span
-      className={cx('block h-1.5 ', tone === 'accent' ? 'bg-ff-accent' : tone === 'neg' ? 'bg-ff-neg' : 'bg-ff-pos')}
-      style={{ width: `${Math.max(0, Math.min(1, max ? value / max : 0)) * 100}%` }}
+      className={cx('block h-full origin-left transition-transform duration-300 ease-out', tone === 'accent' ? 'bg-ff-accent' : tone === 'neg' ? 'bg-ff-neg' : 'bg-ff-pos')}
+      style={{ transform: `scaleX(${Math.max(0, Math.min(1, max ? value / max : 0))})` }}
     />
   </span>
+)
+
+/** Two sides' chances as one bar: the first side's share in the first series colour, the rest in the second. */
+export const WinBar = ({ p, height = 'h-1.5', className }: { p: number; height?: string; className?: string }) => (
+  <span className={cx('flex flex-1 gap-px', height, className)} role="img" aria-label={`Win odds ${pct(p)} to ${pct(1 - p)}`}>
+    <span className="h-full bg-ff-s1" style={{ flexBasis: `${p * 100}%` }} />
+    <span className="h-full flex-1 bg-ff-s2" />
+  </span>
+)
+
+/** The shade of a probability cell, as in the seed tables: faint at a few percent, near-solid accent at a certainty. */
+export const probShade = (p: number) => (p > 0.004 ? `rgb(var(--ff-accent) / ${Math.min(0.95, 0.1 + p * 1.6).toFixed(2)})` : undefined)
+
+/**
+ * A full-size button behind a row or card's content, so the whole row is one click target while names on it stay
+ * their own buttons (they sit above it). Content meant to be clickable needs `relative`.
+ */
+export const RowCover = ({ label, onClick, pressed }: { label: string; onClick: () => void; pressed?: boolean }) => (
+  <button
+    type="button"
+    aria-label={label}
+    aria-pressed={pressed}
+    onClick={onClick}
+    className="absolute inset-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
+  />
 )
 
 /** A bar that grows either way from a centre tick: for values with a natural middle, like 50%. */

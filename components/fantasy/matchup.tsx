@@ -3,7 +3,7 @@ import type { Slate, SlateMatchup, SlatePlayer, SlateSide } from '../../lib/fant
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
-import { Pts, cx, fmt, fmtSigned, pct, type PtsKind } from './ui'
+import { Pts, WinBar, cx, fmt, fmtSigned, pct, type PtsKind } from './ui'
 import { useSlate } from './useSlate'
 
 // The pieces every matchup view shares: the Matchups page, its sheet, and your matchup on Gameday.
@@ -94,13 +94,8 @@ export const useMatchups = () => {
   return { slate: slate as Slate, live, week, read, started, proj, totals }
 }
 
-/** The win-odds bar between two sides. */
-export const OddsBar = ({ p, height = 'h-1.5' }: { p: number; height?: string }) => (
-  <span className={cx('flex flex-1 gap-px', height)} role="img" aria-label={`Win odds ${pct(p)} to ${pct(1 - p)}`}>
-    <span className="h-full bg-ff-s1 transition-[flex-basis] duration-300" style={{ flexBasis: `${p * 100}%` }} />
-    <span className="h-full flex-1 bg-ff-s2" />
-  </span>
-)
+/** The win-odds bar between two sides (ui WinBar). */
+export const OddsBar = WinBar
 
 /** A matchup's headline: both managers, their scores as they stand, where each is heading, and the odds. */
 export const MatchupScore = ({ m, size = 'lg' }: { m: MatchupRead; size?: 'lg' | 'md' }) => {
@@ -121,8 +116,10 @@ export const MatchupScore = ({ m, size = 'lg' }: { m: MatchupRead; size?: 'lg' |
       <div className="mt-1 font-mono text-[11px] text-ff-muted">
         {m.started ? (
           <>
-            {size === 'lg' ? 'heading for ' : '→ '}
-            <Pts value={s.mu} kind="proj" /> · {s.left} {size === 'lg' ? 'to play' : 'left'}
+            <span className={size === 'lg' ? 'hidden sm:inline' : 'hidden'}>heading for </span>
+            <span className={size === 'lg' ? 'sm:hidden' : undefined}>→ </span>
+            <Pts value={s.mu} kind="proj" /> · {s.left} <span className={size === 'lg' ? 'hidden sm:inline' : 'hidden'}>to play</span>
+            <span className={size === 'lg' ? 'sm:hidden' : undefined}>left</span>
           </>
         ) : (
           'projected'

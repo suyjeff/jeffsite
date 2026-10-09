@@ -12,6 +12,7 @@ import {
   Badge,
   Empty,
   GridFill,
+  Meter,
   PageHeader,
   Panel,
   Reasons,
@@ -466,9 +467,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
                             <span className="font-mono text-[10.5px] text-ff-muted">{game.final ? 'final' : dayOf(game.date)}</span>
                           </span>
                           <span className="flex items-center gap-2">
-                            <span className="h-1.5 w-16 bg-ff-line" aria-hidden>
-                              <span className="block h-full bg-ff-accent" style={{ width: `${(g.swing / maxSwing) * 100}%` }} />
-                            </span>
+                            <Meter value={g.swing} max={maxSwing} width={64} />
                             <span className="num w-9 text-right text-[12px] text-ff-text">±{pts(g.swing / 2)}</span>
                           </span>
                           <span className="col-span-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px]">

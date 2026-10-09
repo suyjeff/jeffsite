@@ -5,7 +5,7 @@ import { MoveList, useMoves } from './Moves'
 import PlayerName from './PlayerName'
 import TeamName, { TopMark } from './TeamName'
 import FreeAgentPick from './FreeAgentPick'
-import { SheetBody, SheetClose, SheetContent, SheetSection, useSheet } from './Sheet'
+import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
 import { Avatar, Badge, Button, DeltaChip, Stat, fmt, pct, simOdds } from './ui'
 
 /**
@@ -40,19 +40,18 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
   return (
     <SheetContent>
         <>
-          <header className="flex items-start gap-3 px-4 pb-3 pt-4">
-            <Avatar src={team.avatar} name={team.name} size={48} />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="num text-[11px] text-ff-muted">#{power?.rank ?? '–'} power</span>
+          <SheetHeader
+            lead={<Avatar src={team.avatar} name={team.name} size={48} />}
+            eyebrow={
+              <>
+                <span className="num">#{power?.rank ?? '–'} power</span>
                 {power?.rank === 1 && <TopMark />}
                 {mine && <Badge tone="accent">you</Badge>}
-              </div>
-              <h2 className="mt-0.5 truncate text-[19px] font-medium leading-tight tracking-[-0.01em] text-ff-text">{team.name}</h2>
-              {team.owner && team.owner !== team.name && <div className="truncate font-mono text-[11px] text-ff-muted">@{team.owner}</div>}
-            </div>
-            <SheetClose />
-          </header>
+              </>
+            }
+            title={team.name}
+            sub={team.owner && team.owner !== team.name ? <span className="font-mono">@{team.owner}</span> : undefined}
+          />
 
           <SheetBody>
             <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line [&>*]:border-0">

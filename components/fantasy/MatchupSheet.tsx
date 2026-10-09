@@ -1,7 +1,7 @@
 import React from 'react'
 import { useFantasy } from './FantasyContext'
 import { Deciders, MatchupScore, SlotTable, decidedBy, useMatchups } from './matchup'
-import { SheetBody, SheetClose, SheetContent, SheetSection, useSheet } from './Sheet'
+import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
 import { Avatar, Badge, fmtSigned, pct } from './ui'
 
 /**
@@ -18,24 +18,27 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
   const surname = (id: string) => data.players[id]?.name.split(' ').slice(-1)[0] ?? id
 
   const header = (
-    <header className="flex items-start gap-3 px-4 pb-3 pt-4">
-      <span aria-hidden className="flex shrink-0 items-center gap-1">
-        <Avatar src={A?.avatar ?? null} name={A?.name ?? '?'} size={30} />
-        <span className="font-mono text-[9px] uppercase text-ff-muted">vs</span>
-        <Avatar src={B?.avatar ?? null} name={B?.name ?? '?'} size={30} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-ff-muted">
+    <SheetHeader
+      lead={
+        <span aria-hidden className="flex items-center gap-1">
+          <Avatar src={A?.avatar ?? null} name={A?.name ?? '?'} size={30} />
+          <span className="font-mono text-[9px] uppercase text-ff-muted">vs</span>
+          <Avatar src={B?.avatar ?? null} name={B?.name ?? '?'} size={30} />
+        </span>
+      }
+      eyebrow={
+        <>
           <span>wk {week}</span>
           {m?.close && <Badge tone="warn">close</Badge>}
           {m && (m.kindA === 'final' && m.kindB === 'final' ? <span className="text-ff-text2">final</span> : m.started ? <span className="text-ff-warn">live</span> : <span>projected</span>)}
-        </div>
-        <h2 className="mt-0.5 truncate text-[17px] font-medium leading-tight tracking-[-0.01em] text-ff-text">
+        </>
+      }
+      title={
+        <>
           {A?.name} <span className="text-ff-muted">vs</span> {B?.name}
-        </h2>
-      </div>
-      <SheetClose />
-    </header>
+        </>
+      }
+    />
   )
 
   if (!m)
@@ -62,7 +65,7 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
           {[
             { k: 'Margin', v: fmtSigned(m.a.mu - m.b.mu), s: 'expected, left side' },
             { k: 'To play', v: `${m.a.left}–${m.b.left}`, s: 'starters left' },
-            { k: 'On the line', v: worth(stA) != null && worth(stB) != null ? `${worth(stA)} / ${worth(stB)}` : '…', s: 'playoff odds pts, each' },
+            { k: 'On the line', v: worth(stA) != null && worth(stB) != null ? `${worth(stA)} / ${worth(stB)}` : '…', s: 'playoff points at stake' },
           ].map((c) => (
             <div key={c.k} className="bg-ff-panel px-2 py-2.5">
               <dt className="ff-label">{c.k}</dt>
@@ -98,7 +101,7 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
         </SheetSection>
       </SheetBody>
       <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-ff-line px-4 py-2.5">
-        <span className="min-w-0 truncate text-[11.5px] text-ff-muted">Click a manager or player for theirs.</span>
+        <span className="min-w-0 truncate text-[11.5px] text-ff-muted">Select a manager or player to open theirs.</span>
         <button
           type="button"
           onClick={() => {

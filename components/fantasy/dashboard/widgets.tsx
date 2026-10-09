@@ -14,7 +14,7 @@ import TeamName from '../TeamName'
 import { MoveList, useMoves } from '../Moves'
 import { ruledOutBy } from '../../../lib/fantasy/grades'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Pts, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -48,15 +48,7 @@ type Meta = { title: string; blurb: string; w: number; h: number; Body: (p: Widg
  */
 const Row = ({ children, onClick, active, className, label }: { children: React.ReactNode; onClick?: () => void; active?: boolean; className?: string; label?: string }) => (
   <div className={cx('relative flex h-8 items-center gap-2 border-b border-ff-line/60 px-3 text-[12.5px] last:border-0', onClick && 'hover:bg-ff-raised', active && 'bg-ff-raised', className)}>
-    {onClick && (
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label ?? 'Select'}
-        aria-pressed={active ?? false}
-        className="absolute inset-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
-      />
-    )}
+    {onClick && <RowCover label={label ?? 'Select'} onClick={onClick} pressed={active ?? false} />}
     {children}
   </div>
 )
@@ -138,9 +130,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
           </span>
           <span className="flex w-16 shrink-0 items-center gap-1">
             <span className="num w-7 text-right text-[10.5px] text-ff-text2">{Math.round(g.pA * 100)}</span>
-            <span className="flex h-[6px] flex-1 bg-ff-s2/60">
-              <span className="h-full bg-ff-s1" style={{ width: `${g.pA * 100}%` }} />
-            </span>
+            <WinBar p={g.pA} />
           </span>
           <span className="num w-10 shrink-0 text-ff-text" title={!started && unset[g.b] ? unsetNote(unset[g.b]) : undefined}>
             <Pts value={started ? pts(g.b) : g.muB} kind={kind} />
@@ -260,12 +250,9 @@ const Matchup = ({ select }: WidgetProps) => {
           <span className="font-mono text-[10.5px] text-ff-muted">wk {game.week} · projected</span>
           <Pts value={muOpp} kind="proj" className="text-[26px] font-medium leading-none tracking-[-0.03em]" />
         </div>
-        <div className="mt-2.5 flex items-center gap-2" title={`Chance to win: you ${winPct}%, them ${100 - winPct}%`}>
+        <div className="mt-2.5 flex items-center gap-2" title={`Win odds: you ${winPct}%, them ${100 - winPct}%`}>
           <span className={cx('num w-9 text-[13px] font-medium', favored === mine ? 'text-ff-text' : 'text-ff-muted')}>{winPct}%</span>
-          <span className="flex h-1.5 flex-1 gap-px">
-            <span className="h-full bg-ff-s1" style={{ width: `${p * 100}%` }} />
-            <span className="h-full flex-1 bg-ff-s2" />
-          </span>
+          <WinBar p={p} />
           <span className={cx('num w-9 text-right text-[13px] font-medium', favored === opp ? 'text-ff-text' : 'text-ff-muted')}>{100 - winPct}%</span>
         </div>
         <div className="mt-1 text-center text-[11px] text-ff-text2">
@@ -932,7 +919,7 @@ const Moves = () => {
 
 export const WIDGETS: Record<WidgetKind, Meta> = {
   moves: { title: 'Moves to make', blurb: 'Lineup fixes, cover for starters who may sit, bye holes and the best adds.', w: 4, h: 9, Body: Moves },
-  matchup: { title: 'My matchup', blurb: 'Next week, both lineups, and your chance to win.', w: 4, h: 12, Body: Matchup },
+  matchup: { title: 'My matchup', blurb: 'Next week, both lineups, and your win odds.', w: 4, h: 12, Body: Matchup },
   odds: { title: 'Playoff odds', blurb: 'Simulated seasons: wins, playoff, bye and title odds.', w: 5, h: 11, Body: Odds },
   scoreboard: { title: 'Scoreboard', blurb: "This week's games with expected scores and win odds.", w: 6, h: 7, Body: Scoreboard },
   trades: { title: 'Trade ideas', blurb: 'Best deal from each partner, and how likely each lands.', w: 7, h: 9, Body: TradeIdeas },

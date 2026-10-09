@@ -52,7 +52,7 @@ export const TOUR: TourStep[] = [
     key: 'matchups',
     title: 'Matchups',
     what: 'Every head-to-head this week, yours on top.',
-    can: ['See every score and win chance at once', 'Spot the close ones and who decides them', 'Open a matchup for the slot-by-slot detail'],
+    can: ['See every score and win odds at once', 'Spot the close ones and who decides them', 'Open a matchup for the slot-by-slot detail'],
     why: 'The whole league’s week, and how it moves the standings.',
   },
   {

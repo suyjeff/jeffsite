@@ -4,7 +4,7 @@ import { seasonStories, simInputFor, simulateOnce, type Story, type Trace } from
 import { useFantasy } from '../FantasyContext'
 import { Bracket, CHAOS, Delta, Feed, Headline, LEVER_SIMS, SEED, SIMS, Standings, setupKey, type Chaos } from '../PlayoffLab'
 import TeamName from '../TeamName'
-import { Avatar, Button, Empty, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, usePhone } from '../ui'
+import { Avatar, Button, Empty, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone } from '../ui'
 import { OddsGrid } from './PowerView'
 
 type Sub = 'race' | 'season' | 'seeds'
@@ -139,7 +139,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
         )}
         {bubble != null && (
           <>
-            On the line: <TeamName id={bubble} avatar={false} plain className="font-medium" />, {odds(scenario[bubble]?.playoffs ?? 0)} to get in.
+            The bubble: <TeamName id={bubble} avatar={false} plain className="font-medium" />, {odds(scenario[bubble]?.playoffs ?? 0)} to get in.
           </>
         )}
       </p>
@@ -174,7 +174,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
                           key={k}
                           title={`${pct(p, 1)} to finish ${k + 1}`}
                           className={cx('h-3.5 w-2.5 transition-colors duration-300', k + 1 === nPlayoff && 'mr-[3px]')}
-                          style={{ background: p > 0.004 ? `rgb(var(--ff-accent) / ${Math.min(0.95, 0.1 + p * 1.6).toFixed(2)})` : 'rgb(var(--ff-line) / 0.5)' }}
+                          style={{ background: probShade(p) ?? 'rgb(var(--ff-line) / 0.5)' }}
                         />
                       ))}
                     </span>
@@ -182,9 +182,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
                   <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{fmt(s?.wins)}</td>
                   <td className="h-8 whitespace-nowrap border-b border-ff-line/60 px-2 text-right">
                     <span className="inline-flex items-center justify-end gap-1.5">
-                      <span className="hidden h-1 w-12 bg-ff-line md:inline-block" aria-hidden>
-                        <span className="block h-full origin-left bg-ff-accent transition-transform duration-300 ease-out" style={{ transform: `scaleX(${s?.playoffs ?? 0})` }} />
-                      </span>
+                      <Meter value={s?.playoffs ?? 0} max={1} width={48} thin className="hidden md:inline-block" />
                       <span className="num w-10 text-right text-ff-text">{odds(s?.playoffs, 0, s?.clinch)}</span>
                       {tweaked && <Delta v={(s?.playoffs ?? 0) - (b?.playoffs ?? 0)} />}
                     </span>
@@ -330,7 +328,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
     <Panel title="Play a season" pad={false} actions={trace ? <span className="num">season #{trace.t.seed.toString(36).toUpperCase()}</span> : <span>one draw of many</span>}>
       <div className="flex flex-wrap items-center gap-3 border-b border-ff-line px-3 py-2.5">
         <Button variant="primary" onClick={play} className="ff-press">
-          {trace ? 'Play another season' : 'Play out a season'}
+          {trace ? 'Play another season' : 'Play a season'}
         </Button>
         <span className="min-w-0 flex-1 text-[12px] text-ff-muted">
           {stale

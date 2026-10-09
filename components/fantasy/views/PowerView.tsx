@@ -7,7 +7,7 @@ import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
 import TeamName from '../TeamName'
-import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
+import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, probShade, simOdds, type Column } from '../ui'
 
 type Sub = 'rankings' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'standings', 'schedule']
@@ -435,7 +435,7 @@ export const OddsGrid = ({ onTeam }: { onTeam?: (id: number) => void }) => {
                         key={i}
                         title={`${analysis.teamById[id].name}: ${pct(p, 1)} to finish ${i + 1}`}
                         className={cx('num h-8 border-b border-ff-line/60 text-center text-[10.5px]', p >= 0.25 ? 'text-ff-panel' : p >= 0.02 ? 'text-ff-text2' : 'text-ff-muted/50', i + 1 === cut && 'border-r border-r-ff-line2')}
-                        style={{ background: p > 0.005 ? `rgb(var(--ff-accent) / ${Math.min(0.95, 0.08 + p * 1.6).toFixed(2)})` : undefined }}
+                        style={{ background: probShade(p) }}
                       >
                         {p >= 0.005 ? Math.round(p * 100) : '·'}
                       </td>
