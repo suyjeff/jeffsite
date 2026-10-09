@@ -128,6 +128,9 @@ const Tour = ({ step, setStep, onClose, phone }: { step: number; setStep: (n: nu
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Another modal opened over the tour (the command palette) keeps its own keys.
+      const t = e.target as Element | null
+      if (t && !card.current?.contains(t) && t.closest?.('[aria-modal="true"]')) return
       if (e.key === 'Escape') {
         e.preventDefault()
         e.stopPropagation()

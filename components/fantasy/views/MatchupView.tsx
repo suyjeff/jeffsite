@@ -11,15 +11,16 @@ import { Avatar, Empty, PageHeader, Panel, Pts, PtsKey, Stat, StatGrid, cx, fmt,
 /** One player's score as it stands: final, live, or projected; a starter with no game this week scores nothing. */
 const scoreOf = (p: SlatePlayer | undefined, proj: number): { value: number; kind: PtsKind; expect: number } =>
   !p
-    ? { value: proj, kind: 'proj', expect: proj }
+    ? // Not in the week's games (a bye, or no game at all): nothing to score, so a plain zero.
+      { value: 0, kind: 'final', expect: 0 }
     : p.actual != null
       ? { value: p.actual, kind: 'final', expect: p.actual }
       : p.live != null
         ? { value: p.live, kind: 'live', expect: p.live + 0.5 * p.proj }
         : { value: p.proj, kind: 'proj', expect: p.proj }
 
-/** A side's score: final once every starter has played, live once the week is under way, projected before. */
-const sideKind = (left: number, started: boolean): PtsKind => (left === 0 ? 'final' : started ? 'live' : 'proj')
+/** A side's score: final once every starter's game is, live once the week is under way, projected before. */
+const sideKind = (unfinished: number, started: boolean): PtsKind => (unfinished === 0 ? 'final' : started ? 'live' : 'proj')
 
 /** This week's head-to-head on one page: the score as it stands, the odds, and every slot against its opposite. */
 const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis }) => {
@@ -33,11 +34,22 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
   const p = match && mine ? (match.a === mine ? match.pA : 1 - match.pA) : 0.5
   const manager = me != null ? slate.managers[me] : null
 
-  // Slot by slot, from Sleeper's own lineups (starters line up with the league's starting slots).
+  // Each side's lineup, one entry per starting slot: Sleeper's own when it is set, else the projected best lineup.
+  const lineupOf = useMemo(
+    () => (rid: number) => {
+      const set = raw.find((m) => m.roster_id === rid)?.starters
+      return set?.length ? set : (analysis.needs[rid]?.slots.map((x) => x.starter ?? '0') ?? [])
+    },
+    [raw, analysis.needs],
+  )
+  // Starters whose game is not final yet (a bye counts as done): what keeps a score from being final.
+  const unfinished = (rid: number) => lineupOf(rid).filter((id) => id && id !== '0' && (slate.teamState[players[id]?.team ?? ''] ?? 'final') !== 'final').length
+
+  // Slot by slot.
   const rows = useMemo(() => {
     if (!mine || !theirs) return []
-    const a = raw.find((m) => m.roster_id === mine.rosterId)?.starters ?? mine.starters
-    const b = raw.find((m) => m.roster_id === theirs.rosterId)?.starters ?? theirs.starters
+    const a = lineupOf(mine.rosterId)
+    const b = lineupOf(theirs.rosterId)
     return analysis.slots.map((slot, i) => {
       const ia = a[i] && a[i] !== '0' ? a[i] : null
       const ib = b[i] && b[i] !== '0' ? b[i] : null
@@ -45,12 +57,12 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
       const sb = ib ? scoreOf(slate.byId[ib], proj[ib] ?? 0) : null
       return { slot: slot.name.replace('SUPER_FLEX', 'SF'), a: ia, b: ib, sa, sb, edge: (sa?.expect ?? 0) - (sb?.expect ?? 0) }
     })
-  }, [mine, theirs, raw, analysis.slots, slate.byId, proj])
+  }, [mine, theirs, lineupOf, analysis.slots, slate.byId, proj])
 
   const bench = useMemo(() => {
     if (!mine) return []
     const m = raw.find((x) => x.roster_id === mine.rosterId)
-    const starting = new Set(m?.starters ?? mine.starters)
+    const starting = new Set(lineupOf(mine.rosterId))
     return (m?.players ?? analysis.teamById[mine.rosterId]?.players ?? [])
       .filter((id) => !starting.has(id) && players[id])
       .map((id) => {
@@ -62,7 +74,7 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
       })
       .sort((x, y) => y.value - x.value)
       .slice(0, 7)
-  }, [mine, raw, analysis.teamById, players, proj, slate.teamState])
+  }, [mine, raw, lineupOf, analysis.teamById, players, proj, slate.teamState])
 
   const deciders = useMemo(() => {
     if (!mine || !theirs) return []
@@ -94,9 +106,10 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
   const maxEdge = Math.max(4, ...rows.map((r) => Math.abs(r.edge)))
   const stakes = manager?.stakes
 
-  const Side = ({ s, align }: { s: typeof mine; align: 'left' | 'right' }) => {
+  // A plain render function, not a component: a component defined in render would remount every time.
+  const side = (s: NonNullable<typeof mine>, align: 'left' | 'right') => {
     const t = team(s.rosterId)
-    const kind = sideKind(s.left, started)
+    const kind = sideKind(unfinished(s.rosterId), started)
     return (
       <div className={cx('min-w-0', align === 'right' && 'text-right')}>
         <div className={cx('flex min-w-0 items-center gap-2', align === 'right' && 'flex-row-reverse')}>
@@ -128,9 +141,9 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
       <div className="mt-4 space-y-3">
         <section className="border border-ff-line bg-ff-panel px-3 py-4 sm:px-5" aria-label="Score">
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-3 sm:gap-6">
-            <Side s={mine} align="left" />
+            {side(mine, 'left')}
             <span className="pt-12 font-mono text-[11px] text-ff-muted">vs</span>
-            <Side s={theirs} align="right" />
+            {side(theirs, 'right')}
           </div>
           <div className="mt-4 flex items-center gap-2" title={`Win odds: you ${pct(p)}, them ${pct(1 - p)}`}>
             <span className="num w-10 text-[13px] font-medium text-ff-text">{pct(p)}</span>
@@ -260,9 +273,8 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
             {slate.matchups
               .filter((m) => m !== match)
               .map((m) => {
-                const go = started
-                const ka = sideKind(m.a.left, go)
-                const kb = sideKind(m.b.left, go)
+                const ka = sideKind(unfinished(m.a.rosterId), started)
+                const kb = sideKind(unfinished(m.b.rosterId), started)
                 return (
                   <li
                     key={`${m.a.rosterId}-${m.b.rosterId}`}
@@ -273,14 +285,14 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
                       <span className="truncate text-ff-text">{team(m.a.rosterId)?.name}</span>
                     </span>
                     <span className="text-right">
-                      <Pts value={go ? m.a.banked : m.a.mu} kind={go ? ka : 'proj'} />
+                      <Pts value={started ? m.a.banked : m.a.mu} kind={ka} />
                     </span>
-                    <span className="flex h-1.5 gap-px" title={`Win odds ${pct(m.pA)} – ${pct(1 - m.pA)}`} aria-label={`Win odds ${pct(m.pA)} to ${pct(1 - m.pA)}`}>
+                    <span className="flex h-1.5 gap-px" title={`Win odds ${pct(m.pA)} – ${pct(1 - m.pA)}`} role="img" aria-label={`Win odds ${pct(m.pA)} to ${pct(1 - m.pA)}`}>
                       <span className="h-full bg-ff-s1" style={{ width: `${m.pA * 100}%` }} />
                       <span className="h-full flex-1 bg-ff-s2" />
                     </span>
                     <span>
-                      <Pts value={go ? m.b.banked : m.b.mu} kind={go ? kb : 'proj'} />
+                      <Pts value={started ? m.b.banked : m.b.mu} kind={kb} />
                     </span>
                     <span className="flex min-w-0 items-center justify-end gap-1.5">
                       <span className="truncate text-ff-text">{team(m.b.rosterId)?.name}</span>
@@ -293,7 +305,7 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
         </Panel>
         {started && (
           <p className="text-[11.5px] leading-relaxed text-ff-muted">
-            A game under way counts points so far plus half the projection, since Sleeper has no game clock. Scores update every few minutes.
+            A game under way counts points so far plus half the projection, since Sleeper has no game clock. Reload (R) for the latest scores.
           </p>
         )}
       </div>

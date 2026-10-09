@@ -45,6 +45,12 @@ const UserMenu = ({ username, onSwitch, onTour }: { username: string; onSwitch: 
     }
   }, [open])
 
+  // Moving into the confirmation keeps keyboard focus inside the menu, on the safe choice.
+  const cancel = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (confirm) cancel.current?.focus({ preventScroll: true })
+  }, [confirm])
+
   const item = 'flex h-8 w-full items-center px-3 text-left text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text focus-visible:bg-ff-raised'
   const act = (f: () => void) => () => {
     setOpen(false)
@@ -105,7 +111,13 @@ const UserMenu = ({ username, onSwitch, onTour }: { username: string; onSwitch: 
                 >
                   Clear and restart
                 </button>
-                <button type="button" role="menuitem" onClick={() => setConfirm(false)} className="h-7 border border-ff-line px-2.5 text-[12px] text-ff-text2 hover:bg-ff-raised">
+                <button
+                  ref={cancel}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => setConfirm(false)}
+                  className="h-7 border border-ff-line px-2.5 text-[12px] text-ff-text2 hover:bg-ff-raised"
+                >
                   Cancel
                 </button>
               </div>

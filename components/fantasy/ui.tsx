@@ -113,7 +113,7 @@ export const Panel = ({
     {(title || actions) && (
       <header className="flex h-8 items-center justify-between gap-3 border-b border-ff-line px-3">
         <span className="flex min-w-0 items-baseline gap-2">
-          {index != null && <span className="num text-[10px] text-ff-muted/70">{String(index).padStart(2, '0')}</span>}
+          {index != null && <span className="num text-[10px] text-ff-muted">{String(index).padStart(2, '0')}</span>}
           {title ? <Label className="truncate text-ff-text2">{title}</Label> : null}
         </span>
         {actions && <div className="ff-panel-actions flex min-w-0 shrink-0 items-center gap-2 font-mono text-[10.5px] text-ff-muted">{actions}</div>}
@@ -1384,9 +1384,10 @@ export function Table<T>({
     const add: (string | number)[] = []
     for (const r of rows) {
       const k = rowKey(r)
-      if (offered.current.has(k)) continue
+      // Marked once it has been opened for you, so a row whose note turns prominent later still gets its turn.
+      if (offered.current.has(k) || !defaultOpen(r) || (canExpand && !canExpand(r))) continue
       offered.current.add(k)
-      if (defaultOpen(r) && (canExpand ? canExpand(r) : true)) add.push(k)
+      add.push(k)
     }
     if (add.length) setOpen((o) => new Set([...o, ...add]))
   }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps

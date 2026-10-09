@@ -194,7 +194,12 @@ const SidebarBody = ({
                 {/* Numbers are keyboard shortcuts, so phones (the drawer) leave them out. */}
                 <span className={cx('num hidden w-4 text-[10.5px] md:inline', active ? 'text-ff-text' : 'text-ff-muted')}>{String(i).padStart(2, '0')}</span>
                 <span className={cx('flex-1', active && 'font-medium')}>{label}</span>
-                <kbd className="hidden h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 font-mono text-[10px] text-ff-muted group-hover:inline-flex md:inline-flex md:opacity-0 md:group-hover:opacity-100">{i}</kbd>
+                {/* 1–9 then 0 for the tenth; past that a section has no key. */}
+                {i <= 10 && (
+                  <kbd className="hidden h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 font-mono text-[10px] text-ff-muted group-hover:inline-flex md:inline-flex md:opacity-0 md:group-hover:opacity-100">
+                    {i === 10 ? 0 : i}
+                  </kbd>
+                )}
               </button>
             )
           })}
@@ -276,10 +281,12 @@ const Shell = (props: ShellProps) => {
   }, [onNavigate, onRefresh])
 
   // The tour: which step it is on. A sidebar click while it runs moves the tour there instead of the page.
+  // Back to the start as it ends, so a replay opens on step one rather than flashing the step it ended on.
   const [tourStep, setTourStep] = useState(0)
-  useEffect(() => {
-    if (props.tour) setTourStep(0)
-  }, [props.tour])
+  const endTour = () => {
+    setTourStep(0)
+    props.onTourEnd?.()
+  }
   const tourKey = props.tour ? TOUR[tourStep]?.key : null
   const navigate = (s: SectionKey) => {
     if (props.tour) {
@@ -302,7 +309,7 @@ const Shell = (props: ShellProps) => {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[220px] border-r border-ff-line bg-ff-panel md:block">
         <SidebarBody {...props} onNavigate={navigate} tourKey={tourKey} />
       </aside>
-      {props.tour && props.onTourEnd && <Tour step={tourStep} setStep={setTourStep} onClose={props.onTourEnd} phone={phone} />}
+      {props.tour && props.onTourEnd && <Tour step={tourStep} setStep={setTourStep} onClose={endTour} phone={phone} />}
 
       {/* Phone top bar */}
       <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center border-b border-ff-line bg-ff-panel/95 backdrop-blur md:hidden">

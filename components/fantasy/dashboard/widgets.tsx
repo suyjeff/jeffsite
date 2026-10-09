@@ -114,8 +114,13 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
   const week = f.nextWeek[0].week
   const live = data.matchupsByWeek[week] ?? []
   const pts = (rid: number) => live.find((m) => m.roster_id === rid)?.points ?? 0
-  // Once the week has started, every row shows live points; before, every row shows expectations. Never a mix.
+  // Once the week has started, every row shows points scored; before, every row shows expectations. Never a mix.
   const started = live.some((m) => (m.points ?? 0) > 0)
+  // Final once every NFL game of the week is (by status, or by the calendar when the status lags).
+  const today = new Date().toISOString().slice(0, 10)
+  const weekGames = (data.schedule?.games ?? []).filter((x) => x.week === week && x.status !== 'canceled')
+  const done = weekGames.length > 0 && weekGames.every((x) => x.status === 'complete' || (!!x.date && x.date < today))
+  const kind = !started ? 'proj' : done ? 'final' : 'live'
   return (
     <div>
       <Th>
@@ -133,7 +138,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
           </button>
           <span className="num w-10 shrink-0 text-right text-ff-text" title={!started && unset[g.a] ? unsetNote(unset[g.a]) : undefined}>
             {!started && unset[g.a] && <span className="text-ff-warn">*</span>}
-            <Pts value={started ? pts(g.a) : g.muA} kind={started ? 'live' : 'proj'} />
+            <Pts value={started ? pts(g.a) : g.muA} kind={kind} />
           </span>
           <span className="flex w-16 shrink-0 items-center gap-1">
             <span className="num w-7 text-right text-[10.5px] text-ff-text2">{Math.round(g.pA * 100)}</span>
@@ -142,7 +147,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
             </span>
           </span>
           <span className="num w-10 shrink-0 text-ff-text" title={!started && unset[g.b] ? unsetNote(unset[g.b]) : undefined}>
-            <Pts value={started ? pts(g.b) : g.muB} kind={started ? 'live' : 'proj'} />
+            <Pts value={started ? pts(g.b) : g.muB} kind={kind} />
             {!started && unset[g.b] && <span className="text-ff-warn">*</span>}
           </span>
           <button onClick={() => select({ team: g.b })} className="flex min-w-0 flex-1 justify-end text-right">

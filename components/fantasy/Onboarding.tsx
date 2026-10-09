@@ -46,7 +46,7 @@ const Onboarding = ({ initial, onDone, onCancel }: { initial: string; onDone: (u
       <main className="flex flex-1 items-start justify-center px-4 pt-[12vh] sm:items-center sm:pt-0">
         <form onSubmit={submit} className="w-full max-w-[440px] border border-ff-line bg-ff-panel">
           <div className="flex h-8 items-center gap-2 border-b border-ff-line px-3">
-            <span className="num text-[10px] text-ff-muted/70">01</span>
+            <span className="num text-[10px] text-ff-muted">01</span>
             <span className="ff-label text-ff-text2">connect sleeper</span>
           </div>
           {/* What happens next, drawn: your Sleeper league into one model, out to every page. */}
