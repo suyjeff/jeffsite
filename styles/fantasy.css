@@ -565,32 +565,23 @@ html:has(body .ff) body {
 }
 /* The secondary Aqua: the same gel, lifted toward white so it sits behind the floating one. The label band stays
    about 3:1 against the white text. Dark mode has a lighter accent, so it mixes from the deep accent instead. */
+/* The secondary Aqua (Open in builder): the same glass, lighter. The top and bottom carry more white, so it reads
+   as the quieter button beside the floating one, while the band behind the label stays on the deep step so light
+   text holds (about 5:1 in the default theme, light or dark). */
 .ff .ff-aqua.ff-aqua-soft {
   background: linear-gradient(
     180deg,
-    color-mix(in oklab, rgb(var(--ff-accent)) 64%, white) 0%,
-    color-mix(in oklab, rgb(var(--ff-accent)) 80%, white) 30%,
-    color-mix(in oklab, rgb(var(--ff-accent)) 80%, white) 58%,
-    color-mix(in oklab, rgb(var(--ff-accent)) 84%, white) 82%,
-    color-mix(in oklab, rgb(var(--ff-accent)) 66%, white) 100%
+    color-mix(in oklab, rgb(var(--ff-accent)) 45%, white) 0%,
+    color-mix(in oklab, rgb(var(--ff-accent)) 78%, white) 30%,
+    color-mix(in oklab, rgb(var(--ff-accent-deep)) 92%, white) 46%,
+    color-mix(in oklab, rgb(var(--ff-accent-deep)) 92%, white) 60%,
+    color-mix(in oklab, rgb(var(--ff-accent)) 80%, white) 84%,
+    color-mix(in oklab, rgb(var(--ff-accent)) 50%, white) 100%
   );
   box-shadow:
     inset 0 -2px 4px color-mix(in oklab, rgb(var(--ff-accent)) 35%, rgb(255 255 255 / 0.8)),
-    inset 0 1px 1px rgb(255 255 255 / 0.35),
-    0 1px 2px rgb(0 0 0 / 0.18),
-    0 2px 5px rgb(var(--ff-accent-deep) / 0.18);
-}
-@media (prefers-color-scheme: dark) {
-  .ff .ff-aqua.ff-aqua-soft {
-    background: linear-gradient(
-      180deg,
-      color-mix(in oklab, rgb(var(--ff-accent-deep)) 70%, white) 0%,
-      color-mix(in oklab, rgb(var(--ff-accent-deep)) 80%, white) 30%,
-      color-mix(in oklab, rgb(var(--ff-accent-deep)) 80%, white) 58%,
-      color-mix(in oklab, rgb(var(--ff-accent-deep)) 84%, white) 82%,
-      color-mix(in oklab, rgb(var(--ff-accent-deep)) 68%, white) 100%
-    );
-  }
+    inset 0 1px 1px rgb(255 255 255 / 0.4),
+    0 1px 2px rgb(0 0 0 / 0.16);
 }
 @keyframes ff-aqua-throb {
   to {

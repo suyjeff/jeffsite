@@ -2,7 +2,6 @@ import React, { useMemo } from 'react'
 import { scoutTeam } from '../../lib/fantasy/scout'
 import { useFantasy } from './FantasyContext'
 import { MoveList, useMoves } from './Moves'
-import PlayerName from './PlayerName'
 import TeamName, { TopMark } from './TeamName'
 import FreeAgentPick from './FreeAgentPick'
 import RosterTable from './RosterTable'
@@ -109,22 +108,20 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
               </section>
             )}
 
-            {need && (
-              <SheetSection title={`Starters, week ${data.horizon[0]?.week ?? ''}`} aside="pts/wk ahead">
-                <ul className="-mx-1 divide-y divide-ff-line/60">
-                  {need.slots.map((s) => (
-                    <li key={s.index} className="flex h-8 items-center gap-2 px-1 text-[12.5px]">
-                      <span className="w-8 shrink-0 font-mono text-[10.5px] text-ff-muted">{s.slot.replace('SUPER_FLEX', 'SF')}</span>
-                      <span className="min-w-0 flex-1">
-                        {s.starter ? (
-                          <PlayerName player={data.players[s.starter]} id={s.starter} size={20} />
-                        ) : (
+            {/* The roster below shows every player; a slot the best lineup cannot fill gets the free agent to pick up. */}
+            {need && need.slots.some((s) => !s.starter) && (
+              <SheetSection title={`Open slots, week ${data.horizon[0]?.week ?? ''}`} aside="best free agent">
+                <ul className="divide-y divide-ff-line/60">
+                  {need.slots
+                    .filter((s) => !s.starter)
+                    .map((s) => (
+                      <li key={s.index} className="flex h-8 items-center gap-2 text-[12.5px]">
+                        <span className="w-8 shrink-0 font-mono text-[10.5px] text-ff-muted">{s.slot.replace('SUPER_FLEX', 'SF')}</span>
+                        <span className="min-w-0 flex-1">
                           <FreeAgentPick eligible={s.eligible} week={data.horizon[0]?.week} size={20} />
-                        )}
-                      </span>
-                      <span className="num w-10 shrink-0 text-right text-ff-text2">{fmt(s.pts)}</span>
-                    </li>
-                  ))}
+                        </span>
+                      </li>
+                    ))}
                 </ul>
               </SheetSection>
             )}
