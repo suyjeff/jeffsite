@@ -7,6 +7,7 @@ import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { ContextNotes } from './ContextNotes'
 import { BuildIcon } from './icons'
 import { useFantasy, useTradeRead } from './FantasyContext'
+import { PRICING_VERSION } from '../../lib/fantasy/currency'
 import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../../lib/fantasy/grades'
 import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, simOdds } from './ui'
 
@@ -110,9 +111,9 @@ const GradeBar = ({ idea, base, nm, posOf }: { idea: TradeIdea; base: AcceptRead
   const rec = grades.all[ideaKey(idea)]
   const pick = (g: Grade) =>
     // Picking the grade you already gave takes it back.
-    rec?.grade === g ? grades.set(idea, null) : grades.set(idea, { grade: g, x: base.logit, ask: base.perceivedAsk, why: g === 'yes' ? undefined : rec?.why, player: g === 'yes' ? undefined : rec?.player })
+    rec?.grade === g ? grades.set(idea, null) : grades.set(idea, { grade: g, x: base.logit, ask: base.perceivedAsk, v: PRICING_VERSION, why: g === 'yes' ? undefined : rec?.why, player: g === 'yes' ? undefined : rec?.player })
   const because = (why: GradeWhy, player?: string) =>
-    rec && grades.set(idea, { grade: rec.grade, x: rec.x, ask: rec.ask, ...(rec.why === why && rec.player === player ? {} : { why, player }) })
+    rec && grades.set(idea, { grade: rec.grade, x: rec.x, ask: rec.ask, v: rec.v, ...(rec.why === why && rec.player === player ? {} : { why, player }) })
   const givePos = [...new Set(idea.give.map(posOf).filter(Boolean))].join('/')
   const reasons: { why: GradeWhy; player?: string; label: string }[] = [
     ...idea.get.map((id) => ({ why: 'untouchable' as const, player: id, label: `won't move ${nm(id).split(' ').slice(-1)[0]}` })),
@@ -331,7 +332,7 @@ const TradeCard = ({
               label="Your ask"
               value={fmtSigned(idea.valueAsk, 1)}
               unit="/wk"
-              title="Trade value you take minus what you send, priced as managers price players: streamers cheap, players they drafted dear. Positive means you ask for a premium."
+              title="Trade value you take minus what you send, priced as managers price players: consensus rank and draft slot counted, stars dear, streamers cheap, players they drafted dearer. Positive means you ask for a premium."
             />
             {read.perceivedAsk != null && (
               <Figure label="By consensus" value={fmtSigned(-read.perceivedAsk, 1)} unit="/wk" title="What they come out with in FantasyPros consensus value, priced the same way. Negative reads as them overpaying." />

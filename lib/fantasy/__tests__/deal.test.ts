@@ -28,7 +28,7 @@ const input: DealInput = {
   floor: {},
   capacity: 5,
   pts,
-  market: { q1: 6, q2: 3, q3: 1, r1: 7, r2: 2, r3: 1, w1: 5, w2: 1, w3: 2 },
+  tradeMarket: { q1: 6, q2: 3, q3: 1, r1: 7, r2: 2, r3: 1, w1: 5, w2: 1, w3: 2 },
   rosters: { 1: ['q1', 'r2', 'w2'], 2: ['q2', 'r1', 'w3'], 3: ['q3', 'r3', 'w1'] },
 }
 const faab: Faab = {

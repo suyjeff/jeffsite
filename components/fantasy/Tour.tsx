@@ -1,15 +1,16 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { MONKE } from './brand'
 import { DIAGRAMS, type DiagramKey } from './TourDiagrams'
 import { cx, shortcutLabel } from './ui'
 
-export type TourStep = { key: DiagramKey; title: string; what: string; can: string[]; why: string }
+export type TourStep = { key: DiagramKey; title: string; /** What the title stands for, when it is an acronym. */ aka?: string; what: string; can: string[]; why: string }
 
 /** What each page is for, in the order the sidebar lists them. */
 export const TOUR: TourStep[] = [
   {
     key: 'welcome',
     title: 'Your league, modelled',
-    what: 'Every page reads your Sleeper league and prices it with one model, so the numbers agree everywhere.',
+    what: `Every page reads your Sleeper league and prices it with one model, ${MONKE.name} (${MONKE.long}), so the numbers agree everywhere.`,
     can: ['Pick a page from the sidebar', 'Press {K} to jump to any page, player or team', 'Click a player for his full sheet'],
     why: 'Every number is something you can act on: points per week, win odds, playoff odds.',
   },
@@ -85,7 +86,8 @@ export const TOUR: TourStep[] = [
   },
   {
     key: 'monke',
-    title: 'M.O.N.K.E.',
+    title: MONKE.name,
+    aka: MONKE.long,
     what: 'The model behind every number.',
     can: ['See how the pieces connect', 'Check its forecasts against real results'],
     why: 'Trust the numbers once you can see how they are made.',
@@ -220,6 +222,7 @@ const Tour = ({ step, setStep, onClose, phone }: { step: number; setStep: (n: nu
               <h2 id="ff-tour-title" className="text-[20px] font-medium leading-tight tracking-[-0.01em] text-ff-text">
                 {s.title}
               </h2>
+              {s.aka && <p className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.06em] text-ff-accent">{s.aka}</p>}
               <p id="ff-tour-what" className="mt-1 text-[13.5px] leading-[1.5] text-ff-text2">
                 {fill(s.what)}
               </p>

@@ -20,7 +20,10 @@ export const tradeBase = (data: LeagueData, analysis: Analysis) => {
     pts: analysis.horizon.perWeek,
     me: { rosterId: me.rosterId, players: me.players },
     capacity: analysis.capacity,
+    /** The model's own value: what waiver and target lists show. */
     market: analysis.market,
+    /** What players fetch in a trade: the market blended with reputation (see currency.ts). Deals are priced on this. */
+    tradeMarket: analysis.tradeMarket,
     currency: analysis.currency,
     floor: analysis.horizonReplacement,
   }

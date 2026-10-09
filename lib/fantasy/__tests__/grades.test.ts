@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AcceptRead } from '../behavior'
+import { PRICING_VERSION } from '../currency'
 import { applyLessons, ideaKey, learn, ruledOutBy, type Grades } from '../grades'
 import type { TradeIdea } from '../trades'
 
@@ -65,11 +66,20 @@ describe('trade grades', () => {
 
   it('a premium they balked at lowers asks as big or bigger', () => {
     const i = idea(2, ['a'], ['b'])
-    const g: Grades = { [ideaKey(i)]: { partnerId: 2, give: ['a'], get: ['b'], grade: 'no', why: 'lopsided', x: 0, ask: 2, at: 1 } }
+    const g: Grades = { [ideaKey(i)]: { partnerId: 2, give: ['a'], get: ['b'], grade: 'no', why: 'lopsided', x: 0, ask: 2, v: PRICING_VERSION, at: 1 } }
     const L = learn(g, posOf)
     const big = applyLessons(read(0, 2.5), idea(2, ['c'], ['d']), L, name, posOf)
     const small = applyLessons(read(0, 0.5), idea(2, ['c'], ['d']), L, name, posOf)
     expect(big.index).toBeLessThan(small.index)
+  })
+
+  it('does not hold a premium recorded on an older price scale against today\'s asks', () => {
+    // Graded before prices were reputation-blended and convex: 2.0 then is not 2.0 now, so it caps nothing.
+    const i = idea(2, ['a'], ['b'])
+    const g: Grades = { [ideaKey(i)]: { partnerId: 2, give: ['a'], get: ['b'], grade: 'no', why: 'lopsided', x: 0, ask: 2, at: 1 } }
+    expect(learn(g, posOf).askCap[2]).toBeUndefined()
+    const big = applyLessons(read(0, 2.5), idea(2, ['c'], ['d']), learn(g, posOf), name, posOf)
+    expect(big.signals.some((s) => s.text.includes('as big an ask'))).toBe(false)
   })
 
   it('your own grade of a deal outranks the rule its reason sets', () => {

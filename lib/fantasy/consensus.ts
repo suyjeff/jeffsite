@@ -164,6 +164,20 @@ export const matchConsensus = (rows: ConsensusRow[], players: PlayerMap): Consen
   return { date, byId, matched, unmatched }
 }
 
+/** Market values best first: the curve a rank is read against. */
+export const valueCurve = (market: Record<string, number>): number[] =>
+  Object.values(market)
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => b - a)
+
+/** The value of the player ranked `rank` (1 is best) on a curve; fractional ranks (5.5) interpolate between neighbours. */
+export const valueAtRank = (curve: number[], rank: number): number => {
+  const lo = Math.max(0, Math.min(curve.length - 1, Math.floor(rank) - 1))
+  const hi = Math.min(curve.length - 1, lo + 1)
+  const t = rank - Math.floor(rank)
+  return Math.max(0, curve[lo] * (1 - t) + curve[hi] * t)
+}
+
 /**
  * Consensus rank expressed in the model's own units. Take the model's market
  * values in descending order; the player the experts rank Nth is "perceived"
@@ -171,19 +185,13 @@ export const matchConsensus = (rows: ConsensusRow[], players: PlayerMap): Consen
  * would this player be worth per week?
  */
 export const perceivedValues = (consensus: Consensus, market: Record<string, number>): Record<string, number> => {
-  const curve = Object.values(market)
-    .filter((v) => Number.isFinite(v))
-    .sort((a, b) => b - a)
+  const curve = valueCurve(market)
   if (!curve.length) return {}
   const out: Record<string, number> = {}
   for (const id of Object.keys(consensus.byId)) {
     const rank = consensus.byId[id].rank
     if (rank == null) continue
-    // Fractional consensus ranks (5.5) interpolate between neighbours.
-    const lo = Math.max(0, Math.min(curve.length - 1, Math.floor(rank) - 1))
-    const hi = Math.min(curve.length - 1, lo + 1)
-    const t = rank - Math.floor(rank)
-    out[id] = Math.max(0, curve[lo] * (1 - t) + curve[hi] * t)
+    out[id] = valueAtRank(curve, rank)
   }
   return out
 }

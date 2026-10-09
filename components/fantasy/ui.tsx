@@ -156,7 +156,7 @@ export const PageHeader = ({
     >
       <div
         className={cx(
-          'items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5 md:group-data-[sidebar=closed]/shell:pl-12',
+          'items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5 md:group-data-[sidebar=closed]/shell:pl-12 motion-safe:md:transition-[padding] motion-safe:md:duration-[170ms] motion-safe:md:ease-[cubic-bezier(0.32,0.72,0,1)]',
           actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden',
         )}
       >

@@ -6,6 +6,7 @@ import {
   getPlayers,
   getRosters,
   getConsensusCsv,
+  getDraftBoard,
   getLines,
   getScoredProjections,
   getSchedule,
@@ -21,6 +22,7 @@ import {
 import { scoreStatLine, statLinePlayed } from './scoring'
 import type { ScheduleGame } from './context'
 import type {
+  DraftBoard,
   PlayerMap,
   SleeperLeague,
   SleeperMatchup,
@@ -120,6 +122,8 @@ export type LeagueData = {
   pastProjections: Record<number, Record<string, number>>
   /** FantasyPros consensus, when the mirror could be read. */
   consensus: Consensus | null
+  /** The league's draft order, when it has had a draft: where managers anchor what a player is worth. */
+  draft?: DraftBoard | null
   /** Prop lines for the coming week, read as expected stats and points, when the board has them. */
   market: MarketWeek | null
   warnings: string[]
@@ -446,10 +450,12 @@ export const loadLeagueData = async (
   // All optional: each one sharpens a model, none of them is needed to draw the page.
   onProgress('Reading league history')
   const txWeeks = weekList.filter((w) => w <= Math.min(currentWeek, MAX_WEEK))
-  const [txResults, projResults, consensusRows] = await Promise.all([
+  const [txResults, projResults, consensusRows, draftResult] = await Promise.all([
     settled(txWeeks.map((w) => getTransactions(league.league_id, w, w < currentWeek))),
     settled(regularWeeks.map((w) => getScoredProjections(league.league_id, league.season, w, league.scoring_settings, false))),
     isCurrentSeason ? settled([getConsensusCsv(reduceConsensusCsv)]).then((r) => r[0]) : Promise.resolve(null),
+    // Dynasty leagues' latest draft is a rookie draft: its order says nothing about the rest of the pool.
+    league.settings?.type === 2 ? Promise.resolve(null) : settled([getDraftBoard(league.league_id)]).then((r) => r[0]),
   ])
   const transactions = txResults.flatMap((r) => r ?? [])
   const pastProjections: Record<number, Record<string, number>> = {}
@@ -526,6 +532,8 @@ export const loadLeagueData = async (
     history,
     pastProjections,
     consensus,
+    // A draft that covered only a few rounds is a supplemental one, not a read on the whole pool.
+    draft: draftResult && draftResult.picks >= league.total_rosters * 6 ? draftResult : null,
     market,
     warnings,
   }

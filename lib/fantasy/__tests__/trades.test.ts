@@ -319,7 +319,7 @@ describe('findTargets', () => {
 
 describe('findTrades', () => {
   const { players, pts, horizon, A, B, market, replacement } = buildLeague()
-  const base = { slots: SLOTS, players, horizon, pts, me: A, others: [B], capacity: 9, market }
+  const base = { slots: SLOTS, players, horizon, pts, me: A, others: [B], capacity: 9, tradeMarket: market }
 
   it('finds the swap that improves both lineups', () => {
     const ideas = findTrades(base)
@@ -345,7 +345,7 @@ describe('findTrades', () => {
 
   it('reports what leaves separately from the net gain', () => {
     const ideas = findTrades(base)
-    const cheap = ideas.find((i) => i.give.includes('a_rb4'))!
+    const cheap = ideas.find((i) => i.give.length === 1 && i.give[0] === 'a_rb4')!
     // Their fourth running back never started, so sending him costs nothing
     // even though the deal itself is worth several points a week.
     expect(cheap.myCost).toBe(0)
@@ -457,9 +457,9 @@ describe('findTrades', () => {
 
 describe('scoreTrade', () => {
   const { players, pts, horizon, A, B, market } = buildLeague()
-  const base = { slots: SLOTS, players, horizon, pts, me: A, partner: B, capacity: 9, market }
+  const base = { slots: SLOTS, players, horizon, pts, me: A, partner: B, capacity: 9, tradeMarket: market }
   it('prices a hand-built deal the same way the search does', () => {
-    const idea = findTrades({ slots: SLOTS, players, horizon, pts, me: A, others: [B], capacity: 9, market })[0]
+    const idea = findTrades({ slots: SLOTS, players, horizon, pts, me: A, others: [B], capacity: 9, tradeMarket: market })[0]
     const scored = scoreTrade({ ...base, give: idea.give, get: idea.get })!
     expect(scored.myGain).toBeCloseTo(idea.myGain, 2)
     expect(scored.theirGain).toBeCloseTo(idea.theirGain, 2)

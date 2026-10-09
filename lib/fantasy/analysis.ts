@@ -1,4 +1,4 @@
-import { tradeCurrency, type Currency } from './currency'
+import { tradeCurrency, tradeMarket, type Currency } from './currency'
 import { startingSlots, type Slot } from './lineup'
 import {
   buildTeamSeasons,
@@ -68,11 +68,16 @@ export type Analysis = {
   horizonStarter: Record<string, number>
   /** Points per week above replacement: what a player is worth to the league at large. */
   market: Record<string, number>
+  /**
+   * What a player fetches in a trade: `market` blended with the consensus rank and the draft slot (see
+   * currency.ts), so a star in a slump is not priced like the bench body his projection says he is.
+   */
+  tradeMarket: Record<string, number>
   /** Per-team lineup production, slot by slot, and the size of each hole. */
   needs: Record<number, TeamNeeds>
   /** Players a roster may hold, so uneven packages are costed honestly. */
   capacity: number
-  /** How people price players in a trade: streamers cheap, drafted players dear (see currency.ts). */
+  /** How people price players in a trade: stars dear, streamers cheap, drafted players dearer (see currency.ts). */
   currency: Currency
 }
 
@@ -138,9 +143,10 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
   const market = marketValues(horizon.perActive, players, horizonReplacement)
   const capacity = Math.max(rosterCapacity(rosterPositions), ...teams.map((t) => t.players.length))
   const needs = teamNeeds(teams, slots, players, data.horizon, horizonStarter, rosterPositions, numTeams, horizonReplacement)
+  const priced = tradeMarket({ market, consensus: data.consensus, draft: data.draft, weeksPlayed: regularWeeks.length })
   const currency = tradeCurrency({
     players,
-    market,
+    market: priced,
     rosterPositions,
     numTeams,
     rosters: teams.map((t) => ({ rosterId: t.rosterId, players: t.players })),
@@ -168,6 +174,7 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
     horizonReplacement,
     horizonStarter,
     market,
+    tradeMarket: priced,
     needs,
     capacity,
     currency,
