@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FantasyProvider } from '../../components/fantasy/FantasyContext'
 import PlayerSheet from '../../components/fantasy/PlayerSheet'
+import TeamSheet from '../../components/fantasy/TeamSheet'
+import GameSheet from '../../components/fantasy/GameSheet'
 import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../../components/fantasy/Shell'
 import { Label, Segmented, Select, cx, simOdds } from '../../components/fantasy/ui'
 import DashboardView from '../../components/fantasy/views/DashboardView'
@@ -54,9 +56,20 @@ export type Prefs = {
   scheme: Scheme
   /** Compact (the default) or comfortable: type size and row height across the app. */
   density: Density
+  /** The desktop sidebar: shown, or folded away behind a show-sidebar button. */
+  sidebar: boolean
+  /** The pricing-horizon setting in the sidebar, opened or folded to a one-line summary. */
+  horizonOpen: boolean
 }
 
 const TOUR_KEY = 'ff:tour:v1'
+
+const HORIZON_SHORT: Record<HorizonMode, string> = { next6: '6 wks', regular: 'season', playoffs: '+ playoffs' }
+const HORIZON_LONG: Record<HorizonMode, string> = {
+  next6: 'The next six regular-season weeks',
+  regular: 'Everything left before the fantasy playoffs',
+  playoffs: 'Everything left, fantasy playoffs included',
+}
 
 const loadPrefs = (): Prefs => {
   const base: Prefs = {
@@ -71,6 +84,8 @@ const loadPrefs = (): Prefs => {
     theme: DEFAULT_THEME,
     scheme: 'system',
     density: 'compact',
+    sidebar: true,
+    horizonOpen: false,
   }
   try {
     const raw = window.localStorage.getItem(PREFS_KEY)
@@ -194,6 +209,11 @@ const FantasyPage = () => {
   // The player detail sheet, open over whatever page you are on.
   const [sheet, setSheet] = useState<string | null>(null)
   const closeSheet = useCallback(() => setSheet(null), [])
+  // Team and NFL game summaries open the same way, and a player opened from one stacks over it.
+  const [teamSheet, setTeamSheet] = useState<number | null>(null)
+  const closeTeamSheet = useCallback(() => setTeamSheet(null), [])
+  const [gameSheet, setGameSheet] = useState<string | null>(null)
+  const closeGameSheet = useCallback(() => setGameSheet(null), [])
   // Cmd/Ctrl+K opens the command palette from anywhere, fields included; again closes it.
   const [palette, setPalette] = useState(false)
   const closePalette = useCallback(() => setPalette(false), [])
@@ -268,14 +288,24 @@ const FantasyPage = () => {
   const controls = prefs && (
     <>
       <div className="space-y-1.5">
-        <div className="flex items-baseline justify-between">
-          <Label>Pricing horizon</Label>
-          {horizonWeeks.length > 0 && (
-            <span className="num text-[10.5px] text-ff-muted">
-              wk {horizonWeeks[0]}–{horizonWeeks[horizonWeeks.length - 1]}
-            </span>
-          )}
-        </div>
+        {/* Folded, the setting reads as one line: what it is set to and the weeks that covers. */}
+        <button
+          type="button"
+          aria-expanded={prefs.horizonOpen}
+          aria-controls="ff-horizon"
+          onClick={() => update({ horizonOpen: !prefs.horizonOpen })}
+          className="-mx-1 flex h-6 w-[calc(100%+0.5rem)] items-center gap-2 px-1 text-left hover:bg-ff-raised"
+        >
+          <Label className="min-w-0 flex-1 truncate">Pricing horizon</Label>
+          <span className="num shrink-0 text-[10.5px] text-ff-muted" title={HORIZON_LONG[prefs.horizon]}>
+            {horizonWeeks.length > 0 ? `wk ${horizonWeeks[0]}–${horizonWeeks[horizonWeeks.length - 1]}` : HORIZON_SHORT[prefs.horizon]}
+          </span>
+          <span aria-hidden className={cx('font-mono text-[10px] text-ff-muted motion-safe:transition-transform motion-safe:duration-150', prefs.horizonOpen && 'rotate-180')}>
+            ▾
+          </span>
+        </button>
+        {prefs.horizonOpen && (
+        <div id="ff-horizon" className="space-y-1.5">
         <Segmented<HorizonMode>
           size="sm"
           block
@@ -283,9 +313,9 @@ const FantasyPage = () => {
           value={prefs.horizon}
           onChange={(h) => update({ horizon: h })}
           options={[
-            { key: 'next6', label: '6 wks', title: 'The next six regular-season weeks' },
-            { key: 'regular', label: 'Season', title: 'Everything left before the fantasy playoffs' },
-            { key: 'playoffs', label: '+ Playoffs', title: 'Everything left, fantasy playoffs included' },
+            { key: 'next6', label: '6 wks', title: HORIZON_LONG.next6 },
+            { key: 'regular', label: 'Season', title: HORIZON_LONG.regular },
+            { key: 'playoffs', label: '+ Playoffs', title: HORIZON_LONG.playoffs },
           ]}
         />
         {prefs.horizon === 'playoffs' && (data?.playoffWeeks.length ?? 0) > 0 && (
@@ -311,6 +341,8 @@ const FantasyPage = () => {
               ))}
             </span>
           </div>
+        )}
+        </div>
         )}
       </div>
       <div className="space-y-1.5">
@@ -389,6 +421,8 @@ const FantasyPage = () => {
       loadedAt={loadedAt}
       status={status}
       onSearch={data ? () => setPalette(true) : undefined}
+      sidebar={prefs.sidebar}
+      onSidebar={(open) => update({ sidebar: open })}
       tour={tour && appUp}
       onTourEnd={endTour}
     >
@@ -406,16 +440,16 @@ const FantasyPage = () => {
       )}
 
       {data && analysis && models && prefs ? (
-        <FantasyProvider value={{ data, analysis, models, adjust, grades, go: (s, sub) => route.go(s, sub ?? undefined), openPlayer: setSheet }}>
+        <FantasyProvider value={{ data, analysis, models, adjust, grades, go: (s, sub) => route.go(s, sub ?? undefined), openPlayer: setSheet, openTeam: setTeamSheet, openGame: setGameSheet }}>
         <div key={data.league.league_id} ref={view} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'me' && <MeView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'power' && (
-            <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} weights={prefs.weights} />
+            <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={setTeamSheet} weights={prefs.weights} />
           )}
-          {section === 'teams' && <TeamsView data={data} analysis={analysis} sub={route.sub} onTeam={(id) => route.go('teams', String(id))} />}
+          {section === 'teams' && <TeamsView data={data} analysis={analysis} sub={route.sub} onTeam={(id) => route.go('teams', id == null ? null : String(id))} />}
           {section === 'players' && <PlayersView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'slate' && <SlateView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'matchup' && <MatchupView data={data} analysis={analysis} />}
@@ -435,6 +469,8 @@ const FantasyPage = () => {
             />
           )}
         </div>
+        {teamSheet != null && analysis.teamById[teamSheet] && <TeamSheet rosterId={teamSheet} onClose={closeTeamSheet} />}
+        {gameSheet && <GameSheet gameKey={gameSheet} onClose={closeGameSheet} />}
         {sheet && data.players[sheet] && <PlayerSheet id={sheet} onClose={closeSheet} />}
         <CommandPalette
           open={palette}

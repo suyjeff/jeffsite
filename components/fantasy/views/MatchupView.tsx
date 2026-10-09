@@ -4,7 +4,6 @@ import type { SlatePlayer } from '../../../lib/fantasy/slate'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes } from '../ContextNotes'
 import PlayerName from '../PlayerName'
-import { sectionCode } from '../Shell'
 import { useSlate } from '../useSlate'
 import { Avatar, Empty, PageHeader, Panel, Pts, PtsKey, Stat, StatGrid, cx, fmt, fmtSigned, pct, type PtsKind } from '../ui'
 
@@ -88,7 +87,7 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
   if (!live || !match || !mine || !theirs) {
     return (
       <>
-        <PageHeader code={sectionCode('matchup')} title="Matchup" />
+        <PageHeader title="Matchup" />
         <div className="mt-4">
           <Empty title="No matchup this week">Your head-to-head shows here once Sleeper sets the week&apos;s pairings during the regular season.</Empty>
         </div>
@@ -137,7 +136,7 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
 
   return (
     <>
-      <PageHeader code={sectionCode('matchup')} title="Matchup" meta={`week ${week}`} actions={<PtsKey className="hidden sm:inline-flex" />} />
+      <PageHeader title="Matchup" meta={`week ${week}`} actions={<PtsKey className="hidden sm:inline-flex" />} />
       <div className="mt-4 space-y-3">
         <section className="border border-ff-line bg-ff-panel px-3 py-4 sm:px-5" aria-label="Score">
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-3 sm:gap-6">

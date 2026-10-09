@@ -57,14 +57,34 @@ export type ShellProps = {
   /** The first-visit tour, over the page; the sidebar stays clear and lights the section being explained. */
   tour?: boolean
   onTourEnd?: () => void
+  /** The desktop sidebar shown (the default) or folded away; folding needs `onSidebar`. */
+  sidebar?: boolean
+  onSidebar?: (open: boolean) => void
 }
 
 /** The wordmark. Shared by the shell and onboarding. */
-export const Brand = () => (
-  <span className="flex items-baseline gap-2">
-    <span className="text-[14px] font-semibold tracking-[-0.01em] text-ff-text">Fantasy</span>
-    <span className="font-mono text-[10px] text-ff-muted">/term</span>
-  </span>
+export const Brand = () => <span className="text-[14px] font-semibold tracking-[-0.01em] text-ff-text">Fantasy</span>
+
+/** A panel with its left column marked: the show and hide sidebar control, as desktop apps draw it. */
+const SidebarIcon = () => (
+  <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25">
+    <rect x="1.5" y="2.5" width="13" height="11" />
+    <path d="M6 2.5v11" />
+    <path d="M3 5h1.5M3 7h1.5" strokeWidth="1" />
+  </svg>
+)
+
+const SidebarToggle = ({ open, onClick, className }: { open: boolean; onClick: () => void; className?: string }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-label={open ? 'Hide sidebar' : 'Show sidebar'}
+    aria-keyshortcuts="["
+    title={`${open ? 'Hide' : 'Show'} sidebar ([)`}
+    className={cx('flex h-8 w-8 items-center justify-center text-ff-muted hover:bg-ff-raised hover:text-ff-text', className)}
+  >
+    <SidebarIcon />
+  </button>
 )
 
 /** Document head for every fantasy screen. */
@@ -98,11 +118,13 @@ const SidebarBody = ({
   onClose,
   onSearch,
   tourKey,
-}: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void; tourKey?: string | null }) => (
+  onHide,
+}: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void; tourKey?: string | null; onHide?: () => void }) => (
   <div className="flex h-full flex-col">
     <div className="flex h-11 shrink-0 items-center justify-between border-b border-ff-line pl-3 pr-2">
       <Brand />
       <span className="flex items-center gap-1">
+        {onHide && <SidebarToggle open onClick={onHide} className="-mr-1" />}
         {onClose && (
           <button onClick={onClose} className="h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close menu">
             ESC
@@ -240,9 +262,11 @@ const typing = (e: KeyboardEvent) => {
 }
 
 const Shell = (props: ShellProps) => {
-  const { section, onNavigate, children, title, loading, onRefresh, leagues, leagueId } = props
+  const { section, onNavigate, children, title, loading, onRefresh, leagues, leagueId, onSidebar } = props
   const [drawer, setDrawer] = useState(false)
   const phone = usePhone()
+  // The tour lights entries in the sidebar, so it shows the sidebar while it runs.
+  const sidebarOpen = props.sidebar !== false || !onSidebar || !!props.tour
   // The drawer is a phone control; widening the window past it simply closes it.
   useEffect(() => {
     if (!phone) setDrawer(false)
@@ -275,10 +299,11 @@ const Shell = (props: ShellProps) => {
         onNavigate(SECTIONS[n - 1].key)
         window.scrollTo({ top: 0 })
       } else if (e.key === 'r' || e.key === 'R') onRefresh()
+      else if (e.key === '[' && onSidebar && !phone) onSidebar(!sidebarOpen)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onNavigate, onRefresh])
+  }, [onNavigate, onRefresh, onSidebar, sidebarOpen, phone])
 
   // The tour: which step it is on. A sidebar click while it runs moves the tour there instead of the page.
   // Back to the start as it ends, so a replay opens on step one rather than flashing the step it ended on.
@@ -302,13 +327,25 @@ const Shell = (props: ShellProps) => {
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
 
   return (
-    <div className="ff min-h-screen bg-ff-bg text-ff-text antialiased">
+    // Page headers read data-sidebar to leave room for the show-sidebar button when the sidebar is folded.
+    <div className="ff group/shell min-h-screen bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
       <FantasyHead title={title} />
 
-      {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[220px] border-r border-ff-line bg-ff-panel md:block">
-        <SidebarBody {...props} onNavigate={navigate} tourKey={tourKey} />
+      {/* Desktop sidebar. Folded, it slides off to the left and leaves the tab order. */}
+      <aside
+        inert={!sidebarOpen}
+        className={cx(
+          'fixed inset-y-0 left-0 z-30 hidden w-[220px] border-r border-ff-line bg-ff-panel motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out md:block',
+          !sidebarOpen && '-translate-x-full',
+        )}
+      >
+        <SidebarBody {...props} onNavigate={navigate} tourKey={tourKey} onHide={onSidebar && !props.tour ? () => onSidebar(false) : undefined} />
       </aside>
+      {!sidebarOpen && onSidebar && (
+        <div className="fixed left-0 top-0 z-30 hidden h-11 items-center pl-2 md:flex">
+          <SidebarToggle open={false} onClick={() => onSidebar(true)} />
+        </div>
+      )}
       {props.tour && props.onTourEnd && <Tour step={tourStep} setStep={setTourStep} onClose={endTour} phone={phone} />}
 
       {/* Phone top bar */}
@@ -347,7 +384,7 @@ const Shell = (props: ShellProps) => {
         </div>
       )}
 
-      <main className="overflow-x-clip pt-12 md:pl-[220px] md:pt-0">
+      <main className={cx('overflow-x-clip pt-12 md:pt-0 motion-safe:md:transition-[padding] motion-safe:md:duration-200 motion-safe:md:ease-out', sidebarOpen && 'md:pl-[220px]')}>
         <div className={cx('mx-auto px-3 pb-24 md:px-5 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
       </main>
 

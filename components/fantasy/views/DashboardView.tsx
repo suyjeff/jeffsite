@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { WIDGETS, type Selection, type WidgetKind } from '../dashboard/widgets'
-import { sectionCode } from '../Shell'
 import { Button, PageHeader, cx } from '../ui'
 
 // A modular board in the manner of a trading terminal: widgets on a 12-column
@@ -33,6 +32,7 @@ const DEFAULT_LAYOUT: Widget[] = [
   { id: 'w1', kind: 'matchup', w: 4, h: 12, ch: 2 },
   { id: 'w2', kind: 'odds', w: 5, h: 12, ch: 1 },
   { id: 'w3', kind: 'player', w: 3, h: 12, ch: 2 },
+  { id: 'w13', kind: 'moves', w: 5, h: 9, ch: 2 },
   { id: 'w4', kind: 'trades', w: 7, h: 9, ch: 0 },
   { id: 'w5', kind: 'team', w: 5, h: 9, ch: 1 },
   { id: 'w6', kind: 'consensus', w: 4, h: 9, ch: 2 },
@@ -219,7 +219,6 @@ const DashboardView = () => {
   return (
     <>
       <PageHeader
-        code={sectionCode('dash')}
         title="Dashboard"
         actions={
           <>

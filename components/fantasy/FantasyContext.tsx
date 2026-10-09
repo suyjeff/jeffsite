@@ -18,6 +18,10 @@ export type FantasyCtx = {
   go: (section: SectionKey, sub?: string | null) => void
   /** Open a player's detail sheet. */
   openPlayer: (id: string) => void
+  /** Open a team's summary sheet. */
+  openTeam: (rosterId: number) => void
+  /** Open an NFL game's sheet, by its schedule key. */
+  openGame: (key: string) => void
   /** Your grades of suggested trades and what they teach the trade read (see lib/fantasy/grades). */
   grades: {
     all: Grades

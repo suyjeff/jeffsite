@@ -21,7 +21,6 @@ import { useFantasy } from '../FantasyContext'
 import WaiverMoves from './WaiverMoves'
 import { useStatLines } from '../useStatLines'
 import PlayerName from '../PlayerName'
-import { sectionCode } from '../Shell'
 import { DeltaChip, Badge, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
 
 type Sub = 'moves' | 'stream' | 'adds'
@@ -354,7 +353,6 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   return (
     <>
       <PageHeader
-        code={sectionCode('waivers')}
         title="Waivers"
         tabs={
           <Tabs<Sub>

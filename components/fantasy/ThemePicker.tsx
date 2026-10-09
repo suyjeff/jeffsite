@@ -31,7 +31,8 @@ const ThemeOption = ({ theme, checked, name, onPick }: { theme: Theme; checked: 
     <input type="radio" name={name} checked={checked} onChange={onPick} className="sr-only" />
     <Swatch theme={theme} compact />
     <span className="min-w-0 flex-1 truncate">{theme.label}</span>
-    {theme.family === 'Editor' && <span className="font-mono text-[9.5px] text-ff-muted">{theme.light ? 'light' : 'dark'}</span>}
+    {/* Most themes come in both; the few that don't say which one they are. */}
+    {!(theme.light && theme.dark) && <span className="font-mono text-[9.5px] text-ff-muted">{theme.light ? 'light' : 'dark'}</span>}
   </label>
 )
 
@@ -153,18 +154,13 @@ const DisplayMenu = ({
               />
             </div>
           </div>
-          <fieldset className="max-h-[min(340px,50vh)] space-y-2 overflow-y-auto overscroll-contain p-3">
-            <legend className="sr-only">Theme</legend>
-            {(['Tailwind', 'Editor'] as const).map((family) => (
-              <div key={family} className="space-y-1.5">
-                <div className="ff-label">{family === 'Tailwind' ? 'Tailwind neutrals · light and dark' : 'Editor themes'}</div>
-                <div className={cx('grid gap-1', family === 'Tailwind' ? 'grid-cols-2' : 'grid-cols-1')}>
-                  {THEMES.filter((t) => t.family === family).map((t) => (
-                    <ThemeOption key={t.id} theme={t} name={`${id}-theme`} checked={t.id === theme.id} onPick={() => onTheme(t.id)} />
-                  ))}
-                </div>
-              </div>
-            ))}
+          <fieldset className="max-h-[min(340px,50vh)] overflow-y-auto overscroll-contain p-3">
+            <legend className="ff-label float-left mb-1.5 w-full">Theme</legend>
+            <div className="clear-both grid grid-cols-2 gap-1">
+              {THEMES.map((t) => (
+                <ThemeOption key={t.id} theme={t} name={`${id}-theme`} checked={t.id === theme.id} onPick={() => onTheme(t.id)} />
+              ))}
+            </div>
           </fieldset>
         </div>
       )}
