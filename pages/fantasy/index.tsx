@@ -266,13 +266,14 @@ const FantasyPage = () => {
   }, [])
   useEffect(() => setSheets([]), [leagueKey])
 
-  // A new section or tab fades its content in (the header stays put), so switching never flashes or snaps.
+  // A new section fades its content in (the header stays put), so switching never flashes. Tabs within a page
+  // switch instantly: they are flipped back and forth far too often to wait on.
   const view = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const root = view.current
     if (!root || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     for (const el of root.children) if (!el.classList.contains('ff-pagehead')) el.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: 'ease-out' })
-  }, [route.section, route.sub])
+  }, [route.section])
 
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   useEffect(() => {
@@ -389,7 +390,7 @@ const FantasyPage = () => {
   ].filter((x): x is { label: string; value: string; title: string } => !!x)
 
   // Until prefs are read (first client render), draw nothing rather than flash the wrong screen.
-  if (!prefs) return <div className="ff min-h-screen bg-ff-bg" />
+  if (!prefs) return <div className="ff min-h-dvh bg-ff-bg" />
   if (!prefs.onboarded) {
     return (
       <Onboarding
@@ -492,7 +493,7 @@ const FantasyPage = () => {
         !error && (
           // Padding, not margin: a top margin here collapses through to the page and shows a strip of body.
           <div className="pb-6">
-            <div className="-mx-3 flex h-11 items-center gap-2.5 border-b border-ff-line px-3 font-mono text-[11.5px] text-ff-muted md:-mx-5 md:px-5">
+            <div className="ff-bleed ff-gutter flex h-11 items-center gap-2.5 border-b border-ff-line font-mono text-[11.5px] text-ff-muted">
               <span className="ff-pulse h-1.5 w-1.5 shrink-0 bg-ff-warn" />
               <span className="ff-caret min-w-0 truncate">{loading ? progress : 'starting'}</span>
             </div>

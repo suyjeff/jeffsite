@@ -284,12 +284,12 @@ const CommandPalette = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center px-2 pt-[max(12px,10vh)] sm:px-4" role="presentation">
-      <div className="ff-fade-in absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="ff-pop relative flex max-h-[min(560px,80vh)] w-full max-w-[620px] flex-col border border-ff-line2 bg-ff-panel shadow-[0_24px_64px_rgba(0,0,0,0.35)]"
+        className="relative flex max-h-[min(560px,80dvh)] w-full max-w-[620px] flex-col border border-ff-line2 bg-ff-panel shadow-[0_24px_64px_rgba(0,0,0,0.35)]"
         onKeyDown={onKey}
       >
         <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-ff-line px-3.5">

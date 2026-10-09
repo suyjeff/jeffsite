@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { resolveMode, themeBg, themeById, themeVars, type Mode, type Scheme } from './themes'
+import { resolveMode, themeById, themeVars, tokensFor, type Mode, type Scheme } from './themes'
 
 /**
  * Applies a theme to every `.ff` root: one injected stylesheet, `html .ff { … }`, which outranks
@@ -44,9 +44,24 @@ export const useTheme = (id: string | null | undefined, scheme: Scheme, ready = 
       void document.body.offsetHeight
       requestAnimationFrame(() => hold.remove())
     }
-    // The browser chrome (address bar, overscroll) takes the page colour.
-    for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) m.content = themeBg(theme, mode)
+    // The browser chrome (status bar, address bar) takes the colour of the bar it meets: the phone top bar's panel.
+    // Its own tag, outside next/head, so a page title changing never puts back a stale colour; first in the head,
+    // so it wins over the default pair FantasyHead sets for before the theme is known.
+    let chrome = document.getElementById('ff-theme-color') as HTMLMetaElement | null
+    if (!chrome) {
+      chrome = document.createElement('meta')
+      chrome.id = 'ff-theme-color'
+      chrome.name = 'theme-color'
+      document.head.prepend(chrome)
+    }
+    chrome.content = tokensFor(theme, mode).panel
   }, [theme, mode, ready])
-  useEffect(() => () => document.getElementById('ff-theme')?.remove(), [])
+  useEffect(
+    () => () => {
+      document.getElementById('ff-theme')?.remove()
+      document.getElementById('ff-theme-color')?.remove()
+    },
+    [],
+  )
   return mode
 }

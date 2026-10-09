@@ -149,14 +149,14 @@ export const PageHeader = ({
     {/* On phones the title row scrolls away and only the tabs stay pinned under the top bar; on wide screens both stay. */}
     <div
       className={cx(
-        'ff-pagehead z-20 -mx-3 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:sticky md:top-0 md:-mx-5',
-        !tabs && 'sticky top-12',
+        'ff-pagehead ff-bleed z-20 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:sticky md:top-0',
+        !tabs && 'sticky top-[var(--ff-top)]',
         actions || meta || mobileTitle ? '' : 'hidden md:block',
       )}
     >
       <div
         className={cx(
-          'items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5 md:group-data-[sidebar=closed]/shell:pl-12',
+          'ff-gutter items-center justify-between gap-3 md:flex md:h-11 md:border-b md:border-ff-line md:group-data-[sidebar=closed]/shell:pl-12',
           actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden',
         )}
       >
@@ -167,7 +167,7 @@ export const PageHeader = ({
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
     </div>
-    {tabs && <div className="ff-pagehead ff-pagetabs sticky top-12 z-20 -mx-3 bg-ff-bg/90 px-3 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-11 md:-mx-5 md:px-5">{tabs}</div>}
+    {tabs && <div className="ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-11">{tabs}</div>}
   </>
 )
 
@@ -690,7 +690,7 @@ export const Dropdown = ({
           aria-label={label}
           className={cx(
             'ff-pop ff-scroll absolute left-0 z-50 max-h-[260px] min-w-full overflow-y-auto overscroll-contain border border-ff-line2 bg-ff-panel py-1 shadow-[0_10px_28px_rgba(0,0,0,0.22)]',
-            up ? 'bottom-full mb-1' : 'top-full mt-1',
+            up ? 'ff-pop-up bottom-full mb-1' : 'top-full mt-1',
             menuClassName,
           )}
         >
@@ -784,7 +784,7 @@ export const Button = ({
     disabled={disabled}
     onClick={onClick}
     className={cx(
-      'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40',
+      'ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40',
       size === 'sm' ? 'h-7 px-2 text-[11.5px]' : 'h-8 px-3 text-[12.5px]',
       variant === 'primary' && 'bg-ff-text text-ff-panel hover:bg-ff-text/85',
       variant === 'aqua' && 'ff-aqua',
@@ -817,9 +817,9 @@ export const GridFill = ({ n, wide }: { n: number; wide: 'xl' | '2xl' }) => (
 export const Fab = ({ children, onClick, hidden, label }: { children: ReactNode; onClick: () => void; hidden?: boolean; label?: string }) => (
   <div
     className={cx(
-      'pointer-events-none fixed right-3 z-30 md:hidden',
+      'pointer-events-none fixed right-[max(12px,env(safe-area-inset-right))] z-30 md:hidden',
       'bottom-[calc(48px+env(safe-area-inset-bottom)+14px)]',
-      'motion-safe:transition-[opacity,transform] motion-safe:duration-200 motion-safe:ease-out',
+      'motion-safe:transition-[opacity,transform] motion-safe:duration-200 motion-safe:ease-ff-out',
       hidden ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100',
     )}
   >
@@ -1125,7 +1125,7 @@ export const Meter = ({
   >
     {/* Scaled, not resized, so a change animates without reflowing the row. */}
     <span
-      className={cx('block h-full origin-left transition-transform duration-300 ease-out', tone === 'accent' ? 'bg-ff-accent' : tone === 'neg' ? 'bg-ff-neg' : 'bg-ff-pos')}
+      className={cx('block h-full origin-left transition-transform duration-[240ms] ease-ff-out', tone === 'accent' ? 'bg-ff-accent' : tone === 'neg' ? 'bg-ff-neg' : 'bg-ff-pos')}
       style={{ transform: `scaleX(${Math.max(0, Math.min(1, max ? value / max : 0))})` }}
     />
   </span>

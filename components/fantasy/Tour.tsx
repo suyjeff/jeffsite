@@ -201,7 +201,7 @@ const Tour = ({ step, setStep, onClose, phone }: { step: number; setStep: (n: nu
           aria-modal="true"
           aria-labelledby="ff-tour-title"
           aria-describedby="ff-tour-what"
-          className="ff-pop pointer-events-auto flex max-h-full w-full max-w-[600px] flex-col border border-ff-line2 bg-ff-panel shadow-[0_24px_64px_-24px_rgb(0_0_0/0.5)]"
+          className="ff-modal-in pointer-events-auto flex max-h-full w-full max-w-[600px] flex-col border border-ff-line2 bg-ff-panel shadow-[0_24px_64px_-24px_rgb(0_0_0/0.5)]"
         >
           <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b border-ff-line px-3">
             <span className="ff-label">

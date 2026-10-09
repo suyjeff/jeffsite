@@ -378,9 +378,12 @@ export const resolveMode = (theme: Theme, scheme: Scheme, systemDark: boolean): 
 
 const rgb = (h: string) => hex(h).join(' ')
 
+/** A theme's colours in a mode: that mode's, or its only one. */
+export const tokensFor = (theme: Theme, mode: Mode): Tokens => ((mode === 'dark' ? theme.dark : theme.light) ?? theme.dark ?? theme.light)!
+
 /** CSS custom properties for a theme in a mode, ready for a style attribute. */
 export const themeVars = (theme: Theme, mode: Mode): Record<string, string> => {
-  const t = (mode === 'dark' ? theme.dark : theme.light) ?? theme.dark ?? theme.light!
+  const t = tokensFor(theme, mode)
   return {
     colorScheme: mode,
     '--ff-bg': rgb(t.bg),
@@ -403,9 +406,6 @@ export const themeVars = (theme: Theme, mode: Mode): Record<string, string> => {
     ...Object.fromEntries(t.c.map((c, i) => [`--ff-c${i + 1}`, rgb(c)])),
   }
 }
-
-/** The page colour for the browser chrome (theme-color). */
-export const themeBg = (theme: Theme, mode: Mode) => ((mode === 'dark' ? theme.dark : theme.light) ?? theme.dark ?? theme.light!).bg
 
 /** WCAG relative luminance contrast between two hex colours. */
 export const contrast = (a: string, b: string) => {

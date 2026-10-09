@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
+import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { cx, usePhone } from './ui'
 
@@ -22,14 +22,47 @@ const Sheet = ({
   children: (api: { close: () => void; phone: boolean }) => ReactNode
 }) => {
   const panel = useRef<HTMLDivElement>(null)
+  const root = useRef<HTMLDivElement>(null)
   const phone = usePhone()
   const swipe = useRef<SwipeSheetHandle>(null)
+  const leaving = useRef<number | null>(null)
+  const done = useRef(onClose)
+  done.current = onClose
+  // Wide screens: slide out the way it came in, then report back. The panel stops taking clicks as it goes.
+  const leave = () => {
+    const el = root.current
+    if (leaving.current != null) return
+    if (!el) return onClose()
+    el.removeAttribute('data-open')
+    el.setAttribute('data-closing', '')
+    leaving.current = window.setTimeout(() => done.current(), 200)
+  }
+  // Something opened while it was leaving (the command palette, say): stay, turn around, and show that.
+  const stay = () => {
+    const el = root.current
+    if (leaving.current == null || !el) return
+    window.clearTimeout(leaving.current)
+    leaving.current = null
+    el.removeAttribute('data-closing')
+    el.setAttribute('data-open', '')
+  }
+  useEffect(() => () => window.clearTimeout(leaving.current ?? undefined), [])
   // Phones slide the sheet away first, then report back.
   const close = useRef(onClose)
-  close.current = phone ? () => (swipe.current ? swipe.current.dismiss() : onClose()) : onClose
+  close.current = phone ? () => (swipe.current ? swipe.current.dismiss() : onClose()) : leave
+
+  // Wide screens: in from the right. A transition from the off-screen state the first paint commits, so closing
+  // it before it has arrived turns it around from where it is.
+  useLayoutEffect(() => {
+    const el = root.current
+    if (phone || !el) return
+    void el.offsetWidth
+    el.setAttribute('data-open', '')
+  }, [phone])
 
   useEffect(() => {
     const back = document.activeElement as HTMLElement | null
+    const own = panel.current
     // No scroll on focus: on phones it would cut short the sheet's entrance, which is itself a scroll.
     panel.current?.focus({ preventScroll: true })
     const onKey = (e: KeyboardEvent) => {
@@ -74,7 +107,10 @@ const Sheet = ({
     return () => {
       window.removeEventListener('keydown', onKey, true)
       document.body.style.overflow = overflow
-      back?.focus?.({ preventScroll: true })
+      // Back to where it was, unless focus has since gone somewhere else on purpose (the command palette, opened
+      // while this one was sliding away).
+      const at = document.activeElement
+      if (!at || at === document.body || own?.contains(at)) back?.focus?.({ preventScroll: true })
     }
   }, [])
 
@@ -85,6 +121,7 @@ const Sheet = ({
       first.current = false
       return
     }
+    stay()
     panel.current?.focus({ preventScroll: true })
     panel.current?.querySelector('.ff-scroll')?.scrollTo({ top: 0 })
   }, [contentKey])
@@ -110,13 +147,13 @@ const Sheet = ({
     )
 
   return (
-    <div className="fixed inset-0 z-50" role="presentation">
-      <div className="ff-fade-in absolute inset-0 bg-black/45" onClick={onClose} />
+    <div ref={root} className="ff-sheet-root fixed inset-0 z-50" role="presentation">
+      <div className="ff-scrim absolute inset-0 bg-black/45" onClick={() => close.current()} />
       <div
         ref={panel}
         {...dialog}
         style={{ width }}
-        className="ff-sheet absolute inset-y-0 right-0 flex max-w-full flex-col border-l border-ff-line bg-ff-panel shadow-[-12px_0_40px_rgba(0,0,0,0.3)] outline-none"
+        className="ff-sheet absolute inset-y-0 right-0 flex max-w-full flex-col border-l border-ff-line bg-ff-panel pr-[env(safe-area-inset-right)] shadow-[-12px_0_40px_rgba(0,0,0,0.3)] outline-none"
       >
         {body}
       </div>
@@ -146,8 +183,11 @@ export const SheetSection = ({ title, children, aside }: { title: string; childr
   </section>
 )
 
-/** What a sheet's content needs from the host: close it, step back to what it showed before, and whether it is a phone. */
-export type SheetNav = { close: () => void; back?: () => void; backLabel?: string; phone: boolean }
+/**
+ * What a sheet's content needs from the host: close it, step back to what it showed before, whether it is a phone,
+ * and how it got here (first opened, a step deeper, or a step back), which sets the way new content moves in.
+ */
+export type SheetNav = { close: () => void; back?: () => void; backLabel?: string; phone: boolean; step?: 'open' | 'push' | 'back' }
 export const SheetNavContext = createContext<SheetNav>({ close: () => {}, phone: false })
 export const useSheet = () => useContext(SheetNavContext)
 
@@ -184,7 +224,13 @@ export const SheetHeader = ({ lead, eyebrow, title, sub }: { lead?: ReactNode; e
   </header>
 )
 
-/** A sheet's content, swapped in place: a quick fade so the change reads as a new page, not a flicker. */
-export const SheetContent = ({ children }: { children: ReactNode }) => <div className="ff-fade-in flex min-h-0 flex-1 flex-col">{children}</div>
+/**
+ * A sheet's content, swapped in place. A step deeper comes in from the right and a step back from the left, like a
+ * navigation stack; a first open just fades in under the sheet's own entrance.
+ */
+export const SheetContent = ({ children }: { children: ReactNode }) => {
+  const { step } = useSheet()
+  return <div className={cx(step === 'push' ? 'ff-step-push' : step === 'back' ? 'ff-step-back' : 'ff-fade-in', 'flex min-h-0 flex-1 flex-col')}>{children}</div>
+}
 
 export default Sheet

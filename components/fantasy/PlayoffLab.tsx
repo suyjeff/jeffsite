@@ -86,7 +86,7 @@ export const Feed = ({ stories, run }: { stories: Story[]; run: number }) => (
           'ff-rise grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 px-3 py-2.5',
           s.kind === 'you' && 'bg-ff-accent/[0.06] shadow-[inset_2px_0_0_rgb(var(--ff-accent))]',
         )}
-        style={{ animationDelay: `${100 + i * 100}ms` }}
+        style={{ animationDelay: `${60 + i * 50}ms` }}
       >
         <FaceOff a={s.a} b={s.b} />
         <div className="min-w-0">
@@ -146,7 +146,7 @@ export const Bracket = ({ t, run }: { t: Trace; run: number }) => {
     <div className="ff-scroll overflow-x-auto">
       <div className="flex min-w-max items-stretch gap-3 p-3">
         {t.rounds.map((rd, i) => (
-          <div key={`${run}:${i}`} className="ff-rise flex w-[160px] flex-col" style={{ animationDelay: `${100 + i * 100}ms` }}>
+          <div key={`${run}:${i}`} className="ff-rise flex w-[160px] flex-col" style={{ animationDelay: `${60 + i * 50}ms` }}>
             <div className="ff-label mb-1.5 flex justify-between">
               <span>{rd.name}</span>
               <span className="num">wk {rd.week}</span>
@@ -159,7 +159,7 @@ export const Bracket = ({ t, run }: { t: Trace; run: number }) => {
           </div>
         ))}
         {champ && (
-          <div key={`${run}:champ`} className="ff-rise flex w-[112px] flex-col" style={{ animationDelay: `${100 + t.rounds.length * 100}ms` }}>
+          <div key={`${run}:champ`} className="ff-rise flex w-[112px] flex-col" style={{ animationDelay: `${60 + t.rounds.length * 50}ms` }}>
             <div className="ff-label mb-1.5">Champion</div>
             <div className="flex flex-1 flex-col items-center justify-center gap-2 border border-ff-accent/50 bg-ff-accent/[0.07] px-2 py-3 text-center">
               <Avatar src={champ.avatar} name={champ.name} size={40} />

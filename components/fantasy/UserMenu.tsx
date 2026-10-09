@@ -84,7 +84,7 @@ const UserMenu = ({ username, onSwitch, onTour }: { username: string; onSwitch: 
           id={`${id}-menu`}
           role="menu"
           aria-label="Account"
-          className="ff-pop absolute bottom-full left-0 z-50 mb-1 w-[232px] border border-ff-line2 bg-ff-panel py-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]"
+          className="ff-pop ff-pop-up absolute bottom-full left-0 z-50 mb-1 w-[232px] border border-ff-line2 bg-ff-panel py-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]"
         >
           {!confirm ? (
             <>
