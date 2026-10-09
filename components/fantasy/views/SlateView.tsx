@@ -20,6 +20,7 @@ import {
   Table,
   TabSection,
   Tabs,
+  Pts,
   cx,
   fmt,
   fmtSigned,
@@ -288,24 +289,24 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
     },
     {
       key: 'proj',
-      label: 'Proj',
+      label: 'Pts',
       align: 'right',
-      title: 'Projected points; his 20th to 80th percentile game below',
+      title: 'Points: final, live, or projected (dotted) with his 20th to 80th percentile game below',
       render: (p) =>
         p.actual != null ? (
           <span className="inline-flex flex-col items-end leading-tight">
-            <span className="text-ff-text">{fmt(p.actual)}</span>
+            <Pts value={p.actual} kind="final" />
             <span className={cx('text-[10px]', p.actual >= p.proj ? 'text-ff-pos' : 'text-ff-neg')}>{fmtSigned(p.actual - p.proj)} vs proj</span>
           </span>
         ) : p.live != null ? (
           <span className="inline-flex flex-col items-end leading-tight">
-            <span className="text-ff-text">{fmt(p.live)}</span>
-            <span className="text-[10px] text-ff-warn">live · proj {fmt(p.proj)}</span>
+            <Pts value={p.live} kind="live" />
+            <span className="text-[10px] text-ff-muted">of {fmt(p.proj)} projected</span>
           </span>
         ) : (
           <span className="inline-flex flex-col items-end leading-tight">
-            <span className="text-ff-text">{fmt(p.proj)}</span>
-            <span className="text-[10px] text-ff-muted">
+            <Pts value={p.proj} kind="proj" />
+            <span className="mt-0.5 text-[10px] text-ff-muted">
               {fmt(p.low, 0)}–{fmt(p.high, 0)}
             </span>
           </span>

@@ -7,6 +7,7 @@ import DashboardView from '../../components/fantasy/views/DashboardView'
 import Onboarding from '../../components/fantasy/Onboarding'
 import MeView from '../../components/fantasy/views/MeView'
 import ModelView, { READOUT } from '../../components/fantasy/views/ModelView'
+import MatchupView from '../../components/fantasy/views/MatchupView'
 import SlateView from '../../components/fantasy/views/SlateView'
 import PlayersView from '../../components/fantasy/views/PlayersView'
 import PowerView from '../../components/fantasy/views/PowerView'
@@ -31,6 +32,7 @@ import {
 import { useRoute } from '../../lib/fantasy/useRoute'
 import { DEFAULT_MODEL, type ModelConfig } from '../../lib/fantasy/war'
 import { DEFAULT_THEME, themeById, type Scheme } from '../../lib/fantasy/themes'
+import UserMenu from '../../components/fantasy/UserMenu'
 import DisplayMenu, { type Density } from '../../components/fantasy/ThemePicker'
 import CommandPalette from '../../components/fantasy/CommandPalette'
 import { useTheme } from '../../lib/fantasy/useTheme'
@@ -53,6 +55,8 @@ export type Prefs = {
   /** Compact (the default) or comfortable: type size and row height across the app. */
   density: Density
 }
+
+const TOUR_KEY = 'ff:tour:v1'
 
 const loadPrefs = (): Prefs => {
   const base: Prefs = {
@@ -200,6 +204,25 @@ const FantasyPage = () => {
   useEffect(() => {
     if (!appUp) setPalette(false)
   }, [appUp])
+
+  // The tour runs on a first visit, once a league is up to point at; after that only when asked for.
+  const [tour, setTour] = useState(false)
+  useEffect(() => {
+    if (!appUp) return
+    try {
+      if (!window.localStorage.getItem(TOUR_KEY)) setTour(true)
+    } catch {
+      // Storage blocked: skip it rather than show it on every visit.
+    }
+  }, [appUp])
+  const endTour = useCallback(() => {
+    setTour(false)
+    try {
+      window.localStorage.setItem(TOUR_KEY, '1')
+    } catch {
+      // ignore
+    }
+  }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (canPalette.current && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
@@ -293,20 +316,7 @@ const FantasyPage = () => {
       <div className="space-y-1.5">
         <div className={row}>
           <span className={key}>User</span>
-          <span className="flex h-full min-w-0 flex-1 items-center border border-ff-line bg-ff-panel">
-            <span className="min-w-0 flex-1 truncate pl-2 font-mono text-[11px] text-ff-text" title={`Sleeper user @${prefs.username}`}>
-              @{prefs.username}
-            </span>
-            <button
-              type="button"
-              onClick={() => update({ onboarded: false })}
-              className="h-full w-7 shrink-0 border-l border-ff-line font-mono text-[12px] text-ff-muted hover:bg-ff-raised hover:text-ff-text"
-              title="Switch Sleeper user"
-              aria-label="Switch Sleeper user"
-            >
-              ⇄
-            </button>
-          </span>
+          <UserMenu username={prefs.username} onSwitch={() => update({ onboarded: false })} onTour={() => setTour(true)} />
         </div>
         <div className={row}>
           <span className={key}>Season</span>
@@ -379,6 +389,8 @@ const FantasyPage = () => {
       loadedAt={loadedAt}
       status={status}
       onSearch={data ? () => setPalette(true) : undefined}
+      tour={tour && appUp}
+      onTourEnd={endTour}
     >
       {error && (
         <div className="mt-4 border border-ff-neg/40 bg-ff-neg/10 px-3 py-2.5 font-mono text-[12px] text-ff-neg">ERR · {error}</div>
@@ -406,6 +418,7 @@ const FantasyPage = () => {
           {section === 'teams' && <TeamsView data={data} analysis={analysis} sub={route.sub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'players' && <PlayersView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'slate' && <SlateView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
+          {section === 'matchup' && <MatchupView data={data} analysis={analysis} />}
           {(section === 'model' || section === 'monke') && (
             <ModelView
               key={section}
@@ -433,6 +446,7 @@ const FantasyPage = () => {
           density={prefs.density}
           onDensity={(d) => update({ density: d })}
           onReload={reload}
+          onTour={() => setTour(true)}
           leagues={(data.leagues ?? []).map((l) => ({ id: l.league_id, name: l.name }))}
           onLeague={(id) => update({ leagueId: id })}
         />
