@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useFantasy } from './FantasyContext'
 import GameSheet from './GameSheet'
 import MatchupSheet from './MatchupSheet'
@@ -19,6 +19,13 @@ export const sheetKey = (r: SheetRef) =>
 const SheetHost = ({ stack, onBack, onClose }: { stack: SheetRef[]; onBack: () => void; onClose: () => void }) => {
   const { data, analysis } = useFantasy()
   const top = stack[stack.length - 1]
+  // How the sheet got to what it shows now, decided once per change of content: a shorter trail is a step back.
+  // Kept as state updated during render (React's pattern for deriving from a change in props), so a render React
+  // throws away never leaves a half-made decision behind.
+  const [seen, setSeen] = useState<{ key: string; depth: number; step: 'open' | 'push' | 'back' } | null>(null)
+  const key = top ? sheetKey(top) : null
+  if (!key && seen) setSeen(null)
+  else if (key && seen?.key !== key) setSeen({ key, depth: stack.length, step: !seen ? 'open' : stack.length < seen.depth ? 'back' : 'push' })
   // A ref to something no longer in the league (a switch mid-render, a stale link) opens nothing rather than an empty sheet.
   if (!top || (top.kind === 'player' && !data.players[top.id]) || (top.kind === 'team' && !analysis.teamById[top.id])) return null
   const name = (r: SheetRef | undefined): string => {
@@ -40,7 +47,7 @@ const SheetHost = ({ stack, onBack, onClose }: { stack: SheetRef[]; onBack: () =
   return (
     <Sheet label={label} onClose={onClose} contentKey={sheetKey(top)}>
       {({ close, phone }) => (
-        <SheetNavContext.Provider value={{ close, phone, back: prev ? onBack : undefined, backLabel: prev ? name(prev) : undefined }}>
+        <SheetNavContext.Provider value={{ close, phone, back: prev ? onBack : undefined, backLabel: prev ? name(prev) : undefined, step: seen?.step }}>
           {top.kind === 'player' ? (
             <PlayerSheet key={sheetKey(top)} id={top.id} />
           ) : top.kind === 'team' ? (

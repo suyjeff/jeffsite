@@ -235,9 +235,9 @@ const DashboardView = () => {
                 + Widget
               </Button>
               {catalog && (
-                <div className="fixed inset-x-2 top-[100px] z-40 border border-ff-line2 bg-ff-panel shadow-[0_8px_24px_rgba(0,0,0,0.25)] md:absolute md:inset-x-auto md:right-0 md:top-full md:mt-1 md:w-[300px]">
+                <div className="fixed inset-x-2 top-[calc(var(--ff-top)+52px)] z-40 border border-ff-line2 bg-ff-panel shadow-[0_8px_24px_rgba(0,0,0,0.25)] md:absolute md:inset-x-auto md:right-0 md:top-full md:mt-1 md:w-[300px]">
                   <div className="ff-label border-b border-ff-line px-3 py-1.5">add widget</div>
-                  <div className="ff-scroll max-h-[60vh] overflow-auto">
+                  <div className="ff-scroll max-h-[60dvh] overflow-auto">
                     {(Object.keys(WIDGETS) as WidgetKind[]).map((k) => (
                       <button key={k} onClick={() => add(k)} className="block w-full border-b border-ff-line/60 px-3 py-2 text-left last:border-0 hover:bg-ff-raised">
                         <span className="flex items-baseline justify-between">
@@ -256,7 +256,7 @@ const DashboardView = () => {
           </>
         }
       />
-      <div className="ff-canvas -mx-3 mt-0 min-h-[calc(100vh-120px)] p-1.5 md:-mx-5 md:p-2">
+      <div className="ff-canvas ff-bleed mt-0 min-h-[calc(100dvh-120px)] p-1.5 md:p-2">
         {/* Phones stack widgets at their natural height; the row grid starts at md. */}
         <div ref={grid} className={cx('grid grid-cols-1 gap-1.5 md:grid-flow-row-dense md:auto-rows-[34px] md:grid-cols-12 md:gap-2', editing && 'ff-grid-guides')}>
           {layout.map((w) => {
@@ -278,7 +278,7 @@ const DashboardView = () => {
                   setDrag(null)
                 }}
                 className={cx(
-                  'relative flex max-h-[72vh] min-w-0 flex-col border border-ff-line bg-ff-panel md:max-h-none md:[grid-row:span_var(--rows)_/_span_var(--rows)]',
+                  'relative flex max-h-[72dvh] min-w-0 flex-col border border-ff-line bg-ff-panel md:max-h-none md:[grid-row:span_var(--rows)_/_span_var(--rows)]',
                   drag?.id === w.id && 'ff-dragging',
                   drag && drag.over === w.id && drag.id !== w.id && 'ff-drop-before',
                   spanClass(w.w),

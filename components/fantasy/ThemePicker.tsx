@@ -117,7 +117,7 @@ const DisplayMenu = ({
           id={`${id}-panel`}
           role="dialog"
           aria-label="Display"
-          className="ff-pop absolute bottom-full left-0 z-50 mb-1 w-[288px] max-w-[calc(100vw-24px)] border border-ff-line2 bg-ff-panel shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]"
+          className="ff-pop ff-pop-up absolute bottom-full left-0 z-50 mb-1 w-[288px] max-w-[calc(100vw-24px)] border border-ff-line2 bg-ff-panel shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]"
         >
           <div className="space-y-2.5 border-b border-ff-line p-3">
             <div className="flex items-center justify-between gap-3">
@@ -154,7 +154,7 @@ const DisplayMenu = ({
               />
             </div>
           </div>
-          <fieldset className="max-h-[min(340px,50vh)] overflow-y-auto overscroll-contain p-3">
+          <fieldset className="max-h-[min(340px,50dvh)] overflow-y-auto overscroll-contain p-3">
             <legend className="ff-label float-left mb-1.5 w-full">Theme</legend>
             <div className="clear-both grid grid-cols-2 gap-1">
               {THEMES.map((t) => (

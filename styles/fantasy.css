@@ -34,7 +34,71 @@
   --ff-c2: 235 104 52;
   --ff-c3: 27 175 122;
   --ff-c4: 160 96 220;
+  /* Motion. One strong ease-out for anything entering, leaving or answering a press; the iOS sheet curve for
+     panels that travel across the screen; ease-in-out only for things moving from one place to another. */
+  --ff-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ff-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ff-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* The phone top bar's height, notch included, for everything that sits under it. */
+  --ff-top: calc(48px + env(safe-area-inset-top, 0px));
+  /* Page gutters, widened past a notch or rounded corner in landscape. Edge-to-edge strips (sticky headers, the
+     dashboard canvas) pull out by exactly these and pad back in by them. */
+  --ff-gl: max(12px, env(safe-area-inset-left, 0px));
+  --ff-gr: max(12px, env(safe-area-inset-right, 0px));
   font-family: theme('fontFamily.plex');
+  /* Touch: no grey flash over tapped controls (each draws its own press), and no wait for a double-tap zoom. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+/* touch-action narrows only down to the nearest scroller, so controls inside sheets, tables and menus take it
+   themselves. Pinch zoom stays. */
+.ff :is(button, a[href], [role='button'], summary, label, input, select, textarea) {
+  touch-action: manipulation;
+}
+
+@media (min-width: 768px) {
+  .ff {
+    --ff-gl: 20px;
+    --ff-gr: max(20px, env(safe-area-inset-right, 0px));
+  }
+  /* With the sidebar folded the page itself meets the left edge. */
+  .ff[data-sidebar='closed'] {
+    --ff-gl: max(20px, env(safe-area-inset-left, 0px));
+  }
+}
+.ff .ff-gutter {
+  padding-left: var(--ff-gl);
+  padding-right: var(--ff-gr);
+}
+.ff .ff-bleed {
+  margin-left: calc(-1 * var(--ff-gl));
+  margin-right: calc(-1 * var(--ff-gr));
+}
+
+/* The app owns its scroll: pulling past the top never reloads the whole league (Android's pull-to-refresh). */
+html:has(body .ff),
+html:has(body .ff) body {
+  overscroll-behavior-y: none;
+}
+
+/* Every control answers the moment it is pressed, not when the finger lifts: a faint ink wash layered over
+   whatever background it already has, so selected and coloured states keep their colour. */
+.ff :is(button, a[href], summary, [role='option'], [role='menuitem']):not(:disabled):not([aria-disabled='true']):not(.ff-aqua):active {
+  background-image: linear-gradient(rgb(var(--ff-text) / 0.07), rgb(var(--ff-text) / 0.07));
+}
+
+/* On touch screens a long press on a control selects its label or pops the link callout; controls are not
+   text to copy. Content stays selectable, and a mouse can still drag-select across a table. */
+@media (pointer: coarse) {
+  .ff :is(button, [role='button'], [role='tab'], [role='radio'], [role='option'], summary) {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  /* iOS zooms the page into any field set under 16px and never zooms back out. */
+  .ff :is(input:not([type='range']):not([type='radio']):not([type='checkbox']), textarea, select) {
+    font-size: max(16px, 1em);
+  }
 }
 @media (prefers-color-scheme: dark) {
   .ff {
@@ -208,11 +272,13 @@
 .ff .ff-drop-before { box-shadow: inset 3px 0 0 rgb(var(--ff-accent)); }
 .ff .ff-dragging { opacity: 0.45; }
 
-/* Popovers open with a short fade and a 4px drop; reduced motion keeps just the fade. */
+/* Popovers grow out of their trigger: a short fade with a 4px drop and a 0.97 scale from the edge they hang
+   from (the top of a menu below its button, the bottom of one above). Opening is a click, so it is quick; closing
+   is instant. Reduced motion keeps just the fade. Modals (the tour) appear in place from the centre. */
 @keyframes ff-pop {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(var(--ff-pop-y, -4px)) scale(0.97);
   }
 }
 @keyframes ff-pop-fade {
@@ -220,11 +286,26 @@
     opacity: 0;
   }
 }
+@keyframes ff-modal {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
 .ff .ff-pop {
-  animation: ff-pop 120ms cubic-bezier(0.2, 0, 0, 1);
+  transform-origin: top;
+  animation: ff-pop 150ms var(--ff-ease-out);
+}
+.ff .ff-pop.ff-pop-up {
+  --ff-pop-y: 4px;
+  transform-origin: bottom;
+}
+.ff .ff-modal-in {
+  animation: ff-modal 200ms var(--ff-ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
-  .ff .ff-pop {
+  .ff .ff-pop,
+  .ff .ff-modal-in {
     animation-name: ff-pop-fade;
   }
 }
@@ -236,8 +317,8 @@
   opacity: 0;
   visibility: hidden;
   transition:
-    grid-template-columns 160ms cubic-bezier(0.2, 0, 0, 1),
-    opacity 120ms,
+    grid-template-columns 160ms var(--ff-ease-out),
+    opacity 120ms ease,
     visibility 0s 160ms;
 }
 .ff .ff-reveal-x > * {
@@ -249,8 +330,8 @@
   opacity: 1;
   visibility: visible;
   transition:
-    grid-template-columns 160ms cubic-bezier(0.2, 0, 0, 1),
-    opacity 120ms 40ms,
+    grid-template-columns 160ms var(--ff-ease-out),
+    opacity 120ms ease 40ms,
     visibility 0s;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -420,7 +501,9 @@
     inset 0 1px 1px rgb(255 255 255 / 0.3),
     0 1px 2px rgb(0 0 0 / 0.25),
     0 2px 5px rgb(var(--ff-accent-deep) / 0.25);
-  transition: filter 120ms;
+  transition:
+    filter 120ms ease,
+    scale 200ms var(--ff-ease-out);
 }
 /* The throb: a wash of light that breathes. Opacity only, so it stays on the compositor. */
 .ff .ff-aqua::after {
@@ -490,28 +573,73 @@
   }
 }
 
-/* Sheets: the wide-screen side sheet slides in from the right. */
+/* The wide-screen side sheet (phones use SwipeSheet, which enters by scrolling). It slides in from the right on
+   the iOS sheet curve and leaves the way it came, a little faster. Transitions, not keyframes: closing it while it
+   is still arriving turns it around from wherever it is. The scrim follows. Reduced motion cross-fades instead. */
+.ff .ff-sheet-root .ff-scrim {
+  opacity: 0;
+  transition: opacity 280ms ease;
+}
+.ff .ff-sheet-root .ff-sheet {
+  transform: translateX(100%);
+  transition: transform 280ms var(--ff-ease-drawer);
+}
+.ff .ff-sheet-root[data-open] .ff-scrim {
+  opacity: 1;
+}
+.ff .ff-sheet-root[data-open] .ff-sheet {
+  transform: none;
+}
+.ff .ff-sheet-root[data-closing] :is(.ff-scrim, .ff-sheet) {
+  transition-duration: 200ms;
+}
+.ff .ff-sheet-root[data-closing] .ff-sheet {
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-sheet-root .ff-sheet {
+    transform: none;
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+  .ff .ff-sheet-root[data-open] .ff-sheet {
+    opacity: 1;
+  }
+}
+
+/* What a sheet shows, swapped in place, moves the way the step went: in from the right going deeper (a player
+   from a team), in from the left coming back, like a navigation stack. A first open just fades, under the sheet's
+   own slide. */
+@keyframes ff-push {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes ff-pop-back {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
 @keyframes ff-fade-in {
   from {
     opacity: 0;
   }
 }
-@keyframes ff-sheet-left {
-  from {
-    transform: translateX(100%);
-  }
-}
 .ff .ff-fade-in {
   animation: ff-fade-in 160ms ease-out;
 }
-/* The wide-screen side sheet; phones use SwipeSheet, which enters by scrolling. */
-.ff .ff-sheet {
-  animation: ff-sheet-left 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+.ff .ff-step-push {
+  animation: ff-push 220ms var(--ff-ease-out);
+}
+.ff .ff-step-back {
+  animation: ff-pop-back 220ms var(--ff-ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
-  .ff .ff-fade-in,
-  .ff .ff-sheet {
-    animation: none;
+  .ff .ff-step-push,
+  .ff .ff-step-back {
+    animation: ff-fade-in 160ms ease-out;
   }
 }
 
@@ -678,7 +806,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   .ff .ff-dg .draw {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
-    animation: ff-dg-draw 700ms cubic-bezier(0.2, 0, 0, 1) var(--d, 0ms) forwards;
+    animation: ff-dg-draw 700ms var(--ff-ease-out) var(--d, 0ms) forwards;
   }
   .ff .ff-dg .in {
     opacity: 0;
@@ -688,13 +816,13 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     transform-box: fill-box;
     transform-origin: left center;
     transform: scaleX(0);
-    animation: ff-dg-grow 800ms cubic-bezier(0.2, 0, 0, 1) var(--d, 0ms) forwards;
+    animation: ff-dg-grow 800ms var(--ff-ease-out) var(--d, 0ms) forwards;
   }
   .ff .ff-dg .rise {
     transform-box: fill-box;
     transform-origin: center bottom;
     transform: scaleY(0);
-    animation: ff-dg-rise 700ms cubic-bezier(0.2, 0, 0, 1) var(--d, 0ms) forwards;
+    animation: ff-dg-rise 700ms var(--ff-ease-out) var(--d, 0ms) forwards;
   }
   .ff .ff-dg .flow {
     animation:
@@ -773,7 +901,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   box-shadow: inset 0 0 0 1px rgb(var(--ff-accent) / 0.45);
 }
 
-/* Staggered reveal for the playoff simulator's bracket and story feed; each item sets its own delay, 100ms apart. */
+/* Staggered reveal for the playoff simulator's bracket and story feed; each item sets its own delay, 50ms apart. */
 @keyframes ff-rise {
   from {
     opacity: 0;
@@ -787,7 +915,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
 }
 .ff .ff-rise {
-  animation: ff-rise 300ms ease-out both;
+  animation: ff-rise 300ms var(--ff-ease-out) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .ff .ff-rise {
@@ -795,15 +923,16 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
 }
 
-/* Press feedback for tappable cards and buttons: a small give, never on a disabled control, and none under reduced motion. */
+/* Press feedback for tappable cards and buttons: a small give, taken in 100ms the instant the press lands and
+   let go over 200ms. Never on a disabled control; none under reduced motion, where the ink wash above still shows. */
 .ff .ff-press {
-  -webkit-tap-highlight-color: transparent;
   transition-property: scale, background-color, border-color, color, opacity;
-  transition-duration: 150ms;
-  transition-timing-function: ease-out;
+  transition-duration: 200ms, 150ms, 150ms, 150ms, 150ms;
+  transition-timing-function: var(--ff-ease-out), ease, ease, ease, ease;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .ff .ff-press:not(:disabled):active {
-    scale: 0.96;
+  .ff :is(.ff-press, .ff-aqua):not(:disabled):active {
+    scale: 0.97;
+    transition-duration: 100ms;
   }
 }

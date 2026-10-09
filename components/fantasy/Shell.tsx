@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, type ReactNode } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import Head from 'next/head'
 import { MONKE } from './brand'
 import Tour, { TOUR } from './Tour'
@@ -89,10 +89,11 @@ const SidebarToggle = ({ open, onClick, className }: { open: boolean; onClick: (
 export const FantasyHead = ({ title }: { title: string }) => (
   <Head>
     <title>{title}</title>
-    <meta name="viewport" content="initial-scale=1.0, width=device-width, viewport-fit=cover" />
+    <meta name="viewport" content="initial-scale=1.0, width=device-width, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="robots" content="noindex" />
-    <meta name="theme-color" content="#060709" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#eceef1" media="(prefers-color-scheme: light)" />
+    {/* The default theme's top bar, until the chosen theme is known (useTheme then sets its own tag). */}
+    <meta key="theme-dark" name="theme-color" content="#111114" media="(prefers-color-scheme: dark)" />
+    <meta key="theme-light" name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </Head>
 )
@@ -345,19 +346,35 @@ const Shell = (props: ShellProps) => {
     onNavigate(s)
     window.scrollTo({ top: 0 })
   }
+  // Folding the sidebar moves the page at once (padding, so it lays out once, not every frame), then slides the
+  // page from where it was to where it now is, on the sidebar's own curve and timing, so the two travel together.
+  const page = useRef<HTMLDivElement>(null)
+  const wasOpen = useRef(sidebarOpen)
+  useLayoutEffect(() => {
+    if (wasOpen.current === sidebarOpen) return
+    wasOpen.current = sidebarOpen
+    const el = page.current
+    const main = el?.parentElement
+    if (phone || !el || !main || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const max = parseFloat(getComputedStyle(el).maxWidth) || Infinity
+    // A page narrower than the window sits centred, so it moves half the sidebar's width, not all of it.
+    const left = (pad: number) => pad + Math.max(0, (main.clientWidth - pad - max) / 2)
+    const dx = left(sidebarOpen ? 0 : 220) - left(sidebarOpen ? 220 : 0)
+    el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 170, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' })
+  }, [sidebarOpen, phone])
   const current = SECTIONS.find((s) => s.key === section)
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
 
   return (
     // Page headers read data-sidebar to leave room for the show-sidebar button when the sidebar is folded.
-    <div className="ff group/shell min-h-screen bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
+    <div className="ff group/shell min-h-dvh bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
       <FantasyHead title={title} />
 
       {/* Desktop sidebar. Folded, it slides off to the left and leaves the tab order. */}
       <aside
         inert={!sidebarOpen}
         className={cx(
-          'fixed inset-y-0 left-0 z-30 hidden w-[220px] border-r border-ff-line bg-ff-panel motion-safe:transition-transform motion-safe:duration-[170ms] motion-safe:ease-[cubic-bezier(0.32,0.72,0,1)] md:block',
+          'fixed inset-y-0 left-0 z-30 hidden w-[calc(220px+env(safe-area-inset-left))] border-r border-ff-line bg-ff-panel pl-[env(safe-area-inset-left)] motion-safe:transition-transform motion-safe:duration-[170ms] motion-safe:ease-ff-drawer md:block',
           !sidebarOpen && '-translate-x-full',
         )}
       >
@@ -365,14 +382,14 @@ const Shell = (props: ShellProps) => {
       </aside>
       {/* The toggle is fixed over the sidebar's header row and the page's, so it stays put as the sidebar goes. */}
       {onSidebar && !props.tour && (
-        <div className="fixed left-0 top-0 z-40 hidden h-11 items-center pl-2 md:flex">
+        <div className="fixed left-0 top-0 z-40 hidden h-11 items-center pl-[calc(8px+env(safe-area-inset-left))] md:flex">
           <SidebarToggle open={sidebarOpen} onClick={() => onSidebar(!sidebarOpen)} />
         </div>
       )}
       {props.tour && props.onTourEnd && <Tour step={tourStep} setStep={setTourStep} onClose={endTour} phone={phone} />}
 
       {/* Phone top bar */}
-      <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center border-b border-ff-line bg-ff-panel/95 backdrop-blur md:hidden">
+      <header className="fixed inset-x-0 top-0 z-30 flex h-[var(--ff-top)] items-center border-b border-ff-line bg-ff-panel/95 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
         <button onClick={() => setDrawer(true)} className="flex h-full items-center gap-2 border-r border-ff-line px-3 font-mono text-[11px] tracking-[0.1em] text-ff-text2" aria-label="Open menu">
           MENU
         </button>
@@ -407,12 +424,12 @@ const Shell = (props: ShellProps) => {
         </div>
       )}
 
-      <main className={cx('overflow-x-clip pt-12 md:pt-0 motion-safe:md:transition-[padding] motion-safe:md:duration-[170ms] motion-safe:md:ease-[cubic-bezier(0.32,0.72,0,1)]', sidebarOpen && 'md:pl-[220px]')}>
-        <div className={cx('mx-auto px-3 pb-24 md:px-5 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
+      <main className={cx('overflow-x-clip pt-[var(--ff-top)] md:pt-0', sidebarOpen && 'md:pl-[calc(220px+env(safe-area-inset-left))]')}>
+        <div ref={page} className={cx('ff-gutter mx-auto pb-24 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
       </main>
 
       {/* Phone tab bar: words, not pictures. */}
-      <nav aria-label="Sections" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-ff-line bg-ff-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav aria-label="Sections" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-ff-line bg-ff-panel/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur md:hidden">
         {TAB_BAR.map((key) => {
           const s = SECTIONS.find((x) => x.key === key)!
           const active = key === section

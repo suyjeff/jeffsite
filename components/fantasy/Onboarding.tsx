@@ -37,7 +37,7 @@ const Onboarding = ({ initial, onDone, onCancel }: { initial: string; onDone: (u
 
   const checking = state.kind === 'checking'
   return (
-    <div className="ff ff-canvas flex min-h-screen flex-col bg-ff-bg text-ff-text antialiased">
+    <div className="ff ff-canvas flex min-h-svh flex-col bg-ff-bg text-ff-text antialiased">
       <FantasyHead title="Fantasy · connect Sleeper" />
       <header className="flex h-11 items-center justify-between border-b border-ff-line bg-ff-panel px-3">
         <Brand />

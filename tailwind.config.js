@@ -25,6 +25,11 @@ module.exports = {
             spacing: {
                 '128': '32rem',
             },
+            // Fantasy app motion curves (also var(--ff-ease-*) in styles/fantasy.css).
+            transitionTimingFunction: {
+                'ff-out': 'cubic-bezier(0.23, 1, 0.32, 1)',
+                'ff-drawer': 'cubic-bezier(0.32, 0.72, 0, 1)',
+            },
             animation: {
                 'fade-in': 'fadeIn 0.5s ease-out forwards',
                 'reveal': 'reveal 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards',
