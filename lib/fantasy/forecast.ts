@@ -94,7 +94,22 @@ export const ELO = {
   k: 18,
   /** Share of last season's distance from the mean that is forgotten over the summer. */
   regress: 1 / 3,
+  /**
+   * How much of the projected-lineup gap between two teams Elo credits before the game, ELWAY-style. Half: a
+   * lineup edge is real, but projections miss, and results still have to move the rating.
+   */
+  lineupShare: 0.5,
 }
+
+/**
+ * Elo points per point of weekly scoring edge: the slope where both curves meet at even odds. A margin m wins with
+ * Φ(m / (√2·σ)); an Elo gap d with 1 / (1 + 10^(−d/400)). Matching their slopes at zero gives d ≈ 196 · m / σ.
+ */
+export const eloPerPoint = (sigma: number) => (0.3989 / (Math.SQRT2 * Math.max(1, sigma))) / (Math.LN10 / 1600)
+
+/** The Elo credit a team's projected lineup earns against an opponent's that week. */
+export const lineupEdge = (la: number | undefined, lb: number | undefined, sigma: number) =>
+  la != null && lb != null && la > 0 && lb > 0 ? ELO.lineupShare * eloPerPoint(sigma) * (la - lb) : 0
 
 export const eloWinProb = (diff: number) => 1 / (1 + Math.pow(10, -diff / 400))
 
@@ -112,7 +127,13 @@ export type EloRun = {
   final: Record<number, number>
 }
 
-export const runElo = (games: Game[], teams: number[], start: Record<number, number> = {}, marginSd = 35): EloRun => {
+/**
+ * Elo over a run of games. With `lineup` (each team's projected optimal lineup, by week), every game is judged
+ * against what the two lineups projected: a loss with your starters hurt costs less, a win with a thin lineup earns
+ * more. The rating then measures how a team does against its own lineup, and a team's lineup is added back on top
+ * when it is read (see `lineupEdge`).
+ */
+export const runElo = (games: Game[], teams: number[], start: Record<number, number> = {}, marginSd = 35, lineup?: Record<number, Record<number, number>>): EloRun => {
   const r: Record<number, number> = {}
   for (const t of teams) r[t] = start[t] ?? ELO.base
   const before: Record<number, Record<number, number>> = {}
@@ -123,9 +144,10 @@ export const runElo = (games: Game[], teams: number[], start: Record<number, num
     for (const g of games.filter((x) => x.week === week)) {
       const ra = r[g.a] ?? ELO.base
       const rb = r[g.b] ?? ELO.base
-      const exp = eloWinProb(ra - rb)
+      const edge = lineupEdge(lineup?.[week]?.[g.a], lineup?.[week]?.[g.b], marginSd / Math.SQRT2)
+      const exp = eloWinProb(ra - rb + edge)
       const actual = g.pa > g.pb ? 1 : g.pa < g.pb ? 0 : 0.5
-      const winnerDiff = actual === 1 ? ra - rb : actual === 0 ? rb - ra : 0
+      const winnerDiff = actual === 1 ? ra - rb + edge : actual === 0 ? rb - ra - edge : 0
       const shift = ELO.k * movMultiplier(g.pa - g.pb, winnerDiff, scale) * (actual - exp)
       r[g.a] = ra + shift
       r[g.b] = rb - shift
@@ -749,7 +771,15 @@ export const backtest = (
     const teamIds = [...new Set(s.weeks.flatMap((w) => (s.teamWeeks[w] ?? []).map((t) => t.rosterId)))]
     const games = gamesFrom(s.teamWeeks, s.weeks)
     const marginSd = ctx.sigma * Math.SQRT2
-    const elo = runElo(games, teamIds, s.eloStart ?? {}, marginSd)
+    // Each team's projected lineup in every week with projections, for the lineup-aware Elo.
+    const lineupByWeek: Record<number, Record<number, number>> = {}
+    for (const w of s.weeks) {
+      const pw = s.pastProjections?.[w]
+      if (!pw) continue
+      const ev = makeLineupEval(ctx.slots, ctx.players, pw, ctx.floor)
+      lineupByWeek[w] = Object.fromEntries((s.teamWeeks[w] ?? []).map((t) => [t.rosterId, ev.total(t.players)]))
+    }
+    const elo = runElo(games, teamIds, s.eloStart ?? {}, marginSd, lineupByWeek)
     for (let wi = 1; wi < s.weeks.length; wi++) {
       const week = s.weeks[wi]
       const prior = s.weeks.slice(0, wi)
@@ -811,7 +841,7 @@ export const backtest = (
         }
         const ea = elo.before[week]?.[g.a]
         const eb = elo.before[week]?.[g.b]
-        if (ea != null && eb != null) p.elo = eloWinProb(ea - eb)
+        if (ea != null && eb != null) p.elo = eloWinProb(ea - eb + lineupEdge(lineupByWeek[week]?.[g.a], lineupByWeek[week]?.[g.b], ctx.sigma))
         if (power[g.a] != null && power[g.b] != null) p.power = winProb(power[g.a], power[g.b], ctx.sigma)
         if (proj) {
           const twA = (s.teamWeeks[week] ?? []).find((t) => t.rosterId === g.a)

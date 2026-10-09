@@ -10,10 +10,11 @@ import { describeNote } from '../ContextNotes'
 import { useFantasy, useTradeRead } from '../FantasyContext'
 import { useSlate } from '../useSlate'
 import FreeAgentPick, { bestFreeAgent, FreeAgentName } from '../FreeAgentPick'
+import TeamName from '../TeamName'
 import { MoveList, useMoves } from '../Moves'
 import { ruledOutBy } from '../../../lib/fantasy/grades'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Pts, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -47,15 +48,7 @@ type Meta = { title: string; blurb: string; w: number; h: number; Body: (p: Widg
  */
 const Row = ({ children, onClick, active, className, label }: { children: React.ReactNode; onClick?: () => void; active?: boolean; className?: string; label?: string }) => (
   <div className={cx('relative flex h-8 items-center gap-2 border-b border-ff-line/60 px-3 text-[12.5px] last:border-0', onClick && 'hover:bg-ff-raised', active && 'bg-ff-raised', className)}>
-    {onClick && (
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label ?? 'Select'}
-        aria-pressed={active ?? false}
-        className="absolute inset-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
-      />
-    )}
+    {onClick && <RowCover label={label ?? 'Select'} onClick={onClick} pressed={active ?? false} />}
     {children}
   </div>
 )
@@ -69,16 +62,8 @@ const Bar = ({ value, max = 1, slot = 'accent', width = 48 }: { value: number; m
   </span>
 )
 
-const TeamTag = ({ id, me }: { id: number; me?: boolean }) => {
-  const { analysis } = useFantasy()
-  const t = analysis.teamById[id]
-  return (
-    <span className="flex min-w-0 max-w-full items-center gap-1.5">
-      <Avatar src={t?.avatar ?? null} name={t?.name ?? '?'} size={16} />
-      <span className={cx('truncate', me || id === analysis.myRosterId ? 'font-medium text-ff-accent' : 'text-ff-text')}>{t?.name ?? `#${id}`}</span>
-    </span>
-  )
-}
+/** A manager in a widget row: the app's one team name, small. `plain` inside another control. */
+const TeamTag = ({ id, plain }: { id: number; plain?: boolean }) => <TeamName id={id} size={16} plain={plain} />
 
 const NoForecast = () => <Empty title="No forecast">Needs Sleeper projections for the weeks ahead.</Empty>
 
@@ -137,7 +122,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
       {f.nextWeek.map((g) => (
         <Row key={`${g.a}-${g.b}`} active={sel.team === g.a || sel.team === g.b}>
           <button onClick={() => select({ team: g.a })} className="min-w-0 flex-1 text-left">
-            <TeamTag id={g.a} />
+            <TeamTag id={g.a} plain />
           </button>
           <span className="num w-10 shrink-0 text-right text-ff-text" title={!started && unset[g.a] ? unsetNote(unset[g.a]) : undefined}>
             {!started && unset[g.a] && <span className="text-ff-warn">*</span>}
@@ -145,16 +130,14 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
           </span>
           <span className="flex w-16 shrink-0 items-center gap-1">
             <span className="num w-7 text-right text-[10.5px] text-ff-text2">{Math.round(g.pA * 100)}</span>
-            <span className="flex h-[6px] flex-1 bg-ff-s2/60">
-              <span className="h-full bg-ff-s1" style={{ width: `${g.pA * 100}%` }} />
-            </span>
+            <WinBar p={g.pA} />
           </span>
           <span className="num w-10 shrink-0 text-ff-text" title={!started && unset[g.b] ? unsetNote(unset[g.b]) : undefined}>
             <Pts value={started ? pts(g.b) : g.muB} kind={kind} />
             {!started && unset[g.b] && <span className="text-ff-warn">*</span>}
           </span>
           <button onClick={() => select({ team: g.b })} className="flex min-w-0 flex-1 justify-end text-right">
-            <TeamTag id={g.b} />
+            <TeamTag id={g.b} plain />
           </button>
         </Row>
       ))}
@@ -267,12 +250,9 @@ const Matchup = ({ select }: WidgetProps) => {
           <span className="font-mono text-[10.5px] text-ff-muted">wk {game.week} · projected</span>
           <Pts value={muOpp} kind="proj" className="text-[26px] font-medium leading-none tracking-[-0.03em]" />
         </div>
-        <div className="mt-2.5 flex items-center gap-2" title={`Chance to win: you ${winPct}%, them ${100 - winPct}%`}>
+        <div className="mt-2.5 flex items-center gap-2" title={`Win odds: you ${winPct}%, them ${100 - winPct}%`}>
           <span className={cx('num w-9 text-[13px] font-medium', favored === mine ? 'text-ff-text' : 'text-ff-muted')}>{winPct}%</span>
-          <span className="flex h-1.5 flex-1 gap-px">
-            <span className="h-full bg-ff-s1" style={{ width: `${p * 100}%` }} />
-            <span className="h-full flex-1 bg-ff-s2" />
-          </span>
+          <WinBar p={p} />
           <span className={cx('num w-9 text-right text-[13px] font-medium', favored === opp ? 'text-ff-text' : 'text-ff-muted')}>{100 - winPct}%</span>
         </div>
         <div className="mt-1 text-center text-[11px] text-ff-text2">
@@ -419,7 +399,7 @@ const Power = ({ sel, select }: WidgetProps) => {
   const { models, analysis } = useFantasy()
   const [m, setM] = useState<PowerModel>(models.forecast ? 'forecast' : 'composite')
   const rows = analysis.teams.map((t) => {
-    const v = m === 'forecast' ? (models.forecast?.byId[t.rosterId]?.rating ?? 0) : m === 'elo' ? (models.elo.final[t.rosterId] ?? 1500) : analysis.powerById[t.rosterId].score
+    const v = m === 'forecast' ? (models.forecast?.byId[t.rosterId]?.rating ?? 0) : m === 'elo' ? (models.eloRated[t.rosterId] ?? 1500) : analysis.powerById[t.rosterId].score
     return { id: t.rosterId, v }
   })
   rows.sort((a, b) => b.v - a.v)
@@ -939,7 +919,7 @@ const Moves = () => {
 
 export const WIDGETS: Record<WidgetKind, Meta> = {
   moves: { title: 'Moves to make', blurb: 'Lineup fixes, cover for starters who may sit, bye holes and the best adds.', w: 4, h: 9, Body: Moves },
-  matchup: { title: 'My matchup', blurb: 'Next week, both lineups, and your chance to win.', w: 4, h: 12, Body: Matchup },
+  matchup: { title: 'My matchup', blurb: 'Next week, both lineups, and your win odds.', w: 4, h: 12, Body: Matchup },
   odds: { title: 'Playoff odds', blurb: 'Simulated seasons: wins, playoff, bye and title odds.', w: 5, h: 11, Body: Odds },
   scoreboard: { title: 'Scoreboard', blurb: "This week's games with expected scores and win odds.", w: 6, h: 7, Body: Scoreboard },
   trades: { title: 'Trade ideas', blurb: 'Best deal from each partner, and how likely each lands.', w: 7, h: 9, Body: TradeIdeas },

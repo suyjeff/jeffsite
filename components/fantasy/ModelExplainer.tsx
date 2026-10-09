@@ -40,11 +40,12 @@ const TEXT: Record<RankingModel, { title: string; body: React.ReactNode }> = {
     body: (
       <>
         <p>
-          Results only: who beat whom, and by how much. Teams start at <N>{ELO.base}</N>, or last season&apos;s rating pulled <N>{Math.round(ELO.regress * 100)}%</N> back. Each win
-          takes points from the loser, more for upsets and blowouts (538&apos;s NFL formula, <N>K={ELO.k}</N>).
+          Who beat whom and by how much, judged against the lineups each side had. Teams start at <N>{ELO.base}</N>, or last season&apos;s rating pulled{' '}
+          <N>{Math.round(ELO.regress * 100)}%</N> back. Each game is expected to go the way the ratings and the two projected lineups point, and a win takes points from the
+          loser, more for upsets and blowouts (538&apos;s NFL formula, <N>K={ELO.k}</N>). Losing with your starters out costs less than losing at full strength.
         </p>
         <p>
-          A <N>100</N>-point gap wins about <N>64%</N> of the time. It never sees rosters, so it lags trades and injuries: a record, not a projection.
+          The rating shown adds <N>{Math.round(ELO.lineupShare * 100)}%</N> of each team&apos;s projected-lineup edge over an average lineup, converted at the odds that points edge would give, after 538&apos;s ELWAY. A <N>100</N>-point gap wins about <N>64%</N> of the time.
         </p>
       </>
     ),

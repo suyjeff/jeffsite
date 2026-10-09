@@ -242,7 +242,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
     { id: 'war', col: 2, label: 'WAR (to date)', stat: `σ ${fmt(analysis.sigma)}`, tab: 'value', note: 'Points above replacement converted to wins.' },
     { id: 'trades', col: 3, label: 'Trade search', stat: `${analysis.teams.length - 1} partners`, tab: 'engine', note: 'Beam search over packages, scored week by week.' },
     { id: 'rating', col: 3, label: 'Forecast rating', stat: f ? `eff ${pct(f.leagueEff)} · form ×${FORM_WEIGHT}` : 'off', tab: 'forecast', note: 'Projected lineup × efficiency: points per projected point (ELWAY’s lineup weights).' },
-    { id: 'elo', col: 3, label: 'Elo', stat: `K ${ELO.k} · prior ${models.lastSeasonGames ? 'carried' : 'flat'}`, tab: 'forecast', note: 'Results only, margin-aware, regressed between seasons.' },
+    { id: 'elo', col: 3, label: 'Elo', stat: `K ${ELO.k} · prior ${models.lastSeasonGames ? 'carried' : 'flat'}`, tab: 'forecast', note: 'Results judged against both lineups, margin-aware, regressed between seasons.' },
     { id: 'composite', col: 3, label: 'Composite', stat: 'win % vs avg', tab: 'power', note: 'All-play, scoring, form, roster, efficiency; results regressed by games played.' },
     { id: 'sim', col: 3, label: 'Season sim', stat: f ? `${f.sims.toLocaleString()} × σ ${fmt(f.sigma)}` : 'off', tab: 'forecast', note: 'Week-by-week seasons with a persistent team level, then the bracket.' },
     { id: 'perceived', col: 3, label: 'Perceived value', stat: models.perceived ? 'ECR → pts/wk' : 'off', tab: 'behavior', note: 'Consensus rank priced on the model’s own value curve.' },
@@ -470,7 +470,7 @@ export const ForecastTab = () => {
           <li>
             Each simulated season draws one level per team (<N>τ</N>) on top of weekly noise (<N>σ</N>), so a misjudged team stays misjudged all year.
           </li>
-          <li>Elo is the results-only benchmark. ELWAY adjusts NFL Elo for who plays; in fantasy the lineup is nearly everything, so it leads here.</li>
+          <li>Elo judges each result against the two projected lineups and credits half of a lineup edge when read, as ELWAY adjusts NFL Elo for who plays. In fantasy the lineup is nearly everything, so the lineup model still leads.</li>
         </ul>
       </Panel>
     </div>

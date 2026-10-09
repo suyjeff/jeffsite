@@ -6,11 +6,11 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
-import PlayoffLab from '../PlayoffLab'
-import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
+import TeamName from '../TeamName'
+import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, probShade, simOdds, type Column } from '../ui'
 
-type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
-const SUBS: Sub[] = ['rankings', 'odds', 'standings', 'schedule']
+type Sub = 'rankings' | 'standings' | 'schedule'
+const SUBS: Sub[] = ['rankings', 'standings', 'schedule']
 type RankModel = RankingModel
 
 export const COMPONENTS: { key: keyof PowerWeights; label: string; slot: string }[] = [
@@ -21,15 +21,12 @@ export const COMPONENTS: { key: keyof PowerWeights; label: string; slot: string 
   { key: 'efficiency', label: 'Efficiency', slot: 's5' },
 ]
 
+/** A team in a table: the app's one team name, with its manager underneath. */
 const TeamCell = ({ analysis, rosterId, sub }: { analysis: Analysis; rosterId: number; sub?: React.ReactNode }) => {
   const t = analysis.teamById[rosterId]
   return (
-    <span className="flex min-w-0 items-center gap-2">
-      <Avatar src={t.avatar} name={t.name} size={22} />
-      <span className="min-w-0 leading-tight">
-        <span className={cx('block max-w-[170px] truncate text-[13px]', rosterId === analysis.myRosterId ? 'font-medium text-ff-accent' : 'text-ff-text')}>{t.name}</span>
-        <span className="block max-w-[170px] truncate text-[11px] text-ff-muted">{sub ?? t.owner}</span>
-      </span>
+    <span className="flex max-w-[200px]">
+      <TeamName id={rosterId} size={22} sub={sub ?? (t.owner && t.owner !== t.name ? t.owner : undefined)} className="text-[13px]" />
     </span>
   )
 }
@@ -79,7 +76,7 @@ const PowerView = ({
   const weightSum = COMPONENTS.reduce((a, c) => a + Math.max(0, weights[c.key]), 0) || 1
   const me = myRosterId != null ? { season: seasonById[myRosterId], power: powerById[myRosterId] } : null
   const forecastOrder = useMemo(() => (forecast ? [...forecast.ratings].sort((a, b) => b.rating - a.rating).map((r) => r.rosterId) : []), [forecast])
-  const eloOrder = useMemo(() => [...teams].sort((a, b) => (models.elo.final[b.rosterId] ?? 0) - (models.elo.final[a.rosterId] ?? 0)).map((t) => t.rosterId), [teams, models.elo])
+  const eloOrder = useMemo(() => [...teams].sort((a, b) => (models.eloRated[b.rosterId] ?? 0) - (models.eloRated[a.rosterId] ?? 0)).map((t) => t.rosterId), [teams, models.eloRated])
   const rankIn = (order: number[], id: number) => order.indexOf(id) + 1
   // Rating bars grow from the league average, so a gap shows at its real size rather than stretched end to end.
   const ratingAvg = forecast ? forecast.ratings.reduce((a, r) => a + r.rating, 0) / (forecast.ratings.length || 1) : 0
@@ -122,13 +119,13 @@ const PowerView = ({
     { key: 'xw', label: 'Proj W', align: 'right', hideBelow: 'sm', title: 'Mean simulated wins at season end', sort: (r) => forecast!.sim[r.rosterId].wins, render: (r) => fmt(forecast!.sim[r.rosterId].wins) },
     { key: 'po', label: 'Playoffs', align: 'right', sort: (r) => forecast!.sim[r.rosterId].playoffs, render: (r) => <span className={forecast!.sim[r.rosterId].playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted'}>{simOdds(forecast!.sim[r.rosterId], 'playoffs')}</span> },
     { key: 'title', label: 'Title', align: 'right', sort: (r) => forecast!.sim[r.rosterId].title, render: (r) => simOdds(forecast!.sim[r.rosterId], 'title', forecast!.sim[r.rosterId].title < 0.1 ? 1 : 0) },
-    { key: 'elo', label: 'Elo', align: 'right', hideBelow: 'xl', sort: (r) => models.elo.final[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-muted">{Math.round(models.elo.final[r.rosterId] ?? 1500)}</span> },
+    { key: 'elo', label: 'Elo', align: 'right', hideBelow: 'xl', sort: (r) => models.eloRated[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-muted">{Math.round(models.eloRated[r.rosterId] ?? 1500)}</span> },
   ]
 
   const eloColumns: Column<{ rosterId: number }>[] = [
     { key: 'rank', label: '#', sort: (r) => -rankIn(eloOrder, r.rosterId), render: (r) => <span className="num text-ff-muted">{rankIn(eloOrder, r.rosterId)}</span> },
     { key: 'team', label: 'Team', sticky: true, render: (r) => <TeamCell analysis={analysis} rosterId={r.rosterId} /> },
-    { key: 'elo', label: 'Elo', align: 'right', sort: (r) => models.elo.final[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-text">{Math.round(models.elo.final[r.rosterId] ?? 1500)}</span> },
+    { key: 'elo', label: 'Elo', align: 'right', sort: (r) => models.eloRated[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-text">{Math.round(models.eloRated[r.rosterId] ?? 1500)}</span> },
     {
       key: 'prior',
       label: 'Preseason',
@@ -137,7 +134,15 @@ const PowerView = ({
       sort: (r) => models.eloPrior[r.rosterId] ?? 1500,
       render: (r) => <span className="text-ff-muted">{Math.round(models.eloPrior[r.rosterId] ?? 1500)}</span>,
     },
-    { key: 'delta', label: 'Season Δ', align: 'right', sort: (r) => (models.elo.final[r.rosterId] ?? 1500) - (models.eloPrior[r.rosterId] ?? 1500), render: (r) => <Num value={(models.elo.final[r.rosterId] ?? 1500) - (models.eloPrior[r.rosterId] ?? 1500)} signed digits={0} /> },
+    { key: 'delta', label: 'Season Δ', align: 'right', title: 'Earned from results this season, judged against both lineups', sort: (r) => (models.elo.final[r.rosterId] ?? 1500) - (models.eloPrior[r.rosterId] ?? 1500), render: (r) => <Num value={(models.elo.final[r.rosterId] ?? 1500) - (models.eloPrior[r.rosterId] ?? 1500)} signed digits={0} /> },
+    {
+      key: 'lineup',
+      label: 'Lineup',
+      align: 'right',
+      title: 'Credit for the projected lineup ahead against an average one. Preseason + season Δ + lineup = Elo',
+      sort: (r) => (models.eloRated[r.rosterId] ?? 1500) - (models.elo.final[r.rosterId] ?? 1500),
+      render: (r) => <Num value={(models.eloRated[r.rosterId] ?? 1500) - (models.elo.final[r.rosterId] ?? 1500)} signed digits={0} />,
+    },
     { key: 'record', label: 'W-L', align: 'right', render: (r) => `${seasonById[r.rosterId].wins}-${seasonById[r.rosterId].losses}` },
     { key: 'pf', label: 'PF/G', align: 'right', render: (r) => fmt(seasonById[r.rosterId].ppg) },
   ]
@@ -228,7 +233,6 @@ const PowerView = ({
             stacked={stacked}
             items={[
               { key: 'rankings', label: 'Rankings' },
-              ...(forecast ? [{ key: 'odds' as const, label: 'Playoffs' }] : []),
               { key: 'standings', label: 'Standings' },
               { key: 'schedule', label: 'Remaining schedule' },
             ]}
@@ -238,7 +242,7 @@ const PowerView = ({
       <div className="mt-4 space-y-3">
         {me && (
           <StatGrid>
-            <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.elo.final[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />
+            <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.eloRated[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />
             {forecast && (
               <Stat
                 label="Playoff odds"
@@ -350,13 +354,6 @@ const PowerView = ({
           </div>
         </TabSection>
 
-        {forecast && (
-          <TabSection id="odds" label="Playoffs" active={tab === 'odds'} stacked={stacked} bare>
-            <PlayoffLab />
-            <OddsGrid onTeam={onTeam} />
-          </TabSection>
-        )}
-
         <TabSection id="standings" label="Standings" active={tab === 'standings'} stacked={stacked} bare>
           <Panel title="Standings" pad={false} actions={playoffTeams ? <span>playoff line after #{playoffTeams}</span> : null}>
             <Table
@@ -402,7 +399,7 @@ const PowerView = ({
 }
 
 /** Seed probabilities from the season simulation, one row per team, plus the odds that matter. */
-const OddsGrid = ({ onTeam }: { onTeam: (id: number) => void }) => {
+export const OddsGrid = ({ onTeam }: { onTeam?: (id: number) => void }) => {
   const { models, analysis, data } = useFantasy()
   const f = models.forecast!
   const n = analysis.teams.length
@@ -433,9 +430,11 @@ const OddsGrid = ({ onTeam }: { onTeam: (id: number) => void }) => {
             {rows.map(({ id }) => {
               const s = f.sim[id]
               return (
-                <tr key={id} onClick={() => onTeam(id)} className="cursor-pointer hover:bg-ff-raised">
+                <tr key={id} onClick={onTeam ? () => onTeam(id) : undefined} className="hover:bg-ff-raised">
                   <td className="sticky left-0 z-[1] h-8 border-b border-ff-line/60 bg-ff-panel px-3">
-                    <span className={cx('block max-w-[160px] truncate', id === analysis.myRosterId ? 'font-medium text-ff-accent' : 'text-ff-text')}>{analysis.teamById[id].name}</span>
+                    <span className="flex max-w-[180px]">
+                      <TeamName id={id} avatar={false} />
+                    </span>
                   </td>
                   {Array.from({ length: n }, (_, i) => {
                     const p = s.seeds[i + 1] ?? 0
@@ -444,7 +443,7 @@ const OddsGrid = ({ onTeam }: { onTeam: (id: number) => void }) => {
                         key={i}
                         title={`${analysis.teamById[id].name}: ${pct(p, 1)} to finish ${i + 1}`}
                         className={cx('num h-8 border-b border-ff-line/60 text-center text-[10.5px]', p >= 0.25 ? 'text-ff-panel' : p >= 0.02 ? 'text-ff-text2' : 'text-ff-muted/50', i + 1 === cut && 'border-r border-r-ff-line2')}
-                        style={{ background: p > 0.005 ? `rgb(var(--ff-accent) / ${Math.min(0.95, 0.08 + p * 1.6).toFixed(2)})` : undefined }}
+                        style={{ background: probShade(p) }}
                       >
                         {p >= 0.005 ? Math.round(p * 100) : '·'}
                       </td>

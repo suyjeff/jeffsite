@@ -21,17 +21,10 @@ export const TOUR: TourStep[] = [
     why: 'Your week at a glance, arranged your way.',
   },
   {
-    key: 'matchup',
-    title: 'Matchup',
-    what: "This week's head-to-head, slot by slot.",
-    can: ['Follow live scores against projections', 'See which slots win or lose it for you', 'Catch starters who might sit'],
-    why: 'Know where the week will be decided, before kickoff and during it.',
-  },
-  {
     key: 'slate',
     title: 'Gameday',
-    what: "The week's NFL games, read for your league.",
-    can: ['Find the games that swing your win odds most', 'Track players as games finish', "See what a win does to every manager's playoff odds"],
+    what: 'Your matchup and the week’s NFL games, read for your league.',
+    can: ['Follow your matchup slot by slot, live', 'Find the games that swing your win odds most', 'Open any NFL game for the league starters in it'],
     why: 'Know what to watch on Sunday, and why it matters to you.',
   },
   {
@@ -56,11 +49,25 @@ export const TOUR: TourStep[] = [
     why: 'The cheapest upgrades come off the wire.',
   },
   {
+    key: 'matchups',
+    title: 'Matchups',
+    what: 'Every head-to-head this week, yours on top.',
+    can: ['See every score and win odds at once', 'Spot the close ones and who decides them', 'Open a matchup for the slot-by-slot detail'],
+    why: 'The whole league’s week, and how it moves the standings.',
+  },
+  {
     key: 'power',
     title: 'Power',
-    what: 'Rankings, standings and the playoff race.',
-    can: ['Rank teams three ways', 'Pick results and watch everyone’s playoff odds move', 'Play out a season, bracket and all'],
+    what: 'Rankings and standings.',
+    can: ['Rank teams three ways', 'Check who has the easier schedule'],
     why: 'Where you really stand, not just your record.',
+  },
+  {
+    key: 'playoffs',
+    title: 'Playoffs',
+    what: 'The playoff race, simulated.',
+    can: ['See everyone’s playoff and title odds', 'Pick results and watch the odds move', 'Play out a season, bracket and all'],
+    why: 'See which games matter before they are played.',
   },
   {
     key: 'teams',

@@ -27,7 +27,7 @@ export type TradeTeam = { rosterId: number; players: string[] }
 const round2 = (x: number) => Math.round(x * 100) / 100
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
 /** Weighted mean; falls back to the plain mean when no weights are given. */
-const wmean = (xs: number[], ws?: number[]) => {
+export const wmean = (xs: number[], ws?: number[]) => {
   if (!ws) return mean(xs)
   let num = 0
   let den = 0

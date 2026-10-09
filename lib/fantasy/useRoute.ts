@@ -7,16 +7,19 @@ import { useCallback, useEffect, useState } from 'react'
  */
 export type Route<S extends string> = { section: S; sub: string | null }
 
-const parse = <S extends string>(hash: string, sections: readonly S[], fallback: S): Route<S> => {
-  const [section, sub] = hash.replace(/^#\/?/, '').split('/')
+const parse = <S extends string>(hash: string, sections: readonly S[], fallback: S, aliases: Record<string, string> = {}): Route<S> => {
+  const raw = hash.replace(/^#\/?/, '')
+  // An old link to a section that moved lands where it went.
+  const head = raw.split('/')[0]
+  const [section, sub] = (Object.hasOwn(aliases, head) ? aliases[head] : raw).split('/')
   return sections.includes(section as S) ? { section: section as S, sub: sub || null } : { section: fallback, sub: null }
 }
 
-export const useRoute = <S extends string>(sections: readonly S[], fallback: S) => {
+export const useRoute = <S extends string>(sections: readonly S[], fallback: S, aliases?: Record<string, string>) => {
   const [route, setRoute] = useState<Route<S>>({ section: fallback, sub: null })
 
   useEffect(() => {
-    const read = () => setRoute(parse(window.location.hash, sections, fallback))
+    const read = () => setRoute(parse(window.location.hash, sections, fallback, aliases))
     read()
     window.addEventListener('hashchange', read)
     return () => window.removeEventListener('hashchange', read)

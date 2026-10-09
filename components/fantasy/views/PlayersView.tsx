@@ -6,7 +6,7 @@ import type { PlayerContext } from '../../../lib/fantasy/context'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Badge, Button, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, type Column } from '../ui'
+import { Badge, Button, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, PlayerAvatar, type Column } from '../ui'
 
 const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
 type Pos = (typeof POSITIONS)[number]
@@ -286,21 +286,37 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
           />
         </div>
         {adjusted.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border border-ff-accent/30 bg-ff-accent/[0.05] px-3 py-2 text-[12px]">
-            <span className="ff-label text-ff-accent">your reads</span>
-            {adjusted.map(([id, a]) => (
-              <span key={id} className="inline-flex items-center gap-1.5">
-                <button onClick={() => openPlayer(id)} className="text-ff-text hover:underline">
-                  {players[id]?.name ?? id}
-                </button>
-                <span className="num text-ff-accent">{signedPct(a.pct)}</span>
-                <span className="font-mono text-[10.5px] text-ff-muted">{a.scope === 'week' ? `wk ${a.week}` : 'season'}</span>
-                <button onClick={() => adjust.set(id, null)} aria-label={`Clear your read on ${players[id]?.name ?? id}`} className="px-1 font-mono text-[11px] text-ff-muted hover:text-ff-neg">
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
+          <section aria-label="Your reads" className="flex flex-col gap-2 border border-ff-line bg-ff-panel px-3 py-2.5 sm:flex-row sm:items-start">
+            <div className="shrink-0 sm:w-[112px] sm:pt-1.5">
+              <div className="ff-label text-ff-text2">Your reads</div>
+              <div className="text-[11px] text-ff-muted">{adjusted.length} on file</div>
+            </div>
+            <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+              {adjusted.map(([id, a]) => (
+                <li key={id} className="flex h-9 items-center gap-2 border border-ff-line bg-ff-bg pl-1.5 pr-0.5">
+                  <button type="button" onClick={() => openPlayer(id)} className="flex min-w-0 items-center gap-1.5 hover:[&>span]:underline">
+                    <PlayerAvatar id={id} player={players[id]} size={22} />
+                    <span className="max-w-[140px] truncate text-[12.5px] text-ff-text underline-offset-2">{players[id]?.name ?? id}</span>
+                  </button>
+                  <span
+                    className={cx('num px-1.5 py-0.5 text-[12.5px] font-semibold leading-none', a.pct >= 0 ? 'bg-ff-pos/12 text-ff-pos' : 'bg-ff-neg/10 text-ff-neg')}
+                    title={`Your read: ${signedPct(a.pct)} on his projection`}
+                  >
+                    {signedPct(a.pct)}
+                  </span>
+                  <span className="font-mono text-[10px] text-ff-muted">{a.scope === 'week' ? `wk ${a.week}` : 'season'}</span>
+                  <button
+                    type="button"
+                    onClick={() => adjust.set(id, null)}
+                    aria-label={`Clear your read on ${players[id]?.name ?? id}`}
+                    className="flex h-8 w-7 items-center justify-center font-mono text-[12px] text-ff-muted hover:bg-ff-raised hover:text-ff-neg"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
         <Panel pad={false}>
           <Table

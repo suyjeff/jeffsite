@@ -7,12 +7,14 @@ import PlayerName from '../PlayerName'
 import FreeAgentPick from '../FreeAgentPick'
 import ScoutReport from '../ScoutReport'
 import MovesPanel from '../Moves'
+import TeamName from '../TeamName'
 import type { TeamInfo } from '../../../lib/fantasy/analysis'
 import {
   Avatar,
   Badge,
   DeltaChip,
   Dropdown,
+  Meter,
   Num,
   PageHeader,
   Panel,
@@ -62,15 +64,9 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
       label: 'Team',
       sticky: true,
       render: (t) => (
-        <span className="flex min-w-0 items-center gap-2">
-          <Avatar src={t.avatar} name={t.name} size={24} />
-          <span className="min-w-0 leading-tight">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className={cx('truncate text-[13px]', t.rosterId === myRosterId ? 'font-medium text-ff-text' : 'text-ff-text')}>{t.name}</span>
-              {t.rosterId === myRosterId && <Badge tone="accent">you</Badge>}
-            </span>
-            {t.owner && t.owner !== t.name && <span className="block truncate font-mono text-[10.5px] text-ff-muted">@{t.owner}</span>}
-          </span>
+        <span className="flex max-w-[240px] items-center gap-1.5">
+          <TeamName id={t.rosterId} size={24} sub={t.owner && t.owner !== t.name ? `@${t.owner}` : undefined} className="text-[13px]" />
+          {t.rosterId === myRosterId && <Badge tone="accent">you</Badge>}
         </span>
       ),
     },
@@ -88,7 +84,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
       label: 'Last 5',
       hideBelow: 'md',
       render: (t) => (
-        <span className="flex gap-0.5" aria-label={(seasonById[t.rosterId]?.weeks ?? []).slice(-5).map((w) => w.result ?? '–').join(' ')}>
+        <span className="flex gap-0.5" role="img" aria-label={(seasonById[t.rosterId]?.weeks ?? []).slice(-5).map((w) => w.result ?? '–').join(' ')}>
           {(seasonById[t.rosterId]?.weeks ?? []).slice(-5).map((w) => (
             <span
               key={w.week}
@@ -121,9 +117,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
             sort: (t: TeamInfo) => sim[t.rosterId]?.playoffs ?? 0,
             render: (t: TeamInfo) => (
               <span className="inline-flex items-center gap-2">
-                <span className="hidden h-1 w-10 bg-ff-line lg:inline-block" aria-hidden>
-                  <span className="block h-full bg-ff-accent" style={{ width: `${(sim[t.rosterId]?.playoffs ?? 0) * 100}%` }} />
-                </span>
+                <Meter value={sim[t.rosterId]?.playoffs ?? 0} max={1} width={40} thin className="hidden lg:inline-block" />
                 <span className="w-9 text-right text-ff-text">{simOdds(sim[t.rosterId], 'playoffs')}</span>
               </span>
             ),
@@ -149,7 +143,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
       key: 'next',
       label: next[0] ? `Wk ${next[0].week}` : 'Next',
       hideBelow: 'lg',
-      title: 'Next opponent and chance to win',
+      title: 'Next opponent, and the win odds against them',
       render: (t) => {
         const g = game(t.rosterId)
         if (!g) return <span className="text-ff-muted">–</span>
@@ -158,7 +152,9 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
         return (
           <span className="flex min-w-0 items-center gap-1.5 text-[12px]">
             <span className="text-ff-muted">vs</span>
-            <span className="max-w-[110px] truncate text-ff-text2">{analysis.teamById[opp]?.name}</span>
+            <span className="flex max-w-[130px]">
+              <TeamName id={opp} avatar={false} />
+            </span>
             <span className={cx('num', p >= 0.6 ? 'text-ff-pos' : p <= 0.4 ? 'text-ff-neg' : 'text-ff-text2')}>{pct(p)}</span>
           </span>
         )
@@ -344,7 +340,7 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
                   label: '',
                   render: (w) => <Badge tone={w.result === 'W' ? 'pos' : w.result === 'L' ? 'neg' : 'neutral'}>{w.result ?? '–'}</Badge>,
                 },
-                { key: 'opp', label: 'Opponent', sticky: true, render: (w) => (w.opponentId != null ? <span className="truncate text-ff-text">{teamById[w.opponentId]?.name}</span> : <span className="text-ff-muted">bye</span>) },
+                { key: 'opp', label: 'Opponent', sticky: true, render: (w) => (w.opponentId != null ? <TeamName id={w.opponentId} size={18} /> : <span className="text-ff-muted">bye</span>) },
                 { key: 'score', label: 'Score', align: 'right', render: (w) => `${fmt(w.points)} – ${fmt(w.opponentPoints)}` },
                 {
                   key: 'proj',

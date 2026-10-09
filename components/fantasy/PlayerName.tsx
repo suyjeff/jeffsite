@@ -70,10 +70,11 @@ const PlayerName = ({
           {player.injury && <span className={cx('shrink-0 font-mono text-[9.5px] font-semibold uppercase', tone)}>{player.injury.slice(0, 3)}</span>}
           {adj && (
             <span
-              className="shrink-0 font-mono text-[9.5px] font-semibold text-ff-accent"
+              className={cx('num shrink-0 px-1 text-[10.5px] font-semibold leading-[15px]', adj.pct >= 0 ? 'bg-ff-pos/12 text-ff-pos' : 'bg-ff-neg/10 text-ff-neg')}
               title={`Your read: ${signedPct(adj.pct)} on his projection, ${adj.scope === 'week' ? `week ${adj.week} only` : 'every week ahead'}`}
             >
               {signedPct(adj.pct)}
+              <span className="sr-only"> your read</span>
             </span>
           )}
         </span>

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, type ReactNode } from 'react'
+import React, { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { cx, usePhone } from './ui'
 
@@ -11,11 +11,14 @@ const Sheet = ({
   label,
   onClose,
   width = 460,
+  contentKey,
   children,
 }: {
   label: string
   onClose: () => void
   width?: number
+  /** What the sheet is showing. A new key swaps the content in place and takes focus to it. */
+  contentKey?: string
   children: (api: { close: () => void; phone: boolean }) => ReactNode
 }) => {
   const panel = useRef<HTMLDivElement>(null)
@@ -75,6 +78,17 @@ const Sheet = ({
     }
   }, [])
 
+  // One sheet at a time: opening another from inside swaps the content in the same panel.
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
+    panel.current?.focus({ preventScroll: true })
+    panel.current?.querySelector('.ff-scroll')?.scrollTo({ top: 0 })
+  }, [contentKey])
+
   const dialog = { role: 'dialog', 'aria-modal': true, 'aria-label': label, tabIndex: -1 } as const
   const body = children({ close: () => close.current(), phone })
 
@@ -111,12 +125,15 @@ const Sheet = ({
 }
 
 /** The scrolling body under a sheet's header. On phones it chains its scroll to the sheet, so a swipe down from the top dismisses. */
-export const SheetBody = ({ phone, children }: { phone: boolean; children: ReactNode }) => (
+export const SheetBody = ({ children }: { children: ReactNode }) => {
+  const { phone } = useSheet()
+  return (
   <div className={cx('ff-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]', phone ? 'overscroll-auto' : 'overscroll-contain')}>
     {children}
     <div className="h-4" />
   </div>
-)
+  )
+}
 
 /** A titled block inside a sheet. */
 export const SheetSection = ({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) => (
@@ -129,11 +146,45 @@ export const SheetSection = ({ title, children, aside }: { title: string; childr
   </section>
 )
 
-/** The close control at a sheet header's trailing edge. */
-export const SheetClose = ({ phone, onClick }: { phone: boolean; onClick: () => void }) => (
-  <button onClick={onClick} className="-mr-1 -mt-1 h-8 shrink-0 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close">
-    {phone ? 'Close' : 'ESC'}
-  </button>
+/** What a sheet's content needs from the host: close it, step back to what it showed before, and whether it is a phone. */
+export type SheetNav = { close: () => void; back?: () => void; backLabel?: string; phone: boolean }
+export const SheetNavContext = createContext<SheetNav>({ close: () => {}, phone: false })
+export const useSheet = () => useContext(SheetNavContext)
+
+/** Back (when there is somewhere to go back to) and close, at a sheet header's trailing edge. */
+export const SheetClose = () => {
+  const { close, back, backLabel, phone } = useSheet()
+  return (
+    <span className="-mr-1 -mt-1 flex shrink-0 items-center">
+      {back && (
+        <button onClick={back} className="h-8 max-w-[120px] truncate px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" title={backLabel ? `Back to ${backLabel}` : 'Back'}>
+          ← {backLabel ?? 'Back'}
+        </button>
+      )}
+      <button onClick={close} className="h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close">
+        {phone ? 'Close' : 'ESC'}
+      </button>
+    </span>
+  )
+}
+
+/**
+ * The top of every sheet: a leading picture (portrait, logo, avatars), a small mono line of facts, the title, a
+ * line under it, then back and close at the trailing edge.
+ */
+export const SheetHeader = ({ lead, eyebrow, title, sub }: { lead?: ReactNode; eyebrow?: ReactNode; title: ReactNode; sub?: ReactNode }) => (
+  <header className="flex items-start gap-3 px-4 pb-3 pt-4">
+    {lead && <span className="shrink-0">{lead}</span>}
+    <div className="min-w-0 flex-1">
+      {eyebrow && <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-ff-muted">{eyebrow}</div>}
+      <h2 className="mt-0.5 truncate text-[18px] font-medium leading-tight tracking-[-0.01em] text-ff-text">{title}</h2>
+      {sub && <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-ff-muted">{sub}</div>}
+    </div>
+    <SheetClose />
+  </header>
 )
+
+/** A sheet's content, swapped in place: a quick fade so the change reads as a new page, not a flicker. */
+export const SheetContent = ({ children }: { children: ReactNode }) => <div className="ff-fade-in flex min-h-0 flex-1 flex-col">{children}</div>
 
 export default Sheet

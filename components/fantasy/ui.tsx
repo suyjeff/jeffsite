@@ -810,15 +810,6 @@ export const GridFill = ({ n, wide }: { n: number; wide: 'xl' | '2xl' }) => (
   </>
 )
 
-/** "Build": three blocks stacked, for the trade builder. Square, like the rest of the system. */
-export const BuildGlyph = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden className={cx('shrink-0', className)}>
-    <rect x="0.75" y="6.75" width="4.5" height="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    <rect x="6.75" y="6.75" width="4.5" height="4.5" fill="currentColor" />
-    <rect x="3.75" y="0.75" width="4.5" height="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-  </svg>
-)
-
 /**
  * A floating action button for phones, above the tab bar: the one action a page exists for, kept in
  * reach without taking a row of the page. `hidden` fades it out (when its target is already on screen).
@@ -1111,13 +1102,58 @@ export const PlayerAvatar = ({ id, player, size = 28, className }: { id: string;
 // ---------- Small charts ----------
 
 /** Horizontal meter. The track is a lighter step of the fill's own hue. */
-export const Meter = ({ value, max, width = 64, tone = 'accent' }: { value: number; max: number; width?: number; tone?: 'accent' | 'neg' | 'pos' }) => (
-  <span className={cx('inline-block h-1.5 shrink-0  align-middle', tone === 'accent' ? 'bg-ff-accent/15' : tone === 'neg' ? 'bg-ff-neg/15' : 'bg-ff-pos/15')} style={{ width }}>
+export const Meter = ({
+  value,
+  max,
+  width = 64,
+  tone = 'accent',
+  thin,
+  className,
+}: {
+  value: number
+  max: number
+  width?: number
+  tone?: 'accent' | 'neg' | 'pos'
+  /** 4px instead of 6px, for a bar inside a table cell. */
+  thin?: boolean
+  className?: string
+}) => (
+  <span
+    aria-hidden
+    className={cx('inline-block shrink-0 overflow-hidden align-middle', thin ? 'h-1' : 'h-1.5', tone === 'accent' ? 'bg-ff-accent/15' : tone === 'neg' ? 'bg-ff-neg/15' : 'bg-ff-pos/15', className)}
+    style={{ width }}
+  >
+    {/* Scaled, not resized, so a change animates without reflowing the row. */}
     <span
-      className={cx('block h-1.5 ', tone === 'accent' ? 'bg-ff-accent' : tone === 'neg' ? 'bg-ff-neg' : 'bg-ff-pos')}
-      style={{ width: `${Math.max(0, Math.min(1, max ? value / max : 0)) * 100}%` }}
+      className={cx('block h-full origin-left transition-transform duration-300 ease-out', tone === 'accent' ? 'bg-ff-accent' : tone === 'neg' ? 'bg-ff-neg' : 'bg-ff-pos')}
+      style={{ transform: `scaleX(${Math.max(0, Math.min(1, max ? value / max : 0))})` }}
     />
   </span>
+)
+
+/** Two sides' chances as one bar: the first side's share in the first series colour, the rest in the second. */
+export const WinBar = ({ p, height = 'h-1.5', className }: { p: number; height?: string; className?: string }) => (
+  <span className={cx('flex flex-1 gap-px', height, className)} role="img" aria-label={`Win odds ${pct(p)} to ${pct(1 - p)}`}>
+    <span className="h-full bg-ff-s1" style={{ flexBasis: `${p * 100}%` }} />
+    <span className="h-full flex-1 bg-ff-s2" />
+  </span>
+)
+
+/** The shade of a probability cell, as in the seed tables: faint at a few percent, near-solid accent at a certainty. */
+export const probShade = (p: number) => (p > 0.004 ? `rgb(var(--ff-accent) / ${Math.min(0.95, 0.1 + p * 1.6).toFixed(2)})` : undefined)
+
+/**
+ * A full-size button behind a row or card's content, so the whole row is one click target while names on it stay
+ * their own buttons (they sit above it). Content meant to be clickable needs `relative`.
+ */
+export const RowCover = ({ label, onClick, pressed }: { label: string; onClick: () => void; pressed?: boolean }) => (
+  <button
+    type="button"
+    aria-label={label}
+    aria-pressed={pressed}
+    onClick={onClick}
+    className="absolute inset-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
+  />
 )
 
 /** A bar that grows either way from a centre tick: for values with a natural middle, like 50%. */
@@ -1591,31 +1627,51 @@ export function Table<T>({
   )
 }
 
-export type Reason = { text: ReactNode; tone?: 'pos' | 'neg' | 'warn' | 'neutral' | 'accent' }
+export type Reason = {
+  text: ReactNode
+  tone?: 'pos' | 'neg' | 'warn' | 'neutral' | 'accent'
+  /** A short claim shown on its own line above the text, which then reads as the explanation. */
+  label?: ReactNode
+}
+
+const REASON_MARK: Record<NonNullable<Reason['tone']>, { glyph: string; sr: string; cls: string }> = {
+  pos: { glyph: '+', sr: 'Helps: ', cls: 'bg-ff-pos/15 text-ff-pos' },
+  neg: { glyph: '−', sr: 'Hurts: ', cls: 'bg-ff-neg/12 text-ff-neg' },
+  warn: { glyph: '!', sr: 'Caution: ', cls: 'bg-ff-warn/15 text-ff-warn' },
+  accent: { glyph: '›', sr: '', cls: 'bg-ff-accent/12 text-ff-accent' },
+  neutral: { glyph: 'i', sr: '', cls: 'bg-ff-sunken text-ff-muted' },
+}
 
 /**
  * The case for something, one line per reason, each led by a square in its tone: green helps,
  * red hurts, amber is a caution. Sits in a table's expanded row or anywhere a justification goes.
  */
 export const Reasons = ({ items, title, columns = 2 }: { items: Reason[]; title?: ReactNode; columns?: 1 | 2 }) => (
-  <div className="border-l-2 border-ff-accent/50 bg-ff-panel py-2 pl-3 pr-2">
-    {title && <div className="ff-label mb-1.5">{title}</div>}
-    <ul className={cx('grid gap-x-6 gap-y-1 text-[12.5px] leading-[1.45] text-ff-text2', columns === 2 && 'md:grid-cols-2')}>
-      {items.map((r, i) => (
-        <li key={i} className="flex items-baseline gap-2 whitespace-normal">
-          {/* A mark per tone, in its colour: + helps, − hurts, ! caution, · neutral. Shape carries it too, not colour alone (1.4.1). */}
-          <span
-            className={cx(
-              'w-3 shrink-0 text-center font-mono text-[12px] font-semibold leading-none',
-              r.tone === 'pos' ? 'text-ff-pos' : r.tone === 'neg' ? 'text-ff-neg' : r.tone === 'warn' ? 'text-ff-warn' : r.tone === 'accent' ? 'text-ff-accent' : 'text-ff-muted',
-            )}
-          >
-            <span aria-hidden>{r.tone === 'pos' ? '+' : r.tone === 'neg' ? '−' : r.tone === 'warn' ? '!' : '·'}</span>
-            <span className="sr-only">{r.tone === 'pos' ? 'Helps: ' : r.tone === 'neg' ? 'Hurts: ' : r.tone === 'warn' ? 'Caution: ' : ''}</span>
-          </span>
-          <span className="min-w-0">{r.text}</span>
-        </li>
-      ))}
+  <div className="bg-ff-sunken/40 px-3 py-2.5">
+    {title && <div className="ff-label mb-2">{title}</div>}
+    <ul className={cx('grid gap-x-6 gap-y-2.5 text-[12.5px] leading-[1.45]', columns === 2 && 'md:grid-cols-2')}>
+      {items.map((r, i) => {
+        const m = REASON_MARK[r.tone ?? 'neutral']
+        return (
+          <li key={i} className="flex min-w-0 items-start gap-2.5">
+            {/* A square per tone, in its colour, with a glyph so the shape carries it too, not colour alone (1.4.1). */}
+            <span className={cx('mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center font-mono text-[12px] font-semibold leading-none', m.cls)}>
+              <span aria-hidden>{m.glyph}</span>
+              {m.sr && <span className="sr-only">{m.sr}</span>}
+            </span>
+            <span className="min-w-0">
+              {r.label != null ? (
+                <>
+                  <span className="block font-medium text-ff-text">{r.label}</span>
+                  <span className="mt-0.5 block text-[12px] text-ff-text2">{r.text}</span>
+                </>
+              ) : (
+                <span className="text-ff-text2">{r.text}</span>
+              )}
+            </span>
+          </li>
+        )
+      })}
     </ul>
   </div>
 )

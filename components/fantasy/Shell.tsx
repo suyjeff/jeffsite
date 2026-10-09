@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react'
 import Head from 'next/head'
 import Tour, { TOUR } from './Tour'
+import { PanelIcon } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { Avatar, Dropdown, cx, shortcutLabel, usePhone } from './ui'
 
-export const SECTION_KEYS = ['dash', 'matchup', 'slate', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
+export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 type Group = 'Overview' | 'Your team' | 'League' | 'Engine'
@@ -13,12 +14,13 @@ type Section = { key: SectionKey; label: string; short: string; group: Group }
 /** Order is the register: the number beside each entry is also its keyboard shortcut. */
 export const SECTIONS: Section[] = [
   { key: 'dash', label: 'Dashboard', short: 'Dash', group: 'Overview' },
-  { key: 'matchup', label: 'Matchup', short: 'Matchup', group: 'Overview' },
   { key: 'slate', label: 'Gameday', short: 'Gameday', group: 'Overview' },
   { key: 'trades', label: 'Trades', short: 'Trades', group: 'Your team' },
   { key: 'me', label: 'My team', short: 'Team', group: 'Your team' },
   { key: 'waivers', label: 'Waivers', short: 'Waivers', group: 'Your team' },
+  { key: 'matchups', label: 'Matchups', short: 'Matchups', group: 'League' },
   { key: 'power', label: 'Power', short: 'Power', group: 'League' },
+  { key: 'playoffs', label: 'Playoffs', short: 'Playoffs', group: 'League' },
   { key: 'teams', label: 'Teams', short: 'Teams', group: 'League' },
   { key: 'players', label: 'Players', short: 'Players', group: 'League' },
   { key: 'monke', label: 'M.O.N.K.E.', short: 'MONKE', group: 'Engine' },
@@ -33,7 +35,7 @@ export const MONKE = { name: 'M.O.N.K.E.', long: 'Many Orangutans Nervously Keyb
 export const sectionCode = (key: SectionKey) => String(SECTIONS.findIndex((s) => s.key === key) + 1).padStart(2, '0')
 
 /** What the phone's bottom bar carries; everything else lives in the drawer. */
-const TAB_BAR: SectionKey[] = ['dash', 'matchup', 'trades', 'me']
+const TAB_BAR: SectionKey[] = ['dash', 'slate', 'trades', 'me']
 
 export type ShellProps = {
   section: SectionKey
@@ -46,6 +48,10 @@ export type ShellProps = {
   leagueMeta?: string
   me?: { name: string; avatar: string | null; line: string } | null
   controls?: ReactNode
+  /** The settings box, folded to a one-line summary or open. */
+  controlsOpen?: boolean
+  onControls?: (open: boolean) => void
+  controlsSummary?: ReactNode
   loading: boolean
   progress: string
   onRefresh: () => void
@@ -65,15 +71,6 @@ export type ShellProps = {
 /** The wordmark. Shared by the shell and onboarding. */
 export const Brand = () => <span className="text-[14px] font-semibold tracking-[-0.01em] text-ff-text">Fantasy</span>
 
-/** A panel with its left column marked: the show and hide sidebar control, as desktop apps draw it. */
-const SidebarIcon = () => (
-  <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25">
-    <rect x="1.5" y="2.5" width="13" height="11" />
-    <path d="M6 2.5v11" />
-    <path d="M3 5h1.5M3 7h1.5" strokeWidth="1" />
-  </svg>
-)
-
 const SidebarToggle = ({ open, onClick, className }: { open: boolean; onClick: () => void; className?: string }) => (
   <button
     type="button"
@@ -81,9 +78,9 @@ const SidebarToggle = ({ open, onClick, className }: { open: boolean; onClick: (
     aria-label={open ? 'Hide sidebar' : 'Show sidebar'}
     aria-keyshortcuts="["
     title={`${open ? 'Hide' : 'Show'} sidebar ([)`}
-    className={cx('flex h-8 w-8 items-center justify-center text-ff-muted hover:bg-ff-raised hover:text-ff-text', className)}
+    className={cx('flex h-7 w-7 items-center justify-center text-ff-muted hover:bg-ff-raised hover:text-ff-text', className)}
   >
-    <SidebarIcon />
+    <PanelIcon />
   </button>
 )
 
@@ -119,6 +116,9 @@ const SidebarBody = ({
   onSearch,
   tourKey,
   onHide,
+  controlsOpen,
+  onControls,
+  controlsSummary,
 }: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void; tourKey?: string | null; onHide?: () => void }) => (
   <div className="flex h-full flex-col">
     <div className="flex h-11 shrink-0 items-center justify-between border-b border-ff-line pl-3 pr-2">
@@ -229,7 +229,29 @@ const SidebarBody = ({
       ))}
     </nav>
 
-    {controls && <div className="shrink-0 space-y-3 border-t border-ff-line p-3">{controls}</div>}
+    {controls && (
+      <div className="shrink-0 border-t border-ff-line">
+        {/* Settings fold to one line: what they are set to, opened when needed. */}
+        <button
+          type="button"
+          aria-expanded={!!controlsOpen}
+          aria-controls="ff-settings"
+          onClick={() => onControls?.(!controlsOpen)}
+          className="flex h-9 w-full items-center gap-2 px-3 text-left hover:bg-ff-raised"
+        >
+          <span className="ff-label shrink-0">Settings</span>
+          <span className="min-w-0 flex-1 truncate text-right font-mono text-[10.5px] text-ff-muted">{controlsSummary}</span>
+          <span aria-hidden className={cx('font-mono text-[10px] text-ff-muted motion-safe:transition-transform motion-safe:duration-150', controlsOpen && 'rotate-180')}>
+            ▴
+          </span>
+        </button>
+        {controlsOpen && (
+          <div id="ff-settings" className="space-y-3 px-3 pb-3">
+            {controls}
+          </div>
+        )}
+      </div>
+    )}
 
     <div className="shrink-0 border-t border-ff-line px-3 pb-2.5 pt-2 font-mono text-[10.5px] text-ff-muted">
       <div className="flex h-6 items-center justify-between gap-2">

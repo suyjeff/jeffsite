@@ -22,6 +22,8 @@ export type FantasyCtx = {
   openTeam: (rosterId: number) => void
   /** Open an NFL game's sheet, by its schedule key. */
   openGame: (key: string) => void
+  /** Open a fantasy matchup's sheet. */
+  openMatchup: (week: number, a: number, b: number) => void
   /** Your grades of suggested trades and what they teach the trade read (see lib/fantasy/grades). */
   grades: {
     all: Grades

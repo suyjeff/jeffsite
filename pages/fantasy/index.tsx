@@ -1,15 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FantasyProvider } from '../../components/fantasy/FantasyContext'
-import PlayerSheet from '../../components/fantasy/PlayerSheet'
-import TeamSheet from '../../components/fantasy/TeamSheet'
-import GameSheet from '../../components/fantasy/GameSheet'
+import SheetHost, { sheetKey, type SheetRef } from '../../components/fantasy/SheetHost'
 import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../../components/fantasy/Shell'
 import { Label, Segmented, Select, cx, simOdds } from '../../components/fantasy/ui'
 import DashboardView from '../../components/fantasy/views/DashboardView'
 import Onboarding from '../../components/fantasy/Onboarding'
 import MeView from '../../components/fantasy/views/MeView'
 import ModelView, { READOUT } from '../../components/fantasy/views/ModelView'
-import MatchupView from '../../components/fantasy/views/MatchupView'
+import MatchupsView from '../../components/fantasy/views/MatchupsView'
+import PlayoffsView from '../../components/fantasy/views/PlayoffsView'
 import SlateView from '../../components/fantasy/views/SlateView'
 import PlayersView from '../../components/fantasy/views/PlayersView'
 import PowerView from '../../components/fantasy/views/PowerView'
@@ -58,8 +57,8 @@ export type Prefs = {
   density: Density
   /** The desktop sidebar: shown, or folded away behind a show-sidebar button. */
   sidebar: boolean
-  /** The pricing-horizon setting in the sidebar, opened or folded to a one-line summary. */
-  horizonOpen: boolean
+  /** The sidebar's settings box, opened or folded to a one-line summary. */
+  settingsOpen: boolean
 }
 
 const TOUR_KEY = 'ff:tour:v1'
@@ -85,7 +84,7 @@ const loadPrefs = (): Prefs => {
     scheme: 'system',
     density: 'compact',
     sidebar: true,
-    horizonOpen: false,
+    settingsOpen: false,
   }
   try {
     const raw = window.localStorage.getItem(PREFS_KEY)
@@ -100,7 +99,7 @@ const loadPrefs = (): Prefs => {
 
 const FantasyPage = () => {
   const [prefs, setPrefs] = useState<Prefs | null>(null)
-  const route = useRoute(SECTION_KEYS, 'dash')
+  const route = useRoute(SECTION_KEYS, 'dash', { matchup: 'slate/week' })
   useTheme(prefs?.theme, prefs?.scheme ?? 'system', prefs != null)
   // Density is one attribute on the root; styles/fantasy.css scales type and rows from it.
   useEffect(() => {
@@ -115,6 +114,8 @@ const FantasyPage = () => {
     if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })
     // The Model page split into M.O.N.K.E. (read-only) and Tuning; its read-only tabs moved over.
     if (route.section === 'model' && route.sub && READOUT.includes(route.sub as (typeof READOUT)[number])) route.go('monke', route.sub, { replace: true })
+    // Playoffs moved out of Power into its own page; your matchup moved into Gameday, the league's into Matchups.
+    if (route.section === 'power' && route.sub === 'odds') route.go('playoffs', null, { replace: true })
   }, [route.section, route.sub]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -206,14 +207,24 @@ const FantasyPage = () => {
   const history = useMemo(() => (loaded && coreLoaded ? buildHistory(loaded, coreLoaded) : null), [loaded, coreLoaded])
   const models = useMemo(() => (data && core && history ? buildModels(data, core, history) : null), [data, core, history])
 
-  // The player detail sheet, open over whatever page you are on.
-  const [sheet, setSheet] = useState<string | null>(null)
-  const closeSheet = useCallback(() => setSheet(null), [])
-  // Team and NFL game summaries open the same way, and a player opened from one stacks over it.
-  const [teamSheet, setTeamSheet] = useState<number | null>(null)
-  const closeTeamSheet = useCallback(() => setTeamSheet(null), [])
-  const [gameSheet, setGameSheet] = useState<string | null>(null)
-  const closeGameSheet = useCallback(() => setGameSheet(null), [])
+  // The one detail sheet, over whatever page you are on. Opening another from inside it swaps the content in place
+  // and keeps a short trail back; the same thing twice in a row is one entry.
+  const [sheets, setSheets] = useState<SheetRef[]>([])
+  const openSheet = useCallback(
+    (r: SheetRef) => setSheets((xs) => (xs.length && sheetKey(xs[xs.length - 1]) === sheetKey(r) ? xs : [...xs.slice(-7), r])),
+    [],
+  )
+  const closeSheet = useCallback(() => setSheets([]), [])
+  const backSheet = useCallback(() => setSheets((xs) => xs.slice(0, -1)), [])
+  const sheetApi = useMemo(
+    () => ({
+      openPlayer: (id: string) => openSheet({ kind: 'player', id }),
+      openTeam: (id: number) => openSheet({ kind: 'team', id }),
+      openGame: (key: string) => openSheet({ kind: 'game', key }),
+      openMatchup: (week: number, a: number, b: number) => openSheet({ kind: 'matchup', week, a, b }),
+    }),
+    [openSheet],
+  )
   // Cmd/Ctrl+K opens the command palette from anywhere, fields included; again closes it.
   const [palette, setPalette] = useState(false)
   const closePalette = useCallback(() => setPalette(false), [])
@@ -253,7 +264,7 @@ const FantasyPage = () => {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-  useEffect(() => setSheet(null), [leagueKey])
+  useEffect(() => setSheets([]), [leagueKey])
 
   // A new section or tab fades its content in (the header stays put), so switching never flashes or snaps.
   const view = useRef<HTMLDivElement>(null)
@@ -288,24 +299,14 @@ const FantasyPage = () => {
   const controls = prefs && (
     <>
       <div className="space-y-1.5">
-        {/* Folded, the setting reads as one line: what it is set to and the weeks that covers. */}
-        <button
-          type="button"
-          aria-expanded={prefs.horizonOpen}
-          aria-controls="ff-horizon"
-          onClick={() => update({ horizonOpen: !prefs.horizonOpen })}
-          className="-mx-1 flex h-6 w-[calc(100%+0.5rem)] items-center gap-2 px-1 text-left hover:bg-ff-raised"
-        >
-          <Label className="min-w-0 flex-1 truncate">Pricing horizon</Label>
-          <span className="num shrink-0 text-[10.5px] text-ff-muted" title={HORIZON_LONG[prefs.horizon]}>
-            {horizonWeeks.length > 0 ? `wk ${horizonWeeks[0]}–${horizonWeeks[horizonWeeks.length - 1]}` : HORIZON_SHORT[prefs.horizon]}
-          </span>
-          <span aria-hidden className={cx('font-mono text-[10px] text-ff-muted motion-safe:transition-transform motion-safe:duration-150', prefs.horizonOpen && 'rotate-180')}>
-            ▾
-          </span>
-        </button>
-        {prefs.horizonOpen && (
-        <div id="ff-horizon" className="space-y-1.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <Label>Pricing horizon</Label>
+          {horizonWeeks.length > 0 && (
+            <span className="num text-[10.5px] text-ff-muted" title={HORIZON_LONG[prefs.horizon]}>
+              wk {horizonWeeks[0]}–{horizonWeeks[horizonWeeks.length - 1]}
+            </span>
+          )}
+        </div>
         <Segmented<HorizonMode>
           size="sm"
           block
@@ -341,8 +342,6 @@ const FantasyPage = () => {
               ))}
             </span>
           </div>
-        )}
-        </div>
         )}
       </div>
       <div className="space-y-1.5">
@@ -415,6 +414,9 @@ const FantasyPage = () => {
       leagueMeta={data ? `${data.league.season} · ${data.league.total_rosters} teams${data.state.season_type === 'regular' && data.league.season === data.state.season ? ` · wk ${data.state.week}` : ''}` : undefined}
       me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${mySim ? ` · ${simOdds(mySim, 'playoffs')} playoffs` : myPower ? ` · power #${myPower.rank} of ${analysis!.teams.length}` : ''}` } : null}
       controls={controls}
+      controlsOpen={prefs.settingsOpen}
+      onControls={(open) => update({ settingsOpen: open })}
+      controlsSummary={`${HORIZON_SHORT[prefs.horizon]} · ${themeById(prefs.theme).label}`}
       loading={loading}
       progress={progress}
       onRefresh={reload}
@@ -440,19 +442,20 @@ const FantasyPage = () => {
       )}
 
       {data && analysis && models && prefs ? (
-        <FantasyProvider value={{ data, analysis, models, adjust, grades, go: (s, sub) => route.go(s, sub ?? undefined), openPlayer: setSheet, openTeam: setTeamSheet, openGame: setGameSheet }}>
+        <FantasyProvider value={{ data, analysis, models, adjust, grades, go: (s, sub) => route.go(s, sub ?? undefined), ...sheetApi }}>
         <div key={data.league.league_id} ref={view} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'me' && <MeView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'power' && (
-            <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={setTeamSheet} weights={prefs.weights} />
+            <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={sheetApi.openTeam} weights={prefs.weights} />
           )}
           {section === 'teams' && <TeamsView data={data} analysis={analysis} sub={route.sub} onTeam={(id) => route.go('teams', id == null ? null : String(id))} />}
           {section === 'players' && <PlayersView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'slate' && <SlateView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
-          {section === 'matchup' && <MatchupView data={data} analysis={analysis} />}
+          {section === 'matchups' && <MatchupsView />}
+          {section === 'playoffs' && <PlayoffsView sub={route.sub} onSub={route.setSub} />}
           {(section === 'model' || section === 'monke') && (
             <ModelView
               key={section}
@@ -469,9 +472,7 @@ const FantasyPage = () => {
             />
           )}
         </div>
-        {teamSheet != null && analysis.teamById[teamSheet] && <TeamSheet rosterId={teamSheet} onClose={closeTeamSheet} />}
-        {gameSheet && <GameSheet gameKey={gameSheet} onClose={closeGameSheet} />}
-        {sheet && data.players[sheet] && <PlayerSheet id={sheet} onClose={closeSheet} />}
+        {sheets.length > 0 && <SheetHost stack={sheets} onBack={backSheet} onClose={closeSheet} />}
         <CommandPalette
           open={palette}
           onClose={closePalette}

@@ -4,14 +4,15 @@ import AdjustControl from './AdjustControl'
 import { ContextNotes } from './ContextNotes'
 import { useFantasy } from './FantasyContext'
 import LinesBlock from './LinesBlock'
-import Sheet, { SheetBody, SheetClose, SheetSection } from './Sheet'
+import TeamName from './TeamName'
+import { SheetBody, SheetContent, SheetHeader, SheetSection } from './Sheet'
 import { Badge, PlayerAvatar, PosTag, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel } from './ui'
 
 /**
  * Everything about one player, over the page: a sheet from the right on wide
  * screens, from the bottom on phones. Opens from any player name.
  */
-const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
+const PlayerSheet = ({ id }: { id: string }) => {
   const { data, analysis } = useFantasy()
   const p = data.players[id]
   const ctx = data.context[id]
@@ -45,28 +46,32 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
   const out = isOut(p.injury)
 
   return (
-    <Sheet label={`${p.name} details`} onClose={onClose}>
-      {({ close, phone }) => (
+    <SheetContent>
         <>
-          <header className={cx('flex items-start gap-3 px-4 pb-3', phone ? 'pt-3' : 'pt-4')}>
-            <PlayerAvatar id={id} player={p} size={56} />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <PosTag pos={p.pos} />
-                <span className="font-mono text-[11px] text-ff-muted">{p.team ?? 'FA'}</span>
-                {p.injury && <Badge tone={out ? 'neg' : 'warn'}>{p.injury}</Badge>}
-                {ctx?.byes.length ? <span className="font-mono text-[10.5px] text-ff-muted">bye wk {ctx.byes.join(', ')}</span> : null}
-              </div>
-              <h2 className="mt-1 truncate text-[19px] font-medium leading-tight tracking-[-0.01em] text-ff-text">{p.name}</h2>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-ff-muted">
+          <SheetHeader
+          lead={<PlayerAvatar id={id} player={p} size={56} />}
+          eyebrow={
+            <>
+              <PosTag pos={p.pos} />
+              <span>{p.team ?? 'FA'}</span>
+              {p.injury && <Badge tone={out ? 'neg' : 'warn'}>{p.injury}</Badge>}
+              {ctx?.byes.length ? <span>bye wk {ctx.byes.join(', ')}</span> : null}
+            </>
+          }
+          title={p.name}
+          sub={
+            <>
+              {owner != null && owner !== analysis.myRosterId ? (
+                <TeamName id={owner} size={14} />
+              ) : (
                 <span className={owner === analysis.myRosterId ? 'text-ff-accent' : undefined}>{ownerLabel(analysis, id)}</span>
-                {p.newsAt ? <span>· Sleeper news {ago(p.newsAt)} ago</span> : null}
-              </div>
-            </div>
-            <SheetClose phone={phone} onClick={close} />
-          </header>
+              )}
+              {p.newsAt ? <span>· Sleeper news {ago(p.newsAt)} ago</span> : null}
+            </>
+          }
+        />
 
-          <SheetBody phone={phone}>
+          <SheetBody>
             <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line sm:grid-cols-4 [&>*]:border-0">
               <Stat label="Exp / wk" value={fmt(perWeek)} sub="rest of season" />
               <Stat
@@ -159,8 +164,7 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
             )}
           </SheetBody>
         </>
-      )}
-    </Sheet>
+    </SheetContent>
   )
 }
 
