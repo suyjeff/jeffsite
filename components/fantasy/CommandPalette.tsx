@@ -24,6 +24,11 @@ type Item = {
 }
 
 const TABS: Partial<Record<SectionKey, [string, string][]>> = {
+  slate: [
+    ['week', 'Your week'],
+    ['games', 'Games'],
+    ['managers', 'Every manager'],
+  ],
   trades: [
     ['suggested', 'Suggested trades'],
     ['targets', 'Trade targets'],

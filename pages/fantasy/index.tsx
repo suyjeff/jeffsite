@@ -7,6 +7,7 @@ import DashboardView from '../../components/fantasy/views/DashboardView'
 import Onboarding from '../../components/fantasy/Onboarding'
 import MeView from '../../components/fantasy/views/MeView'
 import ModelView, { READOUT } from '../../components/fantasy/views/ModelView'
+import SlateView from '../../components/fantasy/views/SlateView'
 import PlayersView from '../../components/fantasy/views/PlayersView'
 import PowerView from '../../components/fantasy/views/PowerView'
 import TeamsView from '../../components/fantasy/views/TeamsView'
@@ -404,6 +405,7 @@ const FantasyPage = () => {
           )}
           {section === 'teams' && <TeamsView data={data} analysis={analysis} sub={route.sub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'players' && <PlayersView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
+          {section === 'slate' && <SlateView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {(section === 'model' || section === 'monke') && (
             <ModelView
               key={section}

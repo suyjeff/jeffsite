@@ -41,6 +41,7 @@ const DEFAULT_LAYOUT: Widget[] = [
   { id: 'w9', kind: 'scoreboard', w: 6, h: 7, ch: 1 },
   { id: 'w10', kind: 'standings', w: 6, h: 7, ch: 1 },
   { id: 'w11', kind: 'props', w: 6, h: 9, ch: 2 },
+  { id: 'w12', kind: 'gameday', w: 6, h: 9, ch: 0 },
 ]
 
 const load = (): Widget[] => {

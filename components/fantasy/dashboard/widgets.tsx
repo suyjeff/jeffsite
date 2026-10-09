@@ -9,6 +9,7 @@ import AdjustControl from '../AdjustControl'
 import LinesBlock from '../LinesBlock'
 import { describeNote } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
+import { useSlate } from '../useSlate'
 import PlayerName from '../PlayerName'
 import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
 
@@ -31,6 +32,7 @@ export type WidgetKind =
   | 'consensus'
   | 'activity'
   | 'props'
+  | 'gameday'
 
 type Meta = { title: string; blurb: string; w: number; h: number; Body: (p: WidgetProps) => JSX.Element; reads?: 'team' | 'player' }
 
@@ -855,6 +857,57 @@ const Props = ({ sel, select }: WidgetProps) => {
   )
 }
 
+/** This week from the NFL side: your win odds, what a win is worth, and the games that decide it. */
+const Gameday = () => {
+  const { data, analysis, go } = useFantasy()
+  const { slate, live } = useSlate(data, analysis)
+  const me = analysis.myRosterId
+  const mine = me != null ? slate.managers[me] : null
+  if (!live || !mine) return <Empty title="No matchup this week">Gameday follows the NFL regular season.</Empty>
+  const games = Object.fromEntries(slate.games.map((g) => [g.key, g]))
+  const top = mine.games.slice(0, 5)
+  const maxSwing = Math.max(0.05, top[0]?.swing ?? 0)
+  const last = (id: string) => data.players[id]?.name.split(' ').slice(-1)[0] ?? id
+  const gap = mine.stakes ? mine.stakes.win.playoffs - mine.stakes.loss.playoffs : null
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-px border-b border-ff-line bg-ff-line">
+        <div className="bg-ff-panel px-3 py-2">
+          <div className="ff-label">win odds</div>
+          <div className={cx('num mt-1 text-[20px] font-medium leading-none', mine.win >= 0.6 ? 'text-ff-pos' : mine.win <= 0.4 ? 'text-ff-neg' : 'text-ff-text')}>{pct(mine.win)}</div>
+          <div className="mt-1 truncate text-[11px] text-ff-muted">vs {analysis.teamById[mine.opponent ?? -1]?.name ?? '–'}</div>
+        </div>
+        <div className="bg-ff-panel px-3 py-2">
+          <div className="ff-label">on the line</div>
+          <div className="num mt-1 text-[20px] font-medium leading-none text-ff-text">{gap == null ? '…' : `${(gap * 100).toFixed(0)}pt`}</div>
+          <div className="mt-1 truncate text-[11px] text-ff-muted">playoff odds, a win against a loss</div>
+        </div>
+      </div>
+      <Th>
+        <span className="flex-1">games that decide it</span>
+        <span>±win odds</span>
+      </Th>
+      {top.map((g) => {
+        const game = games[g.key]
+        return (
+          <Row key={g.key} onClick={() => go('slate', 'games')} label={`Open ${game.away} at ${game.home} on Gameday`} className="h-auto py-1.5">
+            <span className="w-[76px] shrink-0 font-mono text-[11.5px] font-semibold text-ff-text">
+              {game.away} @ {game.home}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[11.5px] text-ff-text2">
+              {g.mine.length > 0 && <span className="text-ff-accent">{g.mine.map(last).join(', ')}</span>}
+              {g.mine.length > 0 && g.theirs.length > 0 && <span className="text-ff-muted"> vs </span>}
+              {g.theirs.length > 0 && <span className="text-ff-neg">{g.theirs.map(last).join(', ')}</span>}
+            </span>
+            <Bar value={g.swing} max={maxSwing} width={36} />
+            <span className="num w-8 text-right text-[11.5px] text-ff-text">±{((g.swing / 2) * 100).toFixed(0)}</span>
+          </Row>
+        )
+      })}
+    </div>
+  )
+}
+
 export const WIDGETS: Record<WidgetKind, Meta> = {
   matchup: { title: 'My matchup', blurb: 'Next week, both lineups, and your chance to win.', w: 4, h: 12, Body: Matchup },
   odds: { title: 'Playoff odds', blurb: 'Simulated seasons: wins, playoff, bye and title odds.', w: 5, h: 11, Body: Odds },
@@ -869,5 +922,6 @@ export const WIDGETS: Record<WidgetKind, Meta> = {
   team: { title: 'Team', blurb: 'One roster with its rating and odds. Follows its channel.', w: 5, h: 9, Body: TeamCard, reads: 'team' },
   consensus: { title: 'Model vs consensus', blurb: 'Where FantasyPros and the model disagree: buys and sells.', w: 4, h: 9, Body: Consensus },
   activity: { title: 'League activity', blurb: 'Trades, claims and pickups as they happen.', w: 4, h: 9, Body: Activity },
+  gameday: { title: 'Gameday', blurb: 'Your win odds, what a win is worth, and the NFL games that decide it.', w: 4, h: 9, Body: Gameday },
   props: { title: 'Prop board', blurb: 'Betting lines read as fantasy points, against Sleeper.', w: 4, h: 9, Body: Props },
 }

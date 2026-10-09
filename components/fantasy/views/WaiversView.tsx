@@ -1,9 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { waiverTargets } from '../../../lib/fantasy/search'
-import { getWeekStatLines } from '../../../lib/fantasy/sleeper'
 import type { TradeTarget } from '../../../lib/fantasy/trades'
-import type { WeekStats } from '../../../lib/fantasy/types'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import {
   impliedTotals,
@@ -21,6 +19,7 @@ import { suggestBid, type BidAdvice } from '../../../lib/fantasy/faab'
 import { ContextNotes, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import WaiverMoves from './WaiverMoves'
+import { useStatLines } from '../useStatLines'
 import PlayerName from '../PlayerName'
 import { sectionCode } from '../Shell'
 import { DeltaChip, Badge, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
@@ -31,23 +30,6 @@ const AHEAD = 3
 const POS_LABEL: Record<StreamPos, string> = { QB: 'quarterback', RB: 'running back', WR: 'receiver', TE: 'tight end', K: 'kicker', DEF: 'defense' }
 
 /** Stat lines (pts_allow, sacks, FGA, rush yards) for the weeks on screen. Cached a few hours, a few dozen KB a week. */
-const useStatLines = (season: string, weeks: number[]) => {
-  const [lines, setLines] = useState<Record<number, WeekStats | null>>({})
-  const key = weeks.join(',')
-  useEffect(() => {
-    let live = true
-    for (const w of weeks) {
-      if (w in lines) continue
-      getWeekStatLines(season, w)
-        .then((s) => live && setLines((x) => ({ ...x, [w]: s })))
-        .catch(() => live && setLines((x) => ({ ...x, [w]: null })))
-    }
-    return () => {
-      live = false
-    }
-  }, [season, key]) // eslint-disable-line react-hooks/exhaustive-deps
-  return lines
-}
 
 /** A matchup as a short tier word with its tone: easy, neutral, tough. */
 const tier = (m: Allowed | null | undefined) => (!m ? null : m.index >= 1.12 ? 'easy' : m.index <= 0.88 ? 'tough' : 'avg')

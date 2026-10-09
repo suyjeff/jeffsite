@@ -118,7 +118,13 @@ export const learn = (grades: Grades, posOf: (id: string) => string | undefined)
 }
 
 /** A read with your grades applied: the same terms, then the lessons on top, each one said out loud. */
-export const applyLessons = (read: AcceptRead, idea: TradeIdea, lessons: Lessons | null | undefined, names: (id: string) => string, posOf: (id: string) => string | undefined): AcceptRead => {
+export const applyLessons = (
+  read: AcceptRead,
+  idea: TradeIdea,
+  lessons: Lessons | null | undefined,
+  names: (id: string) => string,
+  posOf: (id: string) => string | undefined,
+): AcceptRead => {
   if (!lessons || !lessons.n) return read
   const signals = [...read.signals]
   let x = read.logit
@@ -130,7 +136,8 @@ export const applyLessons = (read: AcceptRead, idea: TradeIdea, lessons: Lessons
     if (p.dormant) {
       x -= 1.5
       signals.unshift({ text: 'you marked this manager as checked out', tone: 'neg' })
-    } else if (Math.abs(p.offset) >= 0.2) signals.unshift({ text: `${p.offset > 0 ? 'raised' : 'lowered'} by your ${p.n} grade${p.n === 1 ? '' : 's'} of this team`, tone: p.offset > 0 ? 'pos' : 'neg' })
+    } else if (Math.abs(p.offset) >= 0.2)
+      signals.unshift({ text: `${p.offset > 0 ? 'raised' : 'lowered'} by your ${p.n} grade${p.n === 1 ? '' : 's'} of this team`, tone: p.offset > 0 ? 'pos' : 'neg' })
   }
   const kept = (lessons.untouchable[idea.partnerId] ?? []).filter((id) => idea.get.includes(id))
   if (kept.length) {

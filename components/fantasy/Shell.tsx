@@ -3,7 +3,7 @@ import Head from 'next/head'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { Avatar, Dropdown, cx, shortcutLabel, usePhone } from './ui'
 
-export const SECTION_KEYS = ['dash', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
+export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 type Group = 'Overview' | 'Your team' | 'League' | 'Engine'
@@ -12,6 +12,7 @@ type Section = { key: SectionKey; label: string; short: string; group: Group }
 /** Order is the register: the number beside each entry is also its keyboard shortcut. */
 export const SECTIONS: Section[] = [
   { key: 'dash', label: 'Dashboard', short: 'Dash', group: 'Overview' },
+  { key: 'slate', label: 'Gameday', short: 'Gameday', group: 'Overview' },
   { key: 'trades', label: 'Trades', short: 'Trades', group: 'Your team' },
   { key: 'me', label: 'My team', short: 'Team', group: 'Your team' },
   { key: 'waivers', label: 'Waivers', short: 'Waivers', group: 'Your team' },
