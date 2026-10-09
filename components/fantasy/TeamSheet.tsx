@@ -5,6 +5,7 @@ import { MoveList, useMoves } from './Moves'
 import PlayerName from './PlayerName'
 import TeamName, { TopMark } from './TeamName'
 import FreeAgentPick from './FreeAgentPick'
+import RosterTable from './RosterTable'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
 import { Avatar, Badge, Button, DeltaChip, Stat, fmt, pct, simOdds } from './ui'
 
@@ -54,7 +55,7 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
           />
 
           <SheetBody>
-            <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line [&>*]:border-0">
+            <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line [&>*]:!px-4 [&>*]:border-0">
               <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`${fmt(season.ppg)} pts a game`} />
               <Stat label="Playoffs" value={sim ? simOdds(sim, 'playoffs') : '–'} meter={sim?.playoffs} sub={sim ? `title ${simOdds(sim, 'title')}` : 'no forecast'} />
               <Stat label="Power" value={power ? `${fmt(power.score, 0)}%` : '–'} sub="vs an average team" />
@@ -127,10 +128,16 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
                 </ul>
               </SheetSection>
             )}
+
+            {team.players.length > 0 && (
+              <SheetSection title="Roster" aside={`${team.players.length} players · pts/wk ahead`} flush>
+                <RosterTable rosterId={rosterId} />
+              </SheetSection>
+            )}
           </SheetBody>
 
           <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-ff-line px-4 py-2.5">
-            <span className="min-w-0 truncate text-[11.5px] text-ff-muted">Roster, results and slots on the team page</span>
+            <span className="min-w-0 truncate text-[11.5px] text-ff-muted">Roster detail, results and slots on the team page</span>
             <Button size="sm" variant="primary" onClick={open}>
               Open team page →
             </Button>

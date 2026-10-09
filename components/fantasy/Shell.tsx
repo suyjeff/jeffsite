@@ -390,8 +390,8 @@ const Shell = (props: ShellProps) => {
 
       {/* Phone top bar */}
       <header className="fixed inset-x-0 top-0 z-30 flex h-[var(--ff-top)] items-center border-b border-ff-line bg-ff-panel/95 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
-        <button onClick={() => setDrawer(true)} className="flex h-full items-center gap-2 border-r border-ff-line px-3 font-mono text-[11px] tracking-[0.1em] text-ff-text2" aria-label="Open menu">
-          MENU
+        <button onClick={() => setDrawer(true)} className="flex h-full items-center border-r border-ff-line px-3 text-ff-text2" aria-label="Open menu">
+          <PanelIcon />
         </button>
         <div className="min-w-0 flex-1 px-3 leading-tight">
           <div className="truncate text-[15px] font-medium">{current?.label}</div>

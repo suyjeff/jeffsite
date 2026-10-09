@@ -6,6 +6,21 @@ import { Segmented, cx, fmt, signedPct } from './ui'
 const STEPS = [-0.5, -0.25, -0.1, 0, 0.1, 0.25, 0.5]
 
 /**
+ * The selected step takes its sign's colour, stronger with size. Light and
+ * middling steps are tints under normal text; the largest is solid with the
+ * panel colour on top (both clear 4.5:1 in every theme). Zero stays neutral.
+ * Written out in full so Tailwind sees every class.
+ */
+const TONE: Record<string, string> = {
+  '-0.5': 'bg-ff-neg text-ff-panel',
+  '-0.25': 'bg-ff-neg/35 text-ff-text',
+  '-0.1': 'bg-ff-neg/15 text-ff-text',
+  '0.1': 'bg-ff-pos/15 text-ff-text',
+  '0.25': 'bg-ff-pos/35 text-ff-text',
+  '0.5': 'bg-ff-pos text-ff-panel',
+}
+
+/**
  * Your read on a player, applied everywhere: a percentage on his projection
  * for the coming week or every week ahead. For news the projections have not
  * caught: a benching, a coach's hint, a role you expect to change.
@@ -31,14 +46,16 @@ const AdjustControl = ({ id, className }: { id: string; className?: string }) =>
       </div>
       <Segmented<string>
         size="sm"
+        block
         label="Adjust projection"
         value={String(pct)}
         onChange={(v) => adjust.set(id, Number(v) ? { pct: Number(v), scope, week } : null)}
-        options={STEPS.map((s) => ({ key: String(s), label: s ? signedPct(s) : '0', title: s ? `${signedPct(s)} on his projection` : 'No adjustment' }))}
+        options={STEPS.map((s) => ({ key: String(s), label: s ? signedPct(s) : '0', title: s ? `${signedPct(s)} on his projection` : 'No adjustment', activeClassName: TONE[String(s)] }))}
       />
       {pct !== 0 && (
         <Segmented<'week' | 'season'>
           size="sm"
+          block
           label="How long"
           value={scope}
           onChange={(s) => adjust.set(id, { pct, scope: s, week })}

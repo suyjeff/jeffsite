@@ -256,7 +256,7 @@ const DashboardView = () => {
           </>
         }
       />
-      <div className="ff-canvas ff-bleed mt-0 min-h-[calc(100dvh-120px)] p-1.5 md:p-2">
+      <div className="ff-canvas ff-bleed ff-gutter mt-0 min-h-[calc(100dvh-120px)] py-1.5 md:py-2">
         {/* Phones stack widgets at their natural height; the row grid starts at md. */}
         <div ref={grid} className={cx('grid grid-cols-1 gap-1.5 md:grid-flow-row-dense md:auto-rows-[34px] md:grid-cols-12 md:gap-2', editing && 'ff-grid-guides')}>
           {layout.map((w) => {

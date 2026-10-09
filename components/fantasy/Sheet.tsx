@@ -165,21 +165,25 @@ const Sheet = ({
 export const SheetBody = ({ children }: { children: ReactNode }) => {
   const { phone } = useSheet()
   return (
-  <div className={cx('ff-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]', phone ? 'overscroll-auto' : 'overscroll-contain')}>
-    {children}
-    <div className="h-4" />
-  </div>
+    <div className={cx('ff-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]', phone ? 'overscroll-auto' : 'overscroll-contain')}>
+      {children}
+      <div className="h-4" />
+    </div>
   )
 }
 
-/** A titled block inside a sheet. */
-export const SheetSection = ({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) => (
+/**
+ * A titled block inside a sheet. Everything in a sheet sits on one inset (px-4), so left edges line up down the
+ * page. `flush` lets a table run edge to edge for its rules; its first and last cells then take that inset
+ * themselves (`!pl-4`, `!pr-4`), so the first column still lines up with the title.
+ */
+export const SheetSection = ({ title, children, aside, flush }: { title: string; children: ReactNode; aside?: ReactNode; flush?: boolean }) => (
   <section className="border-t border-ff-line px-4 py-3">
     <div className="mb-2 flex items-baseline justify-between gap-2">
       <h3 className="ff-label">{title}</h3>
       {aside && <span className="font-mono text-[10.5px] text-ff-muted">{aside}</span>}
     </div>
-    {children}
+    {flush ? <div className="-mx-4">{children}</div> : children}
   </section>
 )
 
@@ -191,9 +195,13 @@ export type SheetNav = { close: () => void; back?: () => void; backLabel?: strin
 export const SheetNavContext = createContext<SheetNav>({ close: () => {}, phone: false })
 export const useSheet = () => useContext(SheetNavContext)
 
-/** Back (when there is somewhere to go back to) and close, at a sheet header's trailing edge. */
+/**
+ * Back (when there is somewhere to go back to) and close, at a sheet header's trailing edge. Phones get no close
+ * button: the sheet swipes down or taps away, and the header just gives its room to the title.
+ */
 export const SheetClose = () => {
   const { close, back, backLabel, phone } = useSheet()
+  if (phone && !back) return null
   return (
     <span className="-mr-1 -mt-1 flex shrink-0 items-center">
       {back && (
@@ -201,9 +209,11 @@ export const SheetClose = () => {
           ← {backLabel ?? 'Back'}
         </button>
       )}
-      <button onClick={close} className="h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close">
-        {phone ? 'Close' : 'ESC'}
-      </button>
+      {!phone && (
+        <button onClick={close} className="h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close">
+          ESC
+        </button>
+      )}
     </span>
   )
 }

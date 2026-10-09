@@ -72,7 +72,7 @@ const PlayerSheet = ({ id }: { id: string }) => {
         />
 
           <SheetBody>
-            <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line sm:grid-cols-4 [&>*]:border-0">
+            <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line [&>*]:!px-4 [&>*]:border-0">
               <Stat label="Exp / wk" value={fmt(perWeek)} sub="rest of season" />
               <Stat
                 label="Value"
