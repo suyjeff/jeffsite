@@ -50,7 +50,7 @@ const ThemePicker = ({ value, onChange, scheme, onScheme }: { value: string; onC
               <span className="truncate">{t.label}</span>
             </span>
           ),
-          sub: t.family === 'Editor' ? (t.light ? 'light only' : 'dark only') : 'light + dark',
+          sub: t.family === 'Editor' ? (t.light ? 'light only' : 'dark only') : undefined,
         }))}
       />
       {both && (

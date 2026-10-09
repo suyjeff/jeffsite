@@ -183,8 +183,12 @@ const CommandPalette = ({
     icon: <PlayerAvatar id={p.id} player={p} size={20} />,
     hint: (
       <span className="font-mono">
-        {p.pos} {p.team ?? 'FA'} · {ownerLabel(analysis, p.id)}
-        {analysis.horizon.perWeek[p.id] ? ` · ${fmt(analysis.horizon.perWeek[p.id])}/wk` : ''}
+        {p.pos} {p.team ?? 'FA'}
+        <span className="hidden sm:inline">
+          {' · '}
+          {ownerLabel(analysis, p.id)}
+          {analysis.horizon.perWeek[p.id] ? ` · ${fmt(analysis.horizon.perWeek[p.id])}/wk` : ''}
+        </span>
       </span>
     ),
     run: () => openPlayer(p.id),
@@ -273,6 +277,7 @@ const CommandPalette = ({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Jump to a page, player, team or setting"
+            aria-label="Jump to a page, player, team or setting"
             role="combobox"
             aria-expanded="true"
             aria-controls={listId}
@@ -306,7 +311,7 @@ const CommandPalette = ({
                 >
                   <span className="flex w-5 shrink-0 justify-center">{item.icon ?? <span className="h-1.5 w-1.5 bg-ff-line2" />}</span>
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  {item.hint && <span className="shrink-0 truncate text-[11px] text-ff-muted">{item.hint}</span>}
+                  {item.hint && <span className="min-w-0 max-w-[60%] truncate text-[11px] text-ff-muted">{item.hint}</span>}
                   {i === active && (
                     <span aria-hidden className="shrink-0 font-mono text-[11px] text-ff-accent">
                       ↵
@@ -321,7 +326,7 @@ const CommandPalette = ({
           <span>↑↓ move</span>
           <span>↵ open</span>
           <span className="hidden sm:inline">esc close</span>
-          <span className="ml-auto">{shortcutLabel()}</span>
+          <span className="ml-auto hidden sm:inline">{shortcutLabel()}</span>
         </div>
       </div>
     </div>

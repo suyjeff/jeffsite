@@ -6,7 +6,7 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Badge, Empty, N, Panel, Reasons, Stat, StatGrid, fmtSigned, type Reason } from '../ui'
+import { Badge, Empty, N, Panel, Reasons, Stat, StatGrid, Table, fmt, fmtSigned, type Reason } from '../ui'
 
 type Move = { target: TradeTarget; drop: string | null; bid: BidAdvice | null; why: Reason[]; rivals: number; alts: TradeTarget[] }
 
@@ -115,6 +115,17 @@ const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueDat
       })
   }, [adds, me, analysis, players, faab, trending, data.consensus, data.context, modelRank, drop])
 
+  // The hottest pickups on Sleeper that are still free here, with what each would do for you.
+  const gainById = useMemo(() => Object.fromEntries(adds.map((t) => [t.id, t.add])) as Record<string, number>, [adds])
+  const trendingFA = useMemo(
+    () =>
+      data.trending
+        .filter((t) => players[t.player_id] && analysis.rosteredBy[t.player_id] == null)
+        .slice(0, 10)
+        .map((t) => ({ id: t.player_id, count: t.count })),
+    [data.trending, players, analysis.rosteredBy],
+  )
+
   if (me == null) return null
   const mine = faab ? (faab.remaining[me] ?? 0) : 0
   const richer = faab ? Object.entries(faab.remaining).filter(([r, v]) => Number(r) !== me && v > mine).length : 0
@@ -133,7 +144,7 @@ const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueDat
           <Stat
             label="League going rate"
             value={faab.going.n ? `$${faab.going.p50}` : '–'}
-            sub={faab.going.n ? `median winning bid · top quarter $${faab.going.p75}+ · ${faab.going.n} bids, ${faab.going.source}` : 'no winning bids yet'}
+            sub={faab.going.n ? `median winning bid · top 25% $${faab.going.p75}+` : 'no winning bids yet'}
           />
           <Stat label="Richest rival" value={rich ? `$${rich[1]}` : '–'} sub={rich ? (analysis.teamById[Number(rich[0])]?.name ?? '–') : '–'} />
           <Stat
@@ -209,6 +220,47 @@ const WaiverMoves = ({ data, analysis, adds, trending, drop }: { data: LeagueDat
           </ol>
         )}
       </Panel>
+      {trendingFA.length > 0 && (
+        <Panel title="Trending free agents" actions={<span>Sleeper adds, last 24h</span>} pad={false}>
+          <Table
+            rows={trendingFA}
+            rowKey={(t) => t.id}
+            defaultSort="adds"
+            columns={[
+              { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} size={24} /> },
+              { key: 'adds', label: 'Adds', align: 'right', title: 'Sleeper managers, across all leagues, who added him in the last 24 hours', sort: (t) => t.count, render: (t) => t.count.toLocaleString() },
+              {
+                key: 'ecr',
+                label: 'FantasyPros',
+                align: 'right',
+                title: 'FantasyPros consensus rank at his position, rest of season',
+                sort: (t) => -(data.consensus?.byId[t.id]?.posRank ?? 999),
+                render: (t) => {
+                  const r = data.consensus?.byId[t.id]?.posRank
+                  return r != null ? `${players[t.id]?.pos}${Math.round(r)}` : <span className="text-ff-muted">–</span>
+                },
+              },
+              { key: 'exp', label: 'Exp/wk', align: 'right', hideBelow: 'sm', sort: (t) => analysis.horizon.perWeek[t.id] ?? 0, render: (t) => fmt(analysis.horizon.perWeek[t.id]) },
+              {
+                key: 'gain',
+                label: 'For you',
+                align: 'right',
+                title: 'Points per week he would add to your best lineup over the horizon',
+                sort: (t) => gainById[t.id] ?? 0,
+                render: (t) => (gainById[t.id] ? <span className="text-ff-pos">{fmtSigned(gainById[t.id], 1)}</span> : <span className="text-ff-muted">bench</span>),
+              },
+            ]}
+            expand={(t) => {
+              const items = contextReasons(data.context[t.id], players)
+              const why: Reason[] = gainById[t.id]
+                ? items
+                : [{ text: 'Would not start for you over the horizon: a stash or a block, not an upgrade', tone: 'neutral' }, ...items]
+              return <Reasons items={why} />
+            }}
+          />
+        </Panel>
+      )}
+
       {faab && best < 0.75 && moves.length > 0 && (
         <p className="text-[12px] text-ff-muted">
           The best add is worth under <N>0.75</N> pts/wk to you: bid the minimum or hold. FAAB buys the most right after injuries.

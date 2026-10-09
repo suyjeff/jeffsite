@@ -214,7 +214,7 @@ export const Segmented = <K extends string>({
           title={o.title}
           onClick={() => onChange(o.key)}
           className={cx(
-            'shrink-0 whitespace-nowrap border-r border-ff-line transition-colors last:border-r-0',
+            'min-w-6 shrink-0 whitespace-nowrap border-r border-ff-line transition-colors last:border-r-0',
             size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[12px]',
             active ? 'bg-ff-text text-ff-panel' : 'text-ff-text2 hover:bg-ff-raised hover:text-ff-text',
           )}
@@ -407,6 +407,8 @@ export const Dropdown = ({
     <div ref={root} className={cx('relative min-w-0', className)}>
       <button
         type="button"
+        // A select-only combobox (APG): focus stays here while the arrows move through the list.
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${id}-list`}
@@ -1123,7 +1125,7 @@ export function Table<T>({
                       title={allOpen ? 'Collapse all' : 'Expand all'}
                       className="flex h-8 w-7 items-center justify-center font-mono text-[10px] text-ff-muted hover:text-ff-text"
                     >
-                      <span className={cx('inline-block transition-transform duration-150', allOpen && 'rotate-90')}>›</span>
+                      <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', allOpen && 'rotate-90')}>›</span>
                     </button>
                   )}
                 </th>
@@ -1199,7 +1201,7 @@ export function Table<T>({
                         aria-label={isOpen ? 'Hide details' : 'Show details'}
                         className="flex h-[38px] w-7 items-center justify-center font-mono text-[11px] text-ff-muted hover:text-ff-text"
                       >
-                        <span className={cx('inline-block transition-transform duration-150', isOpen && 'rotate-90 text-ff-accent')}>›</span>
+                        <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', isOpen && 'rotate-90 text-ff-accent')}>›</span>
                       </button>
                     )}
                   </td>
@@ -1250,16 +1252,19 @@ export type Reason = { text: ReactNode; tone?: 'pos' | 'neg' | 'warn' | 'neutral
 export const Reasons = ({ items, title, columns = 2 }: { items: Reason[]; title?: ReactNode; columns?: 1 | 2 }) => (
   <div className="border-l-2 border-ff-accent/50 bg-ff-panel py-2 pl-3 pr-2">
     {title && <div className="ff-label mb-1.5">{title}</div>}
-    <ul className={cx('grid gap-x-6 gap-y-1 text-[12.5px] leading-snug text-ff-text2', columns === 2 && 'md:grid-cols-2')}>
+    <ul className={cx('grid gap-x-6 gap-y-1 text-[12.5px] leading-[1.45] text-ff-text2', columns === 2 && 'md:grid-cols-2')}>
       {items.map((r, i) => (
         <li key={i} className="flex items-baseline gap-2 whitespace-normal">
+          {/* A mark per tone, in its colour: + helps, − hurts, ! caution, · neutral. Shape carries it too, not colour alone (1.4.1). */}
           <span
-            aria-hidden
             className={cx(
-              'mt-[5px] h-1.5 w-1.5 shrink-0 self-start',
-              r.tone === 'pos' ? 'bg-ff-pos' : r.tone === 'neg' ? 'bg-ff-neg' : r.tone === 'warn' ? 'bg-ff-warn' : r.tone === 'accent' ? 'bg-ff-accent' : 'bg-ff-line2',
+              'w-3 shrink-0 text-center font-mono text-[12px] font-semibold leading-none',
+              r.tone === 'pos' ? 'text-ff-pos' : r.tone === 'neg' ? 'text-ff-neg' : r.tone === 'warn' ? 'text-ff-warn' : r.tone === 'accent' ? 'text-ff-accent' : 'text-ff-muted',
             )}
-          />
+          >
+            <span aria-hidden>{r.tone === 'pos' ? '+' : r.tone === 'neg' ? '−' : r.tone === 'warn' ? '!' : '·'}</span>
+            <span className="sr-only">{r.tone === 'pos' ? 'Helps: ' : r.tone === 'neg' ? 'Hurts: ' : r.tone === 'warn' ? 'Caution: ' : ''}</span>
+          </span>
           <span className="min-w-0">{r.text}</span>
         </li>
       ))}

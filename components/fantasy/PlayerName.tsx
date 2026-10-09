@@ -40,7 +40,8 @@ const PlayerName = ({
               }}
               // Rows act on Enter and Space too; the key belongs to the name.
               onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && e.stopPropagation()}
-              className="truncate text-left text-[13px] tracking-tight text-ff-text decoration-ff-line2 underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none"
+              // Above a row's own select button; padding takes the target to 24px tall (WCAG 2.5.8) and a matching negative margin keeps the line where it was.
+              className="relative z-[1] -my-1 truncate py-1 text-left text-[13px] tracking-tight text-ff-text decoration-ff-line2 underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none"
               title={`${player.name}: details and your read`}
             >
               {player.name}

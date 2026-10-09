@@ -175,7 +175,7 @@ const SidebarBody = ({
                   active ? 'bg-ff-raised text-ff-text' : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
                 )}
               >
-                <span className={cx('num w-4 text-[10.5px]', active ? 'text-ff-text' : 'text-ff-muted/70')}>{String(i).padStart(2, '0')}</span>
+                <span className={cx('num w-4 text-[10.5px]', active ? 'text-ff-text' : 'text-ff-muted')}>{String(i).padStart(2, '0')}</span>
                 <span className={cx('flex-1', active && 'font-medium')}>{label}</span>
                 <kbd className="hidden h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 font-mono text-[10px] text-ff-muted group-hover:inline-flex md:inline-flex md:opacity-0 md:group-hover:opacity-100">{i}</kbd>
               </button>
@@ -288,7 +288,7 @@ const Shell = (props: ShellProps) => {
           {leagueName && <div className="truncate font-mono text-[10.5px] text-ff-muted">{leagueName}</div>}
         </div>
         {props.onSearch && (
-          <button onClick={props.onSearch} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] tracking-[0.1em] text-ff-text2" aria-label="Search and jump">
+          <button onClick={props.onSearch} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] tracking-[0.1em] text-ff-text2" aria-label="Find a page, player or team">
             FIND
           </button>
         )}
