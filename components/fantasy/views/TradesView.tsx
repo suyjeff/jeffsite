@@ -2,24 +2,25 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { ideaKey } from '../../../lib/fantasy/grades'
 import { searchTrades, tradeBase } from '../../../lib/fantasy/search'
-import { DEFAULT_TRADE_CONFIG, findTargets, scoreTrade, type TradeIdea, type TradeShape } from '../../../lib/fantasy/trades'
+import { DEFAULT_TRADE_CONFIG, findTargets, type TradeIdea, type TradeShape } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import TeamName from '../TeamName'
-import TradeCard, { SHAPE_LABEL } from '../TradeCard'
+import TradeCard from '../TradeCard'
+import TradeBuilder from '../TradeBuilder'
+import { TradeIcon } from '../icons'
+import { emptyDeal, type Deal } from '../../../lib/fantasy/deal'
 import { useFantasy, useTradeRead } from '../FantasyContext'
 import {
   Avatar,
   Badge,
   Button,
   Empty,
-  Label,
   Meter,
   Num,
   PageHeader,
   Panel,
-  PlayerAvatar,
   Reasons,
   Segmented,
   Select,
@@ -28,10 +29,8 @@ import {
   TabSection,
   Tabs,
   GridFill,
-  BuildGlyph,
   Fab,
   spyTo,
-  WeekBars,
   cx,
   fmt,
   fmtSigned,
@@ -230,14 +229,14 @@ const TradesView = ({
     situationScope === 'all' ? true : situationScope === 'mine' ? r.owner === myRosterId : situationScope === 'fa' ? r.owner == null : r.owner != null && r.owner !== myRosterId,
   )
 
-  // ---- Builder ----
-  const [bPartner, setBPartner] = useState<number | null>(null)
-  const [bGive, setBGive] = useState<string[]>([])
-  const [bGet, setBGet] = useState<string[]>([])
+  // ---- Builder: a deal of any shape, you plus one to three other teams ----
+  const [deal, setDeal] = useState<Deal>(() => emptyDeal(myRosterId != null ? [myRosterId] : []))
   const openInBuilder = (idea: TradeIdea) => {
-    setBPartner(idea.partnerId)
-    setBGive(idea.give)
-    setBGet(idea.get)
+    setDeal({
+      teams: [myRosterId!, idea.partnerId],
+      moves: [...idea.give.map((player) => ({ player, from: myRosterId!, to: idea.partnerId })), ...idea.get.map((player) => ({ player, from: idea.partnerId, to: myRosterId! }))],
+      faab: [],
+    })
     // A stacked (phone) page already holds the builder further down: go there instead of switching views.
     if (stacked) window.setTimeout(() => spyTo('builder'), 0)
     else {
@@ -255,12 +254,6 @@ const TradesView = ({
     io.observe(el)
     return () => io.disconnect()
   }, [stacked, me])
-  const built = useMemo(() => {
-    if (!base || bPartner == null) return null
-    const p = teamById[bPartner]
-    if (!p) return null
-    return scoreTrade({ ...base, partner: { rosterId: p.rosterId, players: p.players }, give: bGive, get: bGet })
-  }, [base, bPartner, bGive, bGet, teamById])
 
   if (!me) {
     return (
@@ -318,7 +311,7 @@ const TradesView = ({
           !stacked &&
           tab !== 'builder' && (
             <Button variant="aqua" onClick={() => onSub('builder')} title="Put together any deal and see it priced">
-              <BuildGlyph />
+              <TradeIcon />
               Build a trade
             </Button>
           )
@@ -380,6 +373,11 @@ const TradesView = ({
               </Button>
             </div>
             {showFilters && <Panel title="Search limits">{filterControls}</Panel>}
+            {grades.lessons.n === 0 && (
+              <p className="text-[12px] leading-[1.45] text-ff-muted">
+                Answer <span className="text-ff-text2">Would they?</span> on any card and the odds learn what this league accepts.
+              </p>
+            )}
             {grades.lessons.n > 0 && (
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-l-2 border-ff-accent/50 pl-3 text-[12px] leading-[1.45] text-ff-text2">
                 <span>
@@ -671,25 +669,12 @@ const TradesView = ({
         </TabSection>
 
         <TabSection id="builder" label="Builder" active={tab === 'builder'} stacked={stacked}>
-          <Builder
-            data={data}
-            analysis={analysis}
-            partnerId={bPartner}
-            setPartnerId={(id) => {
-              setBPartner(id)
-              setBGet([])
-            }}
-            give={bGive}
-            setGive={setBGive}
-            get={bGet}
-            setGet={setBGet}
-            result={built}
-          />
+          <TradeBuilder deal={deal} setDeal={setDeal} />
         </TabSection>
       </div>
       {stacked && (
         <Fab onClick={() => spyTo('builder')} hidden={builderInView}>
-          <BuildGlyph />
+          <TradeIcon size={16} />
           Build a trade
         </Fab>
       )}
@@ -731,159 +716,6 @@ const SlotGrid = ({ analysis }: { analysis: Analysis }) => {
           ))}
         </tbody>
       </table>
-    </div>
-  )
-}
-
-const Builder = ({
-  data,
-  analysis,
-  partnerId,
-  setPartnerId,
-  give,
-  setGive,
-  get,
-  setGet,
-  result,
-}: {
-  data: LeagueData
-  analysis: Analysis
-  partnerId: number | null
-  setPartnerId: (id: number | null) => void
-  give: string[]
-  setGive: (ids: string[]) => void
-  get: string[]
-  setGet: (ids: string[]) => void
-  result: TradeIdea | null
-}) => {
-  const { teamById, myRosterId } = analysis
-  const players = data.players
-  const me = teamById[myRosterId!]
-  const partner = partnerId != null ? teamById[partnerId] : null
-  const perWeek = analysis.horizon.perWeek
-  const toggle = (list: string[], set: (v: string[]) => void, id: string) => set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id])
-  const sortIds = (ids: string[]) => ids.filter((id) => players[id]).sort((a, b) => (perWeek[b] ?? 0) - (perWeek[a] ?? 0))
-
-  const Chip = ({ id, active, onClick }: { id: string; active: boolean; onClick: () => void }) => (
-    <button
-      onClick={onClick}
-      aria-pressed={active}
-      className={cx(
-        'flex min-w-0 items-center gap-2 rounded-sm border px-2 py-1.5 text-left transition-colors',
-        active ? 'border-ff-accent bg-ff-accent/10' : 'border-ff-line bg-ff-panel hover:border-ff-line2 hover:bg-ff-raised',
-      )}
-    >
-      <PlayerAvatar id={id} player={players[id]} size={26} />
-      <span className="min-w-0 flex-1 leading-tight">
-        <span className="block truncate text-[12.5px] text-ff-text">{players[id]?.name}</span>
-        <span className="block font-mono text-[10px] text-ff-muted">
-          {players[id]?.pos} · {fmt(perWeek[id])}/wk
-        </span>
-      </span>
-    </button>
-  )
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Label>Partner</Label>
-        <Select label="Partner" value={partnerId ?? ''} onChange={(v) => setPartnerId(v ? Number(v) : null)} className="min-w-[200px]">
-          <option value="">Pick a team</option>
-          {analysis.teams
-            .filter((t) => t.rosterId !== myRosterId)
-            .map((t) => (
-              <option key={t.rosterId} value={t.rosterId}>
-                {t.name}
-              </option>
-            ))}
-        </Select>
-        {(give.length > 0 || get.length > 0) && (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setGive([])
-              setGet([])
-            }}
-          >
-            Clear
-          </Button>
-        )}
-      </div>
-
-      {result && (
-        <Panel title={`${give.length}-for-${get.length} · ${SHAPE_LABEL[result.shape]}`}>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
-              <div>
-                <Label>Your lineup</Label>
-                <div className="mt-0.5 text-[22px] leading-tight">
-                  <Num value={result.myGain} digits={2} signed suffix=" /wk" />
-                </div>
-              </div>
-              <div>
-                <Label>{partner?.name ?? 'Theirs'}</Label>
-                <div className="mt-0.5 text-[22px] leading-tight">
-                  <Num value={result.theirGain} digits={2} signed suffix=" /wk" />
-                </div>
-              </div>
-              <div>
-                <Label>Weeks better</Label>
-                <div className="num mt-0.5 text-[22px] leading-tight text-ff-text">
-                  {result.weeksBetter}
-                  <span className="text-ff-muted">/{result.weeks}</span>
-                </div>
-              </div>
-              <div>
-                <Label>Value ask</Label>
-                <div className="num mt-0.5 text-[22px] leading-tight text-ff-text">{fmtSigned(result.valueAsk, 1)}</div>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="w-12 font-mono text-[10px] uppercase tracking-wider text-ff-muted">You</span>
-                <WeekBars weeks={result.perWeek.map((w) => ({ week: w.week, value: w.mine }))} highlight={data.playoffWeeks} barWidth={8} />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-12 font-mono text-[10px] uppercase tracking-wider text-ff-muted">Them</span>
-                <WeekBars weeks={result.perWeek.map((w) => ({ week: w.week, value: w.theirs }))} highlight={data.playoffWeeks} barWidth={8} />
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-ff-line pt-2 text-[11.5px] text-ff-muted">
-            {result.fills && (
-              <span>
-                Fills their <span className="font-mono text-ff-text2">{result.fills.slot}</span> <span className="num">{result.fills.before.toFixed(1)} → {result.fills.after.toFixed(1)}</span>
-              </span>
-            )}
-            {result.myCuts.length > 0 && <span>You drop {result.myCuts.map((id) => players[id]?.name ?? id).join(', ')}</span>}
-            {result.theirCuts.length > 0 && <span>They drop {result.theirCuts.map((id) => players[id]?.name ?? id).join(', ')}</span>}
-            <span>
-              Sending costs you <span className="num text-ff-text2">{result.myCost.toFixed(2)}</span>/wk before the return
-            </span>
-          </div>
-        </Panel>
-      )}
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Panel title={`You send · ${give.length}`} actions={<span className="num">{me.name}</span>}>
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-            {sortIds(me.players).map((id) => (
-              <Chip key={id} id={id} active={give.includes(id)} onClick={() => toggle(give, setGive, id)} />
-            ))}
-          </div>
-        </Panel>
-        <Panel title={`You get · ${get.length}`} actions={partner ? <span className="num">{partner.name}</span> : null}>
-          {partner ? (
-            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              {sortIds(partner.players).map((id) => (
-                <Chip key={id} id={id} active={get.includes(id)} onClick={() => toggle(get, setGet, id)} />
-              ))}
-            </div>
-          ) : (
-            <p className="py-6 text-center text-[13px] text-ff-muted">Pick a partner to see their roster.</p>
-          )}
-        </Panel>
-      </div>
     </div>
   )
 }

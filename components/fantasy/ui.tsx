@@ -810,15 +810,6 @@ export const GridFill = ({ n, wide }: { n: number; wide: 'xl' | '2xl' }) => (
   </>
 )
 
-/** "Build": three blocks stacked, for the trade builder. Square, like the rest of the system. */
-export const BuildGlyph = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden className={cx('shrink-0', className)}>
-    <rect x="0.75" y="6.75" width="4.5" height="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    <rect x="6.75" y="6.75" width="4.5" height="4.5" fill="currentColor" />
-    <rect x="3.75" y="0.75" width="4.5" height="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-  </svg>
-)
-
 /**
  * A floating action button for phones, above the tab bar: the one action a page exists for, kept in
  * reach without taking a row of the page. `hidden` fades it out (when its target is already on screen).

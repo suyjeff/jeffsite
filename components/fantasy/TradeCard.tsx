@@ -5,9 +5,10 @@ import { tradeLeverage } from '../../lib/fantasy/forecast'
 import { applyTrade, type TradeIdea } from '../../lib/fantasy/trades'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { ContextNotes } from './ContextNotes'
+import { BuildIcon } from './icons'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../../lib/fantasy/grades'
-import { Avatar, Badge, BuildGlyph, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, simOdds } from './ui'
+import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, simOdds } from './ui'
 
 export const SHAPE_LABEL: Record<TradeIdea['shape'], string> = {
   'one-for-one': 'Straight swap',
@@ -121,21 +122,29 @@ const GradeBar = ({ idea, base, nm, posOf }: { idea: TradeIdea; base: AcceptRead
   ]
   return (
     <div className="space-y-1.5 border-t border-ff-line px-3 py-2">
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-        <span className="ff-label">Would they?</span>
-        <Segmented<Grade | ''>
-          size="sm"
-          label="Would they take it?"
-          manual
-          value={rec?.grade ?? ''}
-          onChange={(g) => g && pick(g)}
-          options={[
-            { key: 'yes', label: 'Likely', title: 'They would take this or close to it' },
-            { key: 'maybe', label: 'Maybe', title: 'Worth a message, not a sure thing' },
-            { key: 'no', label: 'No way', title: 'Not happening' },
-          ]}
-        />
-        <span className="ml-auto text-[10.5px] text-ff-muted">{rec ? 'saved · the odds learn from it' : 'your answer tunes the odds'}</span>
+      {/* One row at any width: the question, three answers filling the space, and a mark once saved. */}
+      <div className="flex items-center gap-2">
+        <span className="ff-label shrink-0">Would they?</span>
+        <span className="min-w-0 flex-1 sm:max-w-[300px]">
+          <Segmented<Grade | ''>
+            size="sm"
+            block
+            label="Would they take it?"
+            manual
+            value={rec?.grade ?? ''}
+            onChange={(g) => g && pick(g)}
+            options={[
+              { key: 'yes', label: 'Yes', title: 'They would take this or close to it' },
+              { key: 'maybe', label: 'Maybe', title: 'Worth a message, not a sure thing' },
+              { key: 'no', label: 'No', title: 'Not happening' },
+            ]}
+          />
+        </span>
+        {rec && (
+          <span className="shrink-0 font-mono text-[10px] text-ff-pos" role="status">
+            saved
+          </span>
+        )}
       </div>
       {rec && rec.grade !== 'yes' && (
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Why not">
@@ -370,7 +379,7 @@ const TradeCard = ({
         </div>
         {onBuild && (
           <Button size="sm" variant="aqua" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
-            <BuildGlyph />
+            <BuildIcon size={12} />
             Open in builder
           </Button>
         )}

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react'
 import Head from 'next/head'
 import Tour, { TOUR } from './Tour'
+import { PanelIcon } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { Avatar, Dropdown, cx, shortcutLabel, usePhone } from './ui'
 
@@ -70,14 +71,6 @@ export type ShellProps = {
 /** The wordmark. Shared by the shell and onboarding. */
 export const Brand = () => <span className="text-[14px] font-semibold tracking-[-0.01em] text-ff-text">Fantasy</span>
 
-/** A pane with its sidebar ruled off: two hairlines, nothing more. */
-const SidebarIcon = () => (
-  <svg aria-hidden width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1" shapeRendering="crispEdges">
-    <rect x="0.5" y="1.5" width="13" height="11" />
-    <path d="M4.5 1.5v11" />
-  </svg>
-)
-
 const SidebarToggle = ({ open, onClick, className }: { open: boolean; onClick: () => void; className?: string }) => (
   <button
     type="button"
@@ -87,7 +80,7 @@ const SidebarToggle = ({ open, onClick, className }: { open: boolean; onClick: (
     title={`${open ? 'Hide' : 'Show'} sidebar ([)`}
     className={cx('flex h-7 w-7 items-center justify-center text-ff-muted hover:bg-ff-raised hover:text-ff-text', className)}
   >
-    <SidebarIcon />
+    <PanelIcon />
   </button>
 )
 
