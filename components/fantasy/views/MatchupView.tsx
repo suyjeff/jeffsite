@@ -293,7 +293,7 @@ const MatchupView = ({ data, analysis }: { data: LeagueData; analysis: Analysis 
         </Panel>
         {started && (
           <p className="text-[11.5px] leading-relaxed text-ff-muted">
-            A game under way counts a player&apos;s points so far plus half his projection; Sleeper&apos;s data has no game clock. Live scores update every few minutes.
+            A game under way counts points so far plus half the projection, since Sleeper has no game clock. Scores update every few minutes.
           </p>
         )}
       </div>

@@ -150,14 +150,14 @@ export const suggestBid = (f: Faab, me: number, input: { gain: number; value: nu
   if (broke)
     reasons.push({ text: minBid ? `You have $${mine} left, under the league's $${minBid} minimum bid` : 'You have no FAAB left, so only a $0 bid is possible', tone: 'neg' })
   if (streamer) {
-    reasons.push({ text: 'Kickers and defenses turn over weekly and nobody pays up for them, so bid the minimum', tone: 'neutral' })
+    reasons.push({ text: 'Kickers and defenses change hands weekly: bid the minimum', tone: 'neutral' })
     return { bid, low: Math.min(mine, minBid), high: Math.max(Math.min(mine, minBid), bid), tier, reasons }
   }
-  if (f.going.n) reasons.push({ text: `League pays $${low}–${high} for a player worth ${signed(input.value)}/wk (${f.going.n} winning bids, ${f.going.source})`, tone: 'neutral' })
-  reasons.push({ text: `Worth about $${Math.round(worth)} to you: ${signed(input.gain)} pts/wk to your lineup`, tone: input.gain >= 0.75 ? 'pos' : 'neutral' })
-  if (rush > 1) reasons.push({ text: `${input.trending.toLocaleString()} Sleeper managers added him in the last day: expect competition`, tone: 'warn' })
+  if (f.going.n) reasons.push({ text: `League pays $${low}–${high} for ${signed(input.value)}/wk of value (${f.going.n} winning bids, ${f.going.source})`, tone: 'neutral' })
+  reasons.push({ text: `Worth about $${Math.round(worth)} to you: ${signed(input.gain)} pts/wk`, tone: input.gain >= 0.75 ? 'pos' : 'neutral' })
+  if (rush > 1) reasons.push({ text: `${input.trending.toLocaleString()} Sleeper adds in the last day: expect competition`, tone: 'warn' })
   if (rich + 1 < Math.min(worth, market * 1.1) && rich + 1 <= mine) reasons.push({ text: `No other team has more than $${rich}, so $${rich + 1} wins outright`, tone: 'pos' })
-  if (f.weeksLeft <= 3) reasons.push({ text: `${f.weeksLeft} regular-season weeks left: unspent FAAB is worth little now`, tone: 'warn' })
-  if (bid >= mine && mine > 0 && !broke) reasons.push({ text: `That is all of your remaining $${mine}`, tone: 'neg' })
+  if (f.weeksLeft <= 3) reasons.push({ text: `${f.weeksLeft} regular-season weeks left: spend it now`, tone: 'warn' })
+  if (bid >= mine && mine > 0 && !broke) reasons.push({ text: `Uses all of your $${mine}`, tone: 'neg' })
   return { bid, low, high, tier, reasons }
 }

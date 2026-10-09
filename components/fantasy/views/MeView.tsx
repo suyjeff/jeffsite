@@ -128,7 +128,7 @@ const MeView = ({
         <GridFill n={fresh.length} wide="2xl" />
       </div>
       <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-        Sleeper flags that a player has news, not what it says, and refreshes once a day. Read the story in Sleeper; if it changes your view, click his name to set a read.
+        Sleeper flags news but not what it says, once a day. Read it in Sleeper, then click a name to set your read.
       </p>
     </Panel>
   ) : null

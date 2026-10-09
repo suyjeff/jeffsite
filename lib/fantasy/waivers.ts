@@ -301,7 +301,7 @@ export const streamReasons = (r: StreamRow, pos: StreamPos, teamCount = 32): Str
     const takeaways = (r.stats.int ?? 0) + (r.stats.fum_rec ?? 0)
     if (takeaways >= 1.3) out.push({ text: `${takeaways.toFixed(1)} takeaways projected`, tone: 'pos' })
   } else {
-    if (r.teamTotal) out.push({ text: `His team is projected to score ${r.teamTotal.pts.toFixed(1)} (${src(r.teamTotal)})`, tone: r.teamTotal.pts >= 26 ? 'pos' : r.teamTotal.pts <= 19 ? 'neg' : 'neutral' })
+    if (r.teamTotal) out.push({ text: `His team projects ${r.teamTotal.pts.toFixed(1)} points (${src(r.teamTotal)})`, tone: r.teamTotal.pts >= 26 ? 'pos' : r.teamTotal.pts <= 19 ? 'neg' : 'neutral' })
     if (r.matchup && r.matchup.rank <= third) out.push({ text: `${r.opp} allows ${r.matchup.ppg.toFixed(1)} pts a game to ${pos}s, #${r.matchup.rank} most`, tone: 'pos' })
     if (r.matchup && r.matchup.rank > teamCount - third) out.push({ text: `Tough draw: ${r.opp} is #${r.matchup.rank} of ${teamCount} against ${pos}s`, tone: 'neg' })
     if (pos === 'QB' && (r.stats.rush_yd ?? 0) >= 25) out.push({ text: `${Math.round(r.stats.rush_yd)} rushing yards projected: a floor most QBs lack`, tone: 'pos' })
@@ -310,6 +310,6 @@ export const streamReasons = (r: StreamRow, pos: StreamPos, teamCount = 32): Str
     if ((pos === 'WR' || pos === 'TE' || pos === 'RB') && (r.stats.rec_tgt ?? 0) >= 5) out.push({ text: `${r.stats.rec_tgt.toFixed(1)} targets projected`, tone: 'pos' })
   }
   if (r.home === true) out.push({ text: 'Home game', tone: 'neutral' })
-  if (r.trending >= 500) out.push({ text: `${r.trending.toLocaleString()} Sleeper managers added him in the last 24 hours`, tone: r.trending >= 5000 ? 'warn' : 'neutral' })
+  if (r.trending >= 500) out.push({ text: `${r.trending.toLocaleString()} Sleeper adds in the last day`, tone: r.trending >= 5000 ? 'warn' : 'neutral' })
   return out
 }

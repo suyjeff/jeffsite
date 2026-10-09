@@ -422,8 +422,7 @@ const TradesView = ({
               </>
             )}
             <p className="text-[11.5px] leading-relaxed text-ff-muted">
-              Deals start from every one-for-one that helps you and add a piece only when it improves the deal. Every number is points per week added to a best lineup, week by
-              week, injuries priced in. The side taking more bodies cuts its weakest player.
+              Deals start from every one-for-one that helps you and grow only when a piece improves them. Numbers are points per week added to each best lineup, injuries priced in; the side taking more players cuts its weakest.
             </p>
           
         </TabSection>
@@ -540,9 +539,7 @@ const TradesView = ({
             {needsView === 'position' ? (
               <div className="space-y-2 border-t border-ff-line px-3 py-2.5 text-[11.5px] leading-[1.5] text-ff-muted">
                 <p className="max-w-[78ch]">
-                  <span className="text-ff-text2">How to read it.</span> Each cell is what one league-average starter at that position would add to the team&apos;s projected lineup, in
-                  points per week, after its flex and the waiver wire have done what they can. Zero means the spot is covered; the bigger the number, the more that team should pay
-                  to fill it. <span className="text-ff-text2">Lineup</span> is the projected best lineup, points per week.
+                  <span className="text-ff-text2">How to read it.</span> Each cell is what a league-average starter at that position would add to the team&apos;s lineup, in points per week, after its flex and the waiver wire. Zero means covered; bigger means that team should pay more to fill it. <span className="text-ff-text2">Lineup</span> is the projected best lineup, points per week.
                 </p>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5" aria-label="Legend">
                   <span className="inline-flex items-center gap-1.5">
@@ -617,7 +614,7 @@ const TradesView = ({
               <GridFill n={needCards.length} wide="xl" />
             </div>
             <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-              Holes are the cells above worth at least half a point a week, red for the league&apos;s biggest. Strongest is the lineup slot furthest above the league average.
+              Holes: positions worth half a point a week or more, red for the league&apos;s biggest. Strongest: the slot furthest above the league average.
             </p>
           </Panel>
         </TabSection>

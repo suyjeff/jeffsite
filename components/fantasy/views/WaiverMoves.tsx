@@ -75,8 +75,7 @@ const WaiverMoves = ({
           {
             text: (
               <>
-                Adds <N tone="pos">{fmtSigned(t.add, 1)}</N> pts/wk to your best lineup{t.slot ? ` at ${t.slot.replace('SUPER_FLEX', 'SF')}` : ''}, on Sleeper&apos;s projections
-                blended with prop lines
+                Adds <N tone="pos">{fmtSigned(t.add, 1)}</N> pts/wk to your lineup{t.slot ? ` at ${t.slot.replace('SUPER_FLEX', 'SF')}` : ''}
               </>
             ),
             tone: 'pos',
@@ -105,7 +104,7 @@ const WaiverMoves = ({
                     )
                   </>
                 ) : null}
-                {ahead ? ': the experts like him more than the projections do' : ''}
+                {ahead ? ': experts like him more than projections do' : ''}
               </>
             ),
             tone: ahead ? 'pos' : 'neutral',
@@ -115,7 +114,7 @@ const WaiverMoves = ({
           why.push({
             text: (
               <>
-                <N>{trending[t.id].toLocaleString()}</N> Sleeper managers added him in the last 24 hours
+                <N>{trending[t.id].toLocaleString()}</N> Sleeper adds in the last day
               </>
             ),
             tone: trending[t.id] >= 5000 ? 'warn' : 'neutral',
@@ -288,7 +287,7 @@ const WaiverMoves = ({
             canExpand={() => true}
             expand={(t) => {
               const items = contextReasons(data.context[t.id], players)
-              const why: Reason[] = gainById[t.id] ? items : [{ text: 'Would not start for you over the horizon: a stash or a block, not an upgrade', tone: 'neutral' }, ...items]
+              const why: Reason[] = gainById[t.id] ? items : [{ text: 'Would not start for you: a stash or a block, not an upgrade', tone: 'neutral' }, ...items]
               return <Reasons items={why} />
             }}
           />
@@ -301,9 +300,7 @@ const WaiverMoves = ({
         </p>
       )}
       <p className="text-[11.5px] leading-relaxed text-ff-muted">
-        Gain comes from your lineup re-solved week by week with him in and your weakest player out. Bids weigh what he is worth to you against what this league has paid for similar
-        value{faab ? `, at about $${Math.round(faab.rate)} per pt/wk${faab.rateN ? ` (${faab.rateN} of this season's bids)` : ' (a default until more bids land)'}` : ''}, and never
-        go past one dollar over the richest rival.
+        Gain: your lineup re-solved each week with him in and your weakest player out. Bids weigh his worth to you against what this league pays for similar value{faab ? `, at about $${Math.round(faab.rate)} per pt/wk${faab.rateN ? ` (${faab.rateN} of this season's bids)` : ' (a default until more bids land)'}` : ''}, and never go past $1 over the richest rival.
       </p>
     </div>
   )
