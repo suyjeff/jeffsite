@@ -90,7 +90,7 @@ const GameSheet = ({ gameKey }: { gameKey: string }) => {
               <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-ff-muted">
                 <span>wk {g.week}</span>
                 <span aria-hidden>·</span>
-                {g.final ? <span className="text-ff-text2">Final</span> : g.live ? <span className="text-ff-warn">Live</span> : <span>{dayOf(g.date)}</span>}
+                {g.final ? <span className="text-ff-text2">Final</span> : g.live ? <span className="text-ff-pos">Live</span> : <span>{dayOf(g.date)}</span>}
                 {cast?.networks.length ? (
                   <>
                     <span aria-hidden>·</span>

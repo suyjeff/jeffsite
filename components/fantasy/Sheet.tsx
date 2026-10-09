@@ -196,12 +196,24 @@ export const SheetNavContext = createContext<SheetNav>({ close: () => {}, phone:
 export const useSheet = () => useContext(SheetNavContext)
 
 /**
- * Back (when there is somewhere to go back to) and close, at a sheet header's trailing edge. Phones get no close
- * button: the sheet swipes down or taps away, and the header just gives its room to the title.
+ * Back (when there is somewhere to go back to) and close, at a sheet header's trailing edge. Phones show no close
+ * button: the sheet swipes down or taps away. The button stays for keyboard and screen-reader users, hidden until it
+ * takes focus, and it takes no room in the header while hidden.
  */
 export const SheetClose = () => {
   const { close, back, backLabel, phone } = useSheet()
-  if (phone && !back) return null
+  const closeButton = (
+    <button
+      onClick={close}
+      className={cx('h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text', phone && 'sr-only focus-visible:not-sr-only focus-visible:h-8 focus-visible:px-2')}
+      // The name carries the visible key, so voice control can say what it sees.
+      aria-label={phone ? 'Close' : 'Close (Esc)'}
+    >
+      {phone ? 'Close' : 'ESC'}
+    </button>
+  )
+  // Alone on a phone, the hidden button leaves the title the header's full width.
+  if (phone && !back) return closeButton
   return (
     <span className="-mr-1 -mt-1 flex shrink-0 items-center">
       {back && (
@@ -209,11 +221,7 @@ export const SheetClose = () => {
           ← {backLabel ?? 'Back'}
         </button>
       )}
-      {!phone && (
-        <button onClick={close} className="h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close">
-          ESC
-        </button>
-      )}
+      {closeButton}
     </span>
   )
 }

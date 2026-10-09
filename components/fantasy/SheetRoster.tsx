@@ -1,41 +1,18 @@
 import React, { useMemo } from 'react'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
+import { rosterRows, type RosterRow as Row } from '../../lib/fantasy/roster'
 import { Table, cx, fmt, pct, type Column } from './ui'
-
-type Row = { id: string; slot: string; starter: boolean; n: number }
-
-const NON_START = new Set(['BN', 'IR', 'TAXI'])
-
-/** A team's players as Sleeper has them set: starters in slot order, then bench, IR and taxi. */
-export const useRosterRows = (rosterId: number): Row[] => {
-  const { data, analysis } = useFantasy()
-  const team = analysis.teamById[rosterId]
-  return useMemo(() => {
-    if (!team) return []
-    // Index slots on the unfiltered list: an empty slot ('0') still holds its place.
-    const slotted = team.roster.starters ?? []
-    const starterSet = new Set(slotted.filter((s) => s && s !== '0'))
-    const slotNames = (data.league.roster_positions ?? []).filter((p) => !NON_START.has(p))
-    const out: Omit<Row, 'n'>[] = slotted.flatMap((id, i) => (id && id !== '0' ? [{ id, slot: (slotNames[i] ?? 'ST').replace('SUPER_FLEX', 'SF'), starter: true }] : []))
-    const reserve = new Set(team.roster.reserve ?? [])
-    const taxi = new Set(team.roster.taxi ?? [])
-    for (const id of team.players) {
-      if (starterSet.has(id)) continue
-      out.push({ id, slot: reserve.has(id) ? 'IR' : taxi.has(id) ? 'TX' : 'BN', starter: false })
-    }
-    return out.map((r, n) => ({ ...r, n }))
-  }, [team, data.league.roster_positions])
-}
 
 /**
  * A team's whole roster in a sheet, dense: slot, player (opens his sheet; his NFL team and injury tag ride with the
  * name), next bye, how likely he plays and points a week ahead. Runs edge to edge in its section; the first and last cells keep the sheet's inset so the slot column lines
  * up with the section title above it.
  */
-const RosterTable = ({ rosterId }: { rosterId: number }) => {
+const SheetRoster = ({ rosterId }: { rosterId: number }) => {
   const { data, analysis } = useFantasy()
-  const rows = useRosterRows(rosterId)
+  const team = analysis.teamById[rosterId]
+  const rows = useMemo(() => (team ? rosterRows(team, data.league.roster_positions) : []), [team, data.league.roster_positions])
   const players = data.players
   const week = data.horizon[0]?.week ?? 0
   const perWeek = analysis.horizon.perWeek
@@ -54,7 +31,7 @@ const RosterTable = ({ rosterId }: { rosterId: number }) => {
         label: 'Player',
         className: 'max-w-[150px] overflow-hidden sm:max-w-[190px]',
         sort: (r) => players[r.id]?.name ?? r.id,
-        render: (r) => <PlayerName player={players[r.id]} id={r.id} size={20} />,
+        render: (r) => (r.empty ? <span className="text-ff-muted">empty</span> : <PlayerName player={players[r.id]} id={r.id} size={20} />),
       },
       {
         key: 'bye',
@@ -95,4 +72,4 @@ const RosterTable = ({ rosterId }: { rosterId: number }) => {
   return <Table rows={rows} columns={columns} rowKey={(r) => r.id} dense rowClass={(r) => (r.starter ? '' : 'bg-ff-sunken/40')} />
 }
 
-export default RosterTable
+export default SheetRoster

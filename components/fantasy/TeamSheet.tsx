@@ -4,7 +4,7 @@ import { useFantasy } from './FantasyContext'
 import { MoveList, useMoves } from './Moves'
 import TeamName, { TopMark } from './TeamName'
 import FreeAgentPick from './FreeAgentPick'
-import RosterTable from './RosterTable'
+import SheetRoster from './SheetRoster'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
 import { Avatar, Badge, Button, DeltaChip, Stat, fmt, pct, simOdds } from './ui'
 
@@ -54,11 +54,12 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
           />
 
           <SheetBody>
-            <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line [&>*]:!px-4 [&>*]:border-0">
-              <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`${fmt(season.ppg)} pts a game`} />
-              <Stat label="Playoffs" value={sim ? simOdds(sim, 'playoffs') : '–'} meter={sim?.playoffs} sub={sim ? `title ${simOdds(sim, 'title')}` : 'no forecast'} />
-              <Stat label="Power" value={power ? `${fmt(power.score, 0)}%` : '–'} sub="vs an average team" />
+            <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line">
+              <Stat inset="sheet" label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`${fmt(season.ppg)} pts a game`} />
+              <Stat inset="sheet" label="Playoffs" value={sim ? simOdds(sim, 'playoffs') : '–'} meter={sim?.playoffs} sub={sim ? `title ${simOdds(sim, 'title')}` : 'no forecast'} />
+              <Stat inset="sheet" label="Power" value={power ? `${fmt(power.score, 0)}%` : '–'} sub="vs an average team" />
               <Stat
+                inset="sheet"
                 label="Lineup"
                 value={fmt(need?.lineup)}
                 delta={need && league ? <DeltaChip value={need.lineup - league} title="Against the league's average lineup" /> : undefined}
@@ -128,7 +129,7 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
 
             {team.players.length > 0 && (
               <SheetSection title="Roster" aside={`${team.players.length} players · pts/wk ahead`} flush>
-                <RosterTable rosterId={rosterId} />
+                <SheetRoster rosterId={rosterId} />
               </SheetSection>
             )}
           </SheetBody>

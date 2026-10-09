@@ -890,6 +890,7 @@ export const Stat = ({
   badge,
   meter,
   tone,
+  inset,
   className,
 }: {
   label: ReactNode
@@ -900,9 +901,11 @@ export const Stat = ({
   /** 0–1: a thin bar under the value, for odds and shares. */
   meter?: number
   tone?: Tone
+  /** In a sheet's hairline grid: borderless, on the sheet's 16px inset. */
+  inset?: 'sheet'
   className?: string
 }) => (
-  <div className={cx('min-w-0 border border-ff-line bg-ff-panel px-2.5 py-2 sm:px-3 sm:py-2.5', className)}>
+  <div className={cx('min-w-0 bg-ff-panel py-2 sm:py-2.5', inset === 'sheet' ? 'px-4' : 'border border-ff-line px-2.5 sm:px-3', className)}>
     <div className="ff-label sm:truncate">{label}</div>
     <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       <span className={cx('num truncate text-[18px] font-medium leading-none tracking-[-0.02em] sm:text-[21px]', tone && tone !== 'neutral' ? TONE_TEXT[tone] : 'text-ff-text')}>{value}</span>
@@ -1652,10 +1655,6 @@ const REASON_MARK: Record<NonNullable<Reason['tone']>, { glyph: string; sr: stri
  * The case for something, one line per reason, each led by a square in its tone: green helps,
  * red hurts, amber is a caution. Sits in a table's expanded row or anywhere a justification goes.
  */
-/**
- * A list of sentences, one per item. A hairline runs the full width between items (none under the last) so each
- * reads as its own line of thought; the padding sits on the items so the rule reaches both edges.
- */
 export const Reasons = ({ items, title, columns = 2 }: { items: Reason[]; title?: ReactNode; columns?: 1 | 2 }) => (
   <div className="bg-ff-sunken/40">
     {title && <div className="ff-label px-3 pt-2.5">{title}</div>}
@@ -1696,7 +1695,11 @@ export const Reasons = ({ items, title, columns = 2 }: { items: Reason[]; title?
   </div>
 )
 
-/** A plain list of sentences in a panel with no padding: the same full-width hairlines and rhythm as Reasons. */
+/**
+ * A plain list of sentences, one per item, in a panel with no padding. Like Reasons, a hairline runs the full width
+ * between items (none under the last) so each reads as its own line of thought; the padding sits on the items so the
+ * rule reaches both edges.
+ */
 export const Sentences = ({ children, className }: { children: ReactNode; className?: string }) => (
   <ul className={cx('divide-y divide-ff-line text-[12.5px] leading-[1.45] text-ff-text2 [&>li]:px-3 [&>li]:py-2', className)}>{children}</ul>
 )

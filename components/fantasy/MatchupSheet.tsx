@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react'
+import React from 'react'
+import { benchIds } from '../../lib/fantasy/roster'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
-import { useRosterRows } from './RosterTable'
 import { Deciders, MatchupScore, SlotTable, decidedBy, useMatchups } from './matchup'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
 import { Avatar, Badge, fmt, fmtSigned, pct } from './ui'
@@ -18,22 +18,6 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
   const A = analysis.teamById[a]
   const B = analysis.teamById[b]
   const surname = (id: string) => data.players[id]?.name.split(' ').slice(-1)[0] ?? id
-  // Each side's bench, best first: who could still be swapped in.
-  const rowsA = useRosterRows(a)
-  const rowsB = useRosterRows(b)
-  const benches = useMemo(() => {
-    const per = analysis.horizon.perWeek
-    const bench = (rows: typeof rowsA) =>
-      rows
-        .filter((r) => r.slot === 'BN')
-        .map((r) => r.id)
-        .sort((x, y) => (per[y] ?? 0) - (per[x] ?? 0))
-    return [
-      { id: a, name: A?.name ?? '', ids: bench(rowsA) },
-      { id: b, name: B?.name ?? '', ids: bench(rowsB) },
-    ]
-  }, [rowsA, rowsB, analysis.horizon.perWeek, a, b, A?.name, B?.name])
-
   const header = (
     <SheetHeader
       lead={
@@ -51,7 +35,7 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
             (m.kindA === 'final' && m.kindB === 'final' ? (
               <span className="text-ff-text2">final</span>
             ) : m.started ? (
-              <span className="text-ff-warn">live</span>
+              <span className="text-ff-pos">live</span>
             ) : (
               <span>projected</span>
             ))}
@@ -77,6 +61,12 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
   const stB = slate.managers[b]?.stakes
   const worth = (s: typeof stA) => (s ? Math.round((s.win.playoffs - s.loss.playoffs) * 100) : null)
   const deciding = decidedBy(m, surname)
+  // Each side's bench, best first: who could still be swapped in.
+  const per = analysis.horizon.perWeek
+  const benches = [
+    { id: a, name: A?.name ?? '', ids: A ? benchIds(A).sort((x, y) => (per[y] ?? 0) - (per[x] ?? 0)) : [] },
+    { id: b, name: B?.name ?? '', ids: B ? benchIds(B).sort((x, y) => (per[y] ?? 0) - (per[x] ?? 0)) : [] },
+  ]
 
   return (
     <SheetContent>
@@ -114,13 +104,13 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
         )}
         <SheetSection title="What decides it" aside="± win odds, bad game to good">
           {deciding && m.deciders.length > 0 && <p className="mb-2 text-[12.5px] text-ff-text2">Comes down to {deciding}.</p>}
-          <div className="-mx-4 [&_li]:!px-4 [&_p]:!px-4">
-            <Deciders m={m} limit={5} />
+          <div className="-mx-4">
+            <Deciders m={m} limit={5} inset="sheet" />
           </div>
         </SheetSection>
         <SheetSection title="Slot by slot" aside="green: left side ahead">
-          <div className="-mx-4 [&_li]:!px-4">
-            <SlotTable m={m} compact />
+          <div className="-mx-4">
+            <SlotTable m={m} compact inset="sheet" />
           </div>
         </SheetSection>
         {benches.some((s) => s.ids.length > 0) && (

@@ -148,7 +148,7 @@ export const MatchupScore = ({ m, size = 'lg' }: { m: MatchupRead; size?: 'lg' |
 }
 
 /** Every slot against its opposite, with the edge between them. */
-export const SlotTable = ({ m, compact }: { m: MatchupRead; compact?: boolean }) => {
+export const SlotTable = ({ m, compact, inset }: { m: MatchupRead; compact?: boolean; inset?: 'sheet' }) => {
   const { data, openPlayer } = useFantasy()
   const maxEdge = Math.max(4, ...m.rows.map((r) => Math.abs(r.edge)))
   // Each player is a cell of his own: it lights on hover, wherever the pointer is on it, and a click anywhere on it opens him.
@@ -164,7 +164,7 @@ export const SlotTable = ({ m, compact }: { m: MatchupRead; compact?: boolean })
   return (
     <ul>
       {m.rows.map((r, i) => (
-        <li key={i} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 border-b border-ff-line/60 px-3 last:border-0">
+        <li key={i} className={cx('grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 border-b border-ff-line/60 last:border-0', inset === 'sheet' ? 'px-4' : 'px-3')}>
           <span className="flex min-w-0 items-stretch">{name(r.a, 'left')}</span>
           <span className="flex w-[104px] flex-col items-center justify-center gap-0.5" title={`Edge ${fmtSigned(r.edge)}: expected points, left minus right`}>
             <span className="flex w-full items-baseline justify-between text-[12.5px]">
@@ -189,14 +189,15 @@ export const SlotTable = ({ m, compact }: { m: MatchupRead; compact?: boolean })
 }
 
 /** The players still to play who move the odds most, each with whose he is and his range. */
-export const Deciders = ({ m, limit = 6 }: { m: MatchupRead; limit?: number }) => {
+export const Deciders = ({ m, limit = 6, inset }: { m: MatchupRead; limit?: number; inset?: 'sheet' }) => {
   const { data } = useFantasy()
   const xs = m.deciders.slice(0, limit)
-  if (!xs.length) return <p className="px-3 py-3 text-[12px] text-ff-muted">Every starter&apos;s game is final.</p>
+  const px = inset === 'sheet' ? 'px-4' : 'px-3'
+  if (!xs.length) return <p className={cx(px, 'py-3 text-[12px] text-ff-muted')}>Every starter&apos;s game is final.</p>
   return (
     <ul>
       {xs.map((x) => (
-        <li key={x.id} className="flex items-center gap-2 border-b border-ff-line/60 px-3 py-1.5 last:border-0">
+        <li key={x.id} className={cx('flex items-center gap-2 border-b border-ff-line/60 py-1.5 last:border-0', px)}>
           <span className="min-w-0 flex-1">
             <PlayerName player={data.players[x.id]} id={x.id} size={22} sub={<TeamName id={x.owner} avatar={false} plain className="text-[11px]" />} />
           </span>

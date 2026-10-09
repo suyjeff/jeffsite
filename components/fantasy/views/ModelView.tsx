@@ -233,32 +233,36 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
         }
       />
       <div className="mt-4 space-y-3">
-        {subs.map((k) => (
-          <TabSection key={k} id={k} label={LABEL[k]} active={tab === k} stacked={stacked}>
-            {INTRO[k] && (INTRO[k]!.you || INTRO[k]!.how) ? (
-              <Callout kind="instruction" action={<span className={cx('font-mono text-[10.5px]', INTRO[k]!.you ? 'text-ff-accent' : 'text-ff-muted')}>{INTRO[k]!.you ? 'tunable' : 'read-only'}</span>}>
-                {INTRO[k]!.what}
-                {INTRO[k]!.how && ` ${INTRO[k]!.how}`}
-                {INTRO[k]!.you && <span className="text-ff-text"> Yours to set: {INTRO[k]!.you}</span>}
-              </Callout>
-            ) : INTRO[k] && (
-              <div className="flex flex-col gap-1 border-l-2 border-ff-line2 pl-3 text-[12.5px] leading-snug sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
-                <span className="text-ff-text2">{INTRO[k]!.what}</span>
-                <span className="shrink-0 font-mono text-[10.5px] text-ff-muted">read-only</span>
-              </div>
-            )}
-            {k === 'overview' && <OverviewTab open={open} />}
-            {k === 'system' && <SystemTab onSub={open} />}
-            {k === 'forecast' && <ForecastTab />}
-            {k === 'backtest' && <BacktestTab />}
-            {k === 'behavior' && <BehaviorTab />}
-            {k === 'value' && <ValueTab data={data} analysis={analysis} baseline={baseline} model={model} setModel={setModel} />}
-            {k === 'power' && <PowerTab analysis={analysis} baseline={baseline} weights={weights} setWeights={setWeights} />}
-            {k === 'availability' && <AvailabilityTab data={data} analysis={analysis} />}
-            {k === 'engine' && <EngineTab data={data} analysis={analysis} baseline={baseline} />}
-            {k === 'data' && <DataTab data={data} analysis={analysis} reload={reload} />}
-          </TabSection>
-        ))}
+        {subs.map((k) => {
+          const intro = INTRO[k]
+          return (
+            <TabSection key={k} id={k} label={LABEL[k]} active={tab === k} stacked={stacked}>
+              {intro &&
+                (intro.you || intro.how ? (
+                  <Callout kind="instruction" action={<span className={cx('font-mono text-[10.5px]', intro.you ? 'text-ff-accent' : 'text-ff-muted')}>{intro.you ? 'tunable' : 'read-only'}</span>}>
+                    {intro.what}
+                    {intro.how && ` ${intro.how}`}
+                    {intro.you && <span className="text-ff-text"> Yours to set: {intro.you}</span>}
+                  </Callout>
+                ) : (
+                  <div className="flex flex-col gap-1 border-l-2 border-ff-line2 pl-3 text-[12.5px] leading-snug sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+                    <span className="text-ff-text2">{intro.what}</span>
+                    <span className="shrink-0 font-mono text-[10.5px] text-ff-muted">read-only</span>
+                  </div>
+                ))}
+              {k === 'overview' && <OverviewTab open={open} />}
+              {k === 'system' && <SystemTab onSub={open} />}
+              {k === 'forecast' && <ForecastTab />}
+              {k === 'backtest' && <BacktestTab />}
+              {k === 'behavior' && <BehaviorTab />}
+              {k === 'value' && <ValueTab data={data} analysis={analysis} baseline={baseline} model={model} setModel={setModel} />}
+              {k === 'power' && <PowerTab analysis={analysis} baseline={baseline} weights={weights} setWeights={setWeights} />}
+              {k === 'availability' && <AvailabilityTab data={data} analysis={analysis} />}
+              {k === 'engine' && <EngineTab data={data} analysis={analysis} baseline={baseline} />}
+              {k === 'data' && <DataTab data={data} analysis={analysis} reload={reload} />}
+            </TabSection>
+          )
+        })}
       </div>
     </>
   )
