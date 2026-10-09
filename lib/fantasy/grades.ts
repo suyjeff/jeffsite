@@ -57,7 +57,7 @@ export const TARGET: Record<Grade, number> = { yes: 0.75, maybe: 0.4, no: 0.07 }
 export const GRADE_LABEL: Record<Grade, string> = { yes: 'Likely', maybe: 'Maybe', no: 'No way' }
 export const WHY_LABEL: Record<GradeWhy, string> = {
   untouchable: "won't move him",
-  lopsided: 'asks too much',
+  lopsided: 'too big an ask',
   dormant: 'checked out',
   fit: "doesn't need it",
 }

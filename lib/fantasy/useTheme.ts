@@ -27,12 +27,23 @@ export const useTheme = (id: string | null | undefined, scheme: Scheme, ready = 
       .map(([k, v]) => (k === 'colorScheme' ? `color-scheme:${v}` : `${k}:${v}`))
       .join(';')}}`
     let el = document.getElementById('ff-theme') as HTMLStyleElement | null
+    const swap = !!el && el.textContent !== css
     if (!el) {
       el = document.createElement('style')
       el.id = 'ff-theme'
       document.head.appendChild(el)
     }
+    // Swapping themes would fire every colour transition at once and smear; hold them off for the swap.
+    const hold = swap ? document.createElement('style') : null
+    if (hold) {
+      hold.textContent = '.ff *,.ff *::before,.ff *::after{transition:none!important}'
+      document.head.appendChild(hold)
+    }
     el.textContent = css
+    if (hold) {
+      void document.body.offsetHeight
+      requestAnimationFrame(() => hold.remove())
+    }
     // The browser chrome (address bar, overscroll) takes the page colour.
     for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) m.content = themeBg(theme, mode)
   }, [theme, mode, ready])

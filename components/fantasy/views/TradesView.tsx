@@ -141,9 +141,12 @@ const TradesView = ({
       up.length ? `raise the odds for ${up.join(', ')}` : '',
       down.length ? `lower them for ${down.join(', ')}` : '',
       kept ? `take ${kept} player${kept === 1 ? '' : 's'} off the table` : '',
-      Math.abs(L.global) >= 0.15 ? `make every read ${L.global > 0 ? 'a little more hopeful' : 'a little harsher'}` : '',
+      Math.abs(L.global) >= 0.15 ? `nudge every other team's odds ${L.global > 0 ? 'up' : 'down'} a little` : '',
     ].filter(Boolean)
-    return parts.length ? `${parts.join('; ')}.` : 'are saved; a few more and they start to move the odds.'
+    // Subject is "Your grade" or "Your N grades", so each verb agrees with it.
+    const one = L.n === 1
+    const fixed = parts.map((x) => (one ? x.replace(/^raise /, 'raises ').replace(/^lower /, 'lowers ').replace(/^take /, 'takes ').replace(/^nudge /, 'nudges ') : x))
+    return fixed.length ? `${fixed.join('; ')}.` : one ? 'is saved; a few more and grades start to move the odds.' : 'are saved; a few more and they start to move the odds.'
   }, [grades.lessons, teamById])
 
   const shapeCounts = useMemo(() => {
@@ -384,7 +387,7 @@ const TradesView = ({
             {grades.lessons.n > 0 && (
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-l-2 border-ff-accent/50 pl-3 text-[12px] leading-[1.45] text-ff-text2">
                 <span>
-                  <span className="text-ff-text">Your {grades.lessons.n} grade{grades.lessons.n === 1 ? '' : 's'}</span> {gradeSummary}
+                  <span className="text-ff-text">{grades.lessons.n === 1 ? 'Your grade' : `Your ${grades.lessons.n} grades`}</span> {gradeSummary}
                 </span>
                 {ruledOut > 0 && (
                   <button type="button" onClick={() => setShowRuledOut((x) => !x)} className="font-mono text-[11px] text-ff-accent hover:underline">
@@ -568,7 +571,7 @@ const TradesView = ({
           <Panel title="Biggest needs, team by team" actions={<span>who to call, and with what</span>} pad={false}>
             <div className="grid grid-cols-1 gap-px bg-ff-line/60 sm:grid-cols-2 xl:grid-cols-3">
               {needCards.map((c) => (
-                <div key={c.team.rosterId} className={cx('flex min-w-0 flex-col gap-2 bg-ff-panel px-3 py-2.5', c.mine && 'bg-ff-accent/[0.04]')}>
+                <div key={c.team.rosterId} className={cx('flex min-w-0 flex-col gap-2 bg-ff-panel px-3 py-2.5', c.mine && 'shadow-[inset_2px_0_0_rgb(var(--ff-accent))]')}>
                   <div className="flex min-w-0 items-center gap-2">
                     <Avatar src={c.team.avatar} name={c.team.name} size={20} />
                     <span className={cx('min-w-0 flex-1 truncate text-[13px] text-ff-text', c.mine && 'font-medium')}>{c.team.name}</span>

@@ -113,7 +113,7 @@ const GameCard = ({
           <div className="flex items-center justify-between gap-3 border-t border-ff-line px-3 py-1.5 text-[11px] text-ff-muted">
             <span>
               {g.final ? (
-                'Final: its swing is spent'
+                'Final'
               ) : (
                 <>
                   Moves win odds <span className="num text-ff-text2">±{pts(g.swing / 2)}</span> across the league&apos;s matchups
@@ -271,7 +271,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
             <b className="font-medium text-ff-text">
               {players[p.id]?.name} scored {fmt(p.actual)}
             </b>{' '}
-            ({fmtSigned(p.actual! - p.proj)} against his projection): your win odds {p.realized! > 0 ? 'up' : 'down'} {pts(Math.abs(p.realized!))} points.
+            ({fmtSigned(p.actual! - p.proj)} against the projection): your win odds {p.realized! > 0 ? 'up' : 'down'} {pts(Math.abs(p.realized!))} points.
           </>
         ),
         tone: p.realized! > 0 ? 'pos' : 'neg',
@@ -494,7 +494,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
                     .sort((a, b) => b.swing - a.swing)[0]
                   const gap = m.stakes ? m.stakes.win.playoffs - m.stakes.loss.playoffs : null
                   return (
-                    <div key={m.rosterId} className={cx('min-w-0 space-y-2 bg-ff-panel px-3 py-2.5', m.rosterId === me && 'bg-ff-accent/[0.04]')}>
+                    <div key={m.rosterId} className={cx('min-w-0 space-y-2 bg-ff-panel px-3 py-2.5', m.rosterId === me && 'shadow-[inset_2px_0_0_rgb(var(--ff-accent))]')}>
                       <div className="flex min-w-0 items-center justify-between gap-2 text-[13px]">
                         <ManagerTag id={m.rosterId} me={me} opp={opp} avatar />
                         <span className={cx('num shrink-0 text-[15px] font-medium', m.win >= 0.6 ? 'text-ff-pos' : m.win <= 0.4 ? 'text-ff-neg' : 'text-ff-text')}>

@@ -134,7 +134,7 @@ const GradeBar = ({ idea, base, nm, posOf }: { idea: TradeIdea; base: AcceptRead
             { key: 'no', label: 'No way', title: 'Not happening' },
           ]}
         />
-        <span className="ml-auto text-[10.5px] text-ff-muted">{rec ? 'saved · the read learns from it' : 'your call trains the read'}</span>
+        <span className="ml-auto text-[10.5px] text-ff-muted">{rec ? 'saved · the odds learn from it' : 'your answer tunes the odds'}</span>
       </div>
       {rec && rec.grade !== 'yes' && (
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Why not">

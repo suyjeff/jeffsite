@@ -98,7 +98,7 @@ const RosterTable = ({ data, analysis, rosterId, basis }: { data: LeagueData; an
       rows={rows}
       columns={basis === 'ahead' ? ahead : todate}
       rowKey={(r) => r.id}
-      rowClass={(r) => (r.starter ? '' : 'opacity-80')}
+      rowClass={(r) => (r.starter ? '' : 'bg-ff-sunken/40')}
       canExpand={(r) => !!data.context[r.id]?.notes.length}
       expand={(r) => {
         const items = contextReasons(data.context[r.id], players)

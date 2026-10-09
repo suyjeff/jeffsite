@@ -331,13 +331,13 @@ const Shell = (props: ShellProps) => {
               aria-current={active ? 'page' : undefined}
               className={cx('flex h-12 flex-col items-center justify-center gap-0.5 border-r border-ff-line text-[11.5px]', active ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted')}
             >
-              <span className="num text-[9.5px] opacity-70">{String(SECTIONS.findIndex((x) => x.key === key) + 1).padStart(2, '0')}</span>
+              <span className="num text-[9.5px] text-ff-muted">{String(SECTIONS.findIndex((x) => x.key === key) + 1).padStart(2, '0')}</span>
               {s.short}
             </button>
           )
         })}
         <button onClick={() => setDrawer(true)} className={cx('flex h-12 flex-col items-center justify-center gap-0.5 text-[11.5px]', !TAB_BAR.includes(section) ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted')}>
-          <span className="num text-[9.5px] opacity-70">··</span>
+          <span className="num text-[9.5px] text-ff-muted">··</span>
           More
         </button>
       </nav>

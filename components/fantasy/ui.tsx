@@ -1315,6 +1315,8 @@ export function Table<T>({
   const [open, setOpen] = useState<Set<string | number>>(() => new Set())
   // The band under an open row spans the visible width, not the table's, so it reads without scrolling sideways.
   const [viewW, setViewW] = useState<number | null>(null)
+  // A table wider (or taller) than its box must scroll from the keyboard too, so it joins the tab order (2.1.1).
+  const [scrolls, setScrolls] = useState(false)
   const id = useId()
   useEffect(() => {
     const el = scroller.current
@@ -1322,6 +1324,7 @@ export function Table<T>({
     const check = () => {
       setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
       setViewW(el.clientWidth)
+      setScrolls(el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
     }
     check()
     const ro = new ResizeObserver(check)
@@ -1371,7 +1374,12 @@ export function Table<T>({
   return (
     <div className="relative">
       {more && <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 z-30 w-8 bg-gradient-to-l from-ff-panel to-transparent" />}
-      <div ref={scroller} className="ff-scroll overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
+      <div
+        ref={scroller}
+        tabIndex={scrolls ? 0 : undefined}
+        className="ff-scroll overflow-auto focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
+        style={maxHeight ? { maxHeight } : undefined}
+      >
         <table className="w-full border-collapse text-[13px]">
           <thead className="sticky top-0 z-10">
             <tr>

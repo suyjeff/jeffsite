@@ -148,7 +148,7 @@ const DisplayMenu = ({
               />
             </div>
           </div>
-          <fieldset className="max-h-[min(340px,50vh)] space-y-2 overflow-y-auto p-3">
+          <fieldset className="max-h-[min(340px,50vh)] space-y-2 overflow-y-auto overscroll-contain p-3">
             <legend className="sr-only">Theme</legend>
             {(['Tailwind', 'Editor'] as const).map((family) => (
               <div key={family} className="space-y-1.5">
