@@ -1,12 +1,12 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import type { SlateGame, SlatePlayer } from '../../../lib/fantasy/slate'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { sectionCode } from '../Shell'
 import { useSlate } from '../useSlate'
+import { ManagerTag, RangeBar, dayOf, odds, pts } from '../slateBits'
 import {
   Avatar,
   Badge,
@@ -15,6 +15,7 @@ import {
   PageHeader,
   Panel,
   Reasons,
+  Segmented,
   Stat,
   StatGrid,
   Table,
@@ -33,39 +34,52 @@ import {
 type Sub = 'week' | 'games' | 'managers'
 const SUBS: Sub[] = ['week', 'games', 'managers']
 
-/** Win-odds points, signed: "+12". */
-const pts = (x: number, signed = false) => `${signed && x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x * 100).toFixed(0)}`
-const DAY = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
-const dayOf = (date: string | null) => (date ? DAY.format(new Date(`${date}T12:00:00Z`)) : 'TBD')
-const odds = (p: number) => (p >= 0.995 ? '>99%' : p <= 0.005 ? '<1%' : pct(p))
-
-/** A player's game as a band: 20th to 80th percentile, his projection as a tick, and what he scored once it is final. */
-const RangeBar = ({ p, max }: { p: SlatePlayer; max: number }) => {
-  const x = (v: number) => `${Math.max(0, Math.min(100, (v / max) * 100))}%`
-  const tone = p.actual == null ? '' : p.actual >= p.proj ? 'bg-ff-pos' : 'bg-ff-neg'
+/** One NFL game as a tile: state, projected score, what it moves, and the league starters who matter most in it. */
+const GameTile = ({ g, maxSwing, me, opp, isKey }: { g: SlateGame; maxSwing: number; me: number | null; opp: number | null; isKey?: boolean }) => {
+  const { data, openGame } = useFantasy()
+  const top = g.players.slice(0, 3)
   return (
-    <span className="relative block h-3 w-full min-w-[72px] max-w-[140px]" aria-hidden>
-      <span className="absolute inset-x-0 top-1/2 h-px bg-ff-line" />
-      <span className="absolute top-1/2 h-1.5 -translate-y-1/2 bg-ff-accent/25" style={{ left: x(p.low), width: `calc(${x(p.high)} - ${x(p.low)})` }} />
-      <span className="absolute top-0 h-3 w-px bg-ff-text2" style={{ left: x(p.proj) }} />
-      {p.actual != null && <span className={cx('absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2', tone)} style={{ left: x(p.actual) }} />}
-    </span>
-  )
-}
-
-/** A manager as a compact tag: avatar and name, marked when it is you or your opponent. */
-const ManagerTag = ({ id, me, opp, avatar }: { id: number; me: number | null; opp: number | null; avatar?: boolean }) => {
-  const { analysis } = useFantasy()
-  const t = analysis.teamById[id]
-  if (!t) return null
-  const tone = id === me ? 'font-medium text-ff-accent' : id === opp ? 'text-ff-neg' : 'text-ff-text2'
-  // In a table cell the name alone, so it can truncate with an ellipsis; the avatar only where there is room.
-  if (!avatar) return <span className={tone}>{t.name}</span>
-  return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
-      <Avatar src={t.avatar} name={t.name} size={16} />
-      <span className={cx('truncate', tone)}>{t.name}</span>
-    </span>
+    <button
+      type="button"
+      onClick={() => openGame(g.key)}
+      className={cx(
+        'ff-press group flex min-w-0 flex-col gap-2 border bg-ff-panel px-3 py-2.5 text-left hover:border-ff-line2 hover:bg-ff-raised/40',
+        isKey ? 'border-ff-accent/50' : 'border-ff-line',
+      )}
+    >
+      <span className="flex w-full items-baseline justify-between gap-2">
+        <span className="font-mono text-[13px] font-semibold text-ff-text">
+          {g.away} <span className="font-normal text-ff-muted">@</span> {g.home}
+        </span>
+        <span className={cx('font-mono text-[10.5px]', g.live ? 'text-ff-warn' : g.final ? 'text-ff-text2' : 'text-ff-muted')}>{g.final ? 'Final' : g.live ? 'Live' : dayOf(g.date).split(',')[0]}</span>
+      </span>
+      <span className="flex w-full items-center gap-2">
+        <span className="num text-[11px] text-ff-muted" title={g.final ? 'Pre-game projected score' : 'Projected score'}>
+          {g.totals.away ? fmt(g.totals.away.pts) : '–'}–{g.totals.home ? fmt(g.totals.home.pts) : '–'}
+        </span>
+        <span className="h-1 flex-1 bg-ff-line" aria-hidden>
+          <span className={cx('block h-full', g.final ? 'bg-ff-text2/40' : 'bg-ff-accent')} style={{ width: `${Math.min(100, (g.swing / maxSwing) * 100)}%` }} />
+        </span>
+        <span className="num w-8 text-right text-[11px] text-ff-text2" title="Win odds it moves across the league's matchups">
+          ±{pts(g.swing / 2)}
+        </span>
+      </span>
+      <span className="min-h-[2.9em] space-y-0.5 text-[11.5px] leading-[1.45]">
+        {top.length ? (
+          top.map((p) => (
+            <span key={p.id} className="flex min-w-0 items-center gap-1.5">
+              <span aria-hidden className={cx('h-1.5 w-1.5 shrink-0', p.owner === me ? 'bg-ff-accent' : p.owner === opp ? 'bg-ff-neg' : 'bg-ff-line2')} />
+              <span className={cx('truncate', p.owner === me ? 'text-ff-text' : 'text-ff-text2')}>{data.players[p.id]?.name}</span>
+              {p.owner === me && <span className="sr-only">(yours)</span>}
+              {p.owner === opp && <span className="sr-only">(your opponent&apos;s)</span>}
+            </span>
+          ))
+        ) : (
+          <span className="text-ff-muted">No league starters</span>
+        )}
+      </span>
+      {isKey && <span className="font-mono text-[10px] text-ff-accent">decides your week</span>}
+    </button>
   )
 }
 
@@ -83,6 +97,7 @@ const GameCard = ({
   isKey?: boolean
 }) => {
   const [all, setAll] = useState(false)
+  const { openGame } = useFantasy()
   const max = Math.max(10, ...g.players.map((p) => Math.max(p.high, p.actual ?? 0)))
   const rows = all ? g.players : g.players.slice(0, 6)
   const involved = isKey
@@ -92,13 +107,13 @@ const GameCard = ({
       pad={false}
       title={
         <span className="flex items-baseline gap-2 normal-case tracking-normal">
-          <span className="font-mono text-[12px] font-semibold text-ff-text">
+          <button type="button" onClick={() => openGame(g.key)} title="Open the game" className="font-mono text-[12px] font-semibold text-ff-text hover:underline">
             {g.away}
             {g.totals.away && <span className="ml-1 font-normal text-ff-muted">{fmt(g.totals.away.pts)}</span>}
             <span className="mx-1.5 font-normal text-ff-muted">@</span>
             {g.home}
             {g.totals.home && <span className="ml-1 font-normal text-ff-muted">{fmt(g.totals.home.pts)}</span>}
-          </span>
+          </button>
         </span>
       }
       actions={
@@ -142,6 +157,23 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
   const players = data.players
   const me = analysis.myRosterId
   const { slate, live, week, proj, totals } = useSlate(data, analysis)
+  // Games as full cards or as a grid of tiles that open a sheet; remembered in this browser.
+  const [view, setView] = useState<'list' | 'grid'>('list')
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem('ff:slate:view') === 'grid') setView('grid')
+    } catch {
+      // Storage blocked: the list it is.
+    }
+  }, [])
+  const pickView = (v: 'list' | 'grid') => {
+    setView(v)
+    try {
+      window.localStorage.setItem('ff:slate:view', v)
+    } catch {
+      // Storage blocked: the choice lasts this visit.
+    }
+  }
   const gameByKey = useMemo(() => Object.fromEntries(slate.games.map((g) => [g.key, g])), [slate.games])
   const mine = me != null ? slate.managers[me] : null
   const opp = mine?.opponent ?? null
@@ -155,7 +187,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
   if (!live || !slate.games.length) {
     return (
       <>
-        <PageHeader code={sectionCode('slate')} title="Gameday" />
+        <PageHeader title="Gameday" />
         <div className="mt-4">
           <Empty title="No NFL week in progress">Gameday reads the current week&apos;s games against this league&apos;s matchups. It comes back with the regular season.</Empty>
         </div>
@@ -367,12 +399,12 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
     return <Reasons items={items} />
   }
 
+  const maxSwing = Math.max(0.05, ...slate.games.map((g) => g.swing))
   const byDay = slate.games.reduce<Record<string, SlateGame[]>>((acc, g) => ((acc[g.final ? 'Final' : dayOf(g.date)] ??= []).push(g), acc), {})
 
   return (
     <>
       <PageHeader
-        code={sectionCode('slate')}
         title="Gameday"
         meta={`week ${week} · ${finals} of ${slate.games.length} games final`}
         tabs={
@@ -462,16 +494,40 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
         </TabSection>
 
         <TabSection id="games" label="Games" count={slate.games.length} active={tab === 'games'} stacked={stacked}>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[12px] text-ff-muted">{view === 'grid' ? 'Open a game for its league starters.' : 'Every league starter, game by game.'}</span>
+            <Segmented<'list' | 'grid'>
+              size="sm"
+              label="Games view"
+              value={view}
+              onChange={pickView}
+              options={[
+                { key: 'list', label: 'List', title: 'Full cards with every league starter' },
+                { key: 'grid', label: 'Grid', title: 'A tile per game; open one for the detail' },
+              ]}
+            />
+          </div>
           {Object.entries(byDay).map(([day, gs]) => (
             <div key={day} className="space-y-2">
               <div className="ff-label">
-                {day} <span className="num ml-1">{gs.length}</span>
+                {day}
+                <span className="num ml-1.5 text-ff-muted">
+                  · {gs.length} {gs.length === 1 ? 'game' : 'games'}
+                </span>
               </div>
-              <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
-                {gs.map((g) => (
-                  <GameCard key={g.key} g={g} columns={playerCols} expand={playerWhy} isKey={mine?.games[0]?.key === g.key} />
-                ))}
-              </div>
+              {view === 'grid' ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+                  {gs.map((g) => (
+                    <GameTile key={g.key} g={g} maxSwing={maxSwing} me={me} opp={opp} isKey={mine?.games[0]?.key === g.key} />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
+                  {gs.map((g) => (
+                    <GameCard key={g.key} g={g} columns={playerCols} expand={playerWhy} isKey={mine?.games[0]?.key === g.key} />
+                  ))}
+                </div>
+              )}
             </div>
           ))}
           <p className="text-[11.5px] leading-relaxed text-ff-muted">

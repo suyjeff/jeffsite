@@ -9,6 +9,8 @@ import LinesBlock from '../LinesBlock'
 import { describeNote } from '../ContextNotes'
 import { useFantasy, useTradeRead } from '../FantasyContext'
 import { useSlate } from '../useSlate'
+import FreeAgentPick, { bestFreeAgent, FreeAgentName } from '../FreeAgentPick'
+import { MoveList, useMoves } from '../Moves'
 import { ruledOutBy } from '../../../lib/fantasy/grades'
 import PlayerName from '../PlayerName'
 import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Pts, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
@@ -33,6 +35,7 @@ export type WidgetKind =
   | 'activity'
   | 'props'
   | 'gameday'
+  | 'moves'
 
 type Meta = { title: string; blurb: string; w: number; h: number; Body: (p: WidgetProps) => JSX.Element; reads?: 'team' | 'player' }
 
@@ -218,7 +221,7 @@ const useWeekLineup = (rosterId: number | null, week: number | null) => {
     const res = ev.assign(analysis.teamById[rosterId].players)
     return analysis.slots.map((slot, i) => {
       const p = res.assignments[i]
-      return { slot: slot.name.replace('SUPER_FLEX', 'SF'), id: p && !isWaiverFill(p.id) ? p.id : null, pts: p ? p.pts : 0 }
+      return { slot: slot.name.replace('SUPER_FLEX', 'SF'), eligible: slot.eligible, id: p && !isWaiverFill(p.id) ? p.id : null, pts: p ? p.pts : 0 }
     })
   }, [rosterId, week, data, analysis])
 }
@@ -246,7 +249,10 @@ const Matchup = ({ select }: WidgetProps) => {
   const best = edges.reduce<(typeof edges)[number] | null>((a, e) => (e.d > (a?.d ?? 0) ? e : a), null)
   const worst = edges.reduce<(typeof edges)[number] | null>((a, e) => (e.d < (a?.d ?? 0) ? e : a), null)
   const doubtful = [...(left ?? []), ...(right ?? [])].filter((s) => s.id && data.players[s.id]?.injury && !isOut(data.players[s.id]?.injury)).map((s) => surname(data.players[s.id!].name))
-  const last = (id: string | null) => (id ? surname(data.players[id]?.name ?? id) : 'waiver')
+  const last = (s?: { id: string | null; eligible: string[] }) => {
+    const id = s ? (s.id ?? bestFreeAgent(data, analysis.rosteredBy, s.eligible, game.week)) : null
+    return id ? surname(data.players[id]?.name ?? id) : 'a pickup'
+  }
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-ff-line px-3 pb-2.5 pt-3">
@@ -295,7 +301,9 @@ const Matchup = ({ select }: WidgetProps) => {
                     {data.players[s.id]?.name}
                   </button>
                 ) : (
-                  <span className="flex-1 text-ff-muted">waiver</span>
+                  <span className="min-w-0 flex-1 truncate text-ff-text2">
+                    <FreeAgentName eligible={s.eligible} week={game.week} />
+                  </span>
                 )}
                 <Pts value={s.pts} kind="proj" className="shrink-0" />
               </div>
@@ -314,12 +322,12 @@ const Matchup = ({ select }: WidgetProps) => {
         </li>
         {best && best.d >= 1 && (
           <li>
-            <span className="text-ff-pos">Your edge</span> <span className="font-mono text-[10.5px] text-ff-muted">{best.slot}</span> {last(best.me.id)} over {last(best.them?.id ?? null)} <span className="num text-ff-pos">+{fmt(best.d)}</span>
+            <span className="text-ff-pos">Your edge</span> <span className="font-mono text-[10.5px] text-ff-muted">{best.slot}</span> {last(best.me)} over {last(best.them)} <span className="num text-ff-pos">+{fmt(best.d)}</span>
           </li>
         )}
         {worst && worst.d <= -1 && (
           <li>
-            <span className="text-ff-neg">Their edge</span> <span className="font-mono text-[10.5px] text-ff-muted">{worst.slot}</span> {last(worst.them?.id ?? null)} over {last(worst.me.id)} <span className="num text-ff-neg">{fmtSigned(worst.d, 1)}</span>
+            <span className="text-ff-neg">Their edge</span> <span className="font-mono text-[10.5px] text-ff-muted">{worst.slot}</span> {last(worst.them)} over {last(worst.me)} <span className="num text-ff-neg">{fmtSigned(worst.d, 1)}</span>
           </li>
         )}
         {doubtful.length > 0 && (
@@ -397,7 +405,7 @@ const Lineup = ({ sel, select }: WidgetProps) => {
       {rows.map((r, i) => (
         <Row key={i} onClick={r.id ? () => select({ player: r.id! }) : undefined} active={!!r.id && sel.player === r.id} label={r.id ? `Follow ${data.players[r.id]?.name ?? 'player'}` : undefined}>
           <span className="w-9 font-mono text-[10.5px] text-ff-muted">{r.slot}</span>
-          <span className="min-w-0 flex-1">{r.id ? <PlayerName player={data.players[r.id]} id={r.id} size={18} avatar={false} /> : <span className="text-ff-muted">waiver fill</span>}</span>
+          <span className="min-w-0 flex-1">{r.id ? <PlayerName player={data.players[r.id]} id={r.id} size={18} avatar={false} /> : <FreeAgentPick eligible={r.eligible} week={week} size={18} avatar={false} />}</span>
           <span className="num w-12 text-right text-ff-text">{fmt(r.pts)}</span>
           <span className="num w-10 text-right text-ff-text2">{r.id ? pct(data.context[r.id]?.play) : ''}</span>
         </Row>
@@ -864,7 +872,7 @@ const Props = ({ sel, select }: WidgetProps) => {
 
 /** This week from the NFL side: your win odds, what a win is worth, and the games that decide it. */
 const Gameday = () => {
-  const { data, analysis, go } = useFantasy()
+  const { data, analysis, openGame } = useFantasy()
   const { slate, live } = useSlate(data, analysis)
   const me = analysis.myRosterId
   const mine = me != null ? slate.managers[me] : null
@@ -895,7 +903,7 @@ const Gameday = () => {
       {top.map((g) => {
         const game = games[g.key]
         return (
-          <Row key={g.key} onClick={() => go('slate', 'games')} label={`Open ${game.away} at ${game.home} on Gameday`} className="h-auto py-1.5">
+          <Row key={g.key} onClick={() => openGame(g.key)} label={`Open ${game.away} at ${game.home}`} className="h-auto py-1.5">
             <span className="w-[76px] shrink-0 font-mono text-[11.5px] font-semibold text-ff-text">
               {game.away} @ {game.home}
             </span>
@@ -913,7 +921,24 @@ const Gameday = () => {
   )
 }
 
+/** The moves worth making on your roster, most urgent first. */
+const Moves = () => {
+  const { analysis, go } = useFantasy()
+  const moves = useMoves(analysis.myRosterId, 8)
+  if (analysis.myRosterId == null) return <Empty title="No roster of yours">Pick a league you are in.</Empty>
+  if (!moves.length) return <Empty title="Nothing to do">Lineup is optimal, no starter in doubt, no add worth half a point.</Empty>
+  return (
+    <div>
+      <MoveList moves={moves} compact />
+      <button type="button" onClick={() => go('me')} className="block w-full border-t border-ff-line px-3 py-1.5 text-left font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text">
+        My team →
+      </button>
+    </div>
+  )
+}
+
 export const WIDGETS: Record<WidgetKind, Meta> = {
+  moves: { title: 'Moves to make', blurb: 'Lineup fixes, cover for starters who may sit, bye holes and the best adds.', w: 4, h: 9, Body: Moves },
   matchup: { title: 'My matchup', blurb: 'Next week, both lineups, and your chance to win.', w: 4, h: 12, Body: Matchup },
   odds: { title: 'Playoff odds', blurb: 'Simulated seasons: wins, playoff, bye and title odds.', w: 5, h: 11, Body: Odds },
   scoreboard: { title: 'Scoreboard', blurb: "This week's games with expected scores and win odds.", w: 6, h: 7, Body: Scoreboard },

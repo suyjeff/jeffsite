@@ -5,8 +5,9 @@ import { availabilityDrag } from '../../../lib/fantasy/scout'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, contextReasons } from '../ContextNotes'
 import PlayerName from '../PlayerName'
+import FreeAgentPick from '../FreeAgentPick'
 import ScoutReport from '../ScoutReport'
-import { sectionCode } from '../Shell'
+import MovesPanel from '../Moves'
 import { Badge, Button, DeltaChip, Empty, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
@@ -103,7 +104,7 @@ const MeView = ({
   if (!me) {
     return (
       <>
-        <PageHeader code={sectionCode('me')} title="My team" />
+        <PageHeader title="My team" />
         <div className="mt-4">
           <Empty title="No roster of yours in this league">Pick a league you are in from the menu.</Empty>
         </div>
@@ -193,7 +194,7 @@ const MeView = ({
                   columns={[
                     { key: 'slot', label: 'Slot', render: (r) => <span className="font-mono text-[11px] text-ff-text2">{r.slot.replace('SUPER_FLEX', 'SF')}</span> },
                     ...(slotBasis === 'ahead'
-                      ? [{ key: 'who', label: `Wk ${data.horizon[0]?.week ?? ''}`, render: (r: (typeof slotRows)[number]) => (r.starter ? <PlayerName player={players[r.starter]} id={r.starter} size={22} /> : <span className="text-ff-muted">waiver fill</span>) }]
+                      ? [{ key: 'who', label: `Wk ${data.horizon[0]?.week ?? ''}`, render: (r: (typeof slotRows)[number]) => (r.starter ? <PlayerName player={players[r.starter]} id={r.starter} size={22} /> : <FreeAgentPick eligible={slots[Number(r.key)]?.eligible ?? []} week={data.horizon[0]?.week} />) }]
                       : []),
                     { key: 'mine', label: 'You', align: 'right', render: (r) => <span className="text-ff-text">{fmt(r.mine)}</span> },
                     { key: 'lg', label: 'League', align: 'right', hideBelow: 'sm', render: (r) => fmt(r.league) },
@@ -231,7 +232,6 @@ const MeView = ({
   return (
     <>
       <PageHeader
-        code={sectionCode('me')}
         title={me.name}
         actions={
           <Button size="sm" variant="ghost" onClick={() => onTeam(me.rosterId)} title="The same team as the league sees it">
@@ -294,6 +294,7 @@ const MeView = ({
               </StatGrid>
             )}
 
+            <MovesPanel rosterId={me.rosterId} />
             <ScoutReport rosterId={me.rosterId} mine />
           {!stacked && newsPanel}
           {!stacked && (lineupPanel || slotsPanel) && (

@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { WIDGETS, type Selection, type WidgetKind } from '../dashboard/widgets'
-import { sectionCode } from '../Shell'
 import { Button, PageHeader, cx } from '../ui'
 
 // A modular board in the manner of a trading terminal: widgets on a 12-column
@@ -30,18 +29,20 @@ const spanClass = (w: number) => cx(w <= 6 ? 'md:col-span-6' : 'md:col-span-12',
 const heightLabel = (h: number) => HEIGHTS.find(([, x]) => x === h)?.[0] ?? String(h)
 
 const DEFAULT_LAYOUT: Widget[] = [
+  // Each run of widgets adds up to the 12 columns, so the board starts with no gaps.
   { id: 'w1', kind: 'matchup', w: 4, h: 12, ch: 2 },
   { id: 'w2', kind: 'odds', w: 5, h: 12, ch: 1 },
   { id: 'w3', kind: 'player', w: 3, h: 12, ch: 2 },
   { id: 'w4', kind: 'trades', w: 7, h: 9, ch: 0 },
   { id: 'w5', kind: 'team', w: 5, h: 9, ch: 1 },
+  { id: 'w13', kind: 'moves', w: 4, h: 9, ch: 2 },
   { id: 'w6', kind: 'consensus', w: 4, h: 9, ch: 2 },
   { id: 'w7', kind: 'injuries', w: 4, h: 9, ch: 2 },
   { id: 'w8', kind: 'activity', w: 4, h: 9, ch: 2 },
+  { id: 'w11', kind: 'props', w: 4, h: 9, ch: 2 },
+  { id: 'w12', kind: 'gameday', w: 4, h: 9, ch: 0 },
   { id: 'w9', kind: 'scoreboard', w: 6, h: 7, ch: 1 },
   { id: 'w10', kind: 'standings', w: 6, h: 7, ch: 1 },
-  { id: 'w11', kind: 'props', w: 6, h: 9, ch: 2 },
-  { id: 'w12', kind: 'gameday', w: 6, h: 9, ch: 0 },
 ]
 
 const load = (): Widget[] => {
@@ -219,7 +220,6 @@ const DashboardView = () => {
   return (
     <>
       <PageHeader
-        code={sectionCode('dash')}
         title="Dashboard"
         actions={
           <>

@@ -6,7 +6,7 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
-import { sectionCode } from '../Shell'
+import PlayoffLab from '../PlayoffLab'
 import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
 
 type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
@@ -220,7 +220,6 @@ const PowerView = ({
   return (
     <>
       <PageHeader
-        code={sectionCode('power')}
         title="Power"
         tabs={
           <Tabs<Sub>
@@ -229,7 +228,7 @@ const PowerView = ({
             stacked={stacked}
             items={[
               { key: 'rankings', label: 'Rankings' },
-              ...(forecast ? [{ key: 'odds' as const, label: 'Playoff odds' }] : []),
+              ...(forecast ? [{ key: 'odds' as const, label: 'Playoffs' }] : []),
               { key: 'standings', label: 'Standings' },
               { key: 'schedule', label: 'Remaining schedule' },
             ]}
@@ -352,7 +351,8 @@ const PowerView = ({
         </TabSection>
 
         {forecast && (
-          <TabSection id="odds" label="Playoff odds" active={tab === 'odds'} stacked={stacked} bare>
+          <TabSection id="odds" label="Playoffs" active={tab === 'odds'} stacked={stacked} bare>
+            <PlayoffLab />
             <OddsGrid onTeam={onTeam} />
           </TabSection>
         )}
@@ -411,7 +411,7 @@ const OddsGrid = ({ onTeam }: { onTeam: (id: number) => void }) => {
     .map((t) => ({ id: t.rosterId, mean: f.sim[t.rosterId].seeds.reduce((a, p, i) => a + p * i, 0) }))
     .sort((a, b) => a.mean - b.mean)
   return (
-    <Panel title="Seed distribution" pad={false} actions={<span>{f.sims.toLocaleString()} sims · shade = probability</span>}>
+    <Panel title="Seed distribution, the model" pad={false} actions={<span>{f.sims.toLocaleString()} sims · shade = probability</span>}>
       <div className="ff-scroll overflow-x-auto">
         <table className="w-full border-separate border-spacing-0 text-[12px]">
           <thead>

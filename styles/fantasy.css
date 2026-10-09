@@ -748,3 +748,38 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   background: repeating-linear-gradient(135deg, rgb(var(--ff-accent) / 0.55) 0 1.5px, rgb(var(--ff-accent) / 0.1) 1.5px 4px);
   box-shadow: inset 0 0 0 1px rgb(var(--ff-accent) / 0.45);
 }
+
+/* Staggered reveal for the playoff simulator's bracket and story feed; each item sets its own delay, 100ms apart. */
+@keyframes ff-rise {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(12px);
+  }
+}
+@keyframes ff-rise-fade {
+  from {
+    opacity: 0;
+  }
+}
+.ff .ff-rise {
+  animation: ff-rise 300ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-rise {
+    animation-name: ff-rise-fade;
+  }
+}
+
+/* Press feedback for tappable cards and buttons: a small give, never on a disabled control, and none under reduced motion. */
+.ff .ff-press {
+  -webkit-tap-highlight-color: transparent;
+  transition-property: scale, background-color, border-color, color, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ff .ff-press:not(:disabled):active {
+    scale: 0.96;
+  }
+}

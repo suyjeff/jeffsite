@@ -136,14 +136,12 @@ export const PageHeader = ({
   meta,
   actions,
   tabs,
-  code,
   mobileTitle,
 }: {
   title: ReactNode
   meta?: ReactNode
   actions?: ReactNode
   tabs?: ReactNode
-  code?: string
   /** Show the title on phones too, where the top bar only names the section. */
   mobileTitle?: boolean
 }) => (
@@ -156,9 +154,13 @@ export const PageHeader = ({
         actions || meta || mobileTitle ? '' : 'hidden md:block',
       )}
     >
-      <div className={cx('items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5', actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden')}>
+      <div
+        className={cx(
+          'items-center justify-between gap-3 px-3 md:flex md:h-11 md:border-b md:border-ff-line md:px-5 md:group-data-[sidebar=closed]/shell:pl-12',
+          actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden',
+        )}
+      >
         <div className="flex min-w-0 items-baseline gap-2.5">
-          {code && <span className="num hidden text-[10.5px] text-ff-muted md:inline">{code}</span>}
           <h1 className={cx('min-w-0 truncate text-[15px] font-medium leading-tight tracking-[-0.01em] text-ff-text md:block', mobileTitle ? 'block' : 'hidden')}>{title}</h1>
           {meta && <span className="min-w-0 truncate font-mono text-[10.5px] text-ff-muted">{meta}</span>}
         </div>

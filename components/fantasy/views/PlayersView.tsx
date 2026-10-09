@@ -6,7 +6,6 @@ import type { PlayerContext } from '../../../lib/fantasy/context'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { sectionCode } from '../Shell'
 import { Badge, Button, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, type Column } from '../ui'
 
 const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
@@ -250,7 +249,6 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   return (
     <>
       <PageHeader
-        code={sectionCode('players')}
         title="Players"
         tabs={<div className="h-px" />}
       />

@@ -9,7 +9,7 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DEFAULT_MODEL, type ModelConfig } from '../../../lib/fantasy/war'
 import { HBars, Histogram, Legend, MiniLines } from '../charts'
 import PlayerName from '../PlayerName'
-import { MONKE, sectionCode } from '../Shell'
+import { MONKE } from '../Shell'
 import { useFantasy } from '../FantasyContext'
 import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Stat, StatGrid, Table, TabSection, Tabs, cx, spyTo, usePhone, fmt, fmtSigned, pct, type Column } from '../ui'
 import { BacktestTab, BehaviorTab, ForecastTab, OverviewTab, SystemTab } from './ModelSystem'
@@ -202,7 +202,6 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
   return (
     <>
       <PageHeader
-        code={sectionCode(mode === 'readout' ? 'monke' : 'model')}
         title={mode === 'readout' ? <span title={MONKE.long}>{MONKE.name}</span> : 'Tuning'}
         actions={
           changed.length > 0 && (

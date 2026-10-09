@@ -4,17 +4,191 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ProjectionChart } from '../charts'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
+import FreeAgentPick from '../FreeAgentPick'
 import ScoutReport from '../ScoutReport'
-import { sectionCode } from '../Shell'
-import { Avatar, Badge, DeltaChip, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Swap, Table, TabSection, Tabs, cx, usePhone, fmt, fmtSigned, pct } from '../ui'
+import MovesPanel from '../Moves'
+import type { TeamInfo } from '../../../lib/fantasy/analysis'
+import {
+  Avatar,
+  Badge,
+  DeltaChip,
+  Dropdown,
+  Num,
+  PageHeader,
+  Panel,
+  Segmented,
+  Stat,
+  StatGrid,
+  Swap,
+  Table,
+  TabSection,
+  Tabs,
+  cx,
+  usePhone,
+  fmt,
+  fmtSigned,
+  pct,
+  simOdds,
+  type Column,
+} from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Inner = 'roster' | 'results' | 'slots'
 
-const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis: Analysis; sub: string | null; onTeam: (id: number) => void }) => {
-  const { teamById, seasonById, powerById, myRosterId, needs } = analysis
+const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis: Analysis; sub: string | null; onTeam: (id: number | null) => void }) => {
   const requested = sub ? Number(sub) : NaN
-  const rosterId = teamById[requested] ? requested : (myRosterId ?? analysis.teams[0].rosterId)
+  // No team named: the whole league at a glance, each row opening a summary sheet.
+  if (!analysis.teamById[requested]) return <TeamsIndex data={data} analysis={analysis} onTeam={onTeam} />
+  return <TeamPage data={data} analysis={analysis} rosterId={requested} onTeam={onTeam} />
+}
+
+/** Every team in one dense table: standing, form, what each projects, and where each is thin. */
+const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: Analysis; onTeam: (id: number | null) => void }) => {
+  const { models, openTeam } = useFantasy()
+  const { seasonById, powerById, myRosterId, needs } = analysis
+  const sim = models.forecast?.sim
+  const next = models.forecast?.nextWeek ?? []
+  const leagueLineup = useMemo(() => {
+    const xs = analysis.teams.map((t) => needs[t.rosterId]?.lineup ?? 0).filter((x) => x > 0)
+    return xs.reduce((a, b) => a + b, 0) / (xs.length || 1)
+  }, [analysis.teams, needs])
+  const rows = useMemo(() => [...analysis.teams].sort((a, b) => (powerById[a.rosterId]?.rank ?? 99) - (powerById[b.rosterId]?.rank ?? 99)), [analysis.teams, powerById])
+  const game = (rid: number) => next.find((g) => g.a === rid || g.b === rid)
+
+  const columns: Column<TeamInfo>[] = [
+    { key: 'rank', label: '#', title: 'Power rank', sort: (t) => -(powerById[t.rosterId]?.rank ?? 99), render: (t) => <span className="num text-ff-muted">{powerById[t.rosterId]?.rank ?? '–'}</span> },
+    {
+      key: 'team',
+      label: 'Team',
+      sticky: true,
+      render: (t) => (
+        <span className="flex min-w-0 items-center gap-2">
+          <Avatar src={t.avatar} name={t.name} size={24} />
+          <span className="min-w-0 leading-tight">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className={cx('truncate text-[13px]', t.rosterId === myRosterId ? 'font-medium text-ff-text' : 'text-ff-text')}>{t.name}</span>
+              {t.rosterId === myRosterId && <Badge tone="accent">you</Badge>}
+            </span>
+            {t.owner && t.owner !== t.name && <span className="block truncate font-mono text-[10.5px] text-ff-muted">@{t.owner}</span>}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'rec',
+      label: 'Record',
+      sort: (t) => (seasonById[t.rosterId]?.wins ?? 0) + (seasonById[t.rosterId]?.ppg ?? 0) / 1000,
+      render: (t) => {
+        const s = seasonById[t.rosterId]
+        return s ? `${s.wins}-${s.losses}${s.ties ? `-${s.ties}` : ''}` : '–'
+      },
+    },
+    {
+      key: 'form',
+      label: 'Last 5',
+      hideBelow: 'md',
+      render: (t) => (
+        <span className="flex gap-0.5" aria-label={(seasonById[t.rosterId]?.weeks ?? []).slice(-5).map((w) => w.result ?? '–').join(' ')}>
+          {(seasonById[t.rosterId]?.weeks ?? []).slice(-5).map((w) => (
+            <span
+              key={w.week}
+              aria-hidden
+              title={`Week ${w.week}: ${w.result ?? '–'} ${fmt(w.points)}–${fmt(w.opponentPoints)}`}
+              className={cx('flex h-4 w-4 items-center justify-center font-mono text-[9px] font-medium', w.result === 'W' ? 'bg-ff-pos/15 text-ff-pos' : w.result === 'L' ? 'bg-ff-neg/10 text-ff-neg' : 'bg-ff-sunken text-ff-muted')}
+            >
+              {w.result ?? '–'}
+            </span>
+          ))}
+        </span>
+      ),
+    },
+    { key: 'ppg', label: 'Pts/g', align: 'right', sort: (t) => seasonById[t.rosterId]?.ppg ?? 0, render: (t) => fmt(seasonById[t.rosterId]?.ppg) },
+    {
+      key: 'power',
+      label: 'Power',
+      align: 'right',
+      hideBelow: 'sm',
+      title: 'Chance to beat an average team',
+      sort: (t) => powerById[t.rosterId]?.score ?? 0,
+      render: (t) => <span>{fmt(powerById[t.rosterId]?.score, 0)}%</span>,
+    },
+    ...(sim
+      ? [
+          {
+            key: 'odds',
+            label: 'Playoffs',
+            align: 'right' as const,
+            sort: (t: TeamInfo) => sim[t.rosterId]?.playoffs ?? 0,
+            render: (t: TeamInfo) => (
+              <span className="inline-flex items-center gap-2">
+                <span className="hidden h-1 w-10 bg-ff-line lg:inline-block" aria-hidden>
+                  <span className="block h-full bg-ff-accent" style={{ width: `${(sim[t.rosterId]?.playoffs ?? 0) * 100}%` }} />
+                </span>
+                <span className="w-9 text-right text-ff-text">{simOdds(sim[t.rosterId], 'playoffs')}</span>
+              </span>
+            ),
+          },
+        ]
+      : []),
+    {
+      key: 'lineup',
+      label: 'Lineup',
+      align: 'right',
+      hideBelow: 'md',
+      title: 'Best lineup, points per week ahead, against the league average',
+      sort: (t) => needs[t.rosterId]?.lineup ?? 0,
+      render: (t) => (
+        <span className="inline-flex items-baseline gap-1.5">
+          {fmt(needs[t.rosterId]?.lineup)}
+          <Num value={(needs[t.rosterId]?.lineup ?? 0) - leagueLineup} signed className="w-9 text-right text-[11px]" />
+        </span>
+      ),
+    },
+    { key: 'need', label: 'Need', hideBelow: 'lg', title: 'Thinnest position', render: (t) => <span className="font-mono text-[11px] text-ff-warn">{needs[t.rosterId]?.worstPos ?? '–'}</span> },
+    {
+      key: 'next',
+      label: next[0] ? `Wk ${next[0].week}` : 'Next',
+      hideBelow: 'lg',
+      title: 'Next opponent and chance to win',
+      render: (t) => {
+        const g = game(t.rosterId)
+        if (!g) return <span className="text-ff-muted">–</span>
+        const opp = g.a === t.rosterId ? g.b : g.a
+        const p = g.a === t.rosterId ? g.pA : 1 - g.pA
+        return (
+          <span className="flex min-w-0 items-center gap-1.5 text-[12px]">
+            <span className="text-ff-muted">vs</span>
+            <span className="max-w-[110px] truncate text-ff-text2">{analysis.teamById[opp]?.name}</span>
+            <span className={cx('num', p >= 0.6 ? 'text-ff-pos' : p <= 0.4 ? 'text-ff-neg' : 'text-ff-text2')}>{pct(p)}</span>
+          </span>
+        )
+      },
+    },
+  ]
+
+  return (
+    <>
+      <PageHeader title="Teams" meta={`${analysis.teams.length} teams${next[0] ? ` · wk ${next[0].week}` : ''}`} />
+      <div className="mt-4 space-y-3">
+        <Panel title="League" pad={false} actions={<span>by power · click a team for its summary</span>}>
+          <Table rows={rows} rowKey={(t) => t.rosterId} columns={columns} dense onRowClick={(t) => openTeam(t.rosterId)} rowClass={(t) => (t.rosterId === myRosterId ? 'ff-mine' : '')} />
+        </Panel>
+        <p className="text-[11.5px] text-ff-muted">
+          Power: chance to beat an average team. Lineup: the best lineup&apos;s points per week ahead, against the league average.{' '}
+          {myRosterId != null && (
+            <button type="button" onClick={() => onTeam(myRosterId)} className="text-ff-text2 underline-offset-2 hover:underline">
+              Your team page →
+            </button>
+          )}
+        </p>
+      </div>
+    </>
+  )
+}
+
+/** One team in full: roster, results and lineup slots, with a switcher to move between teams. */
+const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; analysis: Analysis; rosterId: number; onTeam: (id: number | null) => void }) => {
+  const { teamById, seasonById, powerById, myRosterId, needs } = analysis
   const team = teamById[rosterId]
   const season = seasonById[rosterId]
   const power = powerById[rosterId]
@@ -36,40 +210,58 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
     return { ppg: mean(all.map((x) => x.ppg)), eff: mean(all.map((x) => x.efficiency)), lineup: mean(analysis.teams.map((t) => needs[t.rosterId]?.lineup ?? 0).filter((x) => x > 0)) }
   }, [analysis.teams, seasonById, needs])
 
-  // The team picker: pinned with the tabs on wide screens; on phones it scrolls away with the title.
-  const teamChips = (
-    <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 pb-2 md:mx-0 md:px-0">
-      {analysis.teams.map((t) => (
-        <button
-          key={t.rosterId}
-          onClick={() => onTeam(t.rosterId)}
-          className={cx(
-            'flex shrink-0 items-center gap-1.5  border py-0.5 pl-0.5 pr-2.5 text-[12px] transition-colors',
-            t.rosterId === rosterId ? 'border-ff-accent bg-ff-accent/10 text-ff-text' : 'border-ff-line bg-ff-panel text-ff-text2 hover:border-ff-line2',
-          )}
-        >
-          <Avatar src={t.avatar} name={t.name} size={20} />
-          <span className="max-w-[120px] truncate">{t.name}</span>
+  // Teams in power order, for the switcher and prev/next.
+  const order = [...analysis.teams].sort((a, b) => (powerById[a.rosterId]?.rank ?? 99) - (powerById[b.rosterId]?.rank ?? 99))
+  const at = order.findIndex((t) => t.rosterId === rosterId)
+  const step = (d: number) => onTeam(order[(at + d + order.length) % order.length].rosterId)
+  // In the header on wide screens; on phones its own full-width row above the page, where the top bar names the section.
+  const switcher = (
+    <div className="flex w-full items-center gap-1 md:w-auto">
+      <button type="button" onClick={() => onTeam(null)} className="h-7 shrink-0 px-2 font-mono text-[11px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text">
+        ← All teams
+      </button>
+      <span className="flex min-w-0 flex-1 items-stretch border border-ff-line bg-ff-panel md:flex-none">
+        <button type="button" onClick={() => step(-1)} aria-label="Previous team" className="h-7 w-7 border-r border-ff-line font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text">
+          ‹
         </button>
-      ))}
+        <Dropdown
+          label="Team"
+          className="min-w-0 flex-1"
+          value={String(rosterId)}
+          onChange={(v) => onTeam(Number(v))}
+          options={order.map((t) => ({ value: String(t.rosterId), label: t.name, text: t.name, sub: `#${powerById[t.rosterId]?.rank ?? '–'} · ${seasonById[t.rosterId]?.wins ?? 0}-${seasonById[t.rosterId]?.losses ?? 0}` }))}
+          menuClassName="!right-0 !left-auto w-[240px]"
+          renderButton={(cur, open) => (
+            <span className="flex h-7 w-full items-center gap-1.5 px-2 text-left text-[12px] text-ff-text hover:bg-ff-raised md:w-[190px]">
+              <span className="min-w-0 flex-1 truncate">{cur?.label}</span>
+              <span aria-hidden className="font-mono text-[10px] text-ff-muted">
+                {open ? '▴' : '▾'}
+              </span>
+            </span>
+          )}
+        />
+        <button type="button" onClick={() => step(1)} aria-label="Next team" className="h-7 w-7 border-l border-ff-line font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text">
+          ›
+        </button>
+      </span>
     </div>
   )
 
   return (
     <>
       <PageHeader
-        code={sectionCode('teams')}
         mobileTitle
         meta={team.owner && team.owner !== team.name ? `@${team.owner}` : undefined}
         title={
-          <span className="inline-flex items-baseline gap-2">
+          <span className="inline-flex items-center gap-2">
+            <Avatar src={team.avatar} name={team.name} size={20} />
             {team.name}
             {rosterId === myRosterId && <Badge tone="accent">you</Badge>}
           </span>
         }
+        actions={stacked ? undefined : switcher}
         tabs={
           <>
-            {!stacked && teamChips}
             <Tabs<Inner>
               value={inner}
               onChange={setInner}
@@ -84,7 +276,7 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
         }
       />
       <div className="mt-4 space-y-3">
-        {stacked && teamChips}
+        {stacked && switcher}
         <StatGrid>
           <Stat label="Power" value={`#${power.rank}`} badge={{ text: `${fmt(power.score, 0)}% vs avg team`, tone: power.score >= 55 ? 'pos' : power.score <= 45 ? 'neg' : 'neutral' }} sub="chance to beat an average team" />
           <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`all-play ${fmt(season.allPlayWins, 0)}-${fmt(season.allPlayLosses, 0)}`} />
@@ -104,6 +296,7 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
           />
         </StatGrid>
 
+        {rosterId === myRosterId && <MovesPanel rosterId={rosterId} />}
         <ScoutReport rosterId={rosterId} mine={rosterId === myRosterId} />
 
         <TabSection id="roster" label="Roster" active={inner === 'roster'} stacked={stacked} bare>
@@ -182,13 +375,13 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
         </TabSection>
 
         <TabSection id="slots" label="Lineup slots" active={inner === 'slots'} stacked={stacked} bare>
-          <Panel title={`Lineup slots · week ${data.horizon[0]?.week ?? ''} starters, horizon averages`} pad={false}>
+          <Panel title="Lineup slots" actions={<span>wk {data.horizon[0]?.week ?? ''} starters · pts/wk ahead</span>} pad={false}>
             <Table
               rows={needs[rosterId]?.slots ?? []}
               rowKey={(s) => s.index}
               columns={[
                 { key: 'slot', label: 'Slot', render: (s) => <span className="font-mono text-[11px] text-ff-text2">{s.slot.replace('SUPER_FLEX', 'SF')}</span> },
-                { key: 'who', label: 'Starter', sticky: true, render: (s) => (s.starter ? <PlayerName player={players[s.starter]} id={s.starter} size={22} /> : <span className="text-ff-muted">waiver fill</span>) },
+                { key: 'who', label: 'Starter', sticky: true, render: (s) => (s.starter ? <PlayerName player={players[s.starter]} id={s.starter} size={22} /> : <FreeAgentPick eligible={s.eligible} week={data.horizon[0]?.week} />) },
                 { key: 'pts', label: 'Pts/wk', align: 'right', render: (s) => <span className="text-ff-text">{fmt(s.pts)}</span> },
                 { key: 'lg', label: 'League', align: 'right', render: (s) => fmt(s.leagueAvg) },
                 { key: 'gap', label: 'Δ', align: 'right', render: (s) => <Num value={s.gap} signed /> },

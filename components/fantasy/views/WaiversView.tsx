@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { waiverTargets } from '../../../lib/fantasy/search'
+import { dropCandidate as dropCandidateFor } from '../../../lib/fantasy/moves'
 import type { TradeTarget } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import {
@@ -21,7 +22,6 @@ import { useFantasy } from '../FantasyContext'
 import WaiverMoves from './WaiverMoves'
 import { useStatLines } from '../useStatLines'
 import PlayerName from '../PlayerName'
-import { sectionCode } from '../Shell'
 import { DeltaChip, Badge, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
 
 type Sub = 'moves' | 'stream' | 'adds'
@@ -145,17 +145,8 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   // Everyone off the wire who would start for you, with the cut it forces already priced in.
   const adds = useMemo(() => ((stacked || tab === 'adds' || tab === 'moves') && me ? waiverTargets(data, analysis) : []), [stacked, tab, me, data, analysis])
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
-  const dropCandidate = useMemo(() => {
-    if (!me) return null
-    const lineup = new Set(analysis.needs[me.rosterId]?.slots.map((s) => s.starter).filter(Boolean) ?? [])
-    // The model's value, lifted to the consensus price where that is higher, so an injured star the experts still rank is never the cut.
-    // Consensus floors at zero, so it only lifts: below zero the model's order stands.
-    const keep = (id: string) => {
-      const market = analysis.market[id] ?? -99
-      return market + Math.max(0, (models.perceived?.[id] ?? 0) - Math.max(0, market))
-    }
-    return [...me.players].filter((id) => !lineup.has(id)).sort((a, b) => keep(a) - keep(b))[0] ?? null
-  }, [me, analysis, models.perceived])
+  // The weakest bench player, with the consensus price as a floor (lib/fantasy/moves).
+  const dropCandidate = useMemo(() => (me ? dropCandidateFor(analysis, me.rosterId, models.perceived) : null), [me, analysis, models.perceived])
 
   const posLabel = POS_LABEL[pos]
   const myProj = stream.mine
@@ -354,7 +345,6 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   return (
     <>
       <PageHeader
-        code={sectionCode('waivers')}
         title="Waivers"
         tabs={
           <Tabs<Sub>
