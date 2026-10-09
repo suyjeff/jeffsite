@@ -6,7 +6,7 @@ import { applyTrade, type TradeIdea } from '../../lib/fantasy/trades'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { ContextNotes } from './ContextNotes'
 import { useFantasy } from './FantasyContext'
-import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, WeekBars, cx, fmtSigned, isOut, simOdds } from './ui'
+import { Avatar, Badge, BuildGlyph, Button, Chip, Figure, PlayerAvatar, WeekBars, cx, fmtSigned, isOut, simOdds } from './ui'
 
 export const SHAPE_LABEL: Record<TradeIdea['shape'], string> = {
   'one-for-one': 'Straight swap',
@@ -299,7 +299,8 @@ const TradeCard = ({
         </div>
         {onBuild && (
           <Button size="sm" variant="aqua" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
-            Build this trade →
+            <BuildGlyph />
+            Open in builder
           </Button>
         )}
       </footer>

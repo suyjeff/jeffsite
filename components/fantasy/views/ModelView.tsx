@@ -11,7 +11,7 @@ import { HBars, Histogram, Legend, MiniLines } from '../charts'
 import PlayerName from '../PlayerName'
 import { MONKE, sectionCode } from '../Shell'
 import { useFantasy } from '../FantasyContext'
-import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Stat, StatGrid, Table, Tabs, cx, fmt, fmtSigned, pct, type Column } from '../ui'
+import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Stat, StatGrid, Table, TabSection, Tabs, cx, spyTo, usePhone, fmt, fmtSigned, pct, type Column } from '../ui'
 import { BacktestTab, BehaviorTab, ForecastTab, OverviewTab, SystemTab } from './ModelSystem'
 import { COMPONENTS } from './PowerView'
 
@@ -186,8 +186,10 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
   const subs = mode === 'readout' ? READOUT : TUNING
   const tab: Sub = subs.includes(sub as Sub) ? (sub as Sub) : subs[0]
   const changed = diffList(model, weights)
-  // A link to any tab, on whichever page holds it.
-  const open = (s: string) => (subs.includes(s as Sub) ? onSub(s) : go(TUNING.includes(s as Sub) ? 'model' : 'monke', s))
+  // Phones stack every section in one scroll, steered by the tab strip.
+  const stacked = usePhone()
+  // A link to any tab, on whichever page holds it; on a stacked page, a scroll to it.
+  const open = (s: string) => (subs.includes(s as Sub) ? (stacked ? spyTo(s) : onSub(s)) : go(TUNING.includes(s as Sub) ? 'model' : 'monke', s))
 
   // The same league run at the defaults, so every readout can show what your settings moved.
   // Weights alone only re-rank, so that case skips the full re-analysis.
@@ -222,30 +224,35 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
           <Tabs<Sub>
             value={tab}
             onChange={onSub}
+            stacked={stacked}
             items={subs.map((k) => ({ key: k, label: LABEL[k], ...(mode === 'tuning' && TUNABLE.includes(k) ? { mark: 'tune' } : {}) }))}
           />
         }
       />
       <div className="mt-4 space-y-3">
-        {INTRO[tab] && (
-          <div className="flex flex-col gap-1 border-l-2 border-ff-line2 pl-3 text-[12.5px] leading-snug sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
-            <span className="text-ff-text2">
-              {INTRO[tab]!.what}
-              {INTRO[tab]!.you && <span className="text-ff-text"> Yours to set: {INTRO[tab]!.you}</span>}
-            </span>
-            <span className={cx('shrink-0 font-mono text-[10.5px]', INTRO[tab]!.you ? 'text-ff-accent' : 'text-ff-muted')}>{INTRO[tab]!.you ? 'tunable' : 'read-only'}</span>
-          </div>
-        )}
-        {tab === 'overview' && <OverviewTab open={open} />}
-        {tab === 'system' && <SystemTab onSub={open} />}
-        {tab === 'forecast' && <ForecastTab />}
-        {tab === 'backtest' && <BacktestTab />}
-        {tab === 'behavior' && <BehaviorTab />}
-        {tab === 'value' && <ValueTab data={data} analysis={analysis} baseline={baseline} model={model} setModel={setModel} />}
-        {tab === 'power' && <PowerTab analysis={analysis} baseline={baseline} weights={weights} setWeights={setWeights} />}
-        {tab === 'availability' && <AvailabilityTab data={data} analysis={analysis} />}
-        {tab === 'engine' && <EngineTab data={data} analysis={analysis} baseline={baseline} />}
-        {tab === 'data' && <DataTab data={data} analysis={analysis} reload={reload} />}
+        {subs.map((k) => (
+          <TabSection key={k} id={k} label={LABEL[k]} active={tab === k} stacked={stacked}>
+            {INTRO[k] && (
+              <div className="flex flex-col gap-1 border-l-2 border-ff-line2 pl-3 text-[12.5px] leading-snug sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+                <span className="text-ff-text2">
+                  {INTRO[k]!.what}
+                  {INTRO[k]!.you && <span className="text-ff-text"> Yours to set: {INTRO[k]!.you}</span>}
+                </span>
+                <span className={cx('shrink-0 font-mono text-[10.5px]', INTRO[k]!.you ? 'text-ff-accent' : 'text-ff-muted')}>{INTRO[k]!.you ? 'tunable' : 'read-only'}</span>
+              </div>
+            )}
+            {k === 'overview' && <OverviewTab open={open} />}
+            {k === 'system' && <SystemTab onSub={open} />}
+            {k === 'forecast' && <ForecastTab />}
+            {k === 'backtest' && <BacktestTab />}
+            {k === 'behavior' && <BehaviorTab />}
+            {k === 'value' && <ValueTab data={data} analysis={analysis} baseline={baseline} model={model} setModel={setModel} />}
+            {k === 'power' && <PowerTab analysis={analysis} baseline={baseline} weights={weights} setWeights={setWeights} />}
+            {k === 'availability' && <AvailabilityTab data={data} analysis={analysis} />}
+            {k === 'engine' && <EngineTab data={data} analysis={analysis} baseline={baseline} />}
+            {k === 'data' && <DataTab data={data} analysis={analysis} reload={reload} />}
+          </TabSection>
+        ))}
       </div>
     </>
   )

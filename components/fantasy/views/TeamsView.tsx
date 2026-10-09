@@ -6,7 +6,7 @@ import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import ScoutReport from '../ScoutReport'
 import { sectionCode } from '../Shell'
-import { Avatar, Badge, DeltaChip, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Swap, Table, Tabs, cx, fmt, fmtSigned, pct } from '../ui'
+import { Avatar, Badge, DeltaChip, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Swap, Table, TabSection, Tabs, cx, usePhone, fmt, fmtSigned, pct } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Inner = 'roster' | 'results' | 'slots'
@@ -19,6 +19,8 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
   const season = seasonById[rosterId]
   const power = powerById[rosterId]
   const [inner, setInner] = useState<Inner>('roster')
+  // Phones stack every section in one scroll, steered by the tab strip.
+  const stacked = usePhone()
   const [basis, setBasis] = useState<Basis>('ahead')
   const players = data.players
   const { models } = useFantasy()
@@ -34,6 +36,25 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
     return { ppg: mean(all.map((x) => x.ppg)), eff: mean(all.map((x) => x.efficiency)), lineup: mean(analysis.teams.map((t) => needs[t.rosterId]?.lineup ?? 0).filter((x) => x > 0)) }
   }, [analysis.teams, seasonById, needs])
 
+  // The team picker: pinned with the tabs on wide screens; on phones it scrolls away with the title.
+  const teamChips = (
+    <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 pb-2 md:mx-0 md:px-0">
+      {analysis.teams.map((t) => (
+        <button
+          key={t.rosterId}
+          onClick={() => onTeam(t.rosterId)}
+          className={cx(
+            'flex shrink-0 items-center gap-1.5  border py-0.5 pl-0.5 pr-2.5 text-[12px] transition-colors',
+            t.rosterId === rosterId ? 'border-ff-accent bg-ff-accent/10 text-ff-text' : 'border-ff-line bg-ff-panel text-ff-text2 hover:border-ff-line2',
+          )}
+        >
+          <Avatar src={t.avatar} name={t.name} size={20} />
+          <span className="max-w-[120px] truncate">{t.name}</span>
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <>
       <PageHeader
@@ -48,24 +69,11 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
         }
         tabs={
           <>
-            <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 pb-2 md:mx-0 md:px-0">
-              {analysis.teams.map((t) => (
-                <button
-                  key={t.rosterId}
-                  onClick={() => onTeam(t.rosterId)}
-                  className={cx(
-                    'flex shrink-0 items-center gap-1.5  border py-0.5 pl-0.5 pr-2.5 text-[12px] transition-colors',
-                    t.rosterId === rosterId ? 'border-ff-accent bg-ff-accent/10 text-ff-text' : 'border-ff-line bg-ff-panel text-ff-text2 hover:border-ff-line2',
-                  )}
-                >
-                  <Avatar src={t.avatar} name={t.name} size={20} />
-                  <span className="max-w-[120px] truncate">{t.name}</span>
-                </button>
-              ))}
-            </div>
+            {!stacked && teamChips}
             <Tabs<Inner>
               value={inner}
               onChange={setInner}
+              stacked={stacked}
               items={[
                 { key: 'roster', label: 'Roster', count: team.players.length },
                 { key: 'results', label: 'Results', count: season.weeks.length },
@@ -76,6 +84,7 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
         }
       />
       <div className="mt-4 space-y-3">
+        {stacked && teamChips}
         <StatGrid>
           <Stat label="Power" value={`#${power.rank}`} badge={{ text: `${fmt(power.score, 0)}% vs avg team`, tone: power.score >= 55 ? 'pos' : power.score <= 45 ? 'neg' : 'neutral' }} sub="chance to beat an average team" />
           <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`all-play ${fmt(season.allPlayWins, 0)}-${fmt(season.allPlayLosses, 0)}`} />
@@ -97,7 +106,7 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
 
         <ScoutReport rosterId={rosterId} mine={rosterId === myRosterId} />
 
-        {inner === 'roster' && (
+        <TabSection id="roster" label="Roster" active={inner === 'roster'} stacked={stacked} bare>
           <Panel
             title="Roster"
             pad={false}
@@ -117,9 +126,9 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
               <RosterTable data={data} analysis={analysis} rosterId={rosterId} basis={basis} />
             </Swap>
           </Panel>
-        )}
+        </TabSection>
 
-        {inner === 'results' && (
+        <TabSection id="results" label="Results" active={inner === 'results'} stacked={stacked} bare>
           <Panel title="Weekly results" pad={false} actions={<span>scored vs projected</span>}>
             {chartWeeks.length > 0 && (
               <div className="border-b border-ff-line px-2 pb-2 pt-3">
@@ -170,9 +179,9 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
               ]}
             />
           </Panel>
-        )}
+        </TabSection>
 
-        {inner === 'slots' && (
+        <TabSection id="slots" label="Lineup slots" active={inner === 'slots'} stacked={stacked} bare>
           <Panel title={`Lineup slots · week ${data.horizon[0]?.week ?? ''} starters, horizon averages`} pad={false}>
             <Table
               rows={needs[rosterId]?.slots ?? []}
@@ -196,7 +205,7 @@ const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis
                 ))}
             </div>
           </Panel>
-        )}
+        </TabSection>
       </div>
     </>
   )

@@ -25,12 +25,18 @@ import {
   Select,
   Slider,
   Table,
+  TabSection,
   Tabs,
+  GridFill,
+  BuildGlyph,
+  Fab,
+  spyTo,
   WeekBars,
   cx,
   fmt,
   fmtSigned,
   pct,
+  usePhone,
 } from '../ui'
 
 type Sub = 'suggested' | 'targets' | 'needs' | 'injuries' | 'builder'
@@ -52,6 +58,8 @@ const TradesView = ({
   onSub: (s: string) => void
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'suggested'
+  // Phones stack every section in one scroll, steered by the tab strip.
+  const stacked = usePhone()
   const { myRosterId, teamById, needs } = analysis
   const players = data.players
   const me = myRosterId != null ? teamById[myRosterId] : null
@@ -137,6 +145,43 @@ const TradesView = ({
   const [needsView, setNeedsView] = useState<'position' | 'slot'>('position')
   const positions = useMemo(() => POS_ORDER.filter((p) => (analysis.horizonStarter[p] ?? 0) > 0), [analysis.horizonStarter])
   const maxNeed = Math.max(0.5, ...Object.values(needs).flatMap((n) => Object.values(n.byPos)))
+  // Per team: its holes, its strongest slot, and whether your bench holds what it lacks.
+  const needCards = useMemo(() => {
+    const perWeek = analysis.horizon.perWeek
+    const myStarters = new Set(myRosterId != null ? (needs[myRosterId]?.slots.map((x) => x.starter).filter(Boolean) as string[]) : [])
+    const myBench: Record<string, { id: string; pts: number }> = {}
+    for (const id of me?.players ?? []) {
+      const pos = players[id]?.pos
+      if (!pos || myStarters.has(id) || pos === 'K' || pos === 'DEF') continue
+      const pts = perWeek[id] ?? 0
+      if (pts >= (analysis.horizonStarter[pos] ?? Infinity) * 0.85 && pts > (myBench[pos]?.pts ?? 0)) myBench[pos] = { id, pts }
+    }
+    const ideasBy: Record<number, number> = {}
+    for (const i of search.ideas) ideasBy[i.partnerId] = (ideasBy[i.partnerId] ?? 0) + 1
+    return analysis.teams
+      .map((team) => {
+        const n = needs[team.rosterId]
+        const holes = Object.entries(n?.byPos ?? {})
+          .filter(([, v]) => v >= 0.5)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([pos, pts]) => ({ pos, pts, big: pts >= maxNeed * 0.66 }))
+        const strong = [...(n?.slots ?? [])].sort((a, b) => b.gap - a.gap)[0]
+        const mine = team.rosterId === myRosterId
+        const supplyPos = mine ? undefined : holes.find((h) => myBench[h.pos])?.pos
+        return {
+          team,
+          mine,
+          lineup: n?.lineup ?? 0,
+          holes,
+          strong: strong && strong.gap >= 0.5 ? strong : null,
+          supply: supplyPos ? { pos: supplyPos, ...myBench[supplyPos] } : null,
+          ideas: ideasBy[team.rosterId] ?? 0,
+          need: holes[0]?.pts ?? 0,
+        }
+      })
+      .sort((a, b) => Number(b.mine) - Number(a.mine) || Number(!!b.supply) - Number(!!a.supply) || b.need - a.need)
+  }, [analysis.teams, analysis.horizon.perWeek, analysis.horizonStarter, needs, myRosterId, me, players, search.ideas, maxNeed])
 
   // ---- Injuries and roles ----
   const situations = useMemo(() => {
@@ -167,9 +212,23 @@ const TradesView = ({
     setBPartner(idea.partnerId)
     setBGive(idea.give)
     setBGet(idea.get)
-    onSub('builder')
-    window.scrollTo({ top: 0 })
+    // A stacked (phone) page already holds the builder further down: go there instead of switching views.
+    if (stacked) window.setTimeout(() => spyTo('builder'), 0)
+    else {
+      onSub('builder')
+      window.scrollTo({ top: 0 })
+    }
   }
+  // On phones the build action floats; it steps aside once the builder itself is on screen.
+  const [builderInView, setBuilderInView] = useState(false)
+  useEffect(() => {
+    if (!stacked) return
+    const el = document.querySelector('[data-spy="builder"]')
+    if (!el) return
+    const io = new IntersectionObserver(([e]) => setBuilderInView(e.isIntersecting), { rootMargin: '0px 0px -40% 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [stacked, me])
   const built = useMemo(() => {
     if (!base || bPartner == null) return null
     const p = teamById[bPartner]
@@ -231,9 +290,11 @@ const TradesView = ({
         code={sectionCode('trades')}
         title="Trades"
         actions={
+          !stacked &&
           tab !== 'builder' && (
             <Button variant="aqua" onClick={() => onSub('builder')} title="Put together any deal and see it priced">
-              Build a trade →
+              <BuildGlyph />
+              Build a trade
             </Button>
           )
         }
@@ -241,6 +302,7 @@ const TradesView = ({
           <Tabs<Sub>
             value={tab}
             onChange={(k) => onSub(k)}
+            stacked={stacked}
             items={[
               { key: 'suggested', label: 'Suggested', count: search.ideas.length },
               { key: 'targets', label: 'Targets', count: targets.length },
@@ -253,8 +315,7 @@ const TradesView = ({
       />
 
       <div className="mt-4 space-y-3">
-        {tab === 'suggested' && (
-          <>
+        <TabSection id="suggested" label="Suggested" count={search.ideas.length} active={tab === 'suggested'} stacked={stacked}>
             <div className="flex flex-wrap items-center gap-2">
               <Segmented<Sort>
                 label="Sort"
@@ -326,10 +387,10 @@ const TradesView = ({
               Deals start from every one-for-one that helps you and add a piece only when it improves the deal. Every number is points per week added to a best lineup, week by
               week, injuries priced in. The side taking more bodies cuts its weakest player.
             </p>
-          </>
-        )}
+          
+        </TabSection>
 
-        {tab === 'targets' && (
+        <TabSection id="targets" label="Targets" count={targets.length} active={tab === 'targets'} stacked={stacked} bare>
           <Panel
             title="Who would lift your lineup"
             pad={false}
@@ -378,9 +439,9 @@ const TradesView = ({
               ]}
             />
           </Panel>
-        )}
+        </TabSection>
 
-        {tab === 'needs' && (
+        <TabSection id="needs" label="League needs" active={tab === 'needs'} stacked={stacked}>
           <Panel
             title={needsView === 'position' ? 'Points per week an average starter would add' : 'Each slot against the league average'}
             pad={false}
@@ -438,15 +499,92 @@ const TradesView = ({
             ) : (
               <SlotGrid analysis={analysis} />
             )}
+            {needsView === 'position' ? (
+              <div className="space-y-2 border-t border-ff-line px-3 py-2.5 text-[11.5px] leading-[1.5] text-ff-muted">
+                <p className="max-w-[78ch]">
+                  <span className="text-ff-text2">How to read it.</span> Each cell is what one league-average starter at that position would add to the team&apos;s projected lineup, in
+                  points per week, after its flex and the waiver wire have done what they can. Zero means the spot is covered; the bigger the number, the more that team should pay
+                  to fill it. <span className="text-ff-text2">Lineup</span> is the projected best lineup, points per week.
+                </p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5" aria-label="Legend">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Meter value={maxNeed * 0.08} max={maxNeed} width={36} tone="accent" />
+                    covered
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Meter value={maxNeed * 0.45} max={maxNeed} width={36} tone="accent" />
+                    could use one
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Meter value={maxNeed * 0.9} max={maxNeed} width={36} tone="neg" />
+                    <span className="text-ff-neg">big hole</span>
+                    <span>(within a third of the league&apos;s largest, {fmt(maxNeed)}/wk)</span>
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">Points per week each slot produces against the league average. Blue above, red below.</p>
+            )}
+          </Panel>
+
+          <Panel title="Biggest needs, team by team" actions={<span>who to call, and with what</span>} pad={false}>
+            <div className="grid grid-cols-1 gap-px bg-ff-line/60 sm:grid-cols-2 xl:grid-cols-3">
+              {needCards.map((c) => (
+                <div key={c.team.rosterId} className={cx('flex min-w-0 flex-col gap-2 bg-ff-panel px-3 py-2.5', c.mine && 'bg-ff-accent/[0.04]')}>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Avatar src={c.team.avatar} name={c.team.name} size={20} />
+                    <span className={cx('min-w-0 flex-1 truncate text-[13px] text-ff-text', c.mine && 'font-medium')}>{c.team.name}</span>
+                    {c.mine ? <Badge tone="accent">you</Badge> : <span className="num text-[11px] text-ff-muted">{fmt(c.lineup)}/wk</span>}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {c.holes.length ? (
+                      c.holes.map((h) => (
+                        <span key={h.pos} className={cx('inline-flex items-baseline gap-1 border px-1.5 py-0.5 font-mono text-[11px]', h.big ? 'border-ff-neg/40 bg-ff-neg/10 text-ff-neg' : 'border-ff-line text-ff-text2')}>
+                          {h.pos}
+                          <span className="num">+{fmt(h.pts)}</span>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[12px] text-ff-muted">No hole worth half a point a week</span>
+                    )}
+                    {c.strong && (
+                      <span className="text-[11.5px] text-ff-muted">
+                        · strongest at <span className="font-mono text-ff-text2">{c.strong.slot.replace('SUPER_FLEX', 'SF')}</span> <span className="num text-ff-pos">+{fmt(c.strong.gap)}</span>
+                      </span>
+                    )}
+                  </div>
+                  {c.supply && (
+                    <p className="text-[12px] leading-[1.45] text-ff-text2">
+                      <span className="mr-1 font-mono text-ff-pos" aria-hidden>
+                        +
+                      </span>
+                      Your bench fits: {players[c.supply.id]?.name} <span className="num text-ff-muted">{c.supply.pos} · {fmt(c.supply.pts)}/wk</span>
+                    </p>
+                  )}
+                  {!c.mine && c.ideas > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPartner(c.team.rosterId)
+                        if (stacked) spyTo('suggested')
+                        else onSub('suggested')
+                      }}
+                      className="mt-auto self-start font-mono text-[11px] text-ff-accent hover:underline"
+                    >
+                      See {c.ideas} deal{c.ideas === 1 ? '' : 's'} with them
+                    </button>
+                  )}
+                </div>
+              ))}
+              <GridFill n={needCards.length} wide="xl" />
+            </div>
             <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-              {needsView === 'position'
-                ? 'Bigger = a hole worth filling, net of what the flex and the waiver wire already cover.'
-                : 'Points per week each slot produces against the league average. Blue above, red below.'}
+              Holes are the cells above worth at least half a point a week, red for the league&apos;s biggest. Strongest is the lineup slot furthest above the league average.
             </p>
           </Panel>
-        )}
+        </TabSection>
 
-        {tab === 'injuries' && (
+        <TabSection id="injuries" label="Injuries & roles" count={situations.length} active={tab === 'injuries'} stacked={stacked} bare>
           <Panel
             title="Injuries and role changes"
             pad={false}
@@ -496,9 +634,9 @@ const TradesView = ({
               ]}
             />
           </Panel>
-        )}
+        </TabSection>
 
-        {tab === 'builder' && (
+        <TabSection id="builder" label="Builder" active={tab === 'builder'} stacked={stacked}>
           <Builder
             data={data}
             analysis={analysis}
@@ -513,8 +651,14 @@ const TradesView = ({
             setGet={setBGet}
             result={built}
           />
-        )}
+        </TabSection>
       </div>
+      {stacked && (
+        <Fab onClick={() => spyTo('builder')} hidden={builderInView}>
+          <BuildGlyph />
+          Build a trade
+        </Fab>
+      )}
     </>
   )
 }

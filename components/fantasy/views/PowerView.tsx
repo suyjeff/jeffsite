@@ -7,7 +7,7 @@ import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
 import { sectionCode } from '../Shell'
-import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, Tabs, DeltaChip, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
+import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
 
 type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'odds', 'standings', 'schedule']
@@ -50,6 +50,8 @@ const PowerView = ({
   weights: PowerWeights
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'rankings'
+  // Phones stack every section in one scroll, steered by the tab strip.
+  const stacked = usePhone()
   const [view, setView] = useState<'table' | 'breakdown'>('table')
   const { models } = useFantasy()
   const forecast = models.forecast
@@ -224,6 +226,7 @@ const PowerView = ({
           <Tabs<Sub>
             value={tab}
             onChange={onSub}
+            stacked={stacked}
             items={[
               { key: 'rankings', label: 'Rankings' },
               ...(forecast ? [{ key: 'odds' as const, label: 'Playoff odds' }] : []),
@@ -269,7 +272,7 @@ const PowerView = ({
           </StatGrid>
         )}
 
-        {tab === 'rankings' && (
+        <TabSection id="rankings" label="Rankings" active={tab === 'rankings'} stacked={stacked}>
           <div>
             <Panel
               title={rankModel !== 'composite' ? 'Power rankings' : view === 'table' ? 'Power rankings' : 'Where each score comes from'}
@@ -346,11 +349,15 @@ const PowerView = ({
             </Panel>
             <ModelExplainer model={rankModel === 'forecast' && !forecast ? 'composite' : rankModel} />
           </div>
+        </TabSection>
+
+        {forecast && (
+          <TabSection id="odds" label="Playoff odds" active={tab === 'odds'} stacked={stacked} bare>
+            <OddsGrid onTeam={onTeam} />
+          </TabSection>
         )}
 
-        {tab === 'odds' && forecast && <OddsGrid onTeam={onTeam} />}
-
-        {tab === 'standings' && (
+        <TabSection id="standings" label="Standings" active={tab === 'standings'} stacked={stacked} bare>
           <Panel title="Standings" pad={false} actions={playoffTeams ? <span>playoff line after #{playoffTeams}</span> : null}>
             <Table
               rows={standings.map((t, i) => ({ rosterId: t.rosterId, seed: i + 1 }))}
@@ -384,9 +391,11 @@ const PowerView = ({
               ]}
             />
           </Panel>
-        )}
+        </TabSection>
 
-        {tab === 'schedule' && <ScheduleGrid data={data} analysis={analysis} onTeam={onTeam} />}
+        <TabSection id="schedule" label="Remaining schedule" active={tab === 'schedule'} stacked={stacked} bare>
+          <ScheduleGrid data={data} analysis={analysis} onTeam={onTeam} />
+        </TabSection>
       </div>
     </>
   )

@@ -23,7 +23,7 @@ import { useFantasy } from '../FantasyContext'
 import WaiverMoves from './WaiverMoves'
 import PlayerName from '../PlayerName'
 import { sectionCode } from '../Shell'
-import { DeltaChip, Badge, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, Tabs, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
+import { DeltaChip, Badge, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
 
 type Sub = 'moves' | 'stream' | 'adds'
 const SUBS: Sub[] = ['moves', 'stream', 'adds']
@@ -81,6 +81,8 @@ const TotalCell = ({ t, low }: { t: TeamTotal | null; low?: boolean }) =>
 
 const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis: Analysis; sub: string | null; onSub: (s: string) => void }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'moves'
+  // Phones stack every section in one scroll, steered by the tab strip.
+  const stacked = usePhone()
   const { models } = useFantasy()
   const { players } = data
   const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
@@ -159,7 +161,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   }, [stream.rows])
 
   // Everyone off the wire who would start for you, with the cut it forces already priced in.
-  const adds = useMemo(() => ((tab === 'adds' || tab === 'moves') && me ? waiverTargets(data, analysis) : []), [tab, me, data, analysis])
+  const adds = useMemo(() => ((stacked || tab === 'adds' || tab === 'moves') && me ? waiverTargets(data, analysis) : []), [stacked, tab, me, data, analysis])
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
   const dropCandidate = useMemo(() => {
     if (!me) return null
@@ -281,11 +283,11 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   // A suggested bid for every listed add. Moves prices its own few.
   const bids = useMemo(() => {
     const f = models.faab
-    if (!f || !me || tab !== 'adds') return {} as Record<string, BidAdvice>
+    if (!f || !me || (!stacked && tab !== 'adds')) return {} as Record<string, BidAdvice>
     const out: Record<string, BidAdvice> = {}
     for (const t of adds) out[t.id] = suggestBid(f, me.rosterId, { gain: t.add, value: analysis.market[t.id] ?? 0, trending: trending[t.id] ?? 0, pos: players[t.id]?.pos ?? '' })
     return out
-  }, [models.faab, me, tab, adds, analysis.market, players, trending])
+  }, [models.faab, me, stacked, tab, adds, analysis.market, players, trending])
   const addWhy = (t: TradeTarget) => {
     const items: Reason[] = [...contextReasons(data.context[t.id], players), ...(bids[t.id]?.reasons ?? [])]
     return items.length ? <Reasons items={items} /> : null
@@ -381,19 +383,24 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             ]}
             value={tab}
             onChange={onSub}
+            stacked={stacked && !!me}
           />
         }
       />
       <div className="mt-4 space-y-3">
         {!me && <Empty title="You are not in this league">Waiver picks are read against your roster.</Empty>}
 
-        {me && tab === 'moves' && <WaiverMoves data={data} analysis={analysis} adds={adds} trending={trending} drop={dropCandidate} />}
-
-        {me && tab === 'stream' && data.horizonSource !== 'projections' && (
-          <Empty title="No projections to stream from">Streaming reads Sleeper&apos;s projections for the weeks ahead, and there are none right now (the season may be over).</Empty>
+        {me && (
+          <TabSection id="moves" label="Moves" active={tab === 'moves'} stacked={stacked}>
+            <WaiverMoves data={data} analysis={analysis} adds={adds} trending={trending} drop={dropCandidate} />
+          </TabSection>
         )}
 
-        {me && tab === 'stream' && data.horizonSource === 'projections' && (
+        {me && (
+          <TabSection id="stream" label="Streamers" active={tab === 'stream'} stacked={stacked}>
+            {data.horizonSource !== 'projections' ? (
+              <Empty title="No projections to stream from">Streaming reads Sleeper&apos;s projections for the weeks ahead, and there are none right now (the season may be over).</Empty>
+            ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
               <Segmented<StreamPos> label="Position" value={pos} onChange={setPos} options={positions.map((p) => ({ key: p, label: p }))} />
@@ -459,9 +466,12 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               </>
             )}
           </>
+            )}
+          </TabSection>
         )}
 
-        {me && tab === 'adds' && (
+        {me && (
+          <TabSection id="adds" label="All adds" count={adds.length} active={tab === 'adds'} stacked={stacked}>
           <>
             <StatGrid>
               <Stat
@@ -492,6 +502,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               week. Value is what the league would pay.
             </p>
           </>
+          </TabSection>
         )}
       </div>
     </>

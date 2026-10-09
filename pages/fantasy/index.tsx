@@ -27,7 +27,7 @@ import {
 import { useRoute } from '../../lib/fantasy/useRoute'
 import { DEFAULT_MODEL, type ModelConfig } from '../../lib/fantasy/war'
 import { DEFAULT_THEME, themeById, type Scheme } from '../../lib/fantasy/themes'
-import ThemePicker from '../../components/fantasy/ThemePicker'
+import DisplayMenu, { type Density } from '../../components/fantasy/ThemePicker'
 import CommandPalette from '../../components/fantasy/CommandPalette'
 import { useTheme } from '../../lib/fantasy/useTheme'
 
@@ -46,6 +46,8 @@ export type Prefs = {
   /** Colour theme id (lib/fantasy/themes.ts) and, for themes with both, light, dark or the system's. */
   theme: string
   scheme: Scheme
+  /** Compact (the default) or comfortable: type size and row height across the app. */
+  density: Density
 }
 
 const loadPrefs = (): Prefs => {
@@ -60,6 +62,7 @@ const loadPrefs = (): Prefs => {
     weights: DEFAULT_POWER_WEIGHTS,
     theme: DEFAULT_THEME,
     scheme: 'system',
+    density: 'compact',
   }
   try {
     const raw = window.localStorage.getItem(PREFS_KEY)
@@ -76,6 +79,14 @@ const FantasyPage = () => {
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const route = useRoute(SECTION_KEYS, 'dash')
   useTheme(prefs?.theme, prefs?.scheme ?? 'system', prefs != null)
+  // Density is one attribute on the root; styles/fantasy.css scales type and rows from it.
+  useEffect(() => {
+    if (!prefs) return
+    document.documentElement.dataset.ffDensity = prefs.density
+    return () => {
+      delete document.documentElement.dataset.ffDensity
+    }
+  }, [prefs?.density]) // eslint-disable-line react-hooks/exhaustive-deps
   // Waivers moved out of My team into their own section; old links still land there.
   useEffect(() => {
     if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })
@@ -286,8 +297,15 @@ const FantasyPage = () => {
           </Select>
         </div>
         <div className={row}>
-          <span className={key}>Theme</span>
-          <ThemePicker value={prefs.theme} onChange={(t) => update({ theme: t })} scheme={prefs.scheme} onScheme={(m) => update({ scheme: m })} />
+          <span className={key}>Display</span>
+          <DisplayMenu
+            theme={prefs.theme}
+            onTheme={(t) => update({ theme: t })}
+            scheme={prefs.scheme}
+            onScheme={(m) => update({ scheme: m })}
+            density={prefs.density}
+            onDensity={(d) => update({ density: d })}
+          />
         </div>
       </div>
     </>
@@ -384,6 +402,8 @@ const FantasyPage = () => {
           scheme={prefs.scheme}
           onTheme={(t) => update({ theme: t })}
           onScheme={(m) => update({ scheme: m })}
+          density={prefs.density}
+          onDensity={(d) => update({ density: d })}
           onReload={reload}
           leagues={(data.leagues ?? []).map((l) => ({ id: l.league_id, name: l.name }))}
           onLeague={(id) => update({ leagueId: id })}
