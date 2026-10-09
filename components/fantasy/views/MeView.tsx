@@ -142,20 +142,24 @@ const MeView = ({
                       Your lineup matches the projected optimum.
                     </div>
                   ) : (
-                    <div className="space-y-1 border-b border-ff-line px-3 py-2">
-                      {lineupCheck.start.map((id, i) => (
-                        <div key={id} className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
-                          <Badge tone="warn">swap</Badge>
-                          <span className="whitespace-nowrap text-ff-text">
-                            Start {players[id]?.name} <span className="num text-ff-muted">{fmt(data.projections?.[id])}</span>
-                          </span>
-                          {lineupCheck.bench[i] && (
-                            <span className="whitespace-nowrap text-ff-text">
-                              <span className="text-ff-muted">over</span> {players[lineupCheck.bench[i]]?.name} <span className="num text-ff-muted">{fmt(data.projections?.[lineupCheck.bench[i]])}</span>
-                            </span>
-                          )}
+                    <div className="border-b border-ff-line p-3">
+                      <Callout kind="insight">
+                        <div className="space-y-1">
+                          {lineupCheck.start.map((id, i) => (
+                            <div key={id} className="flex flex-wrap items-center gap-1.5">
+                              <Badge tone="warn">swap</Badge>
+                              <span className="whitespace-nowrap text-ff-text">
+                                Start {players[id]?.name} <span className="num text-ff-muted">{fmt(data.projections?.[id])}</span>
+                              </span>
+                              {lineupCheck.bench[i] && (
+                                <span className="whitespace-nowrap text-ff-text">
+                                  <span className="text-ff-muted">over</span> {players[lineupCheck.bench[i]]?.name} <span className="num text-ff-muted">{fmt(data.projections?.[lineupCheck.bench[i]])}</span>
+                                </span>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </Callout>
                     </div>
                   )}
                   <Table
