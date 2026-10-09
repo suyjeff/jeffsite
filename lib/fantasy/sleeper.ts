@@ -1,6 +1,7 @@
 import type { ScheduleGame } from './context'
 import { scoreStatLine } from './scoring'
 import type {
+  DraftBoard,
   PlayerMap,
   SleeperLeague,
   SleeperMatchup,
@@ -360,3 +361,40 @@ export const playerImageUrl = (player: TrimmedPlayer) =>
   player.pos === 'DEF'
     ? `https://sleepercdn.com/images/team_logos/nfl/${player.id.toLowerCase()}.png`
     : `https://sleepercdn.com/content/nfl/players/thumb/${player.id}.jpg`
+
+type RawDraft = { draft_id: string; type?: string; status?: string; start_time?: number | null }
+type RawPick = { player_id?: string | null; pick_no?: number; metadata?: { amount?: string | number } | null }
+
+/**
+ * Where each player went in the league's draft, for the reputation half of a trade price: managers anchor on what
+ * they paid. The latest finished draft counts; no draft (or one that failed to load) is simply no signal. A
+ * completed draft never changes, so it caches for a day.
+ */
+export const getDraftBoard = async (leagueId: string): Promise<DraftBoard | null> => {
+  const drafts = await cachedGet<RawDraft[], { id: string; type: string; at: number }[]>(`/league/${leagueId}/drafts`, 6 * HOUR, {
+    key: `drafts:${leagueId}`,
+    transform: (raw) =>
+      (Array.isArray(raw) ? raw : [])
+        .filter((d) => d.status === 'complete')
+        .map((d) => ({ id: d.draft_id, type: d.type ?? 'snake', at: d.start_time ?? 0 })),
+  })
+  const latest = [...drafts].sort((a, b) => b.at - a.at)[0]
+  if (!latest) return null
+  return cachedGet<RawPick[], DraftBoard>(`/draft/${latest.id}/picks`, 24 * HOUR, {
+    key: `draft:${latest.id}`,
+    transform: (raw) => draftBoard(Array.isArray(raw) ? raw : [], latest.type),
+  })
+}
+
+/** Picks to an overall order: pick number, or for an auction the price paid, dearest first. */
+export const draftBoard = (picks: RawPick[], type: string): DraftBoard => {
+  const made = picks.filter((p) => p.player_id)
+  const price = (p: RawPick) => Number(p.metadata?.amount)
+  const auction = type === 'auction' && made.length > 0 && made.every((p) => Number.isFinite(price(p)))
+  const ordered = [...made].sort((a, b) => (auction ? price(b) - price(a) || (a.pick_no ?? 0) - (b.pick_no ?? 0) : (a.pick_no ?? 0) - (b.pick_no ?? 0)))
+  const rank: Record<string, number> = {}
+  ordered.forEach((p, i) => {
+    rank[p.player_id!] ??= i + 1
+  })
+  return { type, rank, picks: made.length }
+}

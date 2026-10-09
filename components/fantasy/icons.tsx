@@ -53,10 +53,21 @@ export const OpenIcon = ({ className, size }: { className?: string; size?: numbe
   </Svg>
 )
 
-/** A pane with its sidebar ruled off: the show and hide sidebar control. */
-export const PanelIcon = ({ className, size }: { className?: string; size?: number }) => (
-  <Svg className={className} size={size}>
-    <rect x="1.5" y="2.5" width="11" height="9" />
-    <path d="M5 2.5v9" />
-  </Svg>
+/**
+ * A pane with its sidebar ruled off: the show and hide sidebar control. Drawn like the usual panel glyph (a rounded
+ * window, one rule just left of centre) with a hairline stroke; `open` shades the sidebar side, so the same icon
+ * says which state it is in and eases between them.
+ */
+export const PanelIcon = ({ className, size = 16, open }: { className?: string; size?: number; open?: boolean }) => (
+  <svg aria-hidden width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className={cx('shrink-0', className)}>
+    <path
+      d="M3.5 2.5h2.5v11H3.5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z"
+      fill="currentColor"
+      stroke="none"
+      className="motion-safe:transition-opacity motion-safe:duration-150"
+      style={{ opacity: open ? 0.22 : 0 }}
+    />
+    <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
+    <path d="M6 2.5v11" />
+  </svg>
 )

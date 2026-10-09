@@ -671,7 +671,10 @@ const CONFIG_NOTES: Record<keyof TradeConfig, string> = {
   beamWidth: 'Partial deals kept per partner at each growth step.',
   minMyGain: 'Pts/wk the deal must add to your optimal lineup.',
   minTheirGain: 'Pts/wk it must add to theirs. Default; the Limits sliders on Trades override it.',
-  maxValueAsk: 'Market value you may ask for beyond what you send. Default; the Limits sliders on Trades override it.',
+  maxValueAsk: 'Trade value you may ask for beyond what you send. Default; the Limits sliders on Trades override it.',
+  maxValueGive: 'Trade value you may send beyond what you get back, before a deal is dropped as a giveaway.',
+  minReturn: 'Share of the bigger side’s trade value the smaller side must come back with: no star for nothing.',
+  minWeeksBetter: 'Weeks a deal must help your lineup, once three or more are priced: a one-week gain is a bye patch.',
   scoredPerTeam: 'Shortlist per partner that gets exact week-by-week scoring.',
   perPartner: 'Most suggestions from one roster.',
   limit: 'Suggestions returned.',
@@ -768,7 +771,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
           <Code>{`objective = myGain
           + 0.30 · min(theirGain, myGain)
           − 2.50 · max(0, minTheirGain − theirGain)
-          − 0.60 · max(0, valueAsk − maxValueAsk)
+          − 0.60 · valueImbalance(get, give)
           − 0.15 · max(0, players − 2)`}</Code>
           <p className="mt-2 text-[12px] leading-relaxed text-ff-muted">
             Ranks partial deals during the search. Finalists are scored exactly: both teams&apos; best lineups, week by week, before and after, with the side taking extra bodies cutting its
@@ -778,6 +781,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
         <Panel title="Pipeline" pad={false}>
           <ol className="divide-y divide-ff-line">
             {[
+              ['price', 'Each player’s trade value: the model blended with consensus rank and draft slot, convex in points, streamers cheap. Deals outside the fair band, either way, are dropped.'],
               ['seed', `Every 1-for-1: their top ${DEFAULT_TRADE_CONFIG.getPerTeam} by what they add to you × all of yours.`],
               ['grow', `Add one player to either side, keep the best ${DEFAULT_TRADE_CONFIG.beamWidth} per partner, only when the objective improves by > 0.05.`],
               ['diversify', 'Keep each makeup’s best (1-for-1, consolidate, depth, swap) so one shape can’t crowd out the rest.'],

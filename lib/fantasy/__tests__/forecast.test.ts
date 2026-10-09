@@ -8,7 +8,7 @@ import { applyAdjustments, liveAdjustments } from '../adjust'
 import type { Analysis } from '../analysis'
 import type { Models } from '../models'
 import { scoutTeam, surname } from '../scout'
-import { ATTACHMENT, tradeCurrency, tradeValue } from '../currency'
+import { ATTACHMENT, starValue, tradeCurrency, tradeValue } from '../currency'
 import type { TradeIdea } from '../trades'
 import type { LeagueData } from '../useLeagueData'
 import type { PlayerMap, SleeperTransaction } from '../types'
@@ -178,7 +178,7 @@ describe('behavior', () => {
     expect(active.reasons).toContain('has traded with you before')
     const overpay = acceptRead(idea, 2, b, { t: 8, g: 1 })
     expect(overpay.index).toBeLessThan(active.index)
-    expect(overpay.perceivedAsk).toBe(7)
+    expect(overpay.perceivedAsk).toBeCloseTo(starValue(8) - starValue(1), 2)
   })
 })
 
@@ -281,7 +281,7 @@ describe('trade currency', () => {
     expect(cur.attached.has('d')).toBe(false)
     expect(cur.attached.has('w')).toBe(true)
     expect(tradeValue(['w'], market, cur, true)).toBeCloseTo(5 * ATTACHMENT)
-    expect(tradeValue(['q3', 'd'], market, cur, false)).toBeCloseTo(2 * 0.35 + 1.5 * 0.1)
+    expect(tradeValue(['q3', 'd'], market, cur, false)).toBeCloseTo(starValue(2) * 0.35 + starValue(1.5) * 0.1)
   })
 })
 

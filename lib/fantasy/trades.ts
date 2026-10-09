@@ -449,6 +449,23 @@ export type TradeConfig = {
    * lowball and dropped.
    */
   maxValueAsk: number
+  /**
+   * How much more trade value you may send than you get back before the deal
+   * is dropped as a giveaway. The mirror of `maxValueAsk`: lineup math alone is
+   * happy to hand over a star the model has written down, for a bench body.
+   */
+  maxValueGive: number
+  /**
+   * The lesser side's trade value as a share of the greater's, below which a
+   * deal is dropped however the absolute gap reads: nobody sends a star for
+   * nothing, and nobody takes nothing for one. Zero turns it off.
+   */
+  minReturn: number
+  /**
+   * Weeks of the horizon the deal must make your lineup better, once there are
+   * at least three to judge by. A one-week gain is a bye patch, not an upgrade.
+   */
+  minWeeksBetter: number
   /** Deals per partner that get the exact week-by-week scoring. */
   scoredPerTeam: number
   /** Most suggestions per partner in the final list, so one roster cannot crowd out the rest. */
@@ -465,6 +482,9 @@ export const DEFAULT_TRADE_CONFIG: TradeConfig = {
   minMyGain: 0.1,
   minTheirGain: 0,
   maxValueAsk: 4,
+  maxValueGive: 3,
+  minReturn: 0.5,
+  minWeeksBetter: 2,
   scoredPerTeam: 90,
   perPartner: 6,
   limit: 40,
@@ -482,6 +502,31 @@ export type TradeShape = 'one-for-one' | 'consolidate' | 'depth' | 'swap'
 export const tradeShape = (give: number, get: number): TradeShape =>
   give === 1 && get === 1 ? 'one-for-one' : give > get ? 'consolidate' : get > give ? 'depth' : 'swap'
 
+/** Below this much trade value on the bigger side, a gap is noise: two bench swaps are not a lowball. */
+const PRICED = 2
+
+/**
+ * How far a deal sits outside the band where both sides get a fair price, in trade-value points per week; zero
+ * inside it. Two limits, either of which can break it: the absolute gap each way (`maxValueAsk` for what you
+ * take beyond what you send, `maxValueGive` for the reverse) and the share the lesser side must come back with
+ * (`minReturn`), which is what catches a star for a body when the gap itself looks small.
+ *
+ * Raising `maxValueAsk` past its default is asking to see lowballs, so the share rule steps aside on that side
+ * only: what you may *give away* stays guarded.
+ */
+export const valueImbalance = (
+  get: number,
+  give: number,
+  cfg: Pick<TradeConfig, 'maxValueAsk' | 'maxValueGive' | 'minReturn'>,
+): number => {
+  const hi = Math.max(get, give)
+  const lo = Math.min(get, give)
+  const gap = Math.max(0, get - give - cfg.maxValueAsk, give - get - cfg.maxValueGive)
+  const minShare = get > give && cfg.maxValueAsk > DEFAULT_TRADE_CONFIG.maxValueAsk ? 0 : cfg.minReturn
+  const share = hi >= PRICED ? Math.max(0, minShare * hi - lo) : 0
+  return Math.max(gap, share)
+}
+
 export type TradeIdea = {
   partnerId: number
   get: string[]
@@ -495,8 +540,8 @@ export type TradeIdea = {
   myCost: number
   /**
    * Trade value in minus out, priced the way managers price players (see
-   * currency.ts): streamers cheap, the other side's drafted players at a
-   * premium. Positive means you are asking for one.
+   * currency.ts): reputation counted, stars dear, streamers cheap, the other
+   * side's drafted players at a premium. Positive means you are asking for one.
    */
   valueAsk: number
   /**
@@ -525,7 +570,12 @@ export type TradeSearchInput = {
   me: TradeTeam
   others: TradeTeam[]
   capacity: number
-  market: Record<string, number>
+  /**
+   * What each player fetches in a trade (currency.ts tradeMarket), not the model's own value: priced on points
+   * alone, a star the projections have written down is nearly free. Named apart from `market` so a caller
+   * holding both cannot hand over the wrong one.
+   */
+  tradeMarket: Record<string, number>
   /** How people price players in a trade (streamers cheap, drafted players dear); plain market value without it. */
   currency?: Currency
   /** Replacement level per position: the lineup floor any owner can reach via waivers. */
@@ -541,8 +591,10 @@ export type TradeFunnel = {
   combinations: number
   /** Deals that reached the exact week-by-week pass. */
   scored: number
-  /** Packages screened out for asking too much open-market value; exact already, so cut before the exact pass. */
+  /** Packages screened out for being lopsided in trade value, either way; exact already, so cut before the exact pass. */
   rejectedValueAsk: number
+  /** Deals that only help in a week or so of the horizon. */
+  rejectedBye: number
   rejectedMyGain: number
   rejectedTheirGain: number
   /** Deals that passed every filter, before trimming to the final list. */
@@ -687,7 +739,7 @@ const makeDealScorer = (
  */
 export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   const cfg = { ...DEFAULT_TRADE_CONFIG, ...(input.config ?? {}) }
-  const { slots, players, horizon, pts, me, others, capacity, market } = input
+  const { slots, players, horizon, pts, me, others, capacity, tradeMarket: market } = input
   const floor = input.floor ?? {}
   if (!horizon.length) return []
 
@@ -699,21 +751,18 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   const tradeable = (id: string) => !!players[id] && !UNTRADED_POSITIONS.has(players[id].pos)
   const mine = me.players.filter(tradeable)
 
-  const funnel: TradeFunnel = { combinations: 0, scored: 0, rejectedValueAsk: 0, rejectedMyGain: 0, rejectedTheirGain: 0, kept: 0 }
+  const funnel: TradeFunnel = { combinations: 0, scored: 0, rejectedValueAsk: 0, rejectedBye: 0, rejectedMyGain: 0, rejectedTheirGain: 0, kept: 0 }
 
-  type State = { give: string[]; get: string[]; my: number; their: number; ask: number; objective: number }
+  type State = { give: string[]; get: string[]; my: number; their: number; ask: number; imbalance: number; objective: number }
   /**
    * What the search climbs. Your gain, plus credit for how much the other side
    * gains (a deal both like is likelier to happen), minus a steep charge for
-   * every point below their bar and every point of premium above the cap, and
-   * a small charge per extra body so a piece has to earn its place.
+   * every point below their bar and every point the trade values sit outside
+   * the fair band (either way), and a small charge per extra body so a piece
+   * has to earn its place.
    */
-  const objective = (my: number, their: number, ask: number, size: number) =>
-    my +
-    0.3 * Math.min(their, my) -
-    2.5 * Math.max(0, cfg.minTheirGain - their) -
-    0.6 * Math.max(0, ask - cfg.maxValueAsk) -
-    0.15 * Math.max(0, size - 2)
+  const objective = (my: number, their: number, imbalance: number, size: number) =>
+    my + 0.3 * Math.min(their, my) - 2.5 * Math.max(0, cfg.minTheirGain - their) - 0.6 * imbalance - 0.15 * Math.max(0, size - 2)
 
   const ideas: TradeIdea[] = []
 
@@ -732,12 +781,13 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
       const my = screen.total(applyTrade(me.players, give, get, capacity, pts)) - myScreenBase
       const their = screen.total(applyTrade(them.players, get, give, capacity, pts)) - theirScreenBase
       const ask = valueOf(get, true) - valueOf(give, false)
-      const state = { give, get, my, their, ask, objective: objective(my, their, ask, give.length + get.length) }
+      const imbalance = valueImbalance(valueOf(get, true), valueOf(give, false), cfg)
+      const state = { give, get, my, their, ask, imbalance, objective: objective(my, their, imbalance, give.length + get.length) }
       seen.set(key, state)
       // Anything within a point of the gain bars goes to the exact pass: the
       // screen misses in both directions by up to a point or so. The value
-      // ask is already exact, so it is cut here rather than wasting a slot.
-      if (ask > cfg.maxValueAsk) funnel.rejectedValueAsk++
+      // balance is already exact, so it is cut here rather than wasting a slot.
+      if (imbalance > 0) funnel.rejectedValueAsk++
       else if (my >= cfg.minMyGain - 1 && their >= cfg.minTheirGain - 1) pool.set(key, state)
       return state
     }
@@ -784,6 +834,7 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
       const idea = scorer.score(me, them, cand.give, cand.get)
       if (idea.myGain < cfg.minMyGain) funnel.rejectedMyGain++
       else if (idea.theirGain < cfg.minTheirGain) funnel.rejectedTheirGain++
+      else if (idea.weeks >= 3 && idea.weeksBetter < cfg.minWeeksBetter) funnel.rejectedBye++
       else ideas.push(idea)
     }
   }
@@ -855,11 +906,12 @@ export const scoreTrade = (input: {
   give: string[]
   get: string[]
   capacity: number
-  market: Record<string, number>
+  /** What each player fetches in a trade (currency.ts tradeMarket). */
+  tradeMarket: Record<string, number>
   currency?: Currency
   floor?: WaiverFloor
 }): TradeIdea | null => {
-  const { slots, players, horizon, pts, me, partner, give, get, capacity, market } = input
+  const { slots, players, horizon, pts, me, partner, give, get, capacity, tradeMarket: market } = input
   if (!horizon.length || (!give.length && !get.length)) return null
   const scorer = makeDealScorer(slots, players, horizon, input.floor ?? {}, capacity, pts, market, input.currency)
   const idea = scorer.score(me, partner, give, get)

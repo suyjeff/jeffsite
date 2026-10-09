@@ -58,7 +58,8 @@ export type DealInput = {
   floor: WaiverFloor
   capacity: number
   pts: Record<string, number>
-  market: Record<string, number>
+  /** What each player fetches in a trade (currency.ts tradeMarket). */
+  tradeMarket: Record<string, number>
   rosters: Record<number, string[]>
   currency?: Analysis['currency']
   faab?: Faab | null
@@ -66,7 +67,7 @@ export type DealInput = {
 
 /** Price every team in a deal. */
 export const readDeal = (deal: Deal, input: DealInput): DealRead => {
-  const { slots, players, horizon, floor, capacity, pts, market, rosters, currency, faab } = input
+  const { slots, players, horizon, floor, capacity, pts, tradeMarket: market, rosters, currency, faab } = input
   const ev = makeHorizonEval(slots, players, horizon, floor)
   const weeks = horizon.map((h) => h.week)
   const sides = deal.teams.map((rid): DealSide => {
