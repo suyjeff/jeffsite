@@ -135,11 +135,11 @@ export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <button onClick={() => open('value')} className="border border-ff-line bg-ff-panel px-3 py-2.5 text-left hover:border-ff-line2">
-          <span className="ff-label">Tuning →</span>
+          <span className="ff-label block">Tuning →</span>
           <span className="mt-1 block text-[12.5px] text-ff-text2">Change how players are valued and how teams are ranked.</span>
         </button>
         <button onClick={() => open('system')} className="border border-ff-line bg-ff-panel px-3 py-2.5 text-left hover:border-ff-line2">
-          <span className="ff-label">Wiring →</span>
+          <span className="ff-label block">Wiring →</span>
           <span className="mt-1 block text-[12.5px] text-ff-text2">Every input and model, and what feeds what.</span>
         </button>
       </div>

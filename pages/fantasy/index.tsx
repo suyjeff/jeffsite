@@ -26,6 +26,10 @@ import {
 } from '../../lib/fantasy/useLeagueData'
 import { useRoute } from '../../lib/fantasy/useRoute'
 import { DEFAULT_MODEL, type ModelConfig } from '../../lib/fantasy/war'
+import { DEFAULT_THEME, themeById, type Scheme } from '../../lib/fantasy/themes'
+import ThemePicker from '../../components/fantasy/ThemePicker'
+import CommandPalette from '../../components/fantasy/CommandPalette'
+import { useTheme } from '../../lib/fantasy/useTheme'
 
 const PREFS_KEY = 'ff:prefs'
 
@@ -39,6 +43,9 @@ export type Prefs = {
   playoffWeight: number
   model: ModelConfig
   weights: PowerWeights
+  /** Colour theme id (lib/fantasy/themes.ts) and, for themes with both, light, dark or the system's. */
+  theme: string
+  scheme: Scheme
 }
 
 const loadPrefs = (): Prefs => {
@@ -51,6 +58,8 @@ const loadPrefs = (): Prefs => {
     playoffWeight: DEFAULT_PLAYOFF_WEIGHT,
     model: DEFAULT_MODEL,
     weights: DEFAULT_POWER_WEIGHTS,
+    theme: DEFAULT_THEME,
+    scheme: 'system',
   }
   try {
     const raw = window.localStorage.getItem(PREFS_KEY)
@@ -66,6 +75,7 @@ const loadPrefs = (): Prefs => {
 const FantasyPage = () => {
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const route = useRoute(SECTION_KEYS, 'dash')
+  useTheme(prefs?.theme, prefs?.scheme ?? 'system', prefs != null)
   // Waivers moved out of My team into their own section; old links still land there.
   useEffect(() => {
     if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })
@@ -142,6 +152,26 @@ const FantasyPage = () => {
   // The player detail sheet, open over whatever page you are on.
   const [sheet, setSheet] = useState<string | null>(null)
   const closeSheet = useCallback(() => setSheet(null), [])
+  // Cmd/Ctrl+K opens the command palette from anywhere, fields included; again closes it.
+  const [palette, setPalette] = useState(false)
+  const closePalette = useCallback(() => setPalette(false), [])
+  // Only once the app is up: on the loader or onboarding there is nothing to jump to, and a press there must not open it later.
+  const appUp = !!(data && analysis && models && prefs)
+  const canPalette = useRef(appUp)
+  canPalette.current = appUp
+  useEffect(() => {
+    if (!appUp) setPalette(false)
+  }, [appUp])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (canPalette.current && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPalette((x) => !x)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   useEffect(() => setSheet(null), [leagueKey])
 
   // A new section or tab fades its content in (the header stays put), so switching never flashes or snaps.
@@ -255,6 +285,10 @@ const FantasyPage = () => {
             ))}
           </Select>
         </div>
+        <div className={row}>
+          <span className={key}>Theme</span>
+          <ThemePicker value={prefs.theme} onChange={(t) => update({ theme: t })} scheme={prefs.scheme} onScheme={(m) => update({ scheme: m })} />
+        </div>
       </div>
     </>
   )
@@ -299,6 +333,7 @@ const FantasyPage = () => {
       onRefresh={reload}
       loadedAt={loadedAt}
       status={status}
+      onSearch={data ? () => setPalette(true) : undefined}
     >
       {error && (
         <div className="mt-4 border border-ff-neg/40 bg-ff-neg/10 px-3 py-2.5 font-mono text-[12px] text-ff-neg">ERR · {error}</div>
@@ -342,6 +377,17 @@ const FantasyPage = () => {
           )}
         </div>
         {sheet && data.players[sheet] && <PlayerSheet id={sheet} onClose={closeSheet} />}
+        <CommandPalette
+          open={palette}
+          onClose={closePalette}
+          theme={prefs.theme}
+          scheme={prefs.scheme}
+          onTheme={(t) => update({ theme: t })}
+          onScheme={(m) => update({ scheme: m })}
+          onReload={reload}
+          leagues={(data.leagues ?? []).map((l) => ({ id: l.league_id, name: l.name }))}
+          onLeague={(id) => update({ leagueId: id })}
+        />
         </FantasyProvider>
       ) : (
         !error && (

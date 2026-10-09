@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react'
 import Head from 'next/head'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
-import { Avatar, Dropdown, cx, usePhone } from './ui'
+import { Avatar, Dropdown, cx, shortcutLabel, usePhone } from './ui'
 
 export const SECTION_KEYS = ['dash', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
@@ -47,6 +47,8 @@ export type ShellProps = {
   progress: string
   onRefresh: () => void
   loadedAt: Date | null
+  /** Opens the command palette; without it there is no search entry. */
+  onSearch?: () => void
   /** The engine's readouts for the footer: label, value, and what it means. */
   status?: { label: string; value: string; title?: string }[]
 }
@@ -88,6 +90,7 @@ const SidebarBody = ({
   loadedAt,
   status,
   onClose,
+  onSearch,
 }: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void }) => (
   <div className="flex h-full flex-col">
     <div className="flex h-11 shrink-0 items-center justify-between border-b border-ff-line pl-3 pr-2">
@@ -133,6 +136,26 @@ const SidebarBody = ({
       )}
     </div>
 
+    {onSearch && (
+      <div className="shrink-0 border-b border-ff-line px-3 py-2">
+        <button
+          type="button"
+          onClick={() => {
+            onClose?.()
+            onSearch()
+          }}
+          className="flex h-7 w-full items-center gap-2 border border-ff-line bg-ff-sunken px-2 text-left text-[12px] text-ff-muted hover:border-ff-line2 hover:text-ff-text2"
+          aria-keyshortcuts="Meta+K Control+K"
+        >
+          <span aria-hidden className="font-mono text-ff-accent">
+            ›
+          </span>
+          <span className="flex-1">Jump to…</span>
+          <kbd className="font-mono text-[10px]">{shortcutLabel()}</kbd>
+        </button>
+      </div>
+    )}
+
     <nav className="ff-scroll flex-1 overflow-y-auto py-1.5" aria-label="Sections">
       {GROUPS.map((g) => (
         <div key={g} className="pb-1.5">
@@ -148,11 +171,11 @@ const SidebarBody = ({
                 aria-keyshortcuts={String(i)}
                 title={key === 'monke' ? MONKE.long : undefined}
                 className={cx(
-                  'group flex h-8 w-full items-center gap-3 px-3 text-left text-[13px] transition-colors',
+                  'group flex h-7 w-full items-center gap-3 px-3 text-left text-[13px] transition-colors',
                   active ? 'bg-ff-raised text-ff-text' : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
                 )}
               >
-                <span className={cx('num w-4 text-[10.5px]', active ? 'text-ff-text' : 'text-ff-muted/70')}>{String(i).padStart(2, '0')}</span>
+                <span className={cx('num w-4 text-[10.5px]', active ? 'text-ff-text' : 'text-ff-muted')}>{String(i).padStart(2, '0')}</span>
                 <span className={cx('flex-1', active && 'font-medium')}>{label}</span>
                 <kbd className="hidden h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 font-mono text-[10px] text-ff-muted group-hover:inline-flex md:inline-flex md:opacity-0 md:group-hover:opacity-100">{i}</kbd>
               </button>
@@ -264,6 +287,11 @@ const Shell = (props: ShellProps) => {
           </div>
           {leagueName && <div className="truncate font-mono text-[10.5px] text-ff-muted">{leagueName}</div>}
         </div>
+        {props.onSearch && (
+          <button onClick={props.onSearch} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] tracking-[0.1em] text-ff-text2" aria-label="Find a page, player or team">
+            FIND
+          </button>
+        )}
         <button onClick={onRefresh} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] text-ff-text2" aria-label="Reload from Sleeper">
           {loading ? <span className="ff-pulse">SYNC</span> : '↻'}
         </button>

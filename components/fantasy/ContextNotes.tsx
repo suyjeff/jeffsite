@@ -1,6 +1,7 @@
 import React from 'react'
 import { BASE_AVAILABILITY, type ContextNote, type PlayerContext } from '../../lib/fantasy/context'
 import type { PlayerMap } from '../../lib/fantasy/types'
+import type { Reason } from './ui'
 
 const last = (name: string | undefined, id: string) => (name ? name.split(' ').slice(-1)[0] : id)
 
@@ -90,6 +91,24 @@ export const ContextNotes = ({ context, players, max = 4 }: { context?: PlayerCo
     </span>
   )
 }
+
+/** Every note as a full sentence with its tone, for an expanded row or a justification list. */
+export const contextReasons = (context: PlayerContext | undefined, players: PlayerMap): Reason[] =>
+  context
+    ? [...context.notes]
+        .sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind))
+        .map((n) => {
+          const d = describeNote(n, players)
+          return {
+            text: (
+              <>
+                <span className="font-medium text-ff-text">{d.label}.</span> {d.title}
+              </>
+            ),
+            tone: d.tone === 'bad' ? 'neg' : d.tone === 'good' ? 'pos' : d.tone === 'warn' ? 'warn' : 'neutral',
+          } satisfies Reason
+        })
+    : []
 
 /** Opponents in the fantasy playoff weeks, the schedule people actually trade for. */
 export const PlayoffSchedule = ({ context, weeks }: { context?: PlayerContext; weeks: number[] }) => {

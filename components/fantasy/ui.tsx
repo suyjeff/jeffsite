@@ -214,7 +214,7 @@ export const Segmented = <K extends string>({
           title={o.title}
           onClick={() => onChange(o.key)}
           className={cx(
-            'shrink-0 whitespace-nowrap border-r border-ff-line transition-colors last:border-r-0',
+            'min-w-6 shrink-0 whitespace-nowrap border-r border-ff-line transition-colors last:border-r-0',
             size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[12px]',
             active ? 'bg-ff-text text-ff-panel' : 'text-ff-text2 hover:bg-ff-raised hover:text-ff-text',
           )}
@@ -225,6 +225,9 @@ export const Segmented = <K extends string>({
     })}
   </div>
 )
+
+/** The command palette's shortcut as this platform writes it. */
+export const shortcutLabel = () => (typeof navigator !== 'undefined' && /Mac|iP(hone|ad|od)/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K')
 
 /** Whether the viewport is phone-width (below md), kept live across rotation and resizing. */
 export const usePhone = () => {
@@ -302,7 +305,7 @@ export const Swap = ({ k, children, className }: { k: string; children: ReactNod
   )
 }
 
-export type DropdownOption = { value: string; label: ReactNode; sub?: ReactNode; disabled?: boolean }
+export type DropdownOption = { value: string; label: ReactNode; sub?: ReactNode; disabled?: boolean; /** A heading shown above the first option of each group. */ group?: string; /** Plain text for type-ahead when the label is not a string. */ text?: string; /** A shorter face for the closed button. */ face?: ReactNode }
 
 /**
  * A listbox in the app's own skin: square, hairline, mono caret, a check on
@@ -393,7 +396,7 @@ export const Dropdown = ({
     } else if (e.key === 'Tab') setOpen(false)
     else if (e.key.length === 1) {
       const k = e.key.toLowerCase()
-      const text = (o: DropdownOption) => (typeof o.label === 'string' ? o.label : o.value).toLowerCase()
+      const text = (o: DropdownOption) => (o.text ?? (typeof o.label === 'string' ? o.label : o.value)).toLowerCase()
       const from = options.findIndex((o, i) => i > active && text(o).startsWith(k))
       const i = from >= 0 ? from : options.findIndex((o) => text(o).startsWith(k))
       if (i >= 0) setActive(i)
@@ -404,6 +407,8 @@ export const Dropdown = ({
     <div ref={root} className={cx('relative min-w-0', className)}>
       <button
         type="button"
+        // A select-only combobox (APG): focus stays here while the arrows move through the list.
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${id}-list`}
@@ -421,7 +426,7 @@ export const Dropdown = ({
           renderButton(current, open)
         ) : (
           <>
-            <span className="min-w-0 flex-1 truncate pl-2.5 pr-2">{current?.label ?? '—'}</span>
+            <span className="min-w-0 flex-1 truncate pl-2.5 pr-2">{current?.face ?? current?.label ?? '—'}</span>
             <span aria-hidden className="flex h-full w-7 shrink-0 items-center justify-center border-l border-ff-line font-mono text-[10px] text-ff-muted">
               {open ? '▴' : '▾'}
             </span>
@@ -442,9 +447,15 @@ export const Dropdown = ({
         >
           {options.map((o, i) => {
             const selected = o.value === value
+            const heading = o.group && o.group !== options[i - 1]?.group ? o.group : null
             return (
+              <React.Fragment key={o.value}>
+              {heading && (
+                <div role="presentation" className="ff-label px-3 pb-1 pt-2 first:pt-1">
+                  {heading}
+                </div>
+              )}
               <div
-                key={o.value}
                 id={`${id}-${i}`}
                 data-i={i}
                 role="option"
@@ -466,6 +477,7 @@ export const Dropdown = ({
                   {o.sub && <span className="block whitespace-nowrap font-mono text-[10.5px] text-ff-muted">{o.sub}</span>}
                 </span>
               </div>
+              </React.Fragment>
             )
           })}
         </div>
@@ -1018,10 +1030,22 @@ export function Table<T>({
   empty = 'Nothing here yet.',
   maxHeight,
   dense = false,
+  expand,
+  canExpand,
 }: {
   rows: T[]
   columns: Column<T>[]
   rowKey: (row: T) => string | number
+  /**
+   * The case behind a row, shown beneath it on demand: a toggle opens a full-width band under the
+   * row instead of truncating the reasons into a cell. Return null for rows with nothing to add.
+   */
+  expand?: (row: T) => ReactNode | null
+  /**
+   * Whether a row has details, answered cheaply. With it, `expand` runs only for open rows; without
+   * it, every row's details are built up front to find the ones that are empty.
+   */
+  canExpand?: (row: T) => boolean
   defaultSort?: string
   defaultDesc?: boolean
   rowClass?: (row: T) => string
@@ -1035,10 +1059,17 @@ export function Table<T>({
   // While columns hide past the right edge, a fade says so; it clears once scrolled to the end.
   const scroller = useRef<HTMLDivElement>(null)
   const [more, setMore] = useState(false)
+  const [open, setOpen] = useState<Set<string | number>>(() => new Set())
+  // The band under an open row spans the visible width, not the table's, so it reads without scrolling sideways.
+  const [viewW, setViewW] = useState<number | null>(null)
+  const id = useId()
   useEffect(() => {
     const el = scroller.current
     if (!el) return
-    const check = () => setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
+    const check = () => {
+      setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
+      setViewW(el.clientWidth)
+    }
     check()
     const ro = new ResizeObserver(check)
     ro.observe(el)
@@ -1070,6 +1101,20 @@ export function Table<T>({
     }
   }
   const align = (c: Column<T>) => (c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left')
+  const details = !!expand
+  const expandable = expand ? sorted.filter((r) => (canExpand ? canExpand(r) : expand(r) != null)).map(rowKey) : []
+  const hasDetail = new Set(expandable)
+  const allOpen = expandable.length > 0 && expandable.every((k) => open.has(k))
+  const flip = (k: string | number) =>
+    setOpen((o) => {
+      const n = new Set(o)
+      if (n.has(k)) n.delete(k)
+      else n.add(k)
+      return n
+    })
+  // With a toggle column first, pinned columns sit just right of it.
+  const pin = details ? 'left-7' : 'left-0'
+  const span = columns.length + (details ? 1 : 0)
   return (
     <div className="relative">
       {more && <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 z-30 w-8 bg-gradient-to-l from-ff-panel to-transparent" />}
@@ -1077,6 +1122,21 @@ export function Table<T>({
         <table className="w-full border-collapse text-[13px]">
           <thead className="sticky top-0 z-10">
             <tr>
+              {details && (
+                <th className="sticky left-0 z-20 h-8 w-7 border-b border-ff-line bg-ff-panel p-0">
+                  {expandable.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setOpen(allOpen ? new Set() : new Set(expandable))}
+                      aria-label={allOpen ? 'Collapse all rows' : 'Expand all rows'}
+                      title={allOpen ? 'Collapse all' : 'Expand all'}
+                      className="flex h-8 w-7 items-center justify-center font-mono text-[10px] text-ff-muted hover:text-ff-text"
+                    >
+                      <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', allOpen && 'rotate-90')}>›</span>
+                    </button>
+                  )}
+                </th>
+              )}
               {columns.map((c) => (
                 <th
                   key={c.key}
@@ -1087,7 +1147,7 @@ export function Table<T>({
                     'ff-label h-8 whitespace-nowrap border-b border-ff-line bg-ff-panel px-1.5 font-normal first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
                     align(c),
                     c.sort && 'cursor-pointer select-none hover:text-ff-text',
-                    c.sticky && 'sticky left-0 z-20',
+                    c.sticky && cx('sticky z-20', pin),
                     c.hideBelow && HIDE[c.hideBelow],
                     c.className,
                   )}
@@ -1101,14 +1161,18 @@ export function Table<T>({
           <tbody>
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={columns.length} className="px-3 py-10 text-center text-[13px] text-ff-muted">
+                <td colSpan={span} className="px-3 py-10 text-center text-[13px] text-ff-muted">
                   {empty}
                 </td>
               </tr>
             )}
-            {sorted.map((row) => (
+            {sorted.map((row) => {
+              const k = rowKey(row)
+              const isOpen = hasDetail.has(k) && open.has(k)
+              const detail = isOpen && expand ? expand(row) : null
+              return (
+              <React.Fragment key={k}>
               <tr
-                key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
                 onKeyDown={
@@ -1125,9 +1189,30 @@ export function Table<T>({
                   'group border-b border-ff-line/60 last:border-0',
                   onRowClick && 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent',
                   'hover:bg-ff-raised',
+                  isOpen && 'border-b-0 bg-ff-raised',
                   rowClass?.(row),
                 )}
               >
+                {details && (
+                  <td className={cx('sticky left-0 z-[1] w-7 p-0 align-middle group-hover:bg-ff-raised', isOpen ? 'bg-ff-raised' : 'bg-ff-panel')}>
+                    {hasDetail.has(k) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          flip(k)
+                        }}
+                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && e.stopPropagation()}
+                        aria-expanded={isOpen}
+                        aria-controls={`${id}-${k}`}
+                        aria-label={isOpen ? 'Hide details' : 'Show details'}
+                        className="flex h-[38px] w-7 items-center justify-center font-mono text-[11px] text-ff-muted hover:text-ff-text"
+                      >
+                        <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', isOpen && 'rotate-90 text-ff-accent')}>›</span>
+                      </button>
+                    )}
+                  </td>
+                )}
                 {columns.map((c) => (
                   <td
                     key={c.key}
@@ -1137,8 +1222,8 @@ export function Table<T>({
                       'whitespace-nowrap px-1.5 py-1 align-middle first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
                       align(c),
                       c.align === 'right' && 'num',
-                      c.sticky && 'sticky left-0 z-[1] max-w-[170px] overflow-hidden bg-ff-panel group-hover:bg-ff-raised sm:max-w-[300px]',
-                      c.hideBelow && HIDE[c.hideBelow],
+                      c.sticky && cx('sticky z-[1] max-w-[170px] overflow-hidden group-hover:bg-ff-raised sm:max-w-[300px]', isOpen ? 'bg-ff-raised' : 'bg-ff-panel', pin),
+                        c.hideBelow && HIDE[c.hideBelow],
                       c.className,
                     )}
                   >
@@ -1146,13 +1231,53 @@ export function Table<T>({
                   </td>
                 ))}
               </tr>
-            ))}
+              {isOpen && (
+                <tr id={`${id}-${k}`} className="border-b border-ff-line/60 bg-ff-raised">
+                  <td colSpan={span} className="p-0">
+                    <div className="sticky left-0 px-3 pb-3 pt-0.5 sm:pl-9" style={viewW ? { width: viewW } : undefined}>
+                      {detail}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>
     </div>
   )
 }
+
+export type Reason = { text: ReactNode; tone?: 'pos' | 'neg' | 'warn' | 'neutral' | 'accent' }
+
+/**
+ * The case for something, one line per reason, each led by a square in its tone: green helps,
+ * red hurts, amber is a caution. Sits in a table's expanded row or anywhere a justification goes.
+ */
+export const Reasons = ({ items, title, columns = 2 }: { items: Reason[]; title?: ReactNode; columns?: 1 | 2 }) => (
+  <div className="border-l-2 border-ff-accent/50 bg-ff-panel py-2 pl-3 pr-2">
+    {title && <div className="ff-label mb-1.5">{title}</div>}
+    <ul className={cx('grid gap-x-6 gap-y-1 text-[12.5px] leading-[1.45] text-ff-text2', columns === 2 && 'md:grid-cols-2')}>
+      {items.map((r, i) => (
+        <li key={i} className="flex items-baseline gap-2 whitespace-normal">
+          {/* A mark per tone, in its colour: + helps, − hurts, ! caution, · neutral. Shape carries it too, not colour alone (1.4.1). */}
+          <span
+            className={cx(
+              'w-3 shrink-0 text-center font-mono text-[12px] font-semibold leading-none',
+              r.tone === 'pos' ? 'text-ff-pos' : r.tone === 'neg' ? 'text-ff-neg' : r.tone === 'warn' ? 'text-ff-warn' : r.tone === 'accent' ? 'text-ff-accent' : 'text-ff-muted',
+            )}
+          >
+            <span aria-hidden>{r.tone === 'pos' ? '+' : r.tone === 'neg' ? '−' : r.tone === 'warn' ? '!' : '·'}</span>
+            <span className="sr-only">{r.tone === 'pos' ? 'Helps: ' : r.tone === 'neg' ? 'Hurts: ' : r.tone === 'warn' ? 'Caution: ' : ''}</span>
+          </span>
+          <span className="min-w-0">{r.text}</span>
+        </li>
+      ))}
+    </ul>
+  </div>
+)
 
 export const Empty = ({ title, children }: { title: ReactNode; children?: ReactNode }) => (
   <div className="border border-dashed border-ff-line2 px-4 py-10 text-center">

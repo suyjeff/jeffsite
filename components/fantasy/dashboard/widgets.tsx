@@ -36,14 +36,21 @@ type Meta = { title: string; blurb: string; w: number; h: number; Body: (p: Widg
 
 // ---------- Shared bits ----------
 
-const Row = ({ children, onClick, active, className }: { children: React.ReactNode; onClick?: () => void; active?: boolean; className?: string }) => (
-  <div
-    role={onClick ? 'button' : undefined}
-    tabIndex={onClick ? 0 : undefined}
-    onClick={onClick}
-    onKeyDown={onClick ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onClick()) : undefined}
-    className={cx('flex h-8 items-center gap-2 border-b border-ff-line/60 px-3 text-[12.5px] last:border-0', onClick && 'cursor-pointer hover:bg-ff-raised', active && 'bg-ff-raised', className)}
-  >
+/**
+ * A list row. When it selects something, a full-row button sits behind the content, so the row is
+ * one click target without wrapping the player names (themselves buttons) in another button.
+ */
+const Row = ({ children, onClick, active, className, label }: { children: React.ReactNode; onClick?: () => void; active?: boolean; className?: string; label?: string }) => (
+  <div className={cx('relative flex h-8 items-center gap-2 border-b border-ff-line/60 px-3 text-[12.5px] last:border-0', onClick && 'hover:bg-ff-raised', active && 'bg-ff-raised', className)}>
+    {onClick && (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label ?? 'Select'}
+        aria-pressed={active ?? false}
+        className="absolute inset-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
+      />
+    )}
     {children}
   </div>
 )
@@ -171,7 +178,7 @@ const Odds = ({ sel, select }: WidgetProps) => {
         const s = f.sim[r.rosterId]
         const season = analysis.seasonById[r.rosterId]
         return (
-          <Row key={r.rosterId} onClick={() => select({ team: r.rosterId })} active={sel.team === r.rosterId}>
+          <Row key={r.rosterId} onClick={() => select({ team: r.rosterId })} active={sel.team === r.rosterId} label={`Follow ${analysis.teamById[r.rosterId]?.name ?? 'team'}`}>
             <span className="min-w-0 flex-1">
               <TeamTag id={r.rosterId} />
             </span>
@@ -248,12 +255,12 @@ const Matchup = ({ select }: WidgetProps) => {
           <span className="num text-[26px] font-medium leading-none tracking-[-0.03em] text-ff-s2">{fmt(muOpp)}</span>
         </div>
         <div className="mt-2.5 flex items-center gap-2" title={`Chance to win: you ${winPct}%, them ${100 - winPct}%`}>
-          <span className={cx('num w-9 text-[13px] font-medium', favored === mine ? 'text-ff-s1' : 'text-ff-text2')}>{winPct}%</span>
+          <span className={cx('num w-9 text-[13px] font-medium', favored === mine ? 'text-ff-text' : 'text-ff-muted')}>{winPct}%</span>
           <span className="flex h-1.5 flex-1 gap-px">
             <span className="h-full bg-ff-s1" style={{ width: `${p * 100}%` }} />
             <span className="h-full flex-1 bg-ff-s2" />
           </span>
-          <span className={cx('num w-9 text-right text-[13px] font-medium', favored === opp ? 'text-ff-s2' : 'text-ff-text2')}>{100 - winPct}%</span>
+          <span className={cx('num w-9 text-right text-[13px] font-medium', favored === opp ? 'text-ff-text' : 'text-ff-muted')}>{100 - winPct}%</span>
         </div>
         <div className="mt-1 text-center text-[11px] text-ff-text2">
           {favored == null ? 'Even' : favored === mine ? 'You’re favored' : `${analysis.teamById[opp]?.name ?? 'They'} favored`}
@@ -336,9 +343,9 @@ const TradeIdeas = () => {
         <span className="hidden w-16 text-right sm:inline">odds</span>
       </Th>
       {top.map((i) => {
-        const read = acceptRead(i, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency)
+        const read = acceptRead(i, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab)
         return (
-          <Row key={`${i.partnerId}-${i.give.join()}-${i.get.join()}`} onClick={() => go('trades')}>
+          <Row key={`${i.partnerId}-${i.give.join()}-${i.get.join()}`} onClick={() => go('trades')} label={`Open trades with ${analysis.teamById[i.partnerId]?.name ?? 'this team'}`}>
             <span className="w-[120px] shrink-0">
               <TeamTag id={i.partnerId} />
             </span>
@@ -374,7 +381,7 @@ const Lineup = ({ sel, select }: WidgetProps) => {
         <span className="w-10 text-right">plays</span>
       </Th>
       {rows.map((r, i) => (
-        <Row key={i} onClick={r.id ? () => select({ player: r.id! }) : undefined} active={!!r.id && sel.player === r.id}>
+        <Row key={i} onClick={r.id ? () => select({ player: r.id! }) : undefined} active={!!r.id && sel.player === r.id} label={r.id ? `Follow ${data.players[r.id]?.name ?? 'player'}` : undefined}>
           <span className="w-9 font-mono text-[10.5px] text-ff-muted">{r.slot}</span>
           <span className="min-w-0 flex-1">{r.id ? <PlayerName player={data.players[r.id]} id={r.id} size={18} avatar={false} /> : <span className="text-ff-muted">waiver fill</span>}</span>
           <span className="num w-12 text-right text-ff-text">{fmt(r.pts)}</span>
@@ -414,7 +421,7 @@ const Power = ({ sel, select }: WidgetProps) => {
         <span className="font-mono text-[10px] text-ff-muted">{m === 'forecast' ? 'pts/wk' : m === 'elo' ? 'elo' : 'win % vs avg'}</span>
       </div>
       {rows.map((r, i) => (
-        <Row key={r.id} onClick={() => select({ team: r.id })} active={sel.team === r.id}>
+        <Row key={r.id} onClick={() => select({ team: r.id })} active={sel.team === r.id} label={`Follow ${analysis.teamById[r.id]?.name ?? 'team'}`}>
           <span className="num w-5 text-ff-muted">{i + 1}</span>
           <span className="min-w-0 flex-1">
             <TeamTag id={r.id} />
@@ -442,7 +449,7 @@ const Standings = ({ sel, select }: WidgetProps) => {
         <span className="w-8 text-right">str</span>
       </Th>
       {rows.map((s, i) => (
-        <Row key={s.rosterId} onClick={() => select({ team: s.rosterId })} active={sel.team === s.rosterId} className={cx(i === cut - 1 && 'border-b border-dashed border-b-ff-line2')}>
+        <Row key={s.rosterId} onClick={() => select({ team: s.rosterId })} active={sel.team === s.rosterId} label={`Follow ${analysis.teamById[s.rosterId]?.name ?? 'team'}`} className={cx(i === cut - 1 && 'border-b border-dashed border-b-ff-line2')}>
           <span className="num w-5 text-ff-muted">{i + 1}</span>
           <span className="min-w-0 flex-1">
             <TeamTag id={s.rosterId} />
@@ -483,7 +490,7 @@ const Injuries = ({ sel, select }: WidgetProps) => {
         const note = c.notes.find((n) => n.kind === 'status' || n.kind === 'temporary' || n.kind === 'bump') ?? c.notes[0]
         const d = note ? describeNote(note, data.players) : null
         return (
-          <Row key={id} onClick={() => select({ player: id })} active={sel.player === id}>
+          <Row key={id} onClick={() => select({ player: id })} active={sel.player === id} label={`Follow ${data.players[id]?.name ?? 'player'}`}>
             <span className="min-w-0 flex-1">
               <PlayerName player={data.players[id]} id={id} size={18} avatar={false} />
             </span>
@@ -514,7 +521,7 @@ const Waivers = ({ sel, select }: WidgetProps) => {
         <span className="w-14 text-right">adds</span>
       </Th>
       {rows.map((t) => (
-        <Row key={t.id} onClick={() => select({ player: t.id })} active={sel.player === t.id}>
+        <Row key={t.id} onClick={() => select({ player: t.id })} active={sel.player === t.id} label={`Follow ${data.players[t.id]?.name ?? 'player'}`}>
           <span className="min-w-0 flex-1">
             <PlayerName player={data.players[t.id]} id={t.id} size={18} avatar={false} sub={t.slot ? `fills ${t.slot}` : undefined} />
           </span>
@@ -657,7 +664,7 @@ const TeamCard = ({ sel, select }: WidgetProps) => {
       </Th>
       <div className="flex-1">
         {roster.map((pid) => (
-          <Row key={pid} onClick={() => select({ player: pid })} active={sel.player === pid}>
+          <Row key={pid} onClick={() => select({ player: pid })} active={sel.player === pid} label={`Follow ${data.players[pid]?.name ?? 'player'}`}>
             <span className="min-w-0 flex-1">
               <PlayerName player={data.players[pid]} id={pid} size={18} avatar={false} />
             </span>
@@ -718,7 +725,7 @@ const Consensus = ({ sel, select }: WidgetProps) => {
         <span className="w-16 text-right">read</span>
       </Th>
       {rows.map((r) => (
-        <Row key={r.id} onClick={() => select({ player: r.id })} active={sel.player === r.id}>
+        <Row key={r.id} onClick={() => select({ player: r.id })} active={sel.player === r.id} label={`Follow ${data.players[r.id]?.name ?? 'player'}`}>
           <span className="min-w-0 flex-1">
             <PlayerName player={data.players[r.id]} id={r.id} size={18} avatar={false} />
           </span>
@@ -826,7 +833,7 @@ const Props = ({ sel, select }: WidgetProps) => {
       </Th>
       {rows.length === 0 && <div className="px-3 py-6 text-center text-[12px] text-ff-muted">Nobody here has lines yet.</div>}
       {rows.map((r) => (
-        <Row key={r.id} onClick={() => select({ player: r.id })} active={sel.player === r.id}>
+        <Row key={r.id} onClick={() => select({ player: r.id })} active={sel.player === r.id} label={`Follow ${data.players[r.id]?.name ?? 'player'}`}>
           <span className="min-w-0 flex-1">
             <PlayerName player={data.players[r.id]} id={r.id} size={18} avatar={false} />
           </span>

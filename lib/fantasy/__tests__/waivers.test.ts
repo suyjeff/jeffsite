@@ -127,7 +127,29 @@ describe('streaming', () => {
       [1, 'DDD', 12],
       [2, 'AAA', 18],
     ])
-    expect(streamReasons(rows[1], 'QB')).toContain('home')
-    expect(streamReasons(rows[1], 'QB')).toContain('900 adds 24h')
+    const why = streamReasons(rows[1], 'QB').map((r) => r.text)
+    expect(why).toContain('Home game')
+    expect(why).toContain('900 Sleeper managers added him in the last 24 hours')
+  })
+  it('compares against the starter he would replace when you start two', () => {
+    const { rows, mine } = streamRows({
+      pos: 'QB',
+      week: 1,
+      aheadWeeks: [1],
+      players,
+      rosteredBy: { qa: 1, qb: 1 },
+      myPlayers: ['qa', 'qb'],
+      horizon: [{ week: 1, pts: { qa: 20, qb: 6, qc: 11 } }],
+      schedule,
+      totals: {},
+      allowed: {},
+      statLines: null,
+      starter: 15,
+      sd: 6,
+      trending: [],
+      starts: 2,
+    })
+    expect(mine).toEqual({ id: 'qb', proj: 6 })
+    expect(rows[0].vsMine).toBe(5)
   })
 })

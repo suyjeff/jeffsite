@@ -7,6 +7,7 @@ import type { Analysis } from './analysis'
 import { leagueBehavior, type LeagueBehavior } from './behavior'
 import { perceivedValues } from './consensus'
 import { backtest, buildForecast, gamesFrom, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
+import { faabState, type Faab } from './faab'
 import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, type TeamWeek } from './power'
 import type { LeagueData } from './useLeagueData'
 
@@ -28,6 +29,8 @@ export type Models = {
    * the manager's efficiency. Keyed rosterId → week.
    */
   expectedPast: Record<number, Record<number, number>>
+  /** The league's FAAB picture, when it bids for waivers. */
+  faab: Faab | null
 }
 
 /** Remaining regular-season pairings, one row per game. */
@@ -144,5 +147,5 @@ export const buildModels = (data: LeagueData, analysis: Analysis, history: Histo
   // model's own value rather than zero, so a miss never looks like a free player.
   const perceived = data.consensus ? { ...Object.fromEntries(Object.entries(analysis.market).map(([id, v]) => [id, Math.max(0, v)])), ...perceivedValues(data.consensus, analysis.market) } : null
 
-  return { ...history, forecast, forecastInput, perceived, expectedPast }
+  return { ...history, forecast, forecastInput, perceived, expectedPast, faab: faabState(data, analysis) }
 }

@@ -37,6 +37,9 @@ const PlayerSheet = ({ id, onClose }: { id: string; onClose: () => void }) => {
     // No scroll on focus: on phones it would cut short the sheet's entrance, which is itself a scroll.
     panel.current?.focus({ preventScroll: true })
     const onKey = (e: KeyboardEvent) => {
+      // A modal opened over the sheet (the command palette) handles its own keys.
+      const t0 = e.target as Element | null
+      if (t0 && panel.current && !panel.current.contains(t0) && t0.closest?.('[aria-modal="true"]')) return
       if (e.key === 'Escape') {
         if (e.defaultPrevented) return
         // In a field, Escape leaves the field; a second press closes.
