@@ -1,8 +1,10 @@
 import React from 'react'
+import { benchIds } from '../../lib/fantasy/roster'
 import { useFantasy } from './FantasyContext'
+import PlayerName from './PlayerName'
 import { Deciders, MatchupScore, SlotTable, decidedBy, useMatchups } from './matchup'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
-import { Avatar, Badge, fmtSigned, pct } from './ui'
+import { Avatar, Badge, fmt, fmtSigned, pct } from './ui'
 
 /**
  * One fantasy matchup over the page: the score as it stands and where it is heading, what it is worth to each side,
@@ -16,7 +18,6 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
   const A = analysis.teamById[a]
   const B = analysis.teamById[b]
   const surname = (id: string) => data.players[id]?.name.split(' ').slice(-1)[0] ?? id
-
   const header = (
     <SheetHeader
       lead={
@@ -34,7 +35,7 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
             (m.kindA === 'final' && m.kindB === 'final' ? (
               <span className="text-ff-text2">final</span>
             ) : m.started ? (
-              <span className="text-ff-warn">live</span>
+              <span className="text-ff-pos">live</span>
             ) : (
               <span>projected</span>
             ))}
@@ -60,6 +61,12 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
   const stB = slate.managers[b]?.stakes
   const worth = (s: typeof stA) => (s ? Math.round((s.win.playoffs - s.loss.playoffs) * 100) : null)
   const deciding = decidedBy(m, surname)
+  // Each side's bench, best first: who could still be swapped in.
+  const per = analysis.horizon.perWeek
+  const benches = [
+    { id: a, name: A?.name ?? '', ids: A ? benchIds(A).sort((x, y) => (per[y] ?? 0) - (per[x] ?? 0)) : [] },
+    { id: b, name: B?.name ?? '', ids: B ? benchIds(B).sort((x, y) => (per[y] ?? 0) - (per[x] ?? 0)) : [] },
+  ]
 
   return (
     <SheetContent>
@@ -98,14 +105,39 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
         <SheetSection title="What decides it" aside="± win odds, bad game to good">
           {deciding && m.deciders.length > 0 && <p className="mb-2 text-[12.5px] text-ff-text2">Comes down to {deciding}.</p>}
           <div className="-mx-4">
-            <Deciders m={m} limit={5} />
+            <Deciders m={m} limit={5} inset="sheet" />
           </div>
         </SheetSection>
         <SheetSection title="Slot by slot" aside="green: left side ahead">
           <div className="-mx-4">
-            <SlotTable m={m} compact />
+            <SlotTable m={m} compact inset="sheet" />
           </div>
         </SheetSection>
+        {benches.some((s) => s.ids.length > 0) && (
+          <SheetSection title="Benches" aside="pts/wk ahead">
+            <div className="grid grid-cols-2 gap-x-4">
+              {benches.map((s) => (
+                <div key={s.id} className="min-w-0">
+                  <div className="mb-1 truncate font-mono text-[10.5px] text-ff-muted">{s.name}</div>
+                  {s.ids.length ? (
+                    <ul className="divide-y divide-ff-line/60">
+                      {s.ids.map((id) => (
+                        <li key={id} className="flex h-8 items-center gap-2 text-[12.5px]">
+                          <span className="min-w-0 flex-1">
+                            <PlayerName player={data.players[id]} id={id} size={18} />
+                          </span>
+                          <span className="num shrink-0 text-ff-text2">{fmt(analysis.horizon.perWeek[id])}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-[12px] text-ff-muted">Nobody on the bench.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </SheetSection>
+        )}
       </SheetBody>
       <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-ff-line px-4 py-2.5">
         <span className="min-w-0 truncate text-[11.5px] text-ff-muted">Select a manager or player to open theirs.</span>

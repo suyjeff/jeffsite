@@ -10,6 +10,7 @@ import TeamName from '../TeamName'
 import TradeCard from '../TradeCard'
 import TradeBuilder from '../TradeBuilder'
 import { TradeIcon } from '../icons'
+import { Callout } from '../Callout'
 import { emptyDeal, type Deal } from '../../../lib/fantasy/deal'
 import { useFantasy, useTradeRead } from '../FantasyContext'
 import {
@@ -373,22 +374,23 @@ const TradesView = ({
               </Button>
             </div>
             {showFilters && <Panel title="Search limits">{filterControls}</Panel>}
-            {grades.lessons.n === 0 && (
-              <p className="text-[12px] leading-[1.45] text-ff-muted">
-                Answer <span className="text-ff-text2">Would they?</span> on any card and the odds learn what this league accepts.
-              </p>
-            )}
-            {grades.lessons.n > 0 && (
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-l-2 border-ff-accent/50 pl-3 text-[12px] leading-[1.45] text-ff-text2">
-                <span>
-                  <span className="text-ff-text">{grades.lessons.n === 1 ? 'Your grade' : `Your ${grades.lessons.n} grades`}</span> {gradeSummary}
-                </span>
-                {ruledOut > 0 && (
-                  <button type="button" onClick={() => setShowRuledOut((x) => !x)} className="font-mono text-[11px] text-ff-accent hover:underline">
-                    {showRuledOut ? `hide the ${ruledOut} ruled out` : `${ruledOut} ruled out · show`}
-                  </button>
-                )}
-              </div>
+            {grades.lessons.n === 0 ? (
+              <Callout kind="instruction">
+                Answer <span className="text-ff-text">Would they?</span> on any card and the odds learn what this league accepts.
+              </Callout>
+            ) : (
+              <Callout
+                kind="insight"
+                action={
+                  ruledOut > 0 && (
+                    <button type="button" onClick={() => setShowRuledOut((x) => !x)} className="font-mono text-[11px] text-ff-accent hover:underline">
+                      {showRuledOut ? `hide the ${ruledOut} ruled out` : `${ruledOut} ruled out · show`}
+                    </button>
+                  )
+                }
+              >
+                <span className="text-ff-text">{grades.lessons.n === 1 ? 'Your grade' : `Your ${grades.lessons.n} grades`}</span> {gradeSummary}
+              </Callout>
             )}
 
             {shown.length === 0 ? (

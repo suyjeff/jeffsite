@@ -379,7 +379,7 @@ const TradeCard = ({
           )}
         </div>
         {onBuild && (
-          <Button size="sm" variant="aqua" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
+          <Button size="sm" variant="aqua" className="ff-aqua-soft" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
             <BuildIcon size={12} />
             Open in builder
           </Button>

@@ -9,6 +9,7 @@ import FreeAgentPick from '../FreeAgentPick'
 import ScoutReport from '../ScoutReport'
 import MovesPanel from '../Moves'
 import { Badge, Button, DeltaChip, Empty, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone } from '../ui'
+import { Callout } from '../Callout'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Sub = 'overview' | 'roster' | 'news' | 'lineup' | 'slots'
@@ -128,9 +129,9 @@ const MeView = ({
         })}
         <GridFill n={fresh.length} wide="2xl" />
       </div>
-      <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
+      <Callout kind="instruction" className="m-3">
         Sleeper flags news but not what it says, once a day. Read it in Sleeper, then click a name to set your read.
-      </p>
+      </Callout>
     </Panel>
   ) : null
   const lineupPanel = lineupCheck ? (
@@ -141,20 +142,24 @@ const MeView = ({
                       Your lineup matches the projected optimum.
                     </div>
                   ) : (
-                    <div className="space-y-1 border-b border-ff-line px-3 py-2">
-                      {lineupCheck.start.map((id, i) => (
-                        <div key={id} className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
-                          <Badge tone="warn">swap</Badge>
-                          <span className="whitespace-nowrap text-ff-text">
-                            Start {players[id]?.name} <span className="num text-ff-muted">{fmt(data.projections?.[id])}</span>
-                          </span>
-                          {lineupCheck.bench[i] && (
-                            <span className="whitespace-nowrap text-ff-text">
-                              <span className="text-ff-muted">over</span> {players[lineupCheck.bench[i]]?.name} <span className="num text-ff-muted">{fmt(data.projections?.[lineupCheck.bench[i]])}</span>
-                            </span>
-                          )}
+                    <div className="border-b border-ff-line p-3">
+                      <Callout kind="insight">
+                        <div className="space-y-1">
+                          {lineupCheck.start.map((id, i) => (
+                            <div key={id} className="flex flex-wrap items-center gap-1.5">
+                              <Badge tone="warn">swap</Badge>
+                              <span className="whitespace-nowrap text-ff-text">
+                                Start {players[id]?.name} <span className="num text-ff-muted">{fmt(data.projections?.[id])}</span>
+                              </span>
+                              {lineupCheck.bench[i] && (
+                                <span className="whitespace-nowrap text-ff-text">
+                                  <span className="text-ff-muted">over</span> {players[lineupCheck.bench[i]]?.name} <span className="num text-ff-muted">{fmt(data.projections?.[lineupCheck.bench[i]])}</span>
+                                </span>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </Callout>
                     </div>
                   )}
                   <Table

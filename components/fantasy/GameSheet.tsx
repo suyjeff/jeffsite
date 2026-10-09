@@ -8,6 +8,7 @@ import { Badge, Pts, cx, fmt, fmtSigned } from './ui'
 import { useSlate } from './useSlate'
 import { useBroadcasts } from './useBroadcasts'
 import { teamColor, teamLogo } from '../../lib/fantasy/nfl'
+import { Callout } from './Callout'
 
 /** One league starter in the game: who has him, what he projects or scored, his range and what rides on him. */
 const Row = ({ p, max, me, opp }: { p: SlatePlayer; max: number; me: number | null; opp: number | null }) => {
@@ -59,7 +60,9 @@ const GameSheet = ({ gameKey }: { gameKey: string }) => {
     return (
       <SheetContent>
         <SheetHeader title={gameKey.split(':')[1]?.replace('@', ' @ ') ?? 'Game'} eyebrow={<span>not on this week&apos;s slate</span>} />
-        <p className="border-t border-ff-line px-4 py-4 text-[12.5px] text-ff-muted">This game is not in the current week. Close the sheet and open it from Gameday.</p>
+        <div className="border-t border-ff-line px-4 py-4">
+          <Callout kind="instruction">This game is not in the current week. Open it from Gameday instead.</Callout>
+        </div>
       </SheetContent>
     )
   const me = analysis.myRosterId
@@ -87,7 +90,7 @@ const GameSheet = ({ gameKey }: { gameKey: string }) => {
               <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-ff-muted">
                 <span>wk {g.week}</span>
                 <span aria-hidden>·</span>
-                {g.final ? <span className="text-ff-text2">Final</span> : g.live ? <span className="text-ff-warn">Live</span> : <span>{dayOf(g.date)}</span>}
+                {g.final ? <span className="text-ff-text2">Final</span> : g.live ? <span className="text-ff-pos">Live</span> : <span>{dayOf(g.date)}</span>}
                 {cast?.networks.length ? (
                   <>
                     <span aria-hidden>·</span>

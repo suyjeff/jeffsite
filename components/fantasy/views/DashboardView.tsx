@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { WIDGETS, type Selection, type WidgetKind } from '../dashboard/widgets'
 import { Button, PageHeader, cx } from '../ui'
+import { Callout } from '../Callout'
 
 // A modular board in the manner of a trading terminal: widgets on a 12-column
 // grid, each with a width and height, reorderable by dragging the title bar,
@@ -256,7 +257,7 @@ const DashboardView = () => {
           </>
         }
       />
-      <div className="ff-canvas ff-bleed mt-0 min-h-[calc(100dvh-120px)] p-1.5 md:p-2">
+      <div className="ff-canvas ff-bleed ff-gutter mt-0 min-h-[calc(100dvh-120px)] py-1.5 md:py-2">
         {/* Phones stack widgets at their natural height; the row grid starts at md. */}
         <div ref={grid} className={cx('grid grid-cols-1 gap-1.5 md:grid-flow-row-dense md:auto-rows-[34px] md:grid-cols-12 md:gap-2', editing && 'ff-grid-guides')}>
           {layout.map((w) => {
@@ -366,8 +367,10 @@ const DashboardView = () => {
           })}
         </div>
         {layout.length === 0 && (
-          <div className="flex h-64 items-center justify-center font-mono text-[12px] text-ff-muted">
-            <span className="ff-caret">empty board · add a widget</span>
+          <div className="flex h-64 items-center justify-center px-3">
+            <Callout kind="instruction" title="The board is empty" className="max-w-[420px]">
+              Add a widget with <span className="text-ff-text">+ Widget</span> above, then drag and resize it in Edit layout.
+            </Callout>
           </div>
         )}
       </div>

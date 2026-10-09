@@ -291,7 +291,7 @@ const Matchup = ({ select }: WidgetProps) => {
           </div>
         ))}
       </div>
-      <ul className="space-y-1 border-t border-ff-line bg-ff-sunken/60 px-3 py-2 text-[11.5px] leading-snug text-ff-text2">
+      <ul className="divide-y divide-ff-line border-t border-ff-line bg-ff-sunken/60 text-[11.5px] leading-snug text-ff-text2 [&>li]:px-3 [&>li]:py-1">
         <li>
           <span className="text-ff-muted">Spread </span>
           <span className="num">σ {fmt(f.sigma)}</span>

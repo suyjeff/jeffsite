@@ -5,6 +5,7 @@ import { useFantasy } from '../FantasyContext'
 import { Bracket, CHAOS, Delta, Feed, Headline, LEVER_SIMS, SEED, SIMS, Standings, setupKey, type Chaos } from '../PlayoffLab'
 import TeamName from '../TeamName'
 import { Avatar, Button, Empty, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone } from '../ui'
+import { Callout } from '../Callout'
 import { OddsGrid } from './PowerView'
 
 type Sub = 'race' | 'season' | 'seeds'
@@ -208,10 +209,12 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
   // ---- What if: fix results in the weeks left. ----
   const whatIf = (
     <Panel title="What if…" pad={false} actions={nLocks ? <span className="text-ff-accent">{nLocks} picked</span> : <span>no picks yet</span>}>
-      <p className="border-b border-ff-line px-3 py-2.5 text-[12.5px] leading-[1.5] text-ff-text2">
-        Choose who wins games not played yet. <b className="font-medium text-ff-text">The race reruns as if those results happened</b>, and shows how every team&apos;s odds move.
-        Tap a team to make it the winner; tap again to undo.
-      </p>
+      <div className="border-b border-ff-line p-3">
+        <Callout kind="instruction">
+          Choose who wins games not played yet. <b className="font-medium text-ff-text">The race reruns as if those results happened</b>, and shows how every team&apos;s odds move.
+          Tap a team to make it the winner; tap again to undo.
+        </Callout>
+      </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-ff-line px-3 py-2">
         <span className="flex items-center gap-2">
           <span className="ff-label">Luck</span>

@@ -7,6 +7,7 @@ import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import { Badge, Empty, N, Panel, Reasons, Stat, StatGrid, Table, fmt, fmtSigned, type Reason } from '../ui'
+import { Callout } from '../Callout'
 
 type Move = { target: TradeTarget; drop: string | null; bid: BidAdvice | null; why: Reason[]; rivals: number; alts: TradeTarget[] }
 
@@ -295,9 +296,9 @@ const WaiverMoves = ({
       )}
 
       {faab && best < 0.75 && moves.length > 0 && (
-        <p className="text-[12px] text-ff-muted">
+        <Callout kind="insight">
           The best add is worth under <N>0.75</N> pts/wk to you: bid the minimum or hold. FAAB buys the most right after injuries.
-        </p>
+        </Callout>
       )}
       <p className="text-[11.5px] leading-relaxed text-ff-muted">
         Gain: your lineup re-solved each week with him in and your weakest player out. Bids weigh his worth to you against what this league pays for similar value{faab ? `, at about $${Math.round(faab.rate)} per pt/wk${faab.rateN ? ` (${faab.rateN} of this season's bids)` : ' (a default until more bids land)'}` : ''}, and never go past $1 over the richest rival.

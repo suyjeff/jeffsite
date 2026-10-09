@@ -2,9 +2,9 @@ import React, { useMemo } from 'react'
 import { scoutTeam } from '../../lib/fantasy/scout'
 import { useFantasy } from './FantasyContext'
 import { MoveList, useMoves } from './Moves'
-import PlayerName from './PlayerName'
 import TeamName, { TopMark } from './TeamName'
 import FreeAgentPick from './FreeAgentPick'
+import SheetRoster from './SheetRoster'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
 import { Avatar, Badge, Button, DeltaChip, Stat, fmt, pct, simOdds } from './ui'
 
@@ -54,11 +54,12 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
           />
 
           <SheetBody>
-            <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line [&>*]:border-0">
-              <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`${fmt(season.ppg)} pts a game`} />
-              <Stat label="Playoffs" value={sim ? simOdds(sim, 'playoffs') : '–'} meter={sim?.playoffs} sub={sim ? `title ${simOdds(sim, 'title')}` : 'no forecast'} />
-              <Stat label="Power" value={power ? `${fmt(power.score, 0)}%` : '–'} sub="vs an average team" />
+            <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line">
+              <Stat inset="sheet" label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`${fmt(season.ppg)} pts a game`} />
+              <Stat inset="sheet" label="Playoffs" value={sim ? simOdds(sim, 'playoffs') : '–'} meter={sim?.playoffs} sub={sim ? `title ${simOdds(sim, 'title')}` : 'no forecast'} />
+              <Stat inset="sheet" label="Power" value={power ? `${fmt(power.score, 0)}%` : '–'} sub="vs an average team" />
               <Stat
+                inset="sheet"
                 label="Lineup"
                 value={fmt(need?.lineup)}
                 delta={need && league ? <DeltaChip value={need.lineup - league} title="Against the league's average lineup" /> : undefined}
@@ -108,23 +109,27 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
               </section>
             )}
 
-            {need && (
-              <SheetSection title={`Starters, week ${data.horizon[0]?.week ?? ''}`} aside="pts/wk ahead">
-                <ul className="-mx-1 divide-y divide-ff-line/60">
-                  {need.slots.map((s) => (
-                    <li key={s.index} className="flex h-8 items-center gap-2 px-1 text-[12.5px]">
-                      <span className="w-8 shrink-0 font-mono text-[10.5px] text-ff-muted">{s.slot.replace('SUPER_FLEX', 'SF')}</span>
-                      <span className="min-w-0 flex-1">
-                        {s.starter ? (
-                          <PlayerName player={data.players[s.starter]} id={s.starter} size={20} />
-                        ) : (
+            {/* The roster below shows every player; a slot the best lineup cannot fill gets the free agent to pick up. */}
+            {need && need.slots.some((s) => !s.starter) && (
+              <SheetSection title={`Open slots, week ${data.horizon[0]?.week ?? ''}`} aside="best free agent">
+                <ul className="divide-y divide-ff-line/60">
+                  {need.slots
+                    .filter((s) => !s.starter)
+                    .map((s) => (
+                      <li key={s.index} className="flex h-8 items-center gap-2 text-[12.5px]">
+                        <span className="w-8 shrink-0 font-mono text-[10.5px] text-ff-muted">{s.slot.replace('SUPER_FLEX', 'SF')}</span>
+                        <span className="min-w-0 flex-1">
                           <FreeAgentPick eligible={s.eligible} week={data.horizon[0]?.week} size={20} />
-                        )}
-                      </span>
-                      <span className="num w-10 shrink-0 text-right text-ff-text2">{fmt(s.pts)}</span>
-                    </li>
-                  ))}
+                        </span>
+                      </li>
+                    ))}
                 </ul>
+              </SheetSection>
+            )}
+
+            {team.players.length > 0 && (
+              <SheetSection title="Roster" aside={`${team.players.length} players · pts/wk ahead`} flush>
+                <SheetRoster rosterId={rosterId} />
               </SheetSection>
             )}
           </SheetBody>

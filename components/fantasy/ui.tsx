@@ -418,7 +418,13 @@ export const TabSection = ({
   )
 }
 
-export type SegOption<K extends string> = { key: K; label: ReactNode; title?: string }
+export type SegOption<K extends string> = {
+  key: K
+  label: ReactNode
+  title?: string
+  /** Replaces the default selected look (bg-ff-text text-ff-panel), for options that carry a tone. */
+  activeClassName?: string
+}
 
 /** Same data, a different cut of it. */
 export const Segmented = <K extends string>({
@@ -465,7 +471,7 @@ export const Segmented = <K extends string>({
           className={cx(
             'min-w-6 shrink-0 whitespace-nowrap border-r border-ff-line transition-colors last:border-r-0',
             size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[12px]',
-            active ? 'bg-ff-text text-ff-panel' : 'text-ff-text2 hover:bg-ff-raised hover:text-ff-text',
+            active ? (o.activeClassName ?? 'bg-ff-text text-ff-panel') : 'text-ff-text2 hover:bg-ff-raised hover:text-ff-text',
           )}
         >
           {o.label}
@@ -884,6 +890,7 @@ export const Stat = ({
   badge,
   meter,
   tone,
+  inset,
   className,
 }: {
   label: ReactNode
@@ -894,9 +901,11 @@ export const Stat = ({
   /** 0–1: a thin bar under the value, for odds and shares. */
   meter?: number
   tone?: Tone
+  /** In a sheet's hairline grid: borderless, on the sheet's 16px inset. */
+  inset?: 'sheet'
   className?: string
 }) => (
-  <div className={cx('min-w-0 border border-ff-line bg-ff-panel px-2.5 py-2 sm:px-3 sm:py-2.5', className)}>
+  <div className={cx('min-w-0 bg-ff-panel py-2 sm:py-2.5', inset === 'sheet' ? 'px-4' : 'border border-ff-line px-2.5 sm:px-3', className)}>
     <div className="ff-label sm:truncate">{label}</div>
     <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       <span className={cx('num truncate text-[18px] font-medium leading-none tracking-[-0.02em] sm:text-[21px]', tone && tone !== 'neutral' ? TONE_TEXT[tone] : 'text-ff-text')}>{value}</span>
@@ -1647,13 +1656,23 @@ const REASON_MARK: Record<NonNullable<Reason['tone']>, { glyph: string; sr: stri
  * red hurts, amber is a caution. Sits in a table's expanded row or anywhere a justification goes.
  */
 export const Reasons = ({ items, title, columns = 2 }: { items: Reason[]; title?: ReactNode; columns?: 1 | 2 }) => (
-  <div className="bg-ff-sunken/40 px-3 py-2.5">
-    {title && <div className="ff-label mb-2">{title}</div>}
-    <ul className={cx('grid gap-x-6 gap-y-2.5 text-[12.5px] leading-[1.45]', columns === 2 && 'md:grid-cols-2')}>
+  <div className="bg-ff-sunken/40">
+    {title && <div className="ff-label px-3 pt-2.5">{title}</div>}
+    <ul className={cx('grid text-[12.5px] leading-[1.45]', columns === 2 && 'md:grid-cols-2')}>
       {items.map((r, i) => {
         const m = REASON_MARK[r.tone ?? 'neutral']
         return (
-          <li key={i} className="flex min-w-0 items-start gap-2.5">
+          // In two columns the first row has no rule above either item and the two halves of each later rule meet; an
+          // odd last item spans both columns so its rule still reaches across.
+          <li
+            key={i}
+            className={cx(
+              'flex min-w-0 items-start gap-2.5 px-3 py-2',
+              i > 0 && 'border-t border-ff-line',
+              columns === 2 && i === 1 && 'md:border-t-0',
+              columns === 2 && i === items.length - 1 && i % 2 === 0 && 'md:col-span-2',
+            )}
+          >
             {/* A square per tone, in its colour, with a glyph so the shape carries it too, not colour alone (1.4.1). */}
             <span className={cx('mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center font-mono text-[12px] font-semibold leading-none', m.cls)}>
               <span aria-hidden>{m.glyph}</span>
@@ -1674,6 +1693,15 @@ export const Reasons = ({ items, title, columns = 2 }: { items: Reason[]; title?
       })}
     </ul>
   </div>
+)
+
+/**
+ * A plain list of sentences, one per item, in a panel with no padding. Like Reasons, a hairline runs the full width
+ * between items (none under the last) so each reads as its own line of thought; the padding sits on the items so the
+ * rule reaches both edges.
+ */
+export const Sentences = ({ children, className }: { children: ReactNode; className?: string }) => (
+  <ul className={cx('divide-y divide-ff-line text-[12.5px] leading-[1.45] text-ff-text2 [&>li]:px-3 [&>li]:py-2', className)}>{children}</ul>
 )
 
 export const Empty = ({ title, children }: { title: ReactNode; children?: ReactNode }) => (

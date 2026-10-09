@@ -4,7 +4,7 @@ import { gradeSnapshots, loadSnapshots, MARKET_WEIGHT, MEDIAN_TO_MEAN } from '..
 import { useFantasy } from '../FantasyContext'
 import { MONKE } from '../Shell'
 import { surname } from '../../../lib/fantasy/scout'
-import { Badge, N, Num, Panel, Stat, StatGrid, Table, cx, fmt, fmtSigned, simOdds, pct } from '../ui'
+import { Badge, N, Num, Panel, Sentences, Stat, StatGrid, Table, cx, fmt, fmtSigned, simOdds, pct } from '../ui'
 
 // ---------- Overview ----------
 
@@ -366,8 +366,8 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
         </div>
       </Panel>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <Panel title="Measured" index={1}>
-          <ul className="space-y-1.5 text-[12.5px] leading-snug text-ff-text2">
+        <Panel title="Measured" index={1} pad={false}>
+          <Sentences>
             <li>
               Weekly noise {f ? (
                 <>
@@ -380,10 +380,10 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
             <li>How often each player suits up, over two seasons</li>
             <li>Where an injured player&apos;s points go</li>
             <li>How well each ranking predicts unseen games</li>
-          </ul>
+          </Sentences>
         </Panel>
-        <Panel title="Assumed" index={2}>
-          <ul className="space-y-1.5 text-[12.5px] leading-snug text-ff-text2">
+        <Panel title="Assumed" index={2} pad={false}>
+          <Sentences>
             <li>
               Next week: props <N>{Math.round(MARKET_WEIGHT * 100)}%</N>, Sleeper <N>{Math.round((1 - MARKET_WEIGHT) * 100)}%</N>
             </li>
@@ -399,10 +399,10 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
             <li>
               Priors: <N>{EFFICIENCY_PRIOR_GAMES}</N> games on efficiency, <N>{FORM_PRIOR_GAMES}</N> on form
             </li>
-          </ul>
+          </Sentences>
         </Panel>
-        <Panel title="Settled by evidence" index={3}>
-          <ul className="space-y-1.5 text-[12.5px] leading-snug text-ff-text2">
+        <Panel title="Settled by evidence" index={3} pad={false}>
+          <Sentences>
             <li>
               Form weighted <N>×{FORM_WEIGHT}</N>: it made next-week predictions worse
             </li>
@@ -417,7 +417,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
                 Best: {MODEL_LABEL[best.model]}, Brier <N>{best.brier.toFixed(3)}</N> on <N>{best.n}</N> games
               </li>
             )}
-          </ul>
+          </Sentences>
         </Panel>
       </div>
     </div>
@@ -461,8 +461,9 @@ export const ForecastTab = () => {
           ]}
         />
       </Panel>
-      <Panel title="Method · after ELWAY and 538 NFL Elo">
-        <ul className="max-w-[90ch] space-y-1.5 text-[12.5px] leading-snug text-ff-text2">
+      <Panel title="Method · after ELWAY and 538 NFL Elo" pad={false}>
+        {/* The rules run the full width; the text keeps its 90ch measure. */}
+        <Sentences className="[&>li]:pr-[max(0.75rem,calc(100%-90ch))]">
           <li>
             <N>rating = projected best lineup × efficiency</N>, week by week, with injury odds and byes priced in.
           </li>
@@ -471,7 +472,7 @@ export const ForecastTab = () => {
             Each simulated season draws one level per team (<N>τ</N>) on top of weekly noise (<N>σ</N>), so a misjudged team stays misjudged all year.
           </li>
           <li>Elo judges each result against the two projected lineups and credits half of a lineup edge when read, as ELWAY adjusts NFL Elo for who plays. In fantasy the lineup is nearly everything, so the lineup model still leads.</li>
-        </ul>
+        </Sentences>
       </Panel>
     </div>
   )

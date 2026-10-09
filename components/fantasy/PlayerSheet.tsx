@@ -72,20 +72,23 @@ const PlayerSheet = ({ id }: { id: string }) => {
         />
 
           <SheetBody>
-            <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line sm:grid-cols-4 [&>*]:border-0">
-              <Stat label="Exp / wk" value={fmt(perWeek)} sub="rest of season" />
+            <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line">
+              <Stat inset="sheet" label="Exp / wk" value={fmt(perWeek)} sub="rest of season" />
               <Stat
+                inset="sheet"
                 label="Value"
                 value={market != null ? fmtSigned(market, 1) : '–'}
                 sub={posRank ? `model ${p.pos}${posRank}` : 'over replacement'}
                 tone={market != null && market > 0 ? 'pos' : undefined}
               />
               <Stat
+                inset="sheet"
                 label="Consensus"
                 value={ecr?.posRank != null ? `${p.pos}${Math.round(ecr.posRank)}` : '–'}
                 sub={ecr?.weekRank != null ? `this week ${p.pos}${Math.round(ecr.weekRank)}` : 'FantasyPros'}
               />
               <Stat
+                inset="sheet"
                 label="Plays"
                 value={ctx?.play != null ? `${Math.round(ctx.play * 100)}%` : '–'}
                 sub="of weeks ahead"

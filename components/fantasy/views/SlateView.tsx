@@ -52,7 +52,7 @@ const GameTile = ({ g, maxSwing, me, opp, isKey }: { g: SlateGame; maxSwing: num
         <span className="font-mono text-[13px] font-semibold text-ff-text">
           {g.away} <span className="font-normal text-ff-muted">@</span> {g.home}
         </span>
-        <span className={cx('font-mono text-[10.5px]', g.live ? 'text-ff-warn' : g.final ? 'text-ff-text2' : 'text-ff-muted')}>{g.final ? 'Final' : g.live ? 'Live' : dayOf(g.date).split(',')[0]}</span>
+        <span className={cx('font-mono text-[10.5px]', g.live ? 'text-ff-pos' : g.final ? 'text-ff-text2' : 'text-ff-muted')}>{g.final ? 'Final' : g.live ? 'Live' : dayOf(g.date).split(',')[0]}</span>
       </span>
       <span className="flex w-full items-center gap-2">
         <span className="num text-[11px] text-ff-muted" title={g.final ? 'Pre-game projected score' : 'Projected score'}>
@@ -120,7 +120,7 @@ const GameCard = ({
       actions={
         <span className="flex items-center gap-2">
           {involved && <Badge tone="accent">decides your week</Badge>}
-          {g.final ? <span className="text-ff-text2">Final</span> : g.live ? <span className="text-ff-warn">Live</span> : <span>{dayOf(g.date)}</span>}
+          {g.final ? <span className="text-ff-text2">Final</span> : g.live ? <span className="text-ff-pos">Live</span> : <span>{dayOf(g.date)}</span>}
         </span>
       }
     >
