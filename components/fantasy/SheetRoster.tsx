@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
-import { rosterRows, type RosterRow as Row } from '../../lib/fantasy/roster'
+import { blankEmpty, rosterRows, type RosterRow as Row } from '../../lib/fantasy/roster'
 import { Table, cx, fmt, pct, type Column } from './ui'
 
 /**
@@ -69,7 +69,7 @@ const SheetRoster = ({ rosterId }: { rosterId: number }) => {
     [players, data.context, week, perWeek],
   )
 
-  return <Table rows={rows} columns={columns} rowKey={(r) => r.id} dense rowClass={(r) => (r.starter ? '' : 'bg-ff-sunken/40')} />
+  return <Table rows={rows} columns={blankEmpty(columns)} rowKey={(r) => r.id} dense rowClass={(r) => (r.starter ? '' : 'bg-ff-sunken/40')} />
 }
 
 export default SheetRoster

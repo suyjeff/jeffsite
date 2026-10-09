@@ -37,6 +37,10 @@ export const rosterRows = (team: TeamInfo, rosterPositions: string[] | undefined
 
 /** A team's bench: rostered, not starting, not on IR or taxi. */
 export const benchIds = (team: TeamInfo): string[] => {
-  const away = new Set([...(team.roster.starters ?? []), ...(team.roster.reserve ?? []), ...(team.roster.taxi ?? [])])
+  const away = new Set([...(team.roster.starters ?? []), ...(team.roster.reserve ?? []), ...(team.roster.taxi ?? [])].filter(isPlayer))
   return team.players.filter((id) => !away.has(id))
 }
+
+/** A row's cells for everything but its slot and name: an empty slot has no player to describe, so they stay blank. */
+export const blankEmpty = <C extends { key: string; render: (r: RosterRow) => unknown }>(cols: C[], keep = ['slot', 'player']): C[] =>
+  cols.map((c) => (keep.includes(c.key) ? c : { ...c, render: (r: RosterRow) => (r.empty ? null : c.render(r)) }))

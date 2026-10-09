@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { pastProjection, type Analysis } from '../../../lib/fantasy/analysis'
-import { rosterRows, type RosterRow } from '../../../lib/fantasy/roster'
+import { blankEmpty, rosterRows, type RosterRow } from '../../../lib/fantasy/roster'
 import { makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
@@ -82,7 +82,7 @@ const RosterTable = ({ data, analysis, rosterId, basis }: { data: LeagueData; an
   return (
     <Table
       rows={rows}
-      columns={basis === 'ahead' ? ahead : todate}
+      columns={blankEmpty(basis === 'ahead' ? ahead : todate)}
       rowKey={(r) => r.id}
       rowClass={(r) => (r.starter ? '' : 'bg-ff-sunken/40')}
       canExpand={(r) => !!data.context[r.id]?.notes.length}
