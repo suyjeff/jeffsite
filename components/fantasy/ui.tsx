@@ -113,7 +113,7 @@ export const Panel = ({
     {(title || actions) && (
       <header className="flex h-8 items-center justify-between gap-3 border-b border-ff-line px-3">
         <span className="flex min-w-0 items-baseline gap-2">
-          {index != null && <span className="num text-[10px] text-ff-muted/70">{String(index).padStart(2, '0')}</span>}
+          {index != null && <span className="num text-[10px] text-ff-muted">{String(index).padStart(2, '0')}</span>}
           {title ? <Label className="truncate text-ff-text2">{title}</Label> : null}
         </span>
         {actions && <div className="ff-panel-actions flex min-w-0 shrink-0 items-center gap-2 font-mono text-[10.5px] text-ff-muted">{actions}</div>}
@@ -836,6 +836,33 @@ export const Fab = ({ children, onClick, hidden, label }: { children: ReactNode;
   </div>
 )
 
+export type PtsKind = 'proj' | 'live' | 'final'
+
+/**
+ * A fantasy score, marked by what it is, the same way everywhere: a final score in solid ink; a live one with a
+ * small square that pulses; a projection lighter, with a dotted underline (an estimate, not a result). Screen
+ * readers hear the kind as a word.
+ */
+export const Pts = ({ value, kind, digits = 1, className }: { value: number | null | undefined; kind: PtsKind; digits?: number; className?: string }) => (
+  <span className={cx('num whitespace-nowrap', kind === 'proj' ? 'ff-proj' : 'text-ff-text', className)} title={kind === 'proj' ? 'Projected' : kind === 'live' ? 'Live: game under way' : 'Final'}>
+    {kind === 'live' && <span aria-hidden className="ff-live-dot" />}
+    {fmt(value, digits)}
+    <span className="sr-only">{kind === 'proj' ? ' projected' : kind === 'live' ? ' so far' : ''}</span>
+  </span>
+)
+
+/** The key to Pts, for a page that mixes the three. */
+export const PtsKey = ({ className }: { className?: string }) => (
+  <span className={cx('inline-flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10.5px] text-ff-muted', className)}>
+    <span className="text-ff-text">12.4 final</span>
+    <span className="text-ff-text">
+      <span aria-hidden className="ff-live-dot" />
+      8.0 live
+    </span>
+    <span className="ff-proj">14.1 projected</span>
+  </span>
+)
+
 // ---------- Figures ----------
 
 /** A signed change as a small tinted chip: green up, red down, grey at zero. */
@@ -1320,6 +1347,7 @@ export function Table<T>({
   dense = false,
   expand,
   canExpand,
+  defaultOpen,
 }: {
   rows: T[]
   columns: Column<T>[]
@@ -1334,6 +1362,8 @@ export function Table<T>({
    * it, every row's details are built up front to find the ones that are empty.
    */
   canExpand?: (row: T) => boolean
+  /** Rows to show open from the start (a prominent note). Each row is opened once; closing it sticks. */
+  defaultOpen?: (row: T) => boolean
   defaultSort?: string
   defaultDesc?: boolean
   rowClass?: (row: T) => string
@@ -1348,6 +1378,19 @@ export function Table<T>({
   const scroller = useRef<HTMLDivElement>(null)
   const [more, setMore] = useState(false)
   const [open, setOpen] = useState<Set<string | number>>(() => new Set())
+  const offered = useRef(new Set<string | number>())
+  useEffect(() => {
+    if (!defaultOpen || !expand) return
+    const add: (string | number)[] = []
+    for (const r of rows) {
+      const k = rowKey(r)
+      // Marked once it has been opened for you, so a row whose note turns prominent later still gets its turn.
+      if (offered.current.has(k) || !defaultOpen(r) || (canExpand && !canExpand(r))) continue
+      offered.current.add(k)
+      add.push(k)
+    }
+    if (add.length) setOpen((o) => new Set([...o, ...add]))
+  }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
   // The band under an open row spans the visible width, not the table's, so it reads without scrolling sideways.
   const [viewW, setViewW] = useState<number | null>(null)
   // A table wider (or taller) than its box must scroll from the keyboard too, so it joins the tab order (2.1.1).

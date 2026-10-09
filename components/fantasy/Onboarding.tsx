@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { getUser, SleeperError } from '../../lib/fantasy/sleeper'
 import { Brand, FantasyHead } from './Shell'
+import { DIAGRAMS } from './TourDiagrams'
 import { Button, cx } from './ui'
 
 /**
  * First visit only: ask who you are on Sleeper, check the name exists, then
- * hand it back. The page remembers it, so this never shows again unless you
- * switch users.
+ * hand it back. Remembering it is simply what happens next (no box to tick, no
+ * notice about it); switching users or starting over lives in the profile menu.
  */
 const Onboarding = ({ initial, onDone, onCancel }: { initial: string; onDone: (username: string) => void; onCancel?: () => void }) => {
   const [name, setName] = useState(initial)
@@ -45,13 +46,17 @@ const Onboarding = ({ initial, onDone, onCancel }: { initial: string; onDone: (u
       <main className="flex flex-1 items-start justify-center px-4 pt-[12vh] sm:items-center sm:pt-0">
         <form onSubmit={submit} className="w-full max-w-[440px] border border-ff-line bg-ff-panel">
           <div className="flex h-8 items-center gap-2 border-b border-ff-line px-3">
-            <span className="num text-[10px] text-ff-muted/70">01</span>
+            <span className="num text-[10px] text-ff-muted">01</span>
             <span className="ff-label text-ff-text2">connect sleeper</span>
+          </div>
+          {/* What happens next, drawn: your Sleeper league into one model, out to every page. */}
+          <div className="border-b border-ff-line bg-ff-sunken/60 px-2 py-1">
+            <DIAGRAMS.welcome />
           </div>
           <div className="space-y-4 p-4 sm:p-5">
             <div>
               <h1 className="text-[22px] font-medium leading-tight tracking-[-0.01em]">What&apos;s your Sleeper username?</h1>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-ff-text2">Your leagues, rosters and projections load from Sleeper&apos;s public API. No password, no account here.</p>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-ff-text2">Your leagues load straight from Sleeper. No password, no sign-up.</p>
             </div>
             <label className="block">
               <span className="ff-label mb-1.5 block">username</span>
@@ -90,7 +95,6 @@ const Onboarding = ({ initial, onDone, onCancel }: { initial: string; onDone: (u
               </button>
             )}
           </div>
-          <div className="border-t border-ff-line px-4 py-2.5 font-mono text-[10.5px] leading-relaxed text-ff-muted sm:px-5">Saved in this browser, so you only do this once. Switch users any time from the menu.</div>
         </form>
       </main>
     </div>

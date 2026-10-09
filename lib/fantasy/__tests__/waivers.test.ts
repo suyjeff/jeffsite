@@ -129,7 +129,7 @@ describe('streaming', () => {
     ])
     const why = streamReasons(rows[1], 'QB').map((r) => r.text)
     expect(why).toContain('Home game')
-    expect(why).toContain('900 Sleeper managers added him in the last 24 hours')
+    expect(why).toContain('900 Sleeper adds in the last day')
   })
   it('compares against the starter he would replace when you start two', () => {
     const { rows, mine } = streamRows({

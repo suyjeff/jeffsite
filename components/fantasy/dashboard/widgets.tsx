@@ -11,7 +11,7 @@ import { useFantasy, useTradeRead } from '../FantasyContext'
 import { useSlate } from '../useSlate'
 import { ruledOutBy } from '../../../lib/fantasy/grades'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, Empty, Num, PlayerAvatar, PosTag, Pts, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -114,8 +114,13 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
   const week = f.nextWeek[0].week
   const live = data.matchupsByWeek[week] ?? []
   const pts = (rid: number) => live.find((m) => m.roster_id === rid)?.points ?? 0
-  // Once the week has started, every row shows live points; before, every row shows expectations. Never a mix.
+  // Once the week has started, every row shows points scored; before, every row shows expectations. Never a mix.
   const started = live.some((m) => (m.points ?? 0) > 0)
+  // Final once every NFL game of the week is (by status, or by the calendar when the status lags).
+  const today = new Date().toISOString().slice(0, 10)
+  const weekGames = (data.schedule?.games ?? []).filter((x) => x.week === week && x.status !== 'canceled')
+  const done = weekGames.length > 0 && weekGames.every((x) => x.status === 'complete' || (!!x.date && x.date < today))
+  const kind = !started ? 'proj' : done ? 'final' : 'live'
   return (
     <div>
       <Th>
@@ -133,7 +138,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
           </button>
           <span className="num w-10 shrink-0 text-right text-ff-text" title={!started && unset[g.a] ? unsetNote(unset[g.a]) : undefined}>
             {!started && unset[g.a] && <span className="text-ff-warn">*</span>}
-            {fmt(started ? pts(g.a) : g.muA)}
+            <Pts value={started ? pts(g.a) : g.muA} kind={kind} />
           </span>
           <span className="flex w-16 shrink-0 items-center gap-1">
             <span className="num w-7 text-right text-[10.5px] text-ff-text2">{Math.round(g.pA * 100)}</span>
@@ -142,7 +147,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
             </span>
           </span>
           <span className="num w-10 shrink-0 text-ff-text" title={!started && unset[g.b] ? unsetNote(unset[g.b]) : undefined}>
-            {fmt(started ? pts(g.b) : g.muB)}
+            <Pts value={started ? pts(g.b) : g.muB} kind={kind} />
             {!started && unset[g.b] && <span className="text-ff-warn">*</span>}
           </span>
           <button onClick={() => select({ team: g.b })} className="flex min-w-0 flex-1 justify-end text-right">
@@ -252,9 +257,9 @@ const Matchup = ({ select }: WidgetProps) => {
           </span>
         </div>
         <div className="mt-1.5 flex items-baseline justify-between gap-3">
-          <span className="num text-[26px] font-medium leading-none tracking-[-0.03em] text-ff-s1">{fmt(muMe)}</span>
+          <Pts value={muMe} kind="proj" className="text-[26px] font-medium leading-none tracking-[-0.03em]" />
           <span className="font-mono text-[10.5px] text-ff-muted">wk {game.week} · projected</span>
-          <span className="num text-[26px] font-medium leading-none tracking-[-0.03em] text-ff-s2">{fmt(muOpp)}</span>
+          <Pts value={muOpp} kind="proj" className="text-[26px] font-medium leading-none tracking-[-0.03em]" />
         </div>
         <div className="mt-2.5 flex items-center gap-2" title={`Chance to win: you ${winPct}%, them ${100 - winPct}%`}>
           <span className={cx('num w-9 text-[13px] font-medium', favored === mine ? 'text-ff-text' : 'text-ff-muted')}>{winPct}%</span>
@@ -292,7 +297,7 @@ const Matchup = ({ select }: WidgetProps) => {
                 ) : (
                   <span className="flex-1 text-ff-muted">waiver</span>
                 )}
-                <span className="num shrink-0 text-ff-text2">{fmt(s.pts)}</span>
+                <Pts value={s.pts} kind="proj" className="shrink-0" />
               </div>
             ))}
           </div>

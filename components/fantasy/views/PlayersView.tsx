@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { pastProjection, type Analysis } from '../../../lib/fantasy/analysis'
 import { applyTrade, makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
+import type { PlayerContext } from '../../../lib/fantasy/context'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
@@ -13,6 +14,20 @@ type Pos = (typeof POSITIONS)[number]
 type Own = 'all' | 'fa' | 'rostered' | 'mine'
 type Basis = 'ahead' | 'todate'
 const PAGE = 60
+
+/**
+ * A note worth reading without a click: he is back from injury, covering for an injured starter, likely out,
+ * gaining a real share of an absent teammate's work, or his role just swung.
+ */
+const prominent = (notes: PlayerContext['notes'] | undefined) =>
+  !!notes?.some(
+    (n) =>
+      n.kind === 'returns' ||
+      n.kind === 'temporary' ||
+      (n.kind === 'status' && n.play <= 0.5) ||
+      (n.kind === 'bump' && n.pts >= 1.5) ||
+      (n.kind === 'usage' && Math.abs(n.last - n.prior) >= 8),
+  )
 
 const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis: Analysis; sub: string | null; onSub: (s: string) => void }) => {
   const basis: Basis = sub === 'todate' ? 'todate' : 'ahead'
@@ -298,6 +313,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             rowClass={(id) => cx(rosteredBy[id] === myRosterId && 'ff-mine')}
             onRowClick={(id) => openPlayer(id)}
             canExpand={(id) => !!data.context[id]?.notes.length}
+            defaultOpen={(id) => prominent(data.context[id]?.notes)}
             expand={(id) => {
               const items = contextReasons(data.context[id], players)
               return items.length ? <Reasons items={items} /> : null

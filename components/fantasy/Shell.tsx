@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react'
 import Head from 'next/head'
+import Tour, { TOUR } from './Tour'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { Avatar, Dropdown, cx, shortcutLabel, usePhone } from './ui'
 
-export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
+export const SECTION_KEYS = ['dash', 'matchup', 'slate', 'trades', 'me', 'waivers', 'power', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 type Group = 'Overview' | 'Your team' | 'League' | 'Engine'
@@ -12,6 +13,7 @@ type Section = { key: SectionKey; label: string; short: string; group: Group }
 /** Order is the register: the number beside each entry is also its keyboard shortcut. */
 export const SECTIONS: Section[] = [
   { key: 'dash', label: 'Dashboard', short: 'Dash', group: 'Overview' },
+  { key: 'matchup', label: 'Matchup', short: 'Matchup', group: 'Overview' },
   { key: 'slate', label: 'Gameday', short: 'Gameday', group: 'Overview' },
   { key: 'trades', label: 'Trades', short: 'Trades', group: 'Your team' },
   { key: 'me', label: 'My team', short: 'Team', group: 'Your team' },
@@ -31,7 +33,7 @@ export const MONKE = { name: 'M.O.N.K.E.', long: 'Many Orangutans Nervously Keyb
 export const sectionCode = (key: SectionKey) => String(SECTIONS.findIndex((s) => s.key === key) + 1).padStart(2, '0')
 
 /** What the phone's bottom bar carries; everything else lives in the drawer. */
-const TAB_BAR: SectionKey[] = ['dash', 'trades', 'me', 'power']
+const TAB_BAR: SectionKey[] = ['dash', 'matchup', 'trades', 'me']
 
 export type ShellProps = {
   section: SectionKey
@@ -52,6 +54,9 @@ export type ShellProps = {
   onSearch?: () => void
   /** The engine's readouts for the footer: label, value, and what it means. */
   status?: { label: string; value: string; title?: string }[]
+  /** The first-visit tour, over the page; the sidebar stays clear and lights the section being explained. */
+  tour?: boolean
+  onTourEnd?: () => void
 }
 
 /** The wordmark. Shared by the shell and onboarding. */
@@ -92,7 +97,8 @@ const SidebarBody = ({
   status,
   onClose,
   onSearch,
-}: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void }) => (
+  tourKey,
+}: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void; tourKey?: string | null }) => (
   <div className="flex h-full flex-col">
     <div className="flex h-11 shrink-0 items-center justify-between border-b border-ff-line pl-3 pr-2">
       <Brand />
@@ -145,7 +151,11 @@ const SidebarBody = ({
             onClose?.()
             onSearch()
           }}
-          className="flex h-7 w-full items-center gap-2 border border-ff-line bg-ff-sunken px-2 text-left text-[12px] text-ff-muted hover:border-ff-line2 hover:text-ff-text2"
+          data-tour-key="finish"
+          className={cx(
+            'flex h-7 w-full items-center gap-2 border bg-ff-sunken px-2 text-left text-[12px] text-ff-muted hover:border-ff-line2 hover:text-ff-text2',
+            tourKey === 'finish' ? 'border-ff-accent text-ff-text2' : 'border-ff-line',
+          )}
           aria-keyshortcuts="Meta+K Control+K"
         >
           <span aria-hidden className="font-mono text-ff-accent">
@@ -167,18 +177,29 @@ const SidebarBody = ({
             return (
               <button
                 key={key}
+                data-tour-key={key}
                 onClick={() => onNavigate(key)}
                 aria-current={active ? 'page' : undefined}
                 aria-keyshortcuts={i <= 9 ? String(i) : i === 10 ? '0' : undefined}
                 title={key === 'monke' ? MONKE.long : undefined}
                 className={cx(
                   'group flex h-7 w-full items-center gap-3 px-3 text-left text-[13px] transition-colors',
-                  active ? 'bg-ff-raised text-ff-text' : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
+                  tourKey === key
+                    ? 'bg-ff-accent/10 text-ff-text shadow-[inset_2px_0_0_rgb(var(--ff-accent))]'
+                    : active
+                      ? 'bg-ff-raised text-ff-text'
+                      : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
                 )}
               >
-                <span className={cx('num w-4 text-[10.5px]', active ? 'text-ff-text' : 'text-ff-muted')}>{String(i).padStart(2, '0')}</span>
+                {/* Numbers are keyboard shortcuts, so phones (the drawer) leave them out. */}
+                <span className={cx('num hidden w-4 text-[10.5px] md:inline', active ? 'text-ff-text' : 'text-ff-muted')}>{String(i).padStart(2, '0')}</span>
                 <span className={cx('flex-1', active && 'font-medium')}>{label}</span>
-                <kbd className="hidden h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 font-mono text-[10px] text-ff-muted group-hover:inline-flex md:inline-flex md:opacity-0 md:group-hover:opacity-100">{i}</kbd>
+                {/* 1–9 then 0 for the tenth; past that a section has no key. */}
+                {i <= 10 && (
+                  <kbd className="hidden h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 font-mono text-[10px] text-ff-muted group-hover:inline-flex md:inline-flex md:opacity-0 md:group-hover:opacity-100">
+                    {i === 10 ? 0 : i}
+                  </kbd>
+                )}
               </button>
             )
           })}
@@ -259,13 +280,25 @@ const Shell = (props: ShellProps) => {
     return () => window.removeEventListener('keydown', onKey)
   }, [onNavigate, onRefresh])
 
+  // The tour: which step it is on. A sidebar click while it runs moves the tour there instead of the page.
+  // Back to the start as it ends, so a replay opens on step one rather than flashing the step it ended on.
+  const [tourStep, setTourStep] = useState(0)
+  const endTour = () => {
+    setTourStep(0)
+    props.onTourEnd?.()
+  }
+  const tourKey = props.tour ? TOUR[tourStep]?.key : null
   const navigate = (s: SectionKey) => {
+    if (props.tour) {
+      const i = TOUR.findIndex((t) => t.key === s)
+      if (i >= 0) setTourStep(i)
+      return
+    }
     if (drawer) closeDrawer()
     onNavigate(s)
     window.scrollTo({ top: 0 })
   }
   const current = SECTIONS.find((s) => s.key === section)
-  const index = SECTIONS.findIndex((s) => s.key === section) + 1
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
 
   return (
@@ -274,8 +307,9 @@ const Shell = (props: ShellProps) => {
 
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[220px] border-r border-ff-line bg-ff-panel md:block">
-        <SidebarBody {...props} onNavigate={navigate} />
+        <SidebarBody {...props} onNavigate={navigate} tourKey={tourKey} />
       </aside>
+      {props.tour && props.onTourEnd && <Tour step={tourStep} setStep={setTourStep} onClose={endTour} phone={phone} />}
 
       {/* Phone top bar */}
       <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center border-b border-ff-line bg-ff-panel/95 backdrop-blur md:hidden">
@@ -283,10 +317,7 @@ const Shell = (props: ShellProps) => {
           MENU
         </button>
         <div className="min-w-0 flex-1 px-3 leading-tight">
-          <div className="flex items-baseline gap-2">
-            <span className="num text-[10.5px] text-ff-muted">{String(index).padStart(2, '0')}</span>
-            <span className="truncate text-[15px] font-medium">{current?.label}</span>
-          </div>
+          <div className="truncate text-[15px] font-medium">{current?.label}</div>
           {leagueName && <div className="truncate font-mono text-[10.5px] text-ff-muted">{leagueName}</div>}
         </div>
         {props.onSearch && (
@@ -330,15 +361,13 @@ const Shell = (props: ShellProps) => {
               key={key}
               onClick={() => navigate(key)}
               aria-current={active ? 'page' : undefined}
-              className={cx('flex h-12 flex-col items-center justify-center gap-0.5 border-r border-ff-line text-[11.5px]', active ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted')}
+              className={cx('flex h-12 items-center justify-center border-r border-ff-line text-[12px]', active ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted')}
             >
-              <span className="num text-[9.5px] text-ff-muted">{String(SECTIONS.findIndex((x) => x.key === key) + 1).padStart(2, '0')}</span>
               {s.short}
             </button>
           )
         })}
-        <button onClick={() => setDrawer(true)} className={cx('flex h-12 flex-col items-center justify-center gap-0.5 text-[11.5px]', !TAB_BAR.includes(section) ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted')}>
-          <span className="num text-[9.5px] text-ff-muted">··</span>
+        <button onClick={() => setDrawer(true)} className={cx('flex h-12 items-center justify-center text-[12px]', !TAB_BAR.includes(section) ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted')}>
           More
         </button>
       </nav>

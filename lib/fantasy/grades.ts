@@ -159,7 +159,7 @@ export const applyLessons = (
   const cap = lessons.askCap[idea.partnerId]
   if (cap != null && read.perceivedAsk != null && read.perceivedAsk >= cap * 0.9) {
     x -= 1.2
-    signals.unshift({ text: 'asks about as much as a deal you said they balked at', tone: 'neg' })
+    signals.unshift({ text: 'as big an ask as one you said they refused', tone: 'neg' })
   }
   const useless = lessons.noUse[idea.partnerId]
   if (useless?.length && idea.give.every((id) => useless.includes(posOf(id) ?? ''))) {

@@ -130,6 +130,8 @@ export type Slate = {
   managers: Record<number, SlateManager>
   /** Every player in the slate, by id. */
   byId: Record<string, SlatePlayer>
+  /** Each NFL team's game this week: final, under way, or not started (missing: a bye). */
+  teamState: Record<string, 'final' | 'live' | 'pre'>
 }
 
 export type SlateInput = {
@@ -307,5 +309,7 @@ export const buildSlate = (input: SlateInput): Slate => {
     })
     .sort((x, y) => (x.date ?? '').localeCompare(y.date ?? '') || Number(x.final) - Number(y.final) || y.swing - x.swing)
 
-  return { week: input.week, games: outGames, matchups, managers, byId }
+  const teamState: Slate['teamState'] = {}
+  for (const g of outGames) teamState[g.home] = teamState[g.away] = g.final ? 'final' : g.live ? 'live' : 'pre'
+  return { week: input.week, games: outGames, matchups, managers, byId, teamState }
 }

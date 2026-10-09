@@ -109,6 +109,7 @@ const CommandPalette = ({
   density,
   onDensity,
   onReload,
+  onTour,
   leagues,
   onLeague,
 }: {
@@ -121,6 +122,7 @@ const CommandPalette = ({
   density: Density
   onDensity: (d: Density) => void
   onReload: () => void
+  onTour: () => void
   leagues: { id: string; name: string }[]
   onLeague: (id: string) => void
 }) => {
@@ -183,11 +185,12 @@ const CommandPalette = ({
         ? { id: 'density:comfortable', group: 'Actions', label: 'Comfortable density', keywords: 'larger text type size bigger rows spacing', run: () => onDensity('comfortable') }
         : { id: 'density:compact', group: 'Actions', label: 'Compact density', keywords: 'smaller text type size dense rows spacing', run: () => onDensity('compact') },
     )
+    items.push({ id: 'tour', group: 'Actions', label: 'Replay the tour', keywords: 'help guide onboarding intro walkthrough', run: onTour })
     items.push({ id: 'reload', group: 'Actions', label: 'Reload from Sleeper', keywords: 'refresh sync', hint: 'R', run: onReload })
     for (const l of leagues)
       if (l.id !== data.league.league_id) items.push({ id: `league:${l.id}`, group: 'Actions', label: `Switch league: ${l.name}`, keywords: 'league', run: () => onLeague(l.id) })
     return items
-  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, leagues, onLeague, data.league.league_id])
+  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, onTour, leagues, onLeague, data.league.league_id])
 
   // Players worth finding: anyone rostered here or with a value or a projection ahead.
   const pool = useMemo(

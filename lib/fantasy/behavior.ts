@@ -4,7 +4,7 @@
 // three things the transaction log does show:
 //
 //   engagement  waiver claims and free-agent pickups. A manager who never
-//               touches his roster rarely answers a trade offer either.
+//               touches their roster rarely answers a trade offer either.
 //   history     trades made, this season and last (matched by owner), with
 //               whom, in what shapes, and how lopsided accepted deals were at
 //               today's values.
@@ -205,7 +205,7 @@ export const acceptRead = (
   if (team) {
     x += 0.8 * (team.engagement - 0.5)
     if (team.engagement >= 0.75) say('one of the most active managers', 'pos')
-    else if (team.engagement <= 0.25) say('rarely touches his roster', 'neg')
+    else if (team.engagement <= 0.25) say('rarely changes their roster', 'neg')
     const history = team.trades + 0.5 * team.tradesLast
     x += 0.25 * Math.min(3, history)
     if (team.trades + team.tradesLast > 0) say(`${team.trades + team.tradesLast} trade${team.trades + team.tradesLast === 1 ? '' : 's'} on record`, 'pos')

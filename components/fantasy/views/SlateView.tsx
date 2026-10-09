@@ -20,6 +20,7 @@ import {
   Table,
   TabSection,
   Tabs,
+  Pts,
   cx,
   fmt,
   fmtSigned,
@@ -184,7 +185,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
         text: (
           <>
             <b className="font-medium text-ff-text">{label(top)} decides the most.</b> {g.mine.length ? `Yours: ${g.mine.map((id) => players[id]?.name).join(', ')}. ` : ''}
-            {g.theirs.length ? `Theirs: ${g.theirs.map((id) => players[id]?.name).join(', ')}. ` : ''}Between a bad and a good day for them, your odds move ±{pts(g.swing / 2)}.
+            {g.theirs.length ? `Theirs: ${g.theirs.map((id) => players[id]?.name).join(', ')}. ` : ''}Your odds swing ±{pts(g.swing / 2)} on it.
           </>
         ),
         tone: 'neutral',
@@ -198,8 +199,8 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
       watch.push({
         text: (
           <>
-            <b className="font-medium text-ff-text">{players[myBest.id]?.name} carries the most risk.</b> Between a {fmt(myBest.low)}-point game and a {fmt(myBest.high)}-point one,
-            your win odds move ±{pts(myBest.swing / 2)}.
+            <b className="font-medium text-ff-text">{players[myBest.id]?.name} is your biggest swing.</b> {fmt(myBest.low)} to {fmt(myBest.high)} points moves your odds ±
+            {pts(myBest.swing / 2)}.
           </>
         ),
         tone: 'neutral',
@@ -257,8 +258,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
       watch.push({
         text: (
           <>
-            <b className="font-medium text-ff-text">Head to head inside one game:</b> {shared.map((g) => label(gameByKey[g.key])).join(', ')}. A big day for one offense helps one
-            of you and not the other.
+            <b className="font-medium text-ff-text">You meet inside {shared.map((g) => label(gameByKey[g.key])).join(', ')}.</b> A big day there helps one of you, not both.
           </>
         ),
         tone: 'neutral',
@@ -288,24 +288,24 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
     },
     {
       key: 'proj',
-      label: 'Proj',
+      label: 'Pts',
       align: 'right',
-      title: 'Projected points; his 20th to 80th percentile game below',
+      title: 'Points: final, live, or projected (dotted) with his 20th to 80th percentile game below',
       render: (p) =>
         p.actual != null ? (
           <span className="inline-flex flex-col items-end leading-tight">
-            <span className="text-ff-text">{fmt(p.actual)}</span>
+            <Pts value={p.actual} kind="final" />
             <span className={cx('text-[10px]', p.actual >= p.proj ? 'text-ff-pos' : 'text-ff-neg')}>{fmtSigned(p.actual - p.proj)} vs proj</span>
           </span>
         ) : p.live != null ? (
           <span className="inline-flex flex-col items-end leading-tight">
-            <span className="text-ff-text">{fmt(p.live)}</span>
-            <span className="text-[10px] text-ff-warn">live · proj {fmt(p.proj)}</span>
+            <Pts value={p.live} kind="live" />
+            <span className="text-[10px] text-ff-muted">of {fmt(p.proj)} projected</span>
           </span>
         ) : (
           <span className="inline-flex flex-col items-end leading-tight">
-            <span className="text-ff-text">{fmt(p.proj)}</span>
-            <span className="text-[10px] text-ff-muted">
+            <Pts value={p.proj} kind="proj" />
+            <span className="mt-0.5 text-[10px] text-ff-muted">
               {fmt(p.low, 0)}–{fmt(p.high, 0)}
             </span>
           </span>
@@ -450,9 +450,8 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
                     })}
                   </ul>
                   <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-                    How far each game moves your win odds, between a bad and a good day for everyone in it on both sides (± half the gap). Each starter&apos;s range is his
-                    position&apos;s week-to-week spread this season, scaled so a full lineup carries the league&apos;s weekly noise (σ{' '}
-                    {fmt(models.forecast?.sigma ?? models.forecastInput.sigmaFallback)}).
+                    How far each game moves your win odds, from a bad day to a good one for everyone in it. Ranges come from each position&apos;s weekly spread this season, scaled
+                    to the league&apos;s weekly noise (σ {fmt(models.forecast?.sigma ?? models.forecastInput.sigmaFallback)}).
                   </p>
                 </Panel>
               </div>
@@ -476,8 +475,8 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
             </div>
           ))}
           <p className="text-[11.5px] leading-relaxed text-ff-muted">
-            Win odds: how far a player&apos;s game moves his manager&apos;s chance to win this week, between a bad (20th percentile) and a good (80th) game, shown as ±. Playoffs:
-            the same in playoff odds, from what a win is worth to that manager. Final games show what the result did instead. Team totals next to each team are projected points.
+            Win odds: how far a player&apos;s game moves his manager&apos;s chance this week, bad game (20th percentile) to good (80th). Playoffs: the same in playoff odds. Final
+            games show what the result did. Numbers beside teams are projected points.
           </p>
         </TabSection>
 

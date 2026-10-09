@@ -480,8 +480,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               <Table rows={adds} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." expand={addWhy} canExpand={(t) => !!bids[t.id]?.reasons.length || !!data.context[t.id]?.notes.length} />
             </Panel>
             <p className="text-[11.5px] leading-relaxed text-ff-muted">
-              Gain = your best lineup with him in and your weakest player cut, minus today&apos;s, week by week. Anything positive is a real upgrade; a bye fill counts only that
-              week. Value is what the league would pay.
+              Gain: your best lineup with him in and your weakest player out, against today&apos;s, week by week. Any positive gain is an upgrade. Value: what the league would pay.
             </p>
           </>
           </TabSection>

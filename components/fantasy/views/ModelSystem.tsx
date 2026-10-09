@@ -325,7 +325,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
             {COLS.map((c, ci) => (
               <div key={c} className="min-w-0 space-y-2">
                 <div className="ff-label flex items-center gap-2">
-                  <span className="num text-ff-muted/70">{String(ci + 1).padStart(2, '0')}</span>
+                  <span className="num text-ff-muted">{String(ci + 1).padStart(2, '0')}</span>
                   {c}
                 </div>
                 {nodes
