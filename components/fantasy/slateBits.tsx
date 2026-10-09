@@ -1,7 +1,7 @@
 import React from 'react'
 import type { SlatePlayer } from '../../lib/fantasy/slate'
-import { useFantasy } from './FantasyContext'
-import { Avatar, cx, pct } from './ui'
+import TeamName from './TeamName'
+import { cx, pct } from './ui'
 
 // Pieces Gameday's views and the NFL game sheet share.
 
@@ -25,18 +25,12 @@ export const RangeBar = ({ p, max }: { p: SlatePlayer; max: number }) => {
   )
 }
 
-/** A manager as a compact tag: avatar and name, marked when it is you or your opponent. */
-export const ManagerTag = ({ id, me, opp, avatar }: { id: number; me: number | null; opp: number | null; avatar?: boolean }) => {
-  const { analysis } = useFantasy()
-  const t = analysis.teamById[id]
-  if (!t) return null
-  const tone = id === me ? 'font-medium text-ff-accent' : id === opp ? 'text-ff-neg' : 'text-ff-text2'
-  // In a table cell the name alone, so it can truncate with an ellipsis; the avatar only where there is room.
-  if (!avatar) return <span className={tone}>{t.name}</span>
-  return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
-      <Avatar src={t.avatar} name={t.name} size={16} />
-      <span className={cx('truncate', tone)}>{t.name}</span>
+/** A manager as a compact tag: the app's one team name. Your opponent reads in the negative tone. */
+export const ManagerTag = ({ id, opp, avatar }: { id: number; me?: number | null; opp?: number | null; avatar?: boolean }) =>
+  id === opp ? (
+    <span className="inline-flex min-w-0 items-center [&_.truncate]:text-ff-neg">
+      <TeamName id={id} avatar={!!avatar} size={16} />
     </span>
+  ) : (
+    <TeamName id={id} avatar={!!avatar} size={16} />
   )
-}

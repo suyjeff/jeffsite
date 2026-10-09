@@ -2,10 +2,12 @@ import React from 'react'
 import type { SlateGame, SlatePlayer } from '../../lib/fantasy/slate'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
-import Sheet, { SheetBody, SheetClose, SheetSection } from './Sheet'
+import { SheetBody, SheetClose, SheetContent, SheetSection, useSheet } from './Sheet'
 import { ManagerTag, RangeBar, dayOf, pts } from './slateBits'
 import { Badge, Pts, cx, fmt, fmtSigned } from './ui'
 import { useSlate } from './useSlate'
+import { useBroadcasts } from './useBroadcasts'
+import { teamColor, teamLogo } from '../../lib/fantasy/nfl'
 
 /** One league starter in the game: who has him, what he projects or scored, his range and what rides on him. */
 const Row = ({ p, max, me, opp }: { p: SlatePlayer; max: number; me: number | null; opp: number | null }) => {
@@ -47,9 +49,11 @@ const Row = ({ p, max, me, opp }: { p: SlatePlayer; max: number; me: number | nu
  * One NFL game, read for this league, over the page: its state and projected score, then every league starter in it
  * by team, with what each game moves. It summarises; Gameday holds the full breakdown.
  */
-const GameSheet = ({ gameKey, onClose }: { gameKey: string; onClose: () => void }) => {
+const GameSheet = ({ gameKey }: { gameKey: string }) => {
   const { data, analysis, go } = useFantasy()
-  const { slate } = useSlate(data, analysis)
+  const { close } = useSheet()
+  const { slate, week } = useSlate(data, analysis)
+  const casts = useBroadcasts(data.league.season, week)
   const g: SlateGame | undefined = slate.games.find((x) => x.key === gameKey)
   if (!g) return null
   const me = analysis.myRosterId
@@ -59,43 +63,59 @@ const GameSheet = ({ gameKey, onClose }: { gameKey: string; onClose: () => void 
   const max = Math.max(10, ...g.players.map((p) => Math.max(p.high, p.actual ?? 0)))
   const side = (team: string) => g.players.filter((p) => p.team === team)
   const total = (t: SlateGame['totals']['home']) => (t ? fmt(t.pts) : '–')
+  const cast = casts[`${g.away}@${g.home}`]
+  const played = (g.final || g.live) && cast?.away != null && cast?.home != null
   const source = g.totals.home?.source === 'market' || g.totals.away?.source === 'market' ? 'betting lines' : "Sleeper's projections"
 
   return (
-    <Sheet label={`${g.away} at ${g.home}`} onClose={onClose} width={480}>
-      {({ close, phone }) => (
+    <SheetContent>
         <>
-          <header className="flex items-start gap-3 px-4 pb-3 pt-4">
+          {/* The two clubs' colors meet in a hairline across the top. */}
+          <div aria-hidden className="flex h-[3px] shrink-0">
+            <span className="flex-1" style={{ background: teamColor(g.away) }} />
+            <span className="flex-1" style={{ background: teamColor(g.home) }} />
+          </div>
+          <header className="flex items-start gap-3 px-4 pb-3 pt-3">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-ff-muted">
                 <span>wk {g.week}</span>
                 <span aria-hidden>·</span>
                 {g.final ? <span className="text-ff-text2">Final</span> : g.live ? <span className="text-ff-warn">Live</span> : <span>{dayOf(g.date)}</span>}
+                {cast?.networks.length ? (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span className="text-ff-text2" title="Where to watch">
+                      {cast.networks.join(' / ')}
+                    </span>
+                  </>
+                ) : null}
                 {mine?.games[0]?.key === g.key && <Badge tone="accent">decides your week</Badge>}
               </div>
-              <h2 className="mt-1 font-mono text-[20px] font-semibold leading-tight tracking-[-0.01em] text-ff-text">
-                {g.away} <span className="font-normal text-ff-muted">@</span> {g.home}
-              </h2>
             </div>
-            <SheetClose phone={phone} onClick={close} />
+            <SheetClose />
           </header>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 pb-4">
+            {[g.away, g.home].map((t, i) => (
+              <React.Fragment key={t}>
+                {i === 1 && <span className="font-mono text-[12px] text-ff-muted">@</span>}
+                <span className={cx('flex min-w-0 items-center gap-2.5', i === 1 && 'flex-row-reverse text-right')}>
+                  <img src={teamLogo(t)} alt="" width={40} height={40} className="h-10 w-10 shrink-0 object-contain" loading="lazy" />
+                  <span className="min-w-0 leading-tight">
+                    <span className="block font-mono text-[20px] font-semibold tracking-[-0.01em] text-ff-text">{t}</span>
+                    {played ? (
+                      <span className="num block text-[15px] text-ff-text">{i === 0 ? cast!.away : cast!.home}</span>
+                    ) : (
+                      <span className="num block text-[11px] text-ff-muted">{total(i === 0 ? g.totals.away : g.totals.home)} proj</span>
+                    )}
+                  </span>
+                </span>
+              </React.Fragment>
+            ))}
+          </div>
 
-          <SheetBody phone={phone}>
-            <div className="grid grid-cols-3 gap-px border-y border-ff-line bg-ff-line text-center">
-              {[
-                { k: g.away, v: total(g.totals.away), s: g.final ? 'pre-game total' : 'projected' },
-                { k: 'League', v: String(g.players.length), s: g.players.length === 1 ? 'starter in it' : 'starters in it' },
-                { k: g.home, v: total(g.totals.home), s: g.final ? 'pre-game total' : 'projected' },
-              ].map((c, i) => (
-                <div key={i} className="bg-ff-panel px-2 py-2.5">
-                  <div className="ff-label">{c.k}</div>
-                  <div className="num mt-1 text-[20px] font-medium leading-none text-ff-text">{c.v}</div>
-                  <div className="mt-1 text-[10.5px] text-ff-muted">{c.s}</div>
-                </div>
-              ))}
-            </div>
-
-            <p className="px-4 py-3 text-[12.5px] leading-[1.5] text-ff-text2">
+          <SheetBody>
+            <p className="border-t border-ff-line px-4 py-3 text-[12.5px] leading-[1.5] text-ff-text2">
+              <span className="num text-ff-text">{g.players.length}</span> league starter{g.players.length === 1 ? '' : 's'} in it; totals from {source}.{' '}
               {g.final ? (
                 <>Final. Rows show what each starter scored against his projection and what that did to his manager&apos;s week.</>
               ) : (
@@ -106,7 +126,7 @@ const GameSheet = ({ gameKey, onClose }: { gameKey: string; onClose: () => void 
                       , and yours <span className="num text-ff-text">±{pts(forMe.swing / 2)}</span>
                     </>
                   ) : null}
-                  . Team totals from {source}.
+                  .
                 </>
               )}
             </p>
@@ -117,7 +137,7 @@ const GameSheet = ({ gameKey, onClose }: { gameKey: string; onClose: () => void 
               [g.away, g.home].map((team) =>
                 side(team).length ? (
                   <SheetSection key={team} title={team} aside={`${side(team).length} league starter${side(team).length === 1 ? '' : 's'}`}>
-                    <ul className="divide-y divide-ff-line/60">
+                    <ul className="divide-y divide-ff-line/60 border-l-2 pl-2.5" style={{ borderLeftColor: teamColor(team) }}>
                       {side(team).map((p) => (
                         <Row key={p.id} p={p} max={max} me={me} opp={opp} />
                       ))}
@@ -142,8 +162,7 @@ const GameSheet = ({ gameKey, onClose }: { gameKey: string; onClose: () => void 
             </button>
           </footer>
         </>
-      )}
-    </Sheet>
+    </SheetContent>
   )
 }
 

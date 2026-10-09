@@ -6,11 +6,11 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
-import PlayoffLab from '../PlayoffLab'
+import TeamName from '../TeamName'
 import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, simOdds, type Column } from '../ui'
 
-type Sub = 'rankings' | 'odds' | 'standings' | 'schedule'
-const SUBS: Sub[] = ['rankings', 'odds', 'standings', 'schedule']
+type Sub = 'rankings' | 'standings' | 'schedule'
+const SUBS: Sub[] = ['rankings', 'standings', 'schedule']
 type RankModel = RankingModel
 
 export const COMPONENTS: { key: keyof PowerWeights; label: string; slot: string }[] = [
@@ -21,15 +21,12 @@ export const COMPONENTS: { key: keyof PowerWeights; label: string; slot: string 
   { key: 'efficiency', label: 'Efficiency', slot: 's5' },
 ]
 
+/** A team in a table: the app's one team name, with its manager underneath. */
 const TeamCell = ({ analysis, rosterId, sub }: { analysis: Analysis; rosterId: number; sub?: React.ReactNode }) => {
   const t = analysis.teamById[rosterId]
   return (
-    <span className="flex min-w-0 items-center gap-2">
-      <Avatar src={t.avatar} name={t.name} size={22} />
-      <span className="min-w-0 leading-tight">
-        <span className={cx('block max-w-[170px] truncate text-[13px]', rosterId === analysis.myRosterId ? 'font-medium text-ff-accent' : 'text-ff-text')}>{t.name}</span>
-        <span className="block max-w-[170px] truncate text-[11px] text-ff-muted">{sub ?? t.owner}</span>
-      </span>
+    <span className="flex max-w-[200px]">
+      <TeamName id={rosterId} size={22} sub={sub ?? (t.owner && t.owner !== t.name ? t.owner : undefined)} className="text-[13px]" />
     </span>
   )
 }
@@ -228,7 +225,6 @@ const PowerView = ({
             stacked={stacked}
             items={[
               { key: 'rankings', label: 'Rankings' },
-              ...(forecast ? [{ key: 'odds' as const, label: 'Playoffs' }] : []),
               { key: 'standings', label: 'Standings' },
               { key: 'schedule', label: 'Remaining schedule' },
             ]}
@@ -350,13 +346,6 @@ const PowerView = ({
           </div>
         </TabSection>
 
-        {forecast && (
-          <TabSection id="odds" label="Playoffs" active={tab === 'odds'} stacked={stacked} bare>
-            <PlayoffLab />
-            <OddsGrid onTeam={onTeam} />
-          </TabSection>
-        )}
-
         <TabSection id="standings" label="Standings" active={tab === 'standings'} stacked={stacked} bare>
           <Panel title="Standings" pad={false} actions={playoffTeams ? <span>playoff line after #{playoffTeams}</span> : null}>
             <Table
@@ -402,7 +391,7 @@ const PowerView = ({
 }
 
 /** Seed probabilities from the season simulation, one row per team, plus the odds that matter. */
-const OddsGrid = ({ onTeam }: { onTeam: (id: number) => void }) => {
+export const OddsGrid = ({ onTeam }: { onTeam?: (id: number) => void }) => {
   const { models, analysis, data } = useFantasy()
   const f = models.forecast!
   const n = analysis.teams.length
@@ -433,9 +422,11 @@ const OddsGrid = ({ onTeam }: { onTeam: (id: number) => void }) => {
             {rows.map(({ id }) => {
               const s = f.sim[id]
               return (
-                <tr key={id} onClick={() => onTeam(id)} className="cursor-pointer hover:bg-ff-raised">
+                <tr key={id} onClick={onTeam ? () => onTeam(id) : undefined} className="hover:bg-ff-raised">
                   <td className="sticky left-0 z-[1] h-8 border-b border-ff-line/60 bg-ff-panel px-3">
-                    <span className={cx('block max-w-[160px] truncate', id === analysis.myRosterId ? 'font-medium text-ff-accent' : 'text-ff-text')}>{analysis.teamById[id].name}</span>
+                    <span className="flex max-w-[180px]">
+                      <TeamName id={id} avatar={false} />
+                    </span>
                   </td>
                   {Array.from({ length: n }, (_, i) => {
                     const p = s.seeds[i + 1] ?? 0

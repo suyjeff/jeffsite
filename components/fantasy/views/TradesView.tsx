@@ -6,6 +6,7 @@ import { DEFAULT_TRADE_CONFIG, findTargets, scoreTrade, type TradeIdea, type Tra
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import PlayerName from '../PlayerName'
+import TeamName from '../TeamName'
 import TradeCard, { SHAPE_LABEL } from '../TradeCard'
 import { useFantasy, useTradeRead } from '../FantasyContext'
 import {
@@ -453,7 +454,7 @@ const TradesView = ({
               defaultSort="add"
               empty="Nobody outside your roster would improve your lineup."
               columns={[
-                { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} sub={t.ownerId == null ? <span className="text-ff-pos">free agent</span> : teamById[t.ownerId]?.name} /> },
+                { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} sub={t.ownerId == null ? <span className="text-ff-pos">free agent</span> : <TeamName id={t.ownerId} avatar={false} />} /> },
                 { key: 'slot', label: 'Starts at', hideBelow: 'sm', render: (t) => <span className="font-mono text-[11.5px] text-ff-text2">{t.slot ?? '—'}</span> },
                 { key: 'add', label: 'Adds', align: 'right', title: 'Points per week added to your optimal lineup', sort: (t) => t.add, render: (t) => <Num value={t.add} digits={2} signed /> },
                 { key: 'cost', label: 'Owner loses', align: 'right', hideBelow: 'sm', title: 'Points per week his own lineup loses without him', sort: (t) => t.ownerCost, render: (t) => (t.ownerId == null ? <span className="text-ff-muted">–</span> : <Num value={t.ownerCost} digits={2} />) },
@@ -650,7 +651,7 @@ const TradesView = ({
                   label: 'Player',
                   sticky: true,
                   render: (r) => (
-                    <PlayerName player={players[r.id]} id={r.id} sub={r.owner == null ? <span className="text-ff-pos">free agent</span> : r.owner === myRosterId ? <span className="text-ff-accent">you</span> : teamById[r.owner]?.name} />
+                    <PlayerName player={players[r.id]} id={r.id} sub={r.owner == null ? <span className="text-ff-pos">free agent</span> : r.owner === myRosterId ? <span className="text-ff-accent">you</span> : <TeamName id={r.owner} avatar={false} />} />
                   ),
                 },
                 { key: 'play', label: 'Plays', align: 'right', sort: (r) => data.context[r.id]?.play ?? 1, render: (r) => pct(data.context[r.id]?.play) },

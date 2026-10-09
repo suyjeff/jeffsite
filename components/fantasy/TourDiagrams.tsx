@@ -336,15 +336,32 @@ const Finish = () => (
   </Frame>
 )
 
+const Playoffs = () => (
+  <Frame title="A bracket played out, with a pick locked in">
+    {[0, 1, 2, 3].map((i) => (
+      <g key={i}>
+        <Box x={24} y={14 + i * 36} w={96} h={24} label={['01 HOLDS', '04 · 05', '02 · 03', '06 PICKED'][i]} hot={i === 3} at={i * 110} />
+        <Wire path={`M120 ${26 + i * 36}H160V${i < 2 ? 50 : 122}H200`} at={400 + i * 80} hot={i === 3} flow={i === 3} />
+      </g>
+    ))}
+    <Box x={200} y={38} w={96} h={24} label="SEMI" at={700} />
+    <Box x={200} y={110} w={96} h={24} label="SEMI" hot at={760} />
+    <Wire path="M296 50H336V86H372" at={900} />
+    <Wire path="M296 122H336V86H372" hot at={950} flow />
+    <Box x={372} y={70} w={84} h={32} label="TITLE" sub="1 of 2,000" hot at={1100} />
+  </Frame>
+)
+
 export const DIAGRAMS = {
   welcome: Welcome,
   dash: Dash,
-  matchup: Matchup,
+  matchups: Matchup,
   slate: Gameday,
   trades: Trades,
   me: Team,
   waivers: Waivers,
   power: Power,
+  playoffs: Playoffs,
   teams: Teams,
   players: Players,
   monke: Monke,

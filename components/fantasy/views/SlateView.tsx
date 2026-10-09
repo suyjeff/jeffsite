@@ -5,7 +5,7 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { useSlate } from '../useSlate'
+import { MatchupScore, SlotTable, useMatchups } from '../matchup'
 import { ManagerTag, RangeBar, dayOf, odds, pts } from '../slateBits'
 import {
   Avatar,
@@ -156,7 +156,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
   const stacked = usePhone()
   const players = data.players
   const me = analysis.myRosterId
-  const { slate, live, week, proj, totals } = useSlate(data, analysis)
+  const { slate, live, week, proj, totals, read } = useMatchups()
   // Games as full cards or as a grid of tiles that open a sheet; remembered in this browser.
   const [view, setView] = useState<'list' | 'grid'>('list')
   useEffect(() => {
@@ -181,6 +181,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
   const mySide = matchup ? (matchup.a.rosterId === me ? matchup.a : matchup.b) : null
   const oppSide = matchup ? (matchup.a.rosterId === me ? matchup.b : matchup.a) : null
   const finals = slate.games.filter((g) => g.final).length
+  const yours = me != null && opp != null ? read(me, opp) : null
   const name = (id: number | null) => (id == null ? '–' : (analysis.teamById[id]?.name ?? '–'))
   const label = (g: SlateGame) => `${g.away} @ ${g.home}`
 
@@ -424,6 +425,11 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
         <TabSection id="week" label="Your week" active={tab === 'week'} stacked={stacked}>
           {mine && mySide && oppSide ? (
             <>
+              {yours && (
+                <section aria-label="Your matchup" className="border border-ff-line bg-ff-panel px-3 py-4 sm:px-5">
+                  <MatchupScore m={yours} />
+                </section>
+              )}
               <StatGrid>
                 <Stat
                   label="Win odds"
@@ -487,6 +493,11 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
                   </p>
                 </Panel>
               </div>
+              {yours && (
+                <Panel title="Lineups, slot by slot" actions={<span>edge: expected points, yours left</span>} pad={false}>
+                  <SlotTable m={yours} />
+                </Panel>
+              )}
             </>
           ) : (
             <Empty title="No matchup for you this week">You are not paired this week, or Sleeper has not set the week&apos;s matchups yet.</Empty>

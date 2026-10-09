@@ -3,16 +3,18 @@ import { scoutTeam } from '../../lib/fantasy/scout'
 import { useFantasy } from './FantasyContext'
 import { MoveList, useMoves } from './Moves'
 import PlayerName from './PlayerName'
+import TeamName, { TopMark } from './TeamName'
 import FreeAgentPick from './FreeAgentPick'
-import Sheet, { SheetBody, SheetClose, SheetSection } from './Sheet'
+import { SheetBody, SheetClose, SheetContent, SheetSection, useSheet } from './Sheet'
 import { Avatar, Badge, Button, DeltaChip, Stat, fmt, pct, simOdds } from './ui'
 
 /**
  * One team at a glance, over the page: where it stands, what it projects, how it got here and what it starts this
  * week, with a way through to the full team page. Opens from the Teams index and anywhere a team is named.
  */
-const TeamSheet = ({ rosterId, onClose }: { rosterId: number; onClose: () => void }) => {
+const TeamSheet = ({ rosterId }: { rosterId: number }) => {
   const { data, analysis, models, go } = useFantasy()
+  const { close: onClose } = useSheet()
   const team = analysis.teamById[rosterId]
   const season = analysis.seasonById[rosterId]
   const power = analysis.powerById[rosterId]
@@ -36,23 +38,23 @@ const TeamSheet = ({ rosterId, onClose }: { rosterId: number; onClose: () => voi
   }
 
   return (
-    <Sheet label={`${team.name} summary`} onClose={onClose} width={440}>
-      {({ close, phone }) => (
+    <SheetContent>
         <>
           <header className="flex items-start gap-3 px-4 pb-3 pt-4">
             <Avatar src={team.avatar} name={team.name} size={48} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="num text-[11px] text-ff-muted">#{power?.rank ?? '–'} power</span>
+                {power?.rank === 1 && <TopMark />}
                 {mine && <Badge tone="accent">you</Badge>}
               </div>
               <h2 className="mt-0.5 truncate text-[19px] font-medium leading-tight tracking-[-0.01em] text-ff-text">{team.name}</h2>
               {team.owner && team.owner !== team.name && <div className="truncate font-mono text-[11px] text-ff-muted">@{team.owner}</div>}
             </div>
-            <SheetClose phone={phone} onClick={close} />
+            <SheetClose />
           </header>
 
-          <SheetBody phone={phone}>
+          <SheetBody>
             <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line [&>*]:border-0">
               <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`${fmt(season.ppg)} pts a game`} />
               <Stat label="Playoffs" value={sim ? simOdds(sim, 'playoffs') : '–'} meter={sim?.playoffs} sub={sim ? `title ${simOdds(sim, 'title')}` : 'no forecast'} />
@@ -71,8 +73,9 @@ const TeamSheet = ({ rosterId, onClose }: { rosterId: number; onClose: () => voi
               <SheetSection title={`Week ${game.week}`} aside="projected">
                 <div className="flex items-center gap-2 text-[13px]">
                   <span className="text-ff-muted">vs</span>
-                  <Avatar src={analysis.teamById[opp]?.avatar ?? null} name={analysis.teamById[opp]?.name ?? '?'} size={18} />
-                  <span className="min-w-0 flex-1 truncate text-ff-text">{analysis.teamById[opp]?.name}</span>
+                  <span className="flex min-w-0 flex-1">
+                    <TeamName id={opp} size={18} />
+                  </span>
                   <span className="num text-ff-text">{pct(p)}</span>
                   <span className="text-[11.5px] text-ff-muted">to win</span>
                 </div>
@@ -134,8 +137,7 @@ const TeamSheet = ({ rosterId, onClose }: { rosterId: number; onClose: () => voi
             </Button>
           </footer>
         </>
-      )}
-    </Sheet>
+    </SheetContent>
   )
 }
 

@@ -10,6 +10,7 @@ import { describeNote } from '../ContextNotes'
 import { useFantasy, useTradeRead } from '../FantasyContext'
 import { useSlate } from '../useSlate'
 import FreeAgentPick, { bestFreeAgent, FreeAgentName } from '../FreeAgentPick'
+import TeamName from '../TeamName'
 import { MoveList, useMoves } from '../Moves'
 import { ruledOutBy } from '../../../lib/fantasy/grades'
 import PlayerName from '../PlayerName'
@@ -69,16 +70,8 @@ const Bar = ({ value, max = 1, slot = 'accent', width = 48 }: { value: number; m
   </span>
 )
 
-const TeamTag = ({ id, me }: { id: number; me?: boolean }) => {
-  const { analysis } = useFantasy()
-  const t = analysis.teamById[id]
-  return (
-    <span className="flex min-w-0 max-w-full items-center gap-1.5">
-      <Avatar src={t?.avatar ?? null} name={t?.name ?? '?'} size={16} />
-      <span className={cx('truncate', me || id === analysis.myRosterId ? 'font-medium text-ff-accent' : 'text-ff-text')}>{t?.name ?? `#${id}`}</span>
-    </span>
-  )
-}
+/** A manager in a widget row: the app's one team name, small. `plain` inside another control. */
+const TeamTag = ({ id, plain }: { id: number; plain?: boolean }) => <TeamName id={id} size={16} plain={plain} />
 
 const NoForecast = () => <Empty title="No forecast">Needs Sleeper projections for the weeks ahead.</Empty>
 
@@ -137,7 +130,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
       {f.nextWeek.map((g) => (
         <Row key={`${g.a}-${g.b}`} active={sel.team === g.a || sel.team === g.b}>
           <button onClick={() => select({ team: g.a })} className="min-w-0 flex-1 text-left">
-            <TeamTag id={g.a} />
+            <TeamTag id={g.a} plain />
           </button>
           <span className="num w-10 shrink-0 text-right text-ff-text" title={!started && unset[g.a] ? unsetNote(unset[g.a]) : undefined}>
             {!started && unset[g.a] && <span className="text-ff-warn">*</span>}
@@ -154,7 +147,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
             {!started && unset[g.b] && <span className="text-ff-warn">*</span>}
           </span>
           <button onClick={() => select({ team: g.b })} className="flex min-w-0 flex-1 justify-end text-right">
-            <TeamTag id={g.b} />
+            <TeamTag id={g.b} plain />
           </button>
         </Row>
       ))}
