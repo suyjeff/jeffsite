@@ -4,6 +4,7 @@ import AdjustControl from './AdjustControl'
 import { ContextNotes } from './ContextNotes'
 import { useFantasy } from './FantasyContext'
 import LinesBlock from './LinesBlock'
+import PlayerNews from './PlayerNews'
 import TeamName from './TeamName'
 import { SheetBody, SheetContent, SheetHeader, SheetSection } from './Sheet'
 import { Badge, PlayerAvatar, PosTag, Pts, ScoreState, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel } from './ui'
@@ -119,6 +120,11 @@ const PlayerSheet = ({ id }: { id: string }) => {
       weeks,
       actual: weeks.map((w) => (past.includes(w) ? (data.weekPoints[w]?.[id] ?? null) : null)),
       projected: weeks.map((w) => (past.includes(w) ? (data.pastProjections[w]?.[id] ?? null) : (data.horizon.find((h) => h.week === w)?.pts[id] ?? null))),
+      // His current team's opponent each week, for the readout; a traded player's old games read against his new team's.
+      labels: weeks.map((w) => {
+        const opp = data.schedule?.opp[data.players[id]?.team ?? '']?.[w]
+        return opp ? `vs ${opp}` : null
+      }),
     }
   }, [data, id])
 
@@ -185,9 +191,11 @@ const PlayerSheet = ({ id }: { id: string }) => {
 
             {chart.weeks.length > 0 && (
               <SheetSection title="By week" aside="scored vs projected">
-                <ProjectionChart weeks={chart.weeks} actual={chart.actual} projected={chart.projected} highlight={data.playoffWeeks} height={150} />
+                <ProjectionChart weeks={chart.weeks} actual={chart.actual} projected={chart.projected} labels={chart.labels} highlight={data.playoffWeeks} height={190} />
               </SheetSection>
             )}
+
+            <PlayerNews id={id} max={3} section />
 
             {ctx?.notes.length ? (
               <SheetSection title="Context">

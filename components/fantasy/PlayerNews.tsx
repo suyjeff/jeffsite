@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react'
 import type { NewsItem } from '../../lib/fantasy/news'
 import { useFantasy } from './FantasyContext'
+import { SheetSection } from './Sheet'
 import { ago, cx } from './ui'
 import { useNews } from './useNews'
 
@@ -26,17 +27,25 @@ export const NewsBlurb = ({ item, className }: { item: NewsItem; className?: str
  * A player's latest headlines, newest first. Renders nothing until ESPN answers, and nothing at all if it never does,
  * so the sheet it sits in looks the same as before when the feed is blocked.
  */
-const PlayerNews = ({ id, max = 3, className }: { id: string; max?: number; className?: string }) => {
+const PlayerNews = ({ id, max = 3, className, section }: { id: string; max?: number; className?: string; section?: boolean }) => {
   const { data } = useFantasy()
   const ids = useMemo(() => [id], [id])
   const items = useNews(ids, data.players)[id]?.slice(0, max)
   if (!items?.length) return null
-  return (
+  const list = (
     <div className={cx('space-y-2.5', className)}>
       {items.map((it) => (
         <NewsBlurb key={it.id} item={it} />
       ))}
     </div>
+  )
+  // In a sheet the heading comes with it, so an empty feed leaves no empty section behind.
+  return section ? (
+    <SheetSection title="News" aside="latest first">
+      {list}
+    </SheetSection>
+  ) : (
+    list
   )
 }
 
