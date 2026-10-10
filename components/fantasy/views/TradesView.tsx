@@ -597,7 +597,7 @@ const TradesView = ({
             )}
           </Panel>
 
-          <Panel title="Biggest needs, team by team" actions={<span>who to call, and with what</span>} pad={false} className="max-md:order-first">
+          <Panel title="Biggest needs, team by team" actions={!phone && <span>who to call, and with what</span>} pad={false} className="max-md:order-first">
             <div className="grid grid-cols-1 gap-px bg-ff-line/60 sm:grid-cols-2 xl:grid-cols-3">
               {needCards.map((c) => (
                 <div key={c.team.rosterId} className={cx('flex min-w-0 flex-col gap-2 bg-ff-panel px-3 py-2.5', c.mine && 'shadow-[inset_2px_0_0_rgb(var(--ff-accent))]')}>
