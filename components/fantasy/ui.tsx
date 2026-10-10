@@ -1,6 +1,7 @@
 import React, { Children, createContext, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
+import { ShowMore } from './views/ShowMore'
 
 // ---------- Formatting ----------
 
@@ -172,6 +173,9 @@ export const PageHeader = ({
   </>
 )
 
+/** Picks a page; `replace` swaps the history entry instead of adding one. */
+export type PageChange<K extends string = string> = (k: K, opts?: { replace?: boolean }) => void
+
 export type TabItem<K extends string> = { key: K; label: string; count?: number | null; /** A small mono tag after the label, e.g. "tune". */ mark?: string }
 
 const tabLabel = (t: TabItem<string>) => (
@@ -203,9 +207,9 @@ export const CrumbContext = createContext<CrumbHost | null>(null)
  * in the page: the same choice lives in the top bar as the second crumb, `Section › Page ▾`, and each view is
  * its own page.
  */
-export const Tabs = <K extends string>({ items, value, onChange, stacked }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void; stacked?: boolean }) =>
+export const Tabs = <K extends string>({ items, value, onChange, stacked, requested }: { items: TabItem<K>[]; value: K; onChange: PageChange<K>; stacked?: boolean; requested?: string | null }) =>
   stacked ? (
-    <PageCrumb items={items} value={value} onChange={onChange} />
+    <PageCrumb items={items} value={value} onChange={onChange} requested={requested} />
   ) : (
     <div role="tablist" className="no-scrollbar -mb-px flex overflow-x-auto border-b border-ff-line [mask-image:linear-gradient(to_right,black_88%,transparent)] md:[mask-image:none]">
       {items.map((t) => {
@@ -239,7 +243,7 @@ const MenuState = ({ open, onChange }: { open: boolean; onChange?: (open: boolea
 const pageScroll = new Map<string, number>()
 
 /** The second crumb: the current page with a caret, opening a list of the section's pages under the top bar. */
-const PageCrumb =<K extends string>({ items, value, onChange }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void }) => {
+const PageCrumb = <K extends string>({ items, value, onChange, requested }: { items: TabItem<K>[]; value: K; onChange: PageChange<K>; requested?: string | null }) => {
   const host = useContext(CrumbContext)
   const first = items[0]?.key
   const latest = useRef({ value, first, onChange })
@@ -259,6 +263,14 @@ const PageCrumb =<K extends string>({ items, value, onChange }: { items: TabItem
     }
   }, [host])
   useEffect(() => host?.setPaged(value === first ? 'first' : 'later'), [host, value, first])
+
+  // The crumb names the page the URL names. If the URL asks for one that is not in the list (a stale link, or a page
+  // that only exists with data, like your lineup), it is rewritten to the first page in place, not as a step to go Back to.
+  const keys = items.map((t) => t.key).join()
+  useEffect(() => {
+    const known = (k: string) => keys.split(',').includes(k)
+    if (first != null && ((requested != null && !known(requested)) || !known(value))) latest.current.onChange(first, { replace: true })
+  }, [requested, value, first, keys])
 
   // A page is a screen of its own: a fresh pick starts at its top, with no scroll animation. Back and Forward
   // (popstate comes just ahead of the hashchange that moves the page) return to where that page was left.
@@ -329,17 +341,7 @@ const PageCrumb =<K extends string>({ items, value, onChange }: { items: TabItem
 }
 
 /**
- * Pages used to stack on phones, with a scrollspy that steered by section. They no longer do; this moves
- * to the page by writing it into the route, for call sites that have not switched to `onSub` yet.
- */
-export const spyTo = (key: string) => {
-  const section = window.location.hash.replace(/^#\/?/, '').split('/')[0]
-  if (section) window.location.hash = `#${section}/${key}`
-}
-
-/**
- * One tab's content: only the picked tab renders, on phones as on wide screens. `label`, `count`, `stacked` and
- * `bare` are accepted so older call sites compile; they no longer do anything.
+ * One tab's content: only the picked tab renders, on phones as on wide screens.
  */
 export const TabSection = ({
   id,
@@ -347,20 +349,19 @@ export const TabSection = ({
   children,
 }: {
   id: string
+  active: boolean
+  children: ReactNode
+  /** Not used any more; the last call sites still pass them. */
   label?: string
   count?: number | null
-  active: boolean
-  stacked?: boolean
-  bare?: boolean
-  children: ReactNode
-  className?: string
 }) => {
   const phone = usePhone()
   if (!active) return null
   // A phone page replaces the last at once, so it fades up (120ms, opacity only; reduced motion skips it in CSS).
-  // Keyed by the tab so each pick plays it. Wide screens keep the bare content: no wrapper, no layout change.
+  // Keyed by the tab so each pick plays it. The wrapper takes over the page's `space-y-3`, which no longer reaches
+  // the panels inside it; wide screens keep the bare content, so nothing changes there.
   return phone ? (
-    <div key={id} className="ff-page-in">
+    <div key={id} className="ff-page-in space-y-3">
       {children}
     </div>
   ) : (
@@ -572,6 +573,8 @@ export const Dropdown = ({
   const [closing, setClosing] = useState(false)
   const [up, setUp] = useState(false)
   const [active, setActive] = useState(0)
+  // Whether the active row was last moved by the keyboard. Then it is always lit; a pointer-set one is lit only where hover exists.
+  const [kbd, setKbd] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const list = useRef<HTMLDivElement>(null)
@@ -606,7 +609,8 @@ export const Dropdown = ({
     if (open) list.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [open, active])
 
-  const show = () => {
+  const show = (byKey = false) => {
+    setKbd(byKey)
     const r = root.current?.getBoundingClientRect()
     if (r) setUp(window.innerHeight - r.bottom < 260 && r.top > window.innerHeight - r.bottom)
     setActive(Math.max(0, options.findIndex((o) => o.value === value)))
@@ -626,13 +630,14 @@ export const Dropdown = ({
       i = (i + d + options.length) % options.length
       if (!options[i].disabled) break
     }
+    setKbd(true)
     setActive(i)
   }
   const onKey = (e: React.KeyboardEvent) => {
     if (!open) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
-        show()
+        show(true)
       }
       return
     }
@@ -641,6 +646,7 @@ export const Dropdown = ({
       step(e.key === 'ArrowDown' ? 1 : -1)
     } else if (e.key === 'Home' || e.key === 'End') {
       e.preventDefault()
+      setKbd(true)
       setActive(e.key === 'Home' ? 0 : options.length - 1)
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
@@ -655,7 +661,10 @@ export const Dropdown = ({
       const text = (o: DropdownOption) => (o.text ?? (typeof o.label === 'string' ? o.label : o.value)).toLowerCase()
       const from = options.findIndex((o, i) => i > active && text(o).startsWith(k))
       const i = from >= 0 ? from : options.findIndex((o) => text(o).startsWith(k))
-      if (i >= 0) setActive(i)
+      if (i >= 0) {
+        setKbd(true)
+        setActive(i)
+      }
     }
   }
 
@@ -723,11 +732,14 @@ export const Dropdown = ({
                 aria-selected={selected}
                 aria-disabled={o.disabled || undefined}
                 // Touch has no hover: a finger resting on a row would light it up, and the tick already marks the current page.
-                onPointerEnter={() => window.matchMedia('(hover: hover)').matches && setActive(i)}
+                onPointerEnter={() => {
+                  setKbd(false)
+                  if (window.matchMedia('(hover: hover)').matches) setActive(i)
+                }}
                 onClick={() => pick(i)}
                 className={cx(
                   'flex min-h-8 cursor-pointer items-center gap-2 py-1 pl-2 pr-3 text-[12.5px]',
-                  i === active && '[@media(hover:hover)]:bg-ff-raised',
+                  i === active && (kbd ? 'bg-ff-raised' : '[@media(hover:hover)]:bg-ff-raised'),
                   o.disabled ? 'cursor-default text-ff-muted' : selected ? 'text-ff-text' : 'text-ff-text2',
                 )}
               >
@@ -1392,6 +1404,26 @@ export type Column<T> = {
 
 const HIDE: Record<string, string> = { sm: 'hidden sm:table-cell', md: 'hidden md:table-cell', lg: 'hidden lg:table-cell', xl: 'hidden xl:table-cell' }
 
+/** How many rows of a long table show, and how to ask for more. Made by `usePhoneCap`; `Table` reads it. */
+export type RowCap = { limit: number; step: number; more: () => void }
+
+/**
+ * A phone gets the top of a long table and asks for more; wider screens get every row. `resetKey` is whatever
+ * decides which list this is (a filter, a position): when it changes the list starts over at the first batch.
+ * Pass the cap to `Table`, which sorts all the rows before it cuts, so a header sort still finds the true top.
+ */
+export const usePhoneCap = (step: number, resetKey?: string): RowCap => {
+  const phone = usePhone()
+  const [extra, setExtra] = useState(0)
+  const [key, setKey] = useState(resetKey)
+  // Adjusting state during render (not in an effect) so the new list never paints at the old length.
+  if (key !== resetKey) {
+    setKey(resetKey)
+    setExtra(0)
+  }
+  return { limit: phone ? step + extra : Infinity, step, more: () => setExtra((e) => e + step) }
+}
+
 export function Table<T>({
   rows,
   columns,
@@ -1406,10 +1438,13 @@ export function Table<T>({
   expand,
   canExpand,
   defaultOpen,
+  cap,
 }: {
   rows: T[]
   columns: Column<T>[]
   rowKey: (row: T) => string | number
+  /** Show only the first `cap.limit` rows after sorting, with a "Show more" button under the table. */
+  cap?: RowCap
   /**
    * The case behind a row, shown beneath it on demand: a toggle opens a full-width band under the
    * row instead of truncating the reasons into a cell. Return null for rows with nothing to add.
@@ -1493,8 +1528,11 @@ export function Table<T>({
     }
   }
   const align = (c: Column<T>) => (c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left')
+  // Cut after sorting: sorting a header reorders the whole list, not just the rows that happen to be showing.
+  const visible = cap && sorted.length > cap.limit ? sorted.slice(0, cap.limit) : sorted
+  const left = sorted.length - visible.length
   const details = !!expand
-  const expandable = expand ? sorted.filter((r) => (canExpand ? canExpand(r) : expand(r) != null)).map(rowKey) : []
+  const expandable = expand ? visible.filter((r) => (canExpand ? canExpand(r) : expand(r) != null)).map(rowKey) : []
   const hasDetail = new Set(expandable)
   const allOpen = expandable.length > 0 && expandable.every((k) => open.has(k))
   const flip = (k: string | number) =>
@@ -1564,7 +1602,7 @@ export function Table<T>({
                 </td>
               </tr>
             )}
-            {sorted.map((row) => {
+            {visible.map((row) => {
               const k = rowKey(row)
               const isOpen = hasDetail.has(k) && open.has(k)
               const detail = isOpen && expand ? expand(row) : null
@@ -1644,6 +1682,9 @@ export function Table<T>({
           </tbody>
         </table>
       </div>
+      {cap && left > 0 && (
+        <ShowMore className="border-t border-ff-line/60 p-2" step={cap.step} left={left} onMore={cap.more} rows="tbody > tr:not([id])" />
+      )}
     </div>
   )
 }

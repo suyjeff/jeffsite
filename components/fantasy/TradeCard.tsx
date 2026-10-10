@@ -312,7 +312,7 @@ const TradeCard = ({
             </Chip>
           ))}
           {!open && signals.length > Math.min(2, shown.length) && (
-            <button onClick={() => setOpen(true)} className="max-md:relative max-md:before:absolute max-md:before:-inset-y-3 max-md:before:inset-x-0 max-md:before:content-[''] px-1 font-mono text-[10.5px] text-ff-muted hover:text-ff-text sm:hidden">
+            <button onClick={() => setOpen(true)} className="ff-hit px-1 font-mono text-[10.5px] text-ff-muted hover:text-ff-text sm:hidden">
               +{signals.length - Math.min(2, shown.length)} more
             </button>
           )}
@@ -361,7 +361,7 @@ const TradeCard = ({
 
       <footer className="mt-auto flex items-center justify-between gap-2 border-t border-ff-line px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="max-md:relative max-md:before:absolute max-md:before:-inset-y-3 max-md:before:inset-x-0 max-md:before:content-[''] py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text">
+          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="ff-hit py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text">
             {open ? 'less ▴' : 'details ▾'}
           </button>
           {versions.length > 1 && (

@@ -38,6 +38,7 @@ import {
   fmtSigned,
   pct,
   usePhone,
+  usePhoneCap,
 } from '../ui'
 
 type Sub = 'suggested' | 'targets' | 'needs' | 'injuries' | 'builder'
@@ -170,10 +171,8 @@ const TradesView = ({
     return findTargets({ ...base, others, rosteredBy: analysis.rosteredBy, freeAgents, limit: 80 })
   }, [base, others, analysis.rosteredBy, freeAgents])
   const shownTargets = targets.filter((t) => (targetScope === 'all' ? true : targetScope === 'fa' ? t.ownerId == null : t.ownerId != null))
-  // A phone gets the top of each long list, and asks for more.
-  const [rowsMore, setRowsMore] = useState({ targets: 0, situations: 0 })
-  const PHONE_ROWS = 20
-  const cap = (n: number) => (phone ? PHONE_ROWS + n : Infinity)
+  // A phone gets the top of each long list, and asks for more; a new scope starts the list over.
+  const targetCap = usePhoneCap(20, targetScope)
 
   // ---- Needs ----
   const [needsView, setNeedsView] = useState<'position' | 'slot'>('position')
@@ -237,6 +236,7 @@ const TradesView = ({
   const shownSituations = situations.filter((r) =>
     situationScope === 'all' ? true : situationScope === 'mine' ? r.owner === myRosterId : situationScope === 'fa' ? r.owner == null : r.owner != null && r.owner !== myRosterId,
   )
+  const situationCap = usePhoneCap(20, situationScope)
 
   // ---- Builder: a deal of any shape, you plus one to three other teams ----
   const [deal, setDeal] = useState<Deal>(() => emptyDeal(myRosterId != null ? [myRosterId] : []))
@@ -380,7 +380,7 @@ const TradesView = ({
       />
 
       <div className={cx('mt-4 space-y-3', fab && 'max-md:pb-16')}>
-        <TabSection id="suggested" label="Suggested" count={search.ideas.length} active={tab === 'suggested'}>
+        <TabSection id="suggested" active={tab === 'suggested'}>
             <div className="flex flex-wrap items-center gap-2">
               <Segmented<Sort>
                 label="Sort"
@@ -460,7 +460,7 @@ const TradesView = ({
             </Disclosure>
         </TabSection>
 
-        <TabSection id="targets" label="Targets" count={targets.length} active={tab === 'targets'}>
+        <TabSection id="targets" active={tab === 'targets'}>
           <Panel
             title={phone ? 'Lift your lineup' : 'Who would lift your lineup'}
             pad={false}
@@ -478,7 +478,8 @@ const TradesView = ({
             }
           >
             <Table
-              rows={shownTargets.slice(0, cap(rowsMore.targets))}
+              rows={shownTargets}
+              cap={targetCap}
               rowKey={(t) => t.id}
               canExpand={(t) => !!data.context[t.id]?.notes.length}
               expand={(t) => {
@@ -509,12 +510,9 @@ const TradesView = ({
               ]}
             />
           </Panel>
-          {shownTargets.length > cap(rowsMore.targets) && (
-            <ShowMore step={PHONE_ROWS} left={shownTargets.length - cap(rowsMore.targets)} onMore={() => setRowsMore((r) => ({ ...r, targets: r.targets + PHONE_ROWS }))} rows="tbody > tr:not([id])" />
-          )}
         </TabSection>
 
-        <TabSection id="needs" label="League needs" active={tab === 'needs'}>
+        <TabSection id="needs" active={tab === 'needs'}>
           {/* On a phone the team-by-team cards come first: the grid of numbers is wider than the screen. */}
           <div className="flex flex-col gap-3">
           <Panel
@@ -657,7 +655,7 @@ const TradesView = ({
           </div>
         </TabSection>
 
-        <TabSection id="injuries" label="Injuries & roles" count={situations.length} active={tab === 'injuries'}>
+        <TabSection id="injuries" active={tab === 'injuries'}>
           <Panel
             title="Injuries and role changes"
             pad={false}
@@ -676,7 +674,8 @@ const TradesView = ({
             }
           >
             <Table
-              rows={shownSituations.slice(0, cap(rowsMore.situations))}
+              rows={shownSituations}
+              cap={situationCap}
               rowKey={(r) => r.id}
               canExpand={(r) => !!data.context[r.id]?.notes.length}
               expand={(r) => {
@@ -707,12 +706,9 @@ const TradesView = ({
               ]}
             />
           </Panel>
-          {shownSituations.length > cap(rowsMore.situations) && (
-            <ShowMore step={PHONE_ROWS} left={shownSituations.length - cap(rowsMore.situations)} onMore={() => setRowsMore((r) => ({ ...r, situations: r.situations + PHONE_ROWS }))} rows="tbody > tr:not([id])" />
-          )}
         </TabSection>
 
-        <TabSection id="builder" label="Builder" active={tab === 'builder'}>
+        <TabSection id="builder" active={tab === 'builder'}>
           <TradeBuilder deal={deal} setDeal={setDeal} />
         </TabSection>
       </div>

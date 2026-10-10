@@ -20,11 +20,10 @@ import { suggestBid, type BidAdvice } from '../../../lib/fantasy/faab'
 import { ContextNotes, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import WaiverMoves, { TrendingFree } from './WaiverMoves'
-import { ShowMore } from './ShowMore'
 import { Disclosure } from '../Disclosure'
 import { useStatLines } from '../useStatLines'
 import PlayerName from '../PlayerName'
-import { DeltaChip, Badge, Button, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
+import { DeltaChip, Badge, Button, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, usePhoneCap, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
 
 type Sub = 'moves' | 'stream' | 'adds'
 const SUBS: Sub[] = ['moves', 'stream', 'adds']
@@ -67,16 +66,15 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'moves'
   // On a phone each tab is its own page, so pages are kept short and the small print folds away.
   const phone = usePhone()
-  // A phone gets the top of each long table, and asks for more.
-  const [rowsMore, setRowsMore] = useState({ stream: 0, adds: 0 })
-  const PHONE_ROWS = 12
-  const cap = (n: number) => (phone ? PHONE_ROWS + n : Infinity)
   const { models } = useFantasy()
   const { players } = data
   const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
   const startable = useMemo(() => new Set(analysis.slots.flatMap((s) => s.eligible)), [analysis.slots])
   const positions = STREAM_POSITIONS.filter((p) => startable.has(p))
   const [pos, setPos] = useState<StreamPos>(positions[positions.length - 1] ?? 'DEF')
+  // A phone gets the top of each long table, and asks for more; a new position starts the streamers over.
+  const streamCap = usePhoneCap(12, pos)
+  const addsCap = usePhoneCap(12)
   const weeks = useMemo(
     () =>
       data.horizon
@@ -369,13 +367,13 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
         {!me && <Empty title="You are not in this league">Waiver picks are read against your roster.</Empty>}
 
         {me && (
-          <TabSection id="moves" label="Moves" active={tab === 'moves'}>
+          <TabSection id="moves" active={tab === 'moves'}>
             <WaiverMoves data={data} analysis={analysis} adds={adds} trending={trending} drop={dropCandidate} />
           </TabSection>
         )}
 
         {me && (
-          <TabSection id="stream" label="Streamers" active={tab === 'stream'}>
+          <TabSection id="stream" active={tab === 'stream'}>
             {data.horizonSource !== 'projections' ? (
               <Empty title="No projections to stream from">Streaming reads Sleeper&apos;s projections for the weeks ahead, and there are none right now (the season may be over).</Empty>
             ) : (
@@ -420,10 +418,11 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                     />
                   )}
                 </StatGrid>
-                <Panel title={`Free-agent ${posLabel}s · week ${week}`} pad={false} actions={<span>{stream.rows.length} shown</span>}>
+                <Panel title={`Free-agent ${posLabel}s · week ${week}`} pad={false} actions={<span>{stream.rows.length > streamCap.limit ? `${streamCap.limit} of ${stream.rows.length}` : `${stream.rows.length} shown`}</span>}>
                   {stream.rows.length ? (
                     <Table
-                      rows={stream.rows.slice(0, cap(rowsMore.stream))}
+                      rows={stream.rows}
+                      cap={streamCap}
                       rowKey={(r) => r.id}
                       columns={streamCols}
                       defaultSort="proj"
@@ -436,9 +435,6 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                     <div className="p-4 text-[13px] text-ff-muted">No free agent at this position has a projection for week {week}.</div>
                   )}
                 </Panel>
-                {stream.rows.length > cap(rowsMore.stream) && (
-                  <ShowMore step={PHONE_ROWS} left={stream.rows.length - cap(rowsMore.stream)} onMore={() => setRowsMore((r) => ({ ...r, stream: r.stream + PHONE_ROWS }))} rows="tbody > tr:not([id])" />
-                )}
                 <Disclosure from="md" summary="What the columns mean" className="text-[11.5px] leading-relaxed text-ff-muted">
                   <span className="text-ff-text2">Proj</span> blends prop lines into next week. <span className="text-ff-text2">{pos === 'DEF' ? 'Opp total' : 'Team total'}</span>{' '}
                   {pos === 'DEF' ? 'is what the offense he faces should score' : 'is what his offense should score'} (<N>m</N> = from props, else Vegas via Sleeper).{' '}
@@ -454,7 +450,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
         )}
 
         {me && (
-          <TabSection id="adds" label="All adds" count={adds.length} active={tab === 'adds'}>
+          <TabSection id="adds" active={tab === 'adds'}>
           <>
             <StatGrid>
               <Stat
@@ -478,11 +474,8 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               />
             </StatGrid>
             <Panel title={`Free agents who would start for you · wks ${data.horizon[0]?.week ?? ''}–${data.horizon[data.horizon.length - 1]?.week ?? ''}`} pad={false}>
-              <Table rows={adds.slice(0, cap(rowsMore.adds))} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." expand={addWhy} canExpand={(t) => !!bids[t.id]?.reasons.length || !!data.context[t.id]?.notes.length} />
+              <Table rows={adds} cap={addsCap} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." expand={addWhy} canExpand={(t) => !!bids[t.id]?.reasons.length || !!data.context[t.id]?.notes.length} />
             </Panel>
-            {adds.length > cap(rowsMore.adds) && (
-              <ShowMore step={PHONE_ROWS} left={adds.length - cap(rowsMore.adds)} onMore={() => setRowsMore((r) => ({ ...r, adds: r.adds + PHONE_ROWS }))} rows="tbody > tr:not([id])" />
-            )}
             {/* Moves holds this list on wide screens; on a phone it lives here, with the other free-agent lists. */}
             {phone && <TrendingFree data={data} analysis={analysis} adds={adds} />}
             <Disclosure from="md" summary="How gain is figured" className="text-[11.5px] leading-relaxed text-ff-muted">

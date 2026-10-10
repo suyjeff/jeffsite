@@ -11,7 +11,7 @@ import { HBars, Histogram, Legend, MiniLines } from '../charts'
 import PlayerName from '../PlayerName'
 import { MONKE } from '../Shell'
 import { useFantasy } from '../FantasyContext'
-import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Sentences, Stat, StatGrid, Table, TabSection, Tabs, cx, usePhone, fmt, fmtSigned, pct, type Column } from '../ui'
+import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Sentences, Stat, StatGrid, Table, TabSection, Tabs, cx, usePhone, fmt, fmtSigned, pct, type Column, type PageChange } from '../ui'
 import { Callout } from '../Callout'
 import { Disclosure } from '../Disclosure'
 import { BacktestTab, BehaviorTab, ForecastTab, OverviewTab, SystemTab } from './ModelSystem'
@@ -178,7 +178,7 @@ type Props = {
   data: LeagueData
   analysis: Analysis
   sub: string | null
-  onSub: (s: string) => void
+  onSub: PageChange
   model: ModelConfig
   setModel: (m: ModelConfig) => void
   weights: PowerWeights
@@ -226,6 +226,7 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
         }
         tabs={
           <Tabs<Sub>
+            requested={sub}
             value={tab}
             onChange={onSub}
             stacked={stacked}

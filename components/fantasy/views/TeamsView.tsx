@@ -24,6 +24,7 @@ import {
   Swap,
   Table,
   TabSection,
+  type PageChange,
   Tabs,
   cx,
   usePhone,
@@ -40,16 +41,14 @@ import RosterTable, { type Basis } from './RosterTable'
 // Wide screens show it above the tabs, and a link to the phone-only page lands on the roster.
 type Inner = 'overview' | 'roster' | 'results' | 'slots'
 const INNERS: Inner[] = ['overview', 'roster', 'results', 'slots']
-const readInner = (): Inner | null => {
-  const part = typeof window === 'undefined' ? '' : window.location.hash.replace(/^#\/?/, '').split('/')[2]
-  return INNERS.includes(part as Inner) ? (part as Inner) : null
-}
 
-const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis: Analysis; sub: string | null; onTeam: (id: number | null) => void }) => {
+type TeamsProps = { data: LeagueData; analysis: Analysis; sub: string | null; page: string | null; onPage: PageChange; onTeam: (id: number | null) => void }
+
+const TeamsView = ({ data, analysis, sub, page, onPage, onTeam }: TeamsProps) => {
   const requested = sub ? Number(sub) : NaN
   // No team named: the whole league at a glance, each row opening a summary sheet.
   if (!analysis.teamById[requested]) return <TeamsIndex data={data} analysis={analysis} onTeam={onTeam} />
-  return <TeamPage data={data} analysis={analysis} rosterId={requested} onTeam={onTeam} />
+  return <TeamPage data={data} analysis={analysis} rosterId={requested} page={page} onPage={onPage} onTeam={onTeam} />
 }
 
 /** Every team in one dense table: standing, form, what each projects, and where each is thin. */
@@ -191,25 +190,15 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
 }
 
 /** One team in full: roster, results and lineup slots, with a switcher to move between teams. */
-const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; analysis: Analysis; rosterId: number; onTeam: (id: number | null) => void }) => {
+const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<TeamsProps, 'sub'> & { rosterId: number }) => {
   const { teamById, seasonById, powerById, myRosterId, needs } = analysis
   const team = teamById[rosterId]
   const season = seasonById[rosterId]
   const power = powerById[rosterId]
-  // The page within the team lives in the hash after the team (#teams/3/results). Null: the default for the screen.
-  const [inner, setInner] = useState<Inner | null>(readInner)
-  // The route only carries the team, so a link or back button that changes just the page has to be read here.
-  useEffect(() => {
-    const read = () => setInner((cur) => readInner() ?? cur)
-    window.addEventListener('hashchange', read)
-    return () => window.removeEventListener('hashchange', read)
-  }, [])
+  // The page within the team lives in the route after the team (#teams/3/results). Null: the default for the screen.
+  const inner = INNERS.find((k) => k === page) ?? null
   const stacked = usePhone()
   const tab: Inner = stacked ? inner ?? 'overview' : !inner || inner === 'overview' ? 'roster' : inner
-  // Moving to another team keeps the page, so rosters can be compared; the route drops it, so write it back.
-  useEffect(() => {
-    if (inner) window.history.replaceState(window.history.state, '', `#teams/${rosterId}/${inner}`)
-  }, [rosterId, inner])
   const [basis, setBasis] = useState<Basis>('ahead')
   const players = data.players
   const { models } = useFantasy()
@@ -278,8 +267,9 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
         tabs={
           <>
             <Tabs<Inner>
+              requested={page}
               value={tab}
-              onChange={setInner}
+              onChange={onPage}
               stacked={stacked}
               items={[
                 ...(stacked ? [{ key: 'overview' as Inner, label: 'Overview' }] : []),

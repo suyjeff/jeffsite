@@ -22,6 +22,7 @@ import {
   StatGrid,
   Table,
   TabSection,
+  type PageChange,
   Tabs,
   Pts,
   cx,
@@ -153,7 +154,7 @@ const GameCard = ({
   )
 }
 
-const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis: Analysis; sub: string | null; onSub: (s: string) => void }) => {
+const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis: Analysis; sub: string | null; onSub: PageChange }) => {
   const { models } = useFantasy()
   const stacked = usePhone()
   const picked: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'week'
@@ -471,6 +472,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
         meta={`week ${week} · ${finals} of ${slate.games.length} games final`}
         tabs={
           <Tabs<Sub>
+            requested={sub}
             value={tab}
             onChange={onSub}
             stacked={stacked}

@@ -4,7 +4,7 @@ import { seasonStories, simInputFor, simulateOnce, type Story, type Trace } from
 import { useFantasy } from '../FantasyContext'
 import { Bracket, CHAOS, Delta, Feed, Headline, LEVER_SIMS, SEED, SIMS, Standings, setupKey, type Chaos } from '../PlayoffLab'
 import TeamName from '../TeamName'
-import { Avatar, Button, Empty, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone } from '../ui'
+import { Avatar, Button, Empty, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone, type PageChange } from '../ui'
 import { Callout } from '../Callout'
 import { OddsGrid } from './PowerView'
 
@@ -17,7 +17,7 @@ const SUBS: Sub[] = ['race', 'whatif', 'season', 'seeds']
  * results in the weeks left and reruns the race as if they had happened; "Play a season" plays one season whole,
  * bracket and stories, under the same picks.
  */
-const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) => void }) => {
+const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange }) => {
   const { models, analysis } = useFantasy()
   const stacked = usePhone()
   const picked: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'race'
@@ -394,6 +394,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
         meta={`top ${nPlayoff} of ${analysis.teams.length} make it${weeks.length ? ` · ${weeks.length} weeks left` : ''}`}
         tabs={
           <Tabs<Sub>
+            requested={sub}
             value={tab}
             onChange={onSub}
             stacked={stacked}

@@ -152,6 +152,8 @@ const MatchupsView = () => {
     })
     .filter((x): x is MatchupRead => !!x)
   const mine = all.find((m) => m.a.rosterId === me) ?? null
+  // Gameday lists Lineups as a page only when you have a matchup to read there.
+  const slotsHere = me != null && slate.managers[me]?.opponent != null
   // Closest first among the rest, so the games still in doubt lead.
   const rest = all.filter((m) => m !== mine).sort((x, y) => Math.abs(x.p - 0.5) - Math.abs(y.p - 0.5))
   const close = all.filter((m) => m.close).length
@@ -169,7 +171,7 @@ const MatchupsView = () => {
                 <Button size="sm" variant="ghost" onClick={() => open(mine)}>
                   Open matchup
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => go('slate', phone ? 'lineups' : 'week')}>
+                <Button size="sm" variant="ghost" onClick={() => go('slate', phone && slotsHere ? 'lineups' : 'week')}>
                   Slot by slot on Gameday →
                 </Button>
               </span>

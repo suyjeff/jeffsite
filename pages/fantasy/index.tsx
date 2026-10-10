@@ -453,7 +453,10 @@ const FantasyPage = () => {
           {section === 'power' && (
             <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={sheetApi.openTeam} weights={prefs.weights} />
           )}
-          {section === 'teams' && <TeamsView data={data} analysis={analysis} sub={route.sub} onTeam={(id) => route.go('teams', id == null ? null : String(id))} />}
+          {section === 'teams' && (
+            // Moving to another team keeps the page, so rosters can be compared.
+            <TeamsView data={data} analysis={analysis} sub={route.sub} page={route.page} onPage={route.setPage} onTeam={(id) => route.go('teams', id == null ? null : String(id), { page: route.page })} />
+          )}
           {section === 'players' && <PlayersView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'slate' && <SlateView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'matchups' && <MatchupsView />}

@@ -999,3 +999,16 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     transition-duration: 100ms;
   }
 }
+
+/* A phone-only taller hit area for small inline controls (text buttons, links): a transparent ::before reaches 12px
+   above and below the control without changing its layout. Wide screens keep the control's own size. */
+@media (max-width: 767px) {
+  .ff .ff-hit {
+    position: relative;
+  }
+  .ff .ff-hit::before {
+    content: '';
+    position: absolute;
+    inset: -12px 0;
+  }
+}

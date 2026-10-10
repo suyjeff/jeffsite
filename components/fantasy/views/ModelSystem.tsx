@@ -102,7 +102,7 @@ export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
               <span>
                 Best game predictor: {MODEL_LABEL[best.model]}, Brier <N>{best.brier.toFixed(3)}</N> vs <N>0.250</N> for a coin flip
               </span>
-              <button onClick={() => open('backtest')} className="max-md:relative max-md:before:absolute max-md:before:-inset-y-3 max-md:before:inset-x-0 max-md:before:content-[''] shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
+              <button onClick={() => open('backtest')} className="ff-hit shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
                 backtest →
               </button>
             </li>

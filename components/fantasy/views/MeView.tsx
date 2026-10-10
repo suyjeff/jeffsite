@@ -8,7 +8,7 @@ import PlayerName from '../PlayerName'
 import FreeAgentPick from '../FreeAgentPick'
 import ScoutReport from '../ScoutReport'
 import MovesPanel from '../Moves'
-import { Badge, Button, DeltaChip, Empty, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone } from '../ui'
+import { Badge, Button, DeltaChip, Empty, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone, type PageChange } from '../ui'
 import { Callout } from '../Callout'
 import RosterTable, { type Basis } from './RosterTable'
 
@@ -27,7 +27,7 @@ const MeView = ({
   data: LeagueData
   analysis: Analysis
   sub: string | null
-  onSub: (s: string) => void
+  onSub: PageChange
   onTeam: (id: number) => void
 }) => {
   // Phones get a page per section. A phone-only key opened on a wide screen (or a link to a section with
@@ -249,6 +249,7 @@ const MeView = ({
         }
         tabs={
           <Tabs<Sub>
+            requested={sub}
             value={tab}
             onChange={onSub}
             stacked={stacked}

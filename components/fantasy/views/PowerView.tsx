@@ -7,7 +7,7 @@ import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
 import TeamName from '../TeamName'
-import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, probShade, simOdds, type Column } from '../ui'
+import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, probShade, simOdds, type Column, type PageChange } from '../ui'
 
 type Sub = 'rankings' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'standings', 'schedule']
@@ -42,7 +42,7 @@ const PowerView = ({
   data: LeagueData
   analysis: Analysis
   sub: string | null
-  onSub: (s: string) => void
+  onSub: PageChange
   onTeam: (rosterId: number) => void
   weights: PowerWeights
 }) => {
@@ -229,6 +229,7 @@ const PowerView = ({
         title="Power"
         tabs={
           <Tabs<Sub>
+            requested={sub}
             value={tab}
             onChange={onSub}
             stacked={stacked}
