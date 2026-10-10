@@ -534,6 +534,24 @@ const BONUS: [number, number | null, string, string | null][] = [
 /** Reception bonuses by position: ESPN sets them as a per-slot override on its reception rule. */
 const REC_BONUS: Record<string, string> = { '2': 'bonus_rec_rb', '4': 'bonus_rec_wr', '6': 'bonus_rec_te' }
 
+/** Names for the ESPN rules that can fold into another's Sleeper key, for the note that says so. */
+const STAT_LABEL: Record<number, string> = {
+  92: '14–17 points allowed',
+  121: '18–21 points allowed',
+  124: '35–45 points allowed',
+  125: '46+ points allowed',
+  103: 'interception return TD',
+  104: 'fumble return TD',
+  94: 'defensive TD',
+  101: 'kickoff return TD',
+  102: 'punt return TD',
+  93: 'blocked kick TD',
+  198: '50–59 yard FG',
+  201: '60+ yard FG',
+  74: '50+ yard FG',
+}
+const statLabel = (id: number) => STAT_LABEL[id] ?? `stat ${id}`
+
 const round4 = (x: number) => Math.round(x * 10000) / 10000
 
 export const espnScoring = (items: EspnScoringItem[]): { scoring: Record<string, number>; unmapped: number[]; notes: string[] } => {
@@ -550,7 +568,8 @@ export const espnScoring = (items: EspnScoringItem[]): { scoring: Record<string,
     used.add(id)
     for (const k of keys) {
       if (k in scoring) {
-        if (scoring[k] !== it.points) notes.push(`ESPN stat ${id} (${it.points}) shares Sleeper's ${k} with stat ${from[k]}, which is used (${scoring[k]}).`)
+        if (scoring[k] !== it.points)
+          notes.push(`ESPN's ${statLabel(id)} rule (${it.points}) has no separate Sleeper stat; it scores ${scoring[k]}, like ${statLabel(from[k])}.`)
         continue
       }
       scoring[k] = it.points

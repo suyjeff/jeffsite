@@ -123,7 +123,7 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: Onboa
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ff-muted">setup</span>
       </header>
       <main className="flex flex-1 items-start justify-center px-4 py-[8vh] sm:items-center sm:py-8">
-        <form onSubmit={submit} className="w-full max-w-[440px] border border-ff-line bg-ff-panel">
+        <div className="w-full max-w-[440px] border border-ff-line bg-ff-panel">
           <div className="flex h-8 items-center gap-2 border-b border-ff-line px-3">
             <span className="num text-[10px] text-ff-muted">{found ? '02' : '01'}</span>
             <span className="ff-label text-ff-text2">{found ? 'pick your team' : 'connect your league'}</span>
@@ -134,8 +134,9 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: Onboa
               <DIAGRAMS.welcome />
             </div>
           )}
-          <div className="space-y-4 p-4 sm:p-5">
-            {!found && (
+          {/* Outside the form: its buttons are plain buttons, and Enter in a field must not land on one. */}
+          {!found && (
+            <div className="px-4 pt-4 sm:px-5 sm:pt-5">
               <Segmented<Provider>
                 block
                 label="Where your league lives"
@@ -146,7 +147,9 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: Onboa
                   { key: 'espn', label: 'ESPN' },
                 ]}
               />
-            )}
+            </div>
+          )}
+          <form onSubmit={submit} className="space-y-4 p-4 sm:p-5">
 
             {!espn && (
               <>
@@ -295,8 +298,8 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: Onboa
                 </button>
               )
             )}
-          </div>
-        </form>
+          </form>
+        </div>
       </main>
     </div>
   )

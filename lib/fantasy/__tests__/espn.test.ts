@@ -238,7 +238,7 @@ describe('ESPN scoring', () => {
 
   it('reports rules with no Sleeper stat and merged ranges that disagree', () => {
     expect(unmapped).toEqual([155])
-    expect(notes.some((n) => n.includes('pts_allow_14_20'))).toBe(true)
+    expect(notes).toEqual(["ESPN's 18–21 points allowed rule (0) has no separate Sleeper stat; it scores 1, like 14–17 points allowed."])
   })
 
   it('scores "every 25 yards" rules per yard', () => {
