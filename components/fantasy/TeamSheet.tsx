@@ -4,6 +4,7 @@ import { MoveList, useMoves } from './Moves'
 import TeamName, { TopMark } from './TeamName'
 import FreeAgentPick from './FreeAgentPick'
 import SheetRoster from './SheetRoster'
+import { ResultsChart } from './charts'
 import { Callout } from './Callout'
 import { InsightMark } from './InsightMark'
 import { scoutPlayers, useScout } from './ScoutReport'
@@ -34,7 +35,7 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
   if (!team || !season) return null
   const opp = game ? (game.a === rosterId ? game.b : game.a) : null
   const p = game ? (game.a === rosterId ? game.pA : 1 - game.pA) : null
-  const recent = season.weeks.slice(-6)
+  const recent = season.weeks.slice(-8)
   const open = () => {
     onClose()
     go('teams', String(rosterId))
@@ -91,21 +92,10 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
 
             {recent.length > 0 && (
               <SheetSection title="Recent results" aside={`last ${recent.length}`}>
-                <ol className="grid gap-px border border-ff-line bg-ff-line" style={{ gridTemplateColumns: `repeat(${recent.length}, minmax(0, 1fr))` }}>
-                  {recent.map((w) => (
-                    <li
-                      key={w.week}
-                      className="bg-ff-panel px-1 py-1 text-center"
-                      title={`Week ${w.week}: ${fmt(w.points)}–${fmt(w.opponentPoints)}${w.opponentId != null ? ` vs ${analysis.teamById[w.opponentId]?.name}` : ''}`}
-                    >
-                      <span className="block font-mono text-[9px] text-ff-muted">wk {w.week}</span>
-                      <Badge tone={w.result === 'W' ? 'pos' : w.result === 'L' ? 'neg' : 'neutral'} className="mt-0.5">
-                        {w.result ?? '–'}
-                      </Badge>
-                      <span className="num mt-0.5 block text-[10.5px] text-ff-text2">{fmt(w.points, 0)}</span>
-                    </li>
-                  ))}
-                </ol>
+                <ResultsChart
+                  rows={recent.map((w) => ({ week: w.week, points: w.points, opponentPoints: w.opponentPoints, result: w.result, opponent: w.opponentId != null ? analysis.teamById[w.opponentId]?.name : null }))}
+                  avg={season.ppg}
+                />
               </SheetSection>
             )}
 

@@ -218,19 +218,44 @@ export const MiniLines = ({
   )
 }
 
+/** A nice axis top: rounds up to a multiple of 10 (or 5 when the range is small). */
+const niceTop = (v: number) => {
+  const unit = v <= 30 ? 5 : 10
+  return Math.max(unit * 2, Math.ceil(v / unit) * unit)
+}
+
+/** Hover readout: pinned beside the column and flipped to the other side near the right edge. */
+const ColumnTip = ({ x, width, top, children }: { x: number; width: number; top: number; children: React.ReactNode }) => {
+  const flip = x > width * 0.55
+  return (
+    <span
+      className="pointer-events-none absolute z-30 rounded-sm bg-ff-text px-2 py-1 font-mono text-[10.5px] leading-relaxed text-ff-panel"
+      style={{ left: flip ? x - 12 : x + 12, top, transform: flip ? 'translateX(-100%)' : undefined }}
+    >
+      {children}
+    </span>
+  )
+}
+
+/** Value labels sit in ink with a surface halo so they stay readable over gridlines and neighbouring marks. */
+const valueLabel = 'fill-ff-text font-mono text-[10px] [paint-order:stroke] stroke-ff-panel [stroke-width:3px]'
+
 /**
- * Results against expectations, week by week. The projection is a faded line
- * underneath (dashed where the weeks are still to come); what actually
- * happened sits on top, each week's dot marked by whether it beat the
- * projection. One axis, points per week.
+ * Results against expectations, week by week. Each played week is a column of
+ * what was scored from the zero line, with a tick across it at what was
+ * projected: a tick above the column is a miss, below it a beat. Weeks still to
+ * come have no result, only a dashed outline up to the projection. A dashed
+ * line marks the average of the weeks played, and the best and latest weeks
+ * carry their number. One axis, points per week.
  */
 export const ProjectionChart = ({
   weeks,
   actual,
   projected,
-  height = 170,
+  height = 180,
   highlight = [],
   unit = 'pts',
+  labels = [],
 }: {
   weeks: number[]
   actual: (number | null)[]
@@ -239,36 +264,39 @@ export const ProjectionChart = ({
   /** Weeks to shade, e.g. the fantasy playoffs. */
   highlight?: number[]
   unit?: string
+  /** Optional per-week context for the readout, e.g. the opponent ("vs DAL"). */
+  labels?: (string | null | undefined)[]
 }) => {
   const [hover, setHover] = useState<number | null>(null)
   const [ref, w] = useWidth(480)
   const vals = [...actual, ...projected].filter((v): v is number => v != null)
   if (!weeks.length || !vals.length) return null
-  const lastPlayed = actual.reduce<number>((a, v, i) => (v != null ? i : a), -1)
-  const rawLo = Math.min(...vals)
-  const rawHi = Math.max(...vals)
-  const span = rawHi - rawLo || 10
-  const lo = Math.max(0, Math.floor((rawLo - span * 0.1) / 10) * 10)
-  const hi = Math.ceil((rawHi + span * 0.1) / 10) * 10
-  const pad = { l: 34, r: 10, t: 10, b: 20 }
+  const played = actual.flatMap((v, i) => (v != null ? [i] : []))
+  const avg = played.length ? played.reduce((a, i) => a + actual[i]!, 0) / played.length : null
+  const best = played.length ? played.reduce((a, i) => (actual[i]! > actual[a]! ? i : a), played[0]) : -1
+  const latest = played.length ? played[played.length - 1] : -1
+  const upcoming = weeks.some((_, i) => actual[i] == null && projected[i] != null)
+  const hasProj = played.some((i) => projected[i] != null)
+  const hi = niceTop(Math.max(...vals) * 1.1)
+  const pad = { l: 32, r: 8, t: 16, b: 20 }
   const iw = Math.max(40, w - pad.l - pad.r)
   const ih = height - pad.t - pad.b
   const step = iw / weeks.length
+  const bw = Math.max(4, Math.min(18, step * 0.58))
   const x = (i: number) => pad.l + step * (i + 0.5)
-  const y = (v: number) => pad.t + ih - ((v - lo) / (hi - lo || 1)) * ih
-  const ticks = [lo, (lo + hi) / 2, hi]
-  const pastProj = projected.map((v, i) => (i <= Math.max(lastPlayed, 0) ? v : null))
-  // The dashed run starts at the last played week so the two lines join.
-  const futureProj = projected.map((v, i) => (i >= lastPlayed ? v : null))
+  const y = (v: number) => pad.t + ih - (v / hi) * ih
+  const ticks = [0, hi / 2, hi]
   const h = hover
   const diff = h !== null && actual[h] != null && projected[h] != null ? actual[h]! - projected[h]! : null
+  // Label the best and latest weeks; skip the latest when it would sit on top of the best.
+  const labelled = [best, latest].filter((i, k, a) => i >= 0 && a.indexOf(i) === k && (k === 0 || Math.abs(i - best) * step >= 26))
   return (
     <div className="relative" ref={ref} onMouseLeave={() => setHover(null)}>
-      <svg width={w} height={height} className="block" role="img" aria-label={`Weekly ${unit}, scored against projected`}>
+      <svg width={w} height={height} className="block" role="img" aria-label={`Weekly ${unit}, scored against projected${avg != null ? `, average ${fmt(avg)}` : ''}`}>
         {weeks.map((wk, i) => (highlight.includes(wk) ? <rect key={`h${i}`} x={x(i) - step / 2} y={pad.t} width={step} height={ih} className="fill-ff-accent/[0.06]" /> : null))}
         {ticks.map((t, i) => (
           <g key={i}>
-            <line x1={pad.l} x2={w - pad.r} y1={y(t)} y2={y(t)} className="stroke-ff-line" strokeWidth={1} />
+            <line x1={pad.l} x2={w - pad.r} y1={y(t)} y2={y(t)} className={i === 0 ? 'stroke-ff-line2' : 'stroke-ff-line'} strokeWidth={1} />
             <text x={pad.l - 6} y={y(t) + 3} textAnchor="end" className="fill-ff-muted font-mono text-[9.5px]">
               {Math.round(t)}
             </text>
@@ -281,47 +309,202 @@ export const ProjectionChart = ({
             </text>
           ) : null,
         )}
-        {h !== null && <line x1={x(h)} x2={x(h)} y1={pad.t} y2={pad.t + ih} className="stroke-ff-line2" strokeWidth={1} />}
-        <path d={linePath(pastProj, x, y)} fill="none" className="stroke-ff-muted" strokeOpacity={0.5} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        <path d={linePath(futureProj, x, y)} fill="none" className="stroke-ff-muted" strokeOpacity={0.5} strokeWidth={2} strokeDasharray="4 4" strokeLinecap="round" />
-        <path d={linePath(actual, x, y)} fill="none" className="stroke-ff-accent" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        {actual.map((v, i) => {
-          if (v == null) return null
+        {h !== null && <rect x={x(h) - step / 2} y={pad.t} width={step} height={ih} className="fill-ff-text/[0.05]" />}
+        {weeks.map((_, i) => {
+          const v = actual[i]
           const p = projected[i]
-          const tone = p == null ? 'fill-ff-accent' : v >= p ? 'fill-ff-pos' : 'fill-ff-neg'
-          return <circle key={i} cx={x(i)} cy={y(v)} r={h === i ? 4.5 : 3} className={cx(tone, 'stroke-ff-panel')} strokeWidth={2} />
+          if (v == null) {
+            // Not played yet: the projection alone, as an outline.
+            return p != null && p > 0 ? <rect key={i} x={x(i) - bw / 2 + 0.5} y={y(p)} width={bw - 1} height={y(0) - y(p)} fill="none" className="stroke-ff-muted" strokeWidth={1} strokeDasharray="3 2" /> : null
+          }
+          return <rect key={i} x={x(i) - bw / 2} y={y(v)} width={bw} height={Math.max(0, y(0) - y(v))} className="fill-ff-accent" opacity={h === null || h === i ? 1 : 0.55} />
         })}
-        {h !== null && actual[h] == null && projected[h] != null && <circle cx={x(h)} cy={y(projected[h]!)} r={3.5} className="fill-ff-muted stroke-ff-panel" strokeWidth={2} />}
+        {avg != null && played.length > 1 && (
+          <g>
+            <line x1={pad.l} x2={w - pad.r} y1={y(avg)} y2={y(avg)} className="stroke-ff-text2" strokeWidth={1} strokeDasharray="4 3" />
+          </g>
+        )}
+        {played.map((i) => {
+          const p = projected[i]
+          if (p == null) return null
+          const x0 = x(i) - bw / 2 - 3
+          const x1 = x(i) + bw / 2 + 3
+          return (
+            <g key={`t${i}`}>
+              <line x1={x0} x2={x1} y1={y(p)} y2={y(p)} className="stroke-ff-panel" strokeWidth={4} />
+              <line x1={x0} x2={x1} y1={y(p)} y2={y(p)} className="stroke-ff-text" strokeWidth={2} />
+            </g>
+          )
+        })}
+        {labelled.map((i) => (
+          <text key={`l${i}`} x={x(i)} y={Math.min(y(actual[i]!), projected[i] != null ? y(projected[i]!) : Infinity) - 6} textAnchor="middle" className={valueLabel}>
+            {fmt(actual[i], 1)}
+          </text>
+        ))}
         {weeks.map((_, i) => (
-          <rect key={i} x={x(i) - step / 2} y={pad.t} width={step} height={ih} fill="transparent" onMouseEnter={() => setHover(i)} />
+          <rect key={i} x={x(i) - step / 2} y={pad.t} width={step} height={ih} fill="transparent" onMouseEnter={() => setHover(i)} onClick={() => setHover(i)} />
         ))}
       </svg>
       {h !== null && (
-        <span
-          className="pointer-events-none absolute z-30 rounded-sm bg-ff-text px-2 py-1 font-mono text-[10.5px] leading-relaxed text-ff-panel"
-          style={{ left: Math.max(0, Math.min(x(h) + 10, w - 140)), top: pad.t }}
-        >
-          <span className="block opacity-70">week {weeks[h]}</span>
-          {actual[h] != null && <span className="block">scored {fmt(actual[h])}</span>}
+        <ColumnTip x={x(h)} width={w} top={pad.t}>
+          <span className="block opacity-70">
+            week {weeks[h]}
+            {labels[h] ? ` · ${labels[h]}` : ''}
+          </span>
+          {actual[h] != null ? <span className="block">scored {fmt(actual[h])}</span> : <span className="block opacity-80">not played yet</span>}
           {projected[h] != null && <span className="block opacity-80">projected {fmt(projected[h])}</span>}
           {diff != null && <span className="block">{fmtSigned(diff)} vs proj</span>}
-        </span>
+        </ColumnTip>
       )}
-      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 px-1 font-mono text-[10px] text-ff-muted">
+      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-ff-text2">
         <span className="flex items-center gap-1.5">
-          <span className="h-0.5 w-3 bg-ff-accent" />
+          <span className="h-2.5 w-2 bg-ff-accent" />
           scored
         </span>
+        {hasProj && (
+          <span className="flex items-center gap-1.5">
+            <span className="h-0.5 w-3.5 bg-ff-text" />
+            projected
+          </span>
+        )}
+        {upcoming && (
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2 border border-dashed border-ff-muted" />
+            ahead
+          </span>
+        )}
+        {avg != null && played.length > 1 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-3.5 border-t border-dashed border-ff-text2" />
+            average <span className="num text-ff-text">{fmt(avg)}</span>
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A team's recent scoring against its opponents. Two thin columns a week, the
+ * team's own and the opponent's, from the zero line; a lettered cell under each
+ * week says who won, so the result never rests on colour. A dashed line marks
+ * the team's season average.
+ */
+export const ResultsChart = ({
+  rows,
+  avg,
+  height = 128,
+  teamLabel = 'points',
+}: {
+  rows: { week: number; points: number; opponentPoints: number | null; result: 'W' | 'L' | 'T' | null; opponent?: string | null }[]
+  /** The team's season average, drawn as a reference line. */
+  avg?: number
+  height?: number
+  teamLabel?: string
+}) => {
+  const [hover, setHover] = useState<number | null>(null)
+  const [ref, w] = useWidth(420)
+  if (!rows.length) return null
+  const strip = 17
+  const pad = { l: 32, r: 8, t: 16, b: strip + 18 }
+  const iw = Math.max(40, w - pad.l - pad.r)
+  const ih = height - pad.t - pad.b
+  const hi = niceTop(Math.max(...rows.flatMap((r) => [r.points, r.opponentPoints ?? 0])) * 1.1)
+  const step = iw / rows.length
+  const bw = Math.max(3, Math.min(14, step * 0.3))
+  const x = (i: number) => pad.l + step * (i + 0.5)
+  const y = (v: number) => pad.t + ih - (v / hi) * ih
+  const best = rows.reduce((a, r, i) => (r.points > rows[a].points ? i : a), 0)
+  const latest = rows.length - 1
+  const labelled = [best, latest].filter((i, k, a) => a.indexOf(i) === k && (k === 0 || Math.abs(i - best) * step >= 28))
+  const cell = Math.min(strip + 3, step - 4)
+  const h = hover
+  const wins = rows.filter((r) => r.result === 'W').length
+  const losses = rows.filter((r) => r.result === 'L').length
+  return (
+    <div className="relative" ref={ref} onMouseLeave={() => setHover(null)}>
+      <svg
+        width={w}
+        height={height}
+        className="block"
+        role="img"
+        aria-label={`${teamLabel} against opponents over the last ${rows.length} weeks: ${wins} won, ${losses} lost. ${rows.map((r) => `week ${r.week} ${r.result ?? 'no result'} ${fmt(r.points)} to ${fmt(r.opponentPoints)}`).join('; ')}`}
+      >
+        {[0, hi / 2, hi].map((t, i) => (
+          <g key={i}>
+            <line x1={pad.l} x2={w - pad.r} y1={y(t)} y2={y(t)} className={i === 0 ? 'stroke-ff-line2' : 'stroke-ff-line'} strokeWidth={1} />
+            <text x={pad.l - 6} y={y(t) + 3} textAnchor="end" className="fill-ff-muted font-mono text-[9.5px]">
+              {Math.round(t)}
+            </text>
+          </g>
+        ))}
+        {h !== null && <rect x={x(h) - step / 2} y={pad.t} width={step} height={ih + 4 + strip} className="fill-ff-text/[0.05]" />}
+        {rows.map((r, i) => (
+          <g key={r.week} opacity={h === null || h === i ? 1 : 0.6}>
+            <rect x={x(i) - bw - 0.5} y={y(r.points)} width={bw} height={Math.max(0, y(0) - y(r.points))} className="fill-ff-accent" />
+            {r.opponentPoints != null && <rect x={x(i) + 0.5} y={y(r.opponentPoints)} width={bw} height={Math.max(0, y(0) - y(r.opponentPoints))} className="fill-ff-muted" fillOpacity={0.5} />}
+          </g>
+        ))}
+        {avg != null && rows.length > 1 && (
+          <g>
+            <line x1={pad.l} x2={w - pad.r} y1={y(avg)} y2={y(avg)} className="stroke-ff-text2" strokeWidth={1} strokeDasharray="4 3" />
+          </g>
+        )}
+        {labelled.map((i) => (
+          <text key={`l${i}`} x={x(i) - bw / 2 - 0.5} y={y(rows[i].points) - 5} textAnchor="middle" className={valueLabel}>
+            {fmt(rows[i].points, 0)}
+          </text>
+        ))}
+        {rows.map((r, i) => (
+          <g key={`c${r.week}`}>
+            <rect
+              x={x(i) - cell / 2}
+              y={pad.t + ih + 4}
+              width={cell}
+              height={strip}
+              className={cx('stroke-ff-line2', r.result === 'W' ? 'fill-ff-pos/20' : r.result === 'L' ? 'fill-ff-neg/20' : 'fill-ff-line/50')}
+              strokeWidth={1}
+            />
+            <text x={x(i)} y={pad.t + ih + 4 + strip / 2 + 3.5} textAnchor="middle" className="fill-ff-text font-mono text-[10.5px] font-semibold">
+              {r.result ?? '–'}
+            </text>
+            <text x={x(i)} y={height - 3} textAnchor="middle" className="fill-ff-muted font-mono text-[9.5px]">
+              {r.week}
+            </text>
+          </g>
+        ))}
+        {rows.map((r, i) => (
+          <rect key={`m${r.week}`} x={x(i) - step / 2} y={pad.t} width={step} height={ih + 4 + strip} fill="transparent" onMouseEnter={() => setHover(i)} onClick={() => setHover(i)} />
+        ))}
+      </svg>
+      {h !== null && (
+        <ColumnTip x={x(h)} width={w} top={pad.t}>
+          <span className="block opacity-70">
+            week {rows[h].week} · {rows[h].result ?? 'no result'}
+            {rows[h].opponent ? ` vs ${rows[h].opponent}` : ''}
+          </span>
+          <span className="block">
+            {fmt(rows[h].points)} to {fmt(rows[h].opponentPoints)}
+          </span>
+          {rows[h].opponentPoints != null && <span className="block opacity-80">{fmtSigned(rows[h].points - rows[h].opponentPoints!)} margin</span>}
+        </ColumnTip>
+      )}
+      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-ff-text2">
         <span className="flex items-center gap-1.5">
-          <span className="h-0.5 w-3 bg-ff-muted/50" />
-          projected
+          <span className="h-2.5 w-2 bg-ff-accent" />
+          {teamLabel}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-ff-pos" />
-          beat
-          <span className="ml-1 h-2 w-2 rounded-full bg-ff-neg" />
-          missed
+          <span className="h-2.5 w-2 bg-ff-muted/50" />
+          opponent
         </span>
+        {avg != null && rows.length > 1 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-3.5 border-t border-dashed border-ff-text2" />
+            season avg <span className="num text-ff-text">{fmt(avg)}</span>
+          </span>
+        )}
+        <span className="font-mono text-[10px] text-ff-muted">W / L under each week</span>
       </div>
     </div>
   )
