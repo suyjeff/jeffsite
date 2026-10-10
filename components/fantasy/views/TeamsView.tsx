@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ProjectionChart } from '../charts'
@@ -24,6 +24,7 @@ import {
   Swap,
   Table,
   TabSection,
+  type PageChange,
   Tabs,
   cx,
   usePhone,
@@ -33,15 +34,21 @@ import {
   simOdds,
   type Column,
 } from '../ui'
+import { Disclosure } from '../Disclosure'
 import RosterTable, { type Basis } from './RosterTable'
 
-type Inner = 'roster' | 'results' | 'slots'
+// Phones get a page per section, so the team's summary (figures, moves, scout) is a page of its own there.
+// Wide screens show it above the tabs, and a link to the phone-only page lands on the roster.
+type Inner = 'overview' | 'roster' | 'results' | 'slots'
+const INNERS: Inner[] = ['overview', 'roster', 'results', 'slots']
 
-const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis: Analysis; sub: string | null; onTeam: (id: number | null) => void }) => {
+type TeamsProps = { data: LeagueData; analysis: Analysis; sub: string | null; page: string | null; onPage: PageChange; onTeam: (id: number | null) => void }
+
+const TeamsView = ({ data, analysis, sub, page, onPage, onTeam }: TeamsProps) => {
   const requested = sub ? Number(sub) : NaN
   // No team named: the whole league at a glance, each row opening a summary sheet.
   if (!analysis.teamById[requested]) return <TeamsIndex data={data} analysis={analysis} onTeam={onTeam} />
-  return <TeamPage data={data} analysis={analysis} rosterId={requested} onTeam={onTeam} />
+  return <TeamPage data={data} analysis={analysis} rosterId={requested} page={page} onPage={onPage} onTeam={onTeam} />
 }
 
 /** Every team in one dense table: standing, form, what each projects, and where each is thin. */
@@ -166,13 +173,13 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
     <>
       <PageHeader title="Teams" meta={`${analysis.teams.length} teams${next[0] ? ` · wk ${next[0].week}` : ''}`} />
       <div className="mt-4 space-y-3">
-        <Panel title="League" pad={false} actions={<span>by power · click a team for its summary</span>}>
+        <Panel title="League" pad={false} actions={<span>by power · <span className="max-md:hidden">click</span><span className="md:hidden">tap</span> a team for its summary</span>}>
           <Table rows={rows} rowKey={(t) => t.rosterId} columns={columns} dense onRowClick={(t) => openTeam(t.rosterId)} rowClass={(t) => (t.rosterId === myRosterId ? 'ff-mine' : '')} />
         </Panel>
         <p className="text-[11.5px] text-ff-muted">
-          Power: chance to beat an average team. Lineup: the best lineup&apos;s points per week ahead, against the league average.{' '}
+          <span className="hidden md:inline">Power: chance to beat an average team. Lineup: the best lineup&apos;s points per week ahead, against the league average. </span>
           {myRosterId != null && (
-            <button type="button" onClick={() => onTeam(myRosterId)} className="text-ff-text2 underline-offset-2 hover:underline">
+            <button type="button" onClick={() => onTeam(myRosterId)} className="ff-hit text-ff-text2 underline-offset-2 hover:underline">
               Your team page →
             </button>
           )}
@@ -183,14 +190,15 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
 }
 
 /** One team in full: roster, results and lineup slots, with a switcher to move between teams. */
-const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; analysis: Analysis; rosterId: number; onTeam: (id: number | null) => void }) => {
+const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<TeamsProps, 'sub'> & { rosterId: number }) => {
   const { teamById, seasonById, powerById, myRosterId, needs } = analysis
   const team = teamById[rosterId]
   const season = seasonById[rosterId]
   const power = powerById[rosterId]
-  const [inner, setInner] = useState<Inner>('roster')
-  // Phones stack every section in one scroll, steered by the tab strip.
+  // The page within the team lives in the route after the team (#teams/3/results). Null: the default for the screen.
+  const inner = INNERS.find((k) => k === page) ?? null
   const stacked = usePhone()
+  const tab: Inner = stacked ? inner ?? 'overview' : !inner || inner === 'overview' ? 'roster' : inner
   const [basis, setBasis] = useState<Basis>('ahead')
   const players = data.players
   const { models } = useFantasy()
@@ -259,10 +267,12 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
         tabs={
           <>
             <Tabs<Inner>
-              value={inner}
-              onChange={setInner}
+              requested={page}
+              value={tab}
+              onChange={onPage}
               stacked={stacked}
               items={[
+                ...(stacked ? [{ key: 'overview' as Inner, label: 'Overview' }] : []),
                 { key: 'roster', label: 'Roster', count: team.players.length },
                 { key: 'results', label: 'Results', count: season.weeks.length },
                 { key: 'slots', label: 'Lineup slots' },
@@ -273,6 +283,8 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
       />
       <div className="mt-4 space-y-3">
         {stacked && switcher}
+        {(!stacked || tab === 'overview') && (
+          <>
         <StatGrid>
           <Stat label="Power" value={`#${power.rank}`} badge={{ text: `${fmt(power.score, 0)}% vs avg team`, tone: power.score >= 55 ? 'pos' : power.score <= 45 ? 'neg' : 'neutral' }} sub="chance to beat an average team" />
           <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`all-play ${fmt(season.allPlayWins, 0)}-${fmt(season.allPlayLosses, 0)}`} />
@@ -294,8 +306,10 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
 
         {rosterId === myRosterId && <MovesPanel rosterId={rosterId} />}
         <ScoutReport rosterId={rosterId} mine={rosterId === myRosterId} />
+          </>
+        )}
 
-        <TabSection id="roster" label="Roster" active={inner === 'roster'} stacked={stacked} bare>
+        <TabSection id="roster" active={tab === 'roster'}>
           <Panel
             title="Roster"
             pad={false}
@@ -317,14 +331,15 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
           </Panel>
         </TabSection>
 
-        <TabSection id="results" label="Results" active={inner === 'results'} stacked={stacked} bare>
+        <TabSection id="results" active={tab === 'results'}>
           <Panel title="Weekly results" pad={false} actions={<span>scored vs projected</span>}>
             {chartWeeks.length > 0 && (
               <div className="border-b border-ff-line px-2 pb-2 pt-3">
                 <ProjectionChart weeks={chartWeeks} actual={chartWeeks.map((w) => scored[w] ?? null)} projected={chartWeeks.map((w) => expected[w] ?? ahead[w] ?? null)} />
-                <p className="mt-1.5 px-1 text-[11px] leading-snug text-ff-muted">
+                {/* On a phone the explainer folds away so the chart and the table share the screen. */}
+                <Disclosure from="md" summary="How projected is figured" className="text-[11px] leading-snug text-ff-muted md:mt-1.5 md:px-1">
                   Projected = best possible lineup on pre-game projections × the manager&apos;s efficiency. A bye or empty slot left in shows as a miss. Dashed weeks are ahead.
-                </p>
+                </Disclosure>
               </div>
             )}
             <Table
@@ -370,7 +385,7 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
           </Panel>
         </TabSection>
 
-        <TabSection id="slots" label="Lineup slots" active={inner === 'slots'} stacked={stacked} bare>
+        <TabSection id="slots" active={tab === 'slots'}>
           <Panel title="Lineup slots" actions={<span>wk {data.horizon[0]?.week ?? ''} starters · pts/wk ahead</span>} pad={false}>
             <Table
               rows={needs[rosterId]?.slots ?? []}

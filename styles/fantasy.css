@@ -287,6 +287,44 @@ html:has(body .ff) body {
     opacity: 0;
   }
 }
+/* The phone page list is full width, so it cannot grow from the trigger without flashing inset edges: it is
+   revealed top-down from under the bar instead, and wipes back up a little faster on close. Reduced motion fades. */
+@keyframes ff-reveal {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+@keyframes ff-reveal-out {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+@keyframes ff-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+.ff .ff-reveal {
+  animation: ff-reveal 200ms var(--ff-ease-drawer);
+}
+.ff .ff-reveal.ff-reveal-out {
+  animation: ff-reveal-out 120ms var(--ff-ease-out) forwards;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-reveal {
+    animation: ff-pop-fade 120ms var(--ff-ease-out);
+  }
+  .ff .ff-reveal.ff-reveal-out {
+    animation: ff-fade-out 120ms var(--ff-ease-out) forwards;
+  }
+}
 @keyframes ff-modal {
   from {
     opacity: 0;
@@ -651,7 +689,20 @@ html:has(body .ff) body {
   }
 }
 .ff .ff-fade-in {
-  animation: ff-fade-in 160ms ease-out;
+  animation: ff-fade-in 120ms var(--ff-ease-out);
+}
+/* A phone page arriving: the old one is gone at once, so the new one only fades up (no travel). */
+@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+  .ff .ff-page-in {
+    animation: ff-fade-in 120ms var(--ff-ease-out);
+  }
+}
+/* The page-list scrim: a touch stronger in dark mode, where 20% black barely shows on a dark page. */
+.ff .ff-scrim {
+  background: rgb(0 0 0 / 0.2);
+}
+.ff[data-mode='dark'] .ff-scrim {
+  background: rgb(0 0 0 / 0.35);
 }
 .ff .ff-step-push {
   animation: ff-push 220ms var(--ff-ease-out);
@@ -664,23 +715,6 @@ html:has(body .ff) body {
   .ff .ff-step-back {
     animation: ff-fade-in 160ms ease-out;
   }
-}
-
-/* A stacked page's first section sits right under the strip that already names it: keep its heading for
-   screen readers and focus, hide it from view. */
-.ff section[data-spy]:first-child > h2[data-spy-head] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
-.ff section[data-spy]:first-child {
-  padding-top: 0;
 }
 
 /* ---------- Density: comfortable ----------
@@ -963,5 +997,18 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   .ff :is(.ff-press, .ff-aqua):not(:disabled):active {
     scale: 0.97;
     transition-duration: 100ms;
+  }
+}
+
+/* A phone-only taller hit area for small inline controls (text buttons, links): a transparent ::before reaches 12px
+   above and below the control without changing its layout. Wide screens keep the control's own size. */
+@media (max-width: 767px) {
+  .ff .ff-hit {
+    position: relative;
+  }
+  .ff .ff-hit::before {
+    content: '';
+    position: absolute;
+    inset: -12px 0;
   }
 }

@@ -126,7 +126,7 @@ const GradeBar = ({ idea, base, nm, posOf }: { idea: TradeIdea; base: AcceptRead
       {/* One row at any width: the question, three answers filling the space, and a mark once saved. */}
       <div className="flex items-center gap-2">
         <span className="ff-label shrink-0">Would they?</span>
-        <span className="min-w-0 flex-1 sm:max-w-[300px]">
+        <span className="min-w-0 flex-1 max-md:[&_button]:h-11 sm:max-w-[300px]">
           <Segmented<Grade | ''>
             size="sm"
             block
@@ -312,7 +312,7 @@ const TradeCard = ({
             </Chip>
           ))}
           {!open && signals.length > Math.min(2, shown.length) && (
-            <button onClick={() => setOpen(true)} className="px-1 font-mono text-[10.5px] text-ff-muted hover:text-ff-text sm:hidden">
+            <button onClick={() => setOpen(true)} className="ff-hit px-1 font-mono text-[10.5px] text-ff-muted hover:text-ff-text sm:hidden">
               +{signals.length - Math.min(2, shown.length)} more
             </button>
           )}
@@ -361,7 +361,7 @@ const TradeCard = ({
 
       <footer className="mt-auto flex items-center justify-between gap-2 border-t border-ff-line px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text">
+          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="ff-hit py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text">
             {open ? 'less ▴' : 'details ▾'}
           </button>
           {versions.length > 1 && (

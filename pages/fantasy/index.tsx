@@ -100,7 +100,7 @@ const loadPrefs = (): Prefs => {
 const FantasyPage = () => {
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const route = useRoute(SECTION_KEYS, 'dash', { matchup: 'slate/week' })
-  useTheme(prefs?.theme, prefs?.scheme ?? 'system', prefs != null)
+  const mode = useTheme(prefs?.theme, prefs?.scheme ?? 'system', prefs != null)
   // Density is one attribute on the root; styles/fantasy.css scales type and rows from it.
   useEffect(() => {
     if (!prefs) return
@@ -428,6 +428,7 @@ const FantasyPage = () => {
       onSidebar={(open) => update({ sidebar: open })}
       tour={tour && appUp}
       onTourEnd={endTour}
+      mode={mode}
     >
       {error && (
         <div className="mt-4 border border-ff-neg/40 bg-ff-neg/10 px-3 py-2.5 font-mono text-[12px] text-ff-neg">ERR · {error}</div>
@@ -452,7 +453,10 @@ const FantasyPage = () => {
           {section === 'power' && (
             <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={sheetApi.openTeam} weights={prefs.weights} />
           )}
-          {section === 'teams' && <TeamsView data={data} analysis={analysis} sub={route.sub} onTeam={(id) => route.go('teams', id == null ? null : String(id))} />}
+          {section === 'teams' && (
+            // Moving to another team keeps the page, so rosters can be compared.
+            <TeamsView data={data} analysis={analysis} sub={route.sub} page={route.page} onPage={route.setPage} onTeam={(id) => route.go('teams', id == null ? null : String(id), { page: route.page })} />
+          )}
           {section === 'players' && <PlayersView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'slate' && <SlateView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'matchups' && <MatchupsView />}

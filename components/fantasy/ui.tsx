@@ -1,5 +1,7 @@
-import React, { Children, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { Children, createContext, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
+import { ShowMore } from './views/ShowMore'
 
 // ---------- Formatting ----------
 
@@ -167,9 +169,12 @@ export const PageHeader = ({
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
     </div>
-    {tabs && <div className="ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-11">{tabs}</div>}
+    {tabs && <div className="ff-pagehead ff-pagetabs max-md:empty:hidden ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-11">{tabs}</div>}
   </>
 )
+
+/** Picks a page; `replace` swaps the history entry instead of adding one. */
+export type PageChange<K extends string = string> = (k: K, opts?: { replace?: boolean }) => void
 
 export type TabItem<K extends string> = { key: K; label: string; count?: number | null; /** A small mono tag after the label, e.g. "tune". */ mark?: string }
 
@@ -182,13 +187,29 @@ const tabLabel = (t: TabItem<string>) => (
 )
 
 /**
- * A page's sub-views. On wide screens they are tabs, one view at a time. With `stacked` (phones),
- * the page shows every view in one scroll and this becomes a scrollspy: a sticky strip whose
- * underline follows the scroll position continuously and jumps to a section on tap.
+ * What the phone's top bar lends a page's tabs: a slot beside the section crumb to portal the page crumb into,
+ * the section's name for labels, and the hooks to say "this page has pages" and to answer a tap on the section crumb.
  */
-export const Tabs = <K extends string>({ items, value, onChange, stacked }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void; stacked?: boolean }) =>
+export type CrumbHost = {
+  slot: HTMLElement | null
+  section: string
+  /** Set by the tabs while mounted: goes to the section's first page and says so, or says there was nowhere to go. */
+  home: React.MutableRefObject<(() => boolean) | null>
+  /** The tabs say whether the section has pages and whether the one showing is the first (null: no pages). */
+  setPaged: (at: 'first' | 'later' | null) => void
+  /** Set while the page list is open, so the shell can put its scrim under the list. */
+  setMenuOpen: (open: boolean) => void
+}
+export const CrumbContext = createContext<CrumbHost | null>(null)
+
+/**
+ * A page's sub-views. On wide screens they are tabs, one view at a time. On phones (`stacked`) there is no strip
+ * in the page: the same choice lives in the top bar as the second crumb, `Section › Page ▾`, and each view is
+ * its own page.
+ */
+export const Tabs = <K extends string>({ items, value, onChange, stacked, requested }: { items: TabItem<K>[]; value: K; onChange: PageChange<K>; stacked?: boolean; requested?: string | null }) =>
   stacked ? (
-    <SpyStrip items={items} value={value} />
+    <PageCrumb items={items} value={value} onChange={onChange} requested={requested} />
   ) : (
     <div role="tablist" className="no-scrollbar -mb-px flex overflow-x-auto border-b border-ff-line [mask-image:linear-gradient(to_right,black_88%,transparent)] md:[mask-image:none]">
       {items.map((t) => {
@@ -209,212 +230,139 @@ export const Tabs = <K extends string>({ items, value, onChange, stacked }: { it
     </div>
   )
 
-const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
-const spySection = (key: string) => document.querySelector<HTMLElement>(`[data-spy="${CSS.escape(key)}"]`)
-/** Where a section counts as reached: just under the sticky page header. */
-const spyLine = () => (document.querySelector('.ff-pagetabs')?.getBoundingClientRect().bottom ?? 0) + 12
-
-/** Scroll a stacked page to one of its sections, and put focus on its heading for keyboards and screen readers. */
-export const spyTo = (key: string) => {
-  const el = spySection(key)
-  if (!el) return
-  const target = () => window.scrollY + el.getBoundingClientRect().top - (spyLine() - 12) + 1
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  window.scrollTo({ top: Math.max(0, target()), behavior: reduce ? 'auto' : 'smooth' })
-  el.querySelector<HTMLElement>('[data-spy-head]')?.focus({ preventScroll: true })
-  // Sections mount as the scroll passes them, which can move the target; once the scroll settles, land on it exactly.
-  let tries = 0
-  const settle = () => {
-    const off = target() - window.scrollY
-    if (Math.abs(off) > 4 && tries++ < 3) {
-      window.scrollTo({ top: Math.max(0, target()) })
-      window.setTimeout(settle, 200)
-    }
-  }
-  let last = -1
-  const wait = () => {
-    // Settled when the position stops changing between two checks.
-    if (window.scrollY === last) return settle()
-    last = window.scrollY
-    window.setTimeout(wait, 120)
-  }
-  window.setTimeout(wait, reduce ? 0 : 160)
+/** Tells the shell whether the list is open. Unmounting (the page went away) reports closed. */
+const MenuState = ({ open, onChange }: { open: boolean; onChange?: (open: boolean) => void }) => {
+  useEffect(() => {
+    onChange?.(open)
+    return () => onChange?.(false)
+  }, [open, onChange])
+  return null
 }
 
-const SpyStrip = <K extends string>({ items, value }: { items: TabItem<K>[]; value: K }) => {
-  const strip = useRef<HTMLDivElement>(null)
-  const bar = useRef<HTMLSpanElement>(null)
-  const btns = useRef<(HTMLButtonElement | null)[]>([])
-  const [active, setActive] = useState(0)
-  const keys = items.map((t) => t.key).join('|')
+/** Where each page of each section was scrolled to when it was left, so Back lands where the reader was. */
+const pageScroll = new Map<string, number>()
 
+/** The second crumb: the current page with a caret, opening a list of the section's pages under the top bar. */
+const PageCrumb = <K extends string>({ items, value, onChange, requested }: { items: TabItem<K>[]; value: K; onChange: PageChange<K>; requested?: string | null }) => {
+  const host = useContext(CrumbContext)
+  const first = items[0]?.key
+  const latest = useRef({ value, first, onChange })
+  latest.current = { value, first, onChange }
   useEffect(() => {
-    let raf = 0
-    let anim = 0
-    let lastY = NaN
-    // Where the scroll says the underline belongs, and where it is drawn. The drawn one eases toward the
-    // target (a critically damped follow, ~60 ms), so even a fling that crosses a section in two frames glides.
-    const tgt = { x: 0, w: 0 }
-    const cur = { x: NaN, w: NaN }
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    let prev = 0
-    const draw = () => {
-      const s = strip.current
-      const b = bar.current
-      if (!s || !b) return
-      b.style.transform = `translateX(${cur.x}px) scaleX(${cur.w})`
-      b.style.opacity = '1'
-      // Keep the current label in view, but leave the strip alone while only it is being swiped.
-      if (window.scrollY !== lastY || anim) s.scrollLeft = cur.x + cur.w / 2 - s.clientWidth / 2
+    if (!host) return
+    const { home, setPaged } = host
+    home.current = () => {
+      const { value, first, onChange } = latest.current
+      if (first == null || value === first) return false
+      onChange(first)
+      return true
     }
-    const step = (t: number) => {
-      const dt = prev ? Math.min(64, t - prev) : 16
-      prev = t
-      const k = 1 - Math.exp(-dt / 60)
-      cur.x += (tgt.x - cur.x) * k
-      cur.w += (tgt.w - cur.w) * k
-      const done = Math.abs(tgt.x - cur.x) < 0.25 && Math.abs(tgt.w - cur.w) < 0.25
-      if (done) {
-        cur.x = tgt.x
-        cur.w = tgt.w
-      }
-      draw()
-      anim = done ? 0 : requestAnimationFrame(step)
-      if (done) prev = 0
-    }
-    const update = () => {
-      raf = 0
-      const H = window.innerHeight
-      const line0 = spyLine()
-      // Near the bottom the reading line slides down the screen, so short last sections still get their turn.
-      const remaining = document.documentElement.scrollHeight - (window.scrollY + H)
-      const line = line0 + clamp01(1 - remaining / (H * 0.4)) * (H - 72 - line0)
-      const tops = keys.split('|').map((k) => spySection(k)?.getBoundingClientRect().top ?? Infinity)
-      let i = 0
-      tops.forEach((t, j) => t <= line && (i = j))
-      // Between two sections the underline travels with the scroll across a zone, rather than snapping at a threshold.
-      const zone = Math.max(96, H * 0.28)
-      const next = tops[i + 1]
-      const f = next != null && Number.isFinite(next) ? clamp01(1 - (next - line) / zone) : 0
-      const a = btns.current[i]
-      const c = btns.current[i + 1] ?? a
-      if (!a || !c) return
-      tgt.x = a.offsetLeft + (c.offsetLeft - a.offsetLeft) * f
-      tgt.w = a.offsetWidth + (c.offsetWidth - a.offsetWidth) * f
-      setActive(f > 0.5 ? i + 1 : i)
-      if (reduce || Number.isNaN(cur.x)) {
-        cur.x = tgt.x
-        cur.w = tgt.w
-        draw()
-      } else if (!anim) anim = requestAnimationFrame(step)
-      lastY = window.scrollY
-    }
-    const on = () => {
-      if (!raf) raf = requestAnimationFrame(update)
-    }
-    on()
-    window.addEventListener('scroll', on, { passive: true })
-    window.addEventListener('resize', on)
-    const ro = new ResizeObserver(on)
-    const main = document.querySelector('main')
-    if (main) ro.observe(main)
     return () => {
-      cancelAnimationFrame(raf)
-      cancelAnimationFrame(anim)
-      window.removeEventListener('scroll', on)
-      window.removeEventListener('resize', on)
-      ro.disconnect()
+      home.current = null
+      setPaged(null)
     }
-  }, [keys])
+  }, [host])
+  useEffect(() => host?.setPaged(value === first ? 'first' : 'later'), [host, value, first])
 
-  // Arriving with a section named (a link, the palette), go to it once the page has laid out.
-  const shown = useRef<string | null>(null)
+  // The crumb names the page the URL names. If the URL asks for one that is not in the list (a stale link, or a page
+  // that only exists with data, like your lineup), it is rewritten to the first page in place, not as a step to go Back to.
+  const keys = items.map((t) => t.key).join()
   useEffect(() => {
-    const first = shown.current == null
+    const known = (k: string) => keys.split(',').includes(k)
+    if (first != null && ((requested != null && !known(requested)) || !known(value))) latest.current.onChange(first, { replace: true })
+  }, [requested, value, first, keys])
+
+  // A page is a screen of its own: a fresh pick starts at its top, with no scroll animation. Back and Forward
+  // (popstate comes just ahead of the hashchange that moves the page) return to where that page was left.
+  const shown = useRef(value)
+  const at = useRef(0)
+  const popped = useRef(0)
+  useEffect(() => {
+    const onScroll = () => (at.current = window.scrollY)
+    const onPop = () => (popped.current = Date.now())
+    at.current = window.scrollY
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('popstate', onPop)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('popstate', onPop)
+    }
+  }, [])
+  useIsoLayoutEffect(() => {
+    if (shown.current === value) return
+    // The scroll offset the leaving page had, read from the listener: by now the new page has already shortened or lengthened the document.
+    pageScroll.set(`${host?.section}/${shown.current}`, at.current)
     shown.current = value
-    if (first && value === items[0]?.key) return
-    const t = window.setTimeout(() => spyTo(value), first ? 120 : 0)
-    return () => window.clearTimeout(t)
+    const back = Date.now() - popped.current < 600
+    const top = back ? (pageScroll.get(`${host?.section}/${value}`) ?? 0) : 0
+    at.current = top
+    window.scrollTo({ top, left: 0, behavior: 'instant' as ScrollBehavior })
   }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return (
-    <nav aria-label="Sections on this page" className="relative -mb-px border-b border-ff-line">
-      <div ref={strip} className="no-scrollbar relative flex overflow-x-auto [mask-image:linear-gradient(to_right,black_85%,transparent)]">
-        {items.map((t, i) => (
-          <button
-            key={t.key}
-            ref={(el) => {
-              btns.current[i] = el
-            }}
-            type="button"
-            aria-current={i === active ? 'location' : undefined}
-            onClick={() => spyTo(t.key)}
-            className={cx('relative h-9 shrink-0 px-3 text-[13px] transition-colors duration-150 first:pl-0.5', i === active ? 'text-ff-text' : 'text-ff-muted')}
-          >
-            {tabLabel(t)}
-          </button>
-        ))}
-        <span ref={bar} aria-hidden className="pointer-events-none absolute bottom-0 left-0 h-[2px] w-px origin-left bg-ff-text opacity-0" />
-      </div>
-    </nav>
+  const slot = host?.slot
+  const cur = items.find((t) => t.key === value) ?? items[0]
+  if (!slot || !cur) return null
+  return createPortal(
+    <>
+      <span aria-hidden className="shrink-0 px-1.5 font-mono text-[12px] font-normal text-ff-muted">
+        ›
+      </span>
+      <Dropdown
+        label={`Page in ${host.section}: ${cur.label}`}
+        value={value}
+        onChange={(k) => onChange(k as K)}
+        options={items.map((t) => ({ value: t.key, label: tabLabel(t), text: t.label }))}
+        reveal
+        current
+        // The list is the width of the screen under the top bar (anchored to the bar, not to the crumb), with touch-sized rows.
+        // The ring is drawn on the text (see below), so it sits wholly inside the bar; the button's own tall hit area would clip it.
+        className="!static -my-3.5"
+        buttonClassName="group/crumb focus-visible:!ring-0"
+        menuClassName="!inset-x-0 !top-full !mt-0 !max-h-[60dvh] !min-w-0 border-x-0 [&_[role=option]]:min-h-11 [&_[role=option]]:pl-4 [&_[role=option]]:text-[14px]"
+        renderButton={(_, open) => (
+          <span title={cur.label} className="flex min-w-0 items-center py-3.5 text-ff-text">
+            <MenuState open={open} onChange={host?.setMenuOpen} />
+            <span className="-mx-1.5 flex min-w-0 items-center gap-1.5 px-1.5 py-1 group-focus-visible/crumb:ring-2 group-focus-visible/crumb:ring-inset group-focus-visible/crumb:ring-ff-accent">
+              <span className="truncate">{cur.label}</span>
+              <span aria-hidden className={cx('shrink-0 font-mono text-[10px] font-normal text-ff-muted motion-safe:transition-transform duration-200 ease-ff-out', open && 'rotate-180')}>
+                ▾
+              </span>
+            </span>
+          </span>
+        )}
+      />
+      {/* Changing page keeps focus on the crumb; this tells a screen reader where it landed. */}
+      <span role="status" className="sr-only">
+        {cur.label}
+      </span>
+    </>,
+    slot,
   )
 }
 
 /**
- * One tab's content. Alone on wide screens when its tab is picked; on stacked (phone) pages always
- * rendered, under a heading the scrollspy steers by.
+ * One tab's content: only the picked tab renders, on phones as on wide screens.
  */
 export const TabSection = ({
   id,
-  label,
-  count,
   active,
-  stacked,
-  bare,
   children,
-  className,
 }: {
   id: string
-  label: string
-  count?: number | null
   active: boolean
-  stacked?: boolean
-  /** No heading of its own: for a section that is already one titled panel. */
-  bare?: boolean
   children: ReactNode
-  className?: string
 }) => {
-  // Stacked, a section mounts once it comes within a screen of view and then stays: a phone opening a long page
-  // builds the top of it, not every panel at once. Its heading is there from the start, so the strip can steer to it.
-  const ref = useRef<HTMLElement>(null)
-  const [near, setNear] = useState(false)
-  useEffect(() => {
-    if (!stacked || near) return
-    const el = ref.current
-    if (!el || typeof IntersectionObserver === 'undefined') return setNear(true)
-    const io = new IntersectionObserver(([e]) => e.isIntersecting && setNear(true), { rootMargin: '100% 0px' })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [stacked, near])
-  if (!stacked) return active ? <>{children}</> : null
-  const body = near ? children : <div aria-hidden className="min-h-[60vh]" />
-  if (bare)
-    return (
-      <section ref={ref} data-spy={id} aria-label={label} aria-busy={!near || undefined} className={cx('space-y-3', className)}>
-        <span data-spy-head tabIndex={-1} className="sr-only">
-          {label}
-        </span>
-        {body}
-      </section>
-    )
-  return (
-    <section ref={ref} data-spy={id} aria-labelledby={`spy-${id}`} aria-busy={!near || undefined} className={cx('space-y-3 pt-5 first:pt-0', className)}>
-      <h2 id={`spy-${id}`} data-spy-head tabIndex={-1} className="flex items-baseline gap-2 border-b border-ff-line pb-2 text-[15px] font-medium tracking-[-0.01em] text-ff-text outline-none">
-        {label}
-        {count != null && <span className="num text-[11px] font-normal text-ff-muted">{count}</span>}
-      </h2>
-      {body}
-    </section>
+  const phone = usePhone()
+  if (!active) return null
+  // A phone page replaces the last at once, so it fades up (120ms, opacity only; reduced motion skips it in CSS).
+  // Keyed by the tab so each pick plays it. The wrapper takes over the page's `space-y-3`, which no longer reaches
+  // the panels inside it; wide screens keep the bare content, so nothing changes there.
+  return phone ? (
+    <div key={id} className="ff-page-in space-y-3">
+      {children}
+    </div>
+  ) : (
+    <>{children}</>
   )
 }
 
@@ -424,6 +372,30 @@ export type SegOption<K extends string> = {
   title?: string
   /** Replaces the default selected look (bg-ff-text text-ff-panel), for options that carry a tone. */
   activeClassName?: string
+}
+
+/** A horizontally scrolling strip that fades its right edge on phones while more sits beyond it. */
+export const FadeStrip = ({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) => {
+  const ref = useRef<HTMLDivElement>(null)
+  const [more, setMore] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => setMore(el.scrollWidth - el.scrollLeft - el.clientWidth > 2)
+    measure()
+    el.addEventListener('scroll', measure, { passive: true })
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', measure)
+      ro.disconnect()
+    }
+  }, [])
+  return (
+    <div ref={ref} {...rest} className={cx(className, more && 'max-md:[mask-image:linear-gradient(to_right,black_88%,transparent)]')}>
+      {children}
+    </div>
+  )
 }
 
 /** Same data, a different cut of it. */
@@ -446,7 +418,7 @@ export const Segmented = <K extends string>({
   /** Arrows move focus only; Enter or Space picks. For choices that save something (a grade), not a view switch. */
   manual?: boolean
 }) => (
-  <div role="radiogroup" aria-label={label} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex')}>
+  <FadeStrip role="radiogroup" aria-label={label} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex')}>
     {options.map((o, i) => {
       const active = o.key === value
       return (
@@ -470,7 +442,7 @@ export const Segmented = <K extends string>({
           }}
           className={cx(
             'min-w-6 shrink-0 whitespace-nowrap border-r border-ff-line transition-colors last:border-r-0',
-            size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[12px]',
+            size === 'sm' ? 'h-6 px-2 text-[11px] max-md:h-10' : 'h-7 px-2.5 text-[12px] max-md:h-10',
             active ? (o.activeClassName ?? 'bg-ff-text text-ff-panel') : 'text-ff-text2 hover:bg-ff-raised hover:text-ff-text',
           )}
         >
@@ -478,7 +450,7 @@ export const Segmented = <K extends string>({
         </button>
       )
     })}
-  </div>
+  </FadeStrip>
 )
 
 /** The command palette's shortcut as this platform writes it. */
@@ -577,6 +549,8 @@ export const Dropdown = ({
   buttonClassName,
   renderButton,
   menuClassName,
+  reveal,
+  current: isCurrent,
 }: {
   value: string
   options: DropdownOption[]
@@ -587,14 +561,39 @@ export const Dropdown = ({
   /** Custom face for the trigger; gets the current option and whether the list is open. */
   renderButton?: (current: DropdownOption | undefined, open: boolean) => ReactNode
   menuClassName?: string
+  /** Wipe the list open and shut (full-width lists) instead of popping it, keeping it mounted for the way out. */
+  reveal?: boolean
+  /** This is the page the reader is on (a breadcrumb's last crumb). */
+  current?: boolean
 }) => {
   const [open, setOpen] = useState(false)
+  const [closing, setClosing] = useState(false)
   const [up, setUp] = useState(false)
   const [active, setActive] = useState(0)
+  // Whether the active row was last moved by the keyboard. Then it is always lit; a pointer-set one is lit only where hover exists.
+  const [kbd, setKbd] = useState(false)
   const root = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
   const list = useRef<HTMLDivElement>(null)
   const id = useId()
   const current = options.find((o) => o.value === value)
+
+  // A revealed list stays mounted while it wipes shut; animationend unmounts it, and the timer is the fallback
+  // for when no animation runs (reduced motion in a tab that never paints, a display:none ancestor).
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true
+      setClosing(false)
+      return
+    }
+    if (!wasOpen.current) return
+    wasOpen.current = false
+    if (!reveal) return
+    setClosing(true)
+    const t = window.setTimeout(() => setClosing(false), 200)
+    return () => window.clearTimeout(t)
+  }, [open, reveal])
 
   useEffect(() => {
     if (!open) return
@@ -607,7 +606,8 @@ export const Dropdown = ({
     if (open) list.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [open, active])
 
-  const show = () => {
+  const show = (byKey = false) => {
+    setKbd(byKey)
     const r = root.current?.getBoundingClientRect()
     if (r) setUp(window.innerHeight - r.bottom < 260 && r.top > window.innerHeight - r.bottom)
     setActive(Math.max(0, options.findIndex((o) => o.value === value)))
@@ -617,6 +617,8 @@ export const Dropdown = ({
     const o = options[i]
     if (!o || o.disabled) return
     setOpen(false)
+    // A tap on an option would otherwise leave focus on a node that is about to unmount (and so on the page).
+    trigger.current?.focus({ preventScroll: true })
     if (o.value !== value) onChange(o.value)
   }
   const step = (d: number) => {
@@ -625,13 +627,14 @@ export const Dropdown = ({
       i = (i + d + options.length) % options.length
       if (!options[i].disabled) break
     }
+    setKbd(true)
     setActive(i)
   }
   const onKey = (e: React.KeyboardEvent) => {
     if (!open) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
-        show()
+        show(true)
       }
       return
     }
@@ -640,6 +643,7 @@ export const Dropdown = ({
       step(e.key === 'ArrowDown' ? 1 : -1)
     } else if (e.key === 'Home' || e.key === 'End') {
       e.preventDefault()
+      setKbd(true)
       setActive(e.key === 'Home' ? 0 : options.length - 1)
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
@@ -654,13 +658,17 @@ export const Dropdown = ({
       const text = (o: DropdownOption) => (o.text ?? (typeof o.label === 'string' ? o.label : o.value)).toLowerCase()
       const from = options.findIndex((o, i) => i > active && text(o).startsWith(k))
       const i = from >= 0 ? from : options.findIndex((o) => text(o).startsWith(k))
-      if (i >= 0) setActive(i)
+      if (i >= 0) {
+        setKbd(true)
+        setActive(i)
+      }
     }
   }
 
   return (
     <div ref={root} className={cx('relative min-w-0', className)}>
       <button
+        ref={trigger}
         type="button"
         // A select-only combobox (APG): focus stays here while the arrows move through the list.
         role="combobox"
@@ -669,6 +677,7 @@ export const Dropdown = ({
         aria-controls={`${id}-list`}
         aria-activedescendant={open ? `${id}-${active}` : undefined}
         aria-label={label}
+        aria-current={isCurrent ? 'page' : undefined}
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={onKey}
         className={cx(
@@ -688,14 +697,17 @@ export const Dropdown = ({
           </>
         )}
       </button>
-      {open && (
+      {(open || closing) && (
         <div
           ref={list}
           id={`${id}-list`}
           role="listbox"
           aria-label={label}
+          aria-hidden={!open || undefined}
+          onAnimationEnd={(e) => e.target === e.currentTarget && !open && setClosing(false)}
           className={cx(
-            'ff-pop ff-scroll absolute left-0 z-50 max-h-[260px] min-w-full overflow-y-auto overscroll-contain border border-ff-line2 bg-ff-panel py-1 shadow-[0_10px_28px_rgba(0,0,0,0.22)]',
+            reveal ? cx('ff-reveal', !open && 'ff-reveal-out') : 'ff-pop',
+            'ff-scroll absolute left-0 z-50 max-h-[260px] min-w-full overflow-y-auto overscroll-contain border border-ff-line2 bg-ff-panel py-1 shadow-[0_10px_28px_rgba(0,0,0,0.22)]',
             up ? 'ff-pop-up bottom-full mb-1' : 'top-full mt-1',
             menuClassName,
           )}
@@ -716,11 +728,15 @@ export const Dropdown = ({
                 role="option"
                 aria-selected={selected}
                 aria-disabled={o.disabled || undefined}
-                onPointerEnter={() => setActive(i)}
+                // Touch has no hover: a finger resting on a row would light it up, and the tick already marks the current page.
+                onPointerEnter={() => {
+                  setKbd(false)
+                  if (window.matchMedia('(hover: hover)').matches) setActive(i)
+                }}
                 onClick={() => pick(i)}
                 className={cx(
                   'flex min-h-8 cursor-pointer items-center gap-2 py-1 pl-2 pr-3 text-[12.5px]',
-                  i === active && 'bg-ff-raised',
+                  i === active && (kbd ? 'bg-ff-raised' : '[@media(hover:hover)]:bg-ff-raised'),
                   o.disabled ? 'cursor-default text-ff-muted' : selected ? 'text-ff-text' : 'text-ff-text2',
                 )}
               >
@@ -773,6 +789,7 @@ export const Button = ({
   title,
   type = 'button',
   disabled,
+  ...rest
 }: {
   children: ReactNode
   onClick?: () => void
@@ -783,15 +800,17 @@ export const Button = ({
   title?: string
   type?: 'button' | 'submit'
   disabled?: boolean
-}) => (
+} & React.AriaAttributes & { [K in `data-${string}`]?: string | number | boolean | undefined }) => (
   <button
+    {...rest}
     type={type}
     title={title}
     disabled={disabled}
     onClick={onClick}
     className={cx(
       'ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40',
-      size === 'sm' ? 'h-7 px-2 text-[11.5px]' : 'h-8 px-3 text-[12.5px]',
+      // Phone targets are 40px; the desktop sizes are for a pointer.
+      size === 'sm' ? 'h-7 px-2 text-[11.5px] max-md:h-10' : 'h-8 px-3 text-[12.5px] max-md:h-10',
       variant === 'primary' && 'bg-ff-text text-ff-panel hover:bg-ff-text/85',
       variant === 'aqua' && 'ff-aqua',
       variant === 'outline' && 'border border-ff-line bg-ff-panel text-ff-text hover:border-ff-line2 hover:bg-ff-raised',
@@ -825,8 +844,9 @@ export const Fab = ({ children, onClick, hidden, label }: { children: ReactNode;
     className={cx(
       'pointer-events-none fixed right-[max(12px,env(safe-area-inset-right))] z-30 md:hidden',
       'bottom-[calc(48px+env(safe-area-inset-bottom)+14px)]',
-      'motion-safe:transition-[opacity,transform] motion-safe:duration-200 motion-safe:ease-ff-out',
-      hidden ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100',
+      // In over 200ms, out over 120ms: the state being entered sets the duration.
+      'motion-safe:transition-[opacity,transform] motion-safe:ease-ff-out',
+      hidden ? 'translate-y-2 opacity-0 motion-safe:duration-[120ms]' : 'translate-y-0 opacity-100 motion-safe:duration-200',
     )}
   >
     <button type="button" onClick={onClick} aria-label={label} tabIndex={hidden ? -1 : undefined} aria-hidden={hidden || undefined} className={cx('ff-aqua ff-aqua-fab', !hidden && 'pointer-events-auto')}>
@@ -1381,6 +1401,26 @@ export type Column<T> = {
 
 const HIDE: Record<string, string> = { sm: 'hidden sm:table-cell', md: 'hidden md:table-cell', lg: 'hidden lg:table-cell', xl: 'hidden xl:table-cell' }
 
+/** How many rows of a long table show, and how to ask for more. Made by `usePhoneCap`; `Table` reads it. */
+export type RowCap = { limit: number; step: number; more: () => void }
+
+/**
+ * A phone gets the top of a long table and asks for more; wider screens get every row. `resetKey` is whatever
+ * decides which list this is (a filter, a position): when it changes the list starts over at the first batch.
+ * Pass the cap to `Table`, which sorts all the rows before it cuts, so a header sort still finds the true top.
+ */
+export const usePhoneCap = (step: number, resetKey?: string): RowCap => {
+  const phone = usePhone()
+  const [extra, setExtra] = useState(0)
+  const [key, setKey] = useState(resetKey)
+  // Adjusting state during render (not in an effect) so the new list never paints at the old length.
+  if (key !== resetKey) {
+    setKey(resetKey)
+    setExtra(0)
+  }
+  return { limit: phone ? step + extra : Infinity, step, more: () => setExtra((e) => e + step) }
+}
+
 export function Table<T>({
   rows,
   columns,
@@ -1395,10 +1435,13 @@ export function Table<T>({
   expand,
   canExpand,
   defaultOpen,
+  cap,
 }: {
   rows: T[]
   columns: Column<T>[]
   rowKey: (row: T) => string | number
+  /** Show only the first `cap.limit` rows after sorting, with a "Show more" button under the table. */
+  cap?: RowCap
   /**
    * The case behind a row, shown beneath it on demand: a toggle opens a full-width band under the
    * row instead of truncating the reasons into a cell. Return null for rows with nothing to add.
@@ -1482,8 +1525,11 @@ export function Table<T>({
     }
   }
   const align = (c: Column<T>) => (c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left')
+  // Cut after sorting: sorting a header reorders the whole list, not just the rows that happen to be showing.
+  const visible = cap && sorted.length > cap.limit ? sorted.slice(0, cap.limit) : sorted
+  const left = sorted.length - visible.length
   const details = !!expand
-  const expandable = expand ? sorted.filter((r) => (canExpand ? canExpand(r) : expand(r) != null)).map(rowKey) : []
+  const expandable = expand ? visible.filter((r) => (canExpand ? canExpand(r) : expand(r) != null)).map(rowKey) : []
   const hasDetail = new Set(expandable)
   const allOpen = expandable.length > 0 && expandable.every((k) => open.has(k))
   const flip = (k: string | number) =>
@@ -1494,7 +1540,8 @@ export function Table<T>({
       return n
     })
   // With a toggle column first, pinned columns sit just right of it.
-  const pin = details ? 'left-7' : 'left-0'
+  // The expand column is 28px, widened to 40px on phones so the arrow is a thumb's target.
+  const pin = details ? 'left-7 max-md:left-10' : 'left-0'
   const span = columns.length + (details ? 1 : 0)
   return (
     <div className="relative">
@@ -1509,14 +1556,14 @@ export function Table<T>({
           <thead className="sticky top-0 z-10">
             <tr>
               {details && (
-                <th className="sticky left-0 z-20 h-8 w-7 border-b border-ff-line bg-ff-panel p-0">
+                <th className="sticky left-0 z-20 h-8 w-7 border-b max-md:w-10 border-ff-line bg-ff-panel p-0">
                   {expandable.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setOpen(allOpen ? new Set() : new Set(expandable))}
                       aria-label={allOpen ? 'Collapse all rows' : 'Expand all rows'}
                       title={allOpen ? 'Collapse all' : 'Expand all'}
-                      className="flex h-8 w-7 items-center justify-center font-mono text-[10px] text-ff-muted hover:text-ff-text"
+                      className="flex h-8 w-7 items-center justify-center font-mono text-[10px] text-ff-muted hover:text-ff-text max-md:w-10"
                     >
                       <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', allOpen && 'rotate-90')}>›</span>
                     </button>
@@ -1552,7 +1599,7 @@ export function Table<T>({
                 </td>
               </tr>
             )}
-            {sorted.map((row) => {
+            {visible.map((row) => {
               const k = rowKey(row)
               const isOpen = hasDetail.has(k) && open.has(k)
               const detail = isOpen && expand ? expand(row) : null
@@ -1580,7 +1627,7 @@ export function Table<T>({
                 )}
               >
                 {details && (
-                  <td className={cx('sticky left-0 z-[1] w-7 p-0 align-middle group-hover:bg-ff-raised', isOpen ? 'bg-ff-raised' : 'bg-ff-panel')}>
+                  <td className={cx('sticky left-0 z-[1] w-7 p-0 align-middle max-md:w-10 group-hover:bg-ff-raised', isOpen ? 'bg-ff-raised' : 'bg-ff-panel')}>
                     {hasDetail.has(k) && (
                       <button
                         type="button"
@@ -1592,7 +1639,7 @@ export function Table<T>({
                         aria-expanded={isOpen}
                         aria-controls={`${id}-${k}`}
                         aria-label={isOpen ? 'Hide details' : 'Show details'}
-                        className="flex h-[38px] w-7 items-center justify-center font-mono text-[11px] text-ff-muted hover:text-ff-text"
+                        className="flex h-[38px] w-7 items-center justify-center font-mono text-[11px] text-ff-muted hover:text-ff-text max-md:h-11 max-md:w-10"
                       >
                         <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', isOpen && 'rotate-90 text-ff-accent')}>›</span>
                       </button>
@@ -1632,6 +1679,9 @@ export function Table<T>({
           </tbody>
         </table>
       </div>
+      {cap && left > 0 && (
+        <ShowMore className="border-t border-ff-line/60 p-2" step={cap.step} left={left} onMore={cap.more} rows="tbody > tr:not([id])" />
+      )}
     </div>
   )
 }

@@ -11,6 +11,8 @@ import TradeCard from '../TradeCard'
 import TradeBuilder from '../TradeBuilder'
 import { TradeIcon } from '../icons'
 import { Callout } from '../Callout'
+import { ShowMore } from './ShowMore'
+import { Disclosure } from '../Disclosure'
 import { emptyDeal, type Deal } from '../../../lib/fantasy/deal'
 import { useFantasy, useTradeRead } from '../FantasyContext'
 import {
@@ -31,12 +33,12 @@ import {
   Tabs,
   GridFill,
   Fab,
-  spyTo,
   cx,
   fmt,
   fmtSigned,
   pct,
   usePhone,
+  usePhoneCap,
 } from '../ui'
 
 type Sub = 'suggested' | 'targets' | 'needs' | 'injuries' | 'builder'
@@ -58,8 +60,8 @@ const TradesView = ({
   onSub: (s: string) => void
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'suggested'
-  // Phones stack every section in one scroll, steered by the tab strip.
-  const stacked = usePhone()
+  // On a phone each tab is its own page, so pages are kept short and the small print folds away.
+  const phone = usePhone()
   const { myRosterId, teamById, needs } = analysis
   const players = data.players
   const me = myRosterId != null ? teamById[myRosterId] : null
@@ -71,7 +73,10 @@ const TradesView = ({
   const [minTheirGain, setMinTheirGain] = useState(DEFAULT_TRADE_CONFIG.minTheirGain)
   const [maxValueAsk, setMaxValueAsk] = useState(DEFAULT_TRADE_CONFIG.maxValueAsk)
   const [showFilters, setShowFilters] = useState(false)
-  const [visible, setVisible] = useState(10)
+  const step = phone ? 5 : 10
+  const [visible, setVisible] = useState(step)
+  // On a phone the deal filters share one panel behind a single button.
+  const [moreOpen, setMoreOpen] = useState(false)
 
   const others = useMemo(
     () => analysis.teams.filter((t) => t.rosterId !== myRosterId).map((t) => ({ rosterId: t.rosterId, players: t.players })),
@@ -111,7 +116,7 @@ const TradesView = ({
     }
     return [...groups.values()]
   }, [search.ideas, makeup, partner, sort, reads, showRuledOut, grades.all])
-  useEffect(() => setVisible(10), [makeup, partner, sort, minTheirGain, maxValueAsk])
+  useEffect(() => setVisible(step), [makeup, partner, sort, minTheirGain, maxValueAsk, step])
 
   const tags = useMemo(() => {
     const out = new Map<TradeIdea, string>()
@@ -166,6 +171,8 @@ const TradesView = ({
     return findTargets({ ...base, others, rosteredBy: analysis.rosteredBy, freeAgents, limit: 80 })
   }, [base, others, analysis.rosteredBy, freeAgents])
   const shownTargets = targets.filter((t) => (targetScope === 'all' ? true : targetScope === 'fa' ? t.ownerId == null : t.ownerId != null))
+  // A phone gets the top of each long list, and asks for more; a new scope starts the list over.
+  const targetCap = usePhoneCap(20, targetScope)
 
   // ---- Needs ----
   const [needsView, setNeedsView] = useState<'position' | 'slot'>('position')
@@ -229,6 +236,7 @@ const TradesView = ({
   const shownSituations = situations.filter((r) =>
     situationScope === 'all' ? true : situationScope === 'mine' ? r.owner === myRosterId : situationScope === 'fa' ? r.owner == null : r.owner != null && r.owner !== myRosterId,
   )
+  const situationCap = usePhoneCap(20, situationScope)
 
   // ---- Builder: a deal of any shape, you plus one to three other teams ----
   const [deal, setDeal] = useState<Deal>(() => emptyDeal(myRosterId != null ? [myRosterId] : []))
@@ -238,23 +246,9 @@ const TradesView = ({
       moves: [...idea.give.map((player) => ({ player, from: myRosterId!, to: idea.partnerId })), ...idea.get.map((player) => ({ player, from: idea.partnerId, to: myRosterId! }))],
       faab: [],
     })
-    // A stacked (phone) page already holds the builder further down: go there instead of switching views.
-    if (stacked) window.setTimeout(() => spyTo('builder'), 0)
-    else {
-      onSub('builder')
-      window.scrollTo({ top: 0 })
-    }
+    onSub('builder')
+    window.scrollTo({ top: 0 })
   }
-  // On phones the build action floats; it steps aside once the builder itself is on screen.
-  const [builderInView, setBuilderInView] = useState(false)
-  useEffect(() => {
-    if (!stacked) return
-    const el = document.querySelector('[data-spy="builder"]')
-    if (!el) return
-    const io = new IntersectionObserver(([e]) => setBuilderInView(e.isIntersecting), { rootMargin: '0px 0px -40% 0px' })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [stacked, me])
 
   if (!me) {
     return (
@@ -304,12 +298,64 @@ const TradesView = ({
     </div>
   )
 
+  // The floating build action: the cards carry their own "Open in builder", and the builder is where it leads.
+  const fab = phone && tab !== 'builder' && tab !== 'suggested'
+  const limitsChanged = minTheirGain !== DEFAULT_TRADE_CONFIG.minTheirGain || maxValueAsk !== DEFAULT_TRADE_CONFIG.maxValueAsk
+  const activeFilters = Number(makeup !== 'any') + Number(partner !== 'all') + Number(limitsChanged)
+
+  const makeupSeg = (
+    <Segmented<Makeup>
+      label="Makeup"
+      value={makeup}
+      onChange={setMakeup}
+      options={[
+        { key: 'any', label: <>Any <span className="num text-ff-muted">{shapeCounts.any ?? 0}</span></> },
+        { key: 'one-for-one', label: <>1-for-1 <span className="num text-ff-muted">{shapeCounts['one-for-one'] ?? 0}</span></>, title: 'One player each way' },
+        { key: 'consolidate', label: <>Consolidate <span className="num text-ff-muted">{shapeCounts.consolidate ?? 0}</span></>, title: 'You send more players than you get' },
+        { key: 'depth', label: <>Depth <span className="num text-ff-muted">{shapeCounts.depth ?? 0}</span></>, title: 'You get more players than you send' },
+        { key: 'swap', label: <>Packages <span className="num text-ff-muted">{shapeCounts.swap ?? 0}</span></>, title: 'Several players each way, even count' },
+      ]}
+    />
+  )
+  const partnerSel = (
+    <Select label="Partner" value={String(partner)} onChange={(v) => setPartner(v === 'all' ? 'all' : Number(v))} className="max-w-[200px]">
+      <option value="all">All teams</option>
+      {analysis.teams
+        .filter((t) => t.rosterId !== myRosterId)
+        .map((t) => (
+          <option key={t.rosterId} value={t.rosterId}>
+            {t.name}
+          </option>
+        ))}
+    </Select>
+  )
+  // What your grades have taught the odds. A phone reads the deals first and this after them.
+  const gradeNote =
+    grades.lessons.n === 0 ? (
+      <Callout kind="instruction">
+        Answer <span className="text-ff-text">Would they?</span> on any card and the odds learn what this league accepts.
+      </Callout>
+    ) : (
+      <Callout
+        kind="insight"
+        action={
+          ruledOut > 0 && (
+            <button type="button" onClick={() => setShowRuledOut((x) => !x)} className="font-mono text-[11px] text-ff-accent hover:underline">
+              {showRuledOut ? `hide the ${ruledOut} ruled out` : `${ruledOut} ruled out · show`}
+            </button>
+          )
+        }
+      >
+        <span className="text-ff-text">{grades.lessons.n === 1 ? 'Your grade' : `Your ${grades.lessons.n} grades`}</span> {gradeSummary}
+      </Callout>
+    )
+
   return (
     <>
       <PageHeader
         title="Trades"
         actions={
-          !stacked &&
+          !phone &&
           tab !== 'builder' && (
             <Button variant="aqua" onClick={() => onSub('builder')} title="Put together any deal and see it priced">
               <TradeIcon />
@@ -321,7 +367,7 @@ const TradesView = ({
           <Tabs<Sub>
             value={tab}
             onChange={(k) => onSub(k)}
-            stacked={stacked}
+            stacked={phone}
             items={[
               { key: 'suggested', label: 'Suggested', count: search.ideas.length },
               { key: 'targets', label: 'Targets', count: targets.length },
@@ -333,8 +379,8 @@ const TradesView = ({
         }
       />
 
-      <div className="mt-4 space-y-3">
-        <TabSection id="suggested" label="Suggested" count={search.ideas.length} active={tab === 'suggested'} stacked={stacked}>
+      <div className={cx('mt-4 space-y-3', fab && 'max-md:pb-16')}>
+        <TabSection id="suggested" active={tab === 'suggested'}>
             <div className="flex flex-wrap items-center gap-2">
               <Segmented<Sort>
                 label="Sort"
@@ -346,56 +392,48 @@ const TradesView = ({
                   { key: 'balanced', label: 'Balanced', title: 'Highest gain for the side that gains less' },
                 ]}
               />
-              <Segmented<Makeup>
-                label="Makeup"
-                value={makeup}
-                onChange={setMakeup}
-                options={[
-                  { key: 'any', label: <>Any <span className="num text-ff-muted">{shapeCounts.any ?? 0}</span></> },
-                  { key: 'one-for-one', label: <>1-for-1 <span className="num text-ff-muted">{shapeCounts['one-for-one'] ?? 0}</span></>, title: 'One player each way' },
-                  { key: 'consolidate', label: <>Consolidate <span className="num text-ff-muted">{shapeCounts.consolidate ?? 0}</span></>, title: 'You send more players than you get' },
-                  { key: 'depth', label: <>Depth <span className="num text-ff-muted">{shapeCounts.depth ?? 0}</span></>, title: 'You get more players than you send' },
-                  { key: 'swap', label: <>Packages <span className="num text-ff-muted">{shapeCounts.swap ?? 0}</span></>, title: 'Several players each way, even count' },
-                ]}
-              />
-              <Select label="Partner" value={String(partner)} onChange={(v) => setPartner(v === 'all' ? 'all' : Number(v))} className="max-w-[200px]">
-                <option value="all">All teams</option>
-                {analysis.teams
-                  .filter((t) => t.rosterId !== myRosterId)
-                  .map((t) => (
-                    <option key={t.rosterId} value={t.rosterId}>
-                      {t.name}
-                    </option>
-                  ))}
-              </Select>
-              <Button size="md" variant={showFilters ? 'primary' : 'outline'} onClick={() => setShowFilters((s) => !s)}>
-                Limits
-                {(minTheirGain !== DEFAULT_TRADE_CONFIG.minTheirGain || maxValueAsk !== DEFAULT_TRADE_CONFIG.maxValueAsk) && <span className="h-1.5 w-1.5  bg-ff-warn" />}
-              </Button>
+              {!phone && (
+                <>
+                  {makeupSeg}
+                  {partnerSel}
+                  <Button size="md" variant={showFilters ? 'primary' : 'outline'} onClick={() => setShowFilters((s) => !s)}>
+                    Limits
+                    {limitsChanged && <span className="h-1.5 w-1.5  bg-ff-warn" />}
+                  </Button>
+                </>
+              )}
+              {phone && (
+                <Button size="md" variant={moreOpen ? 'primary' : 'outline'} onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
+                  Filters
+                  {activeFilters > 0 && <span className="num text-ff-warn">{activeFilters}</span>}
+                  <span aria-hidden className={cx('text-[10px] motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-ff-out', moreOpen && 'rotate-180')}>
+                    ▾
+                  </span>
+                </Button>
+              )}
             </div>
-            {showFilters && <Panel title="Search limits">{filterControls}</Panel>}
-            {grades.lessons.n === 0 ? (
-              <Callout kind="instruction">
-                Answer <span className="text-ff-text">Would they?</span> on any card and the odds learn what this league accepts.
-              </Callout>
-            ) : (
-              <Callout
-                kind="insight"
-                action={
-                  ruledOut > 0 && (
-                    <button type="button" onClick={() => setShowRuledOut((x) => !x)} className="font-mono text-[11px] text-ff-accent hover:underline">
-                      {showRuledOut ? `hide the ${ruledOut} ruled out` : `${ruledOut} ruled out · show`}
-                    </button>
-                  )
-                }
-              >
-                <span className="text-ff-text">{grades.lessons.n === 1 ? 'Your grade' : `Your ${grades.lessons.n} grades`}</span> {gradeSummary}
-              </Callout>
+            {/* Always mounted so it can slide: the row grows from 0 to its height, and closed it leaves the tab order. */}
+            {phone && (
+              <div className={cx('!mt-0 grid transition-[grid-template-rows] duration-[220ms] ease-ff-drawer motion-reduce:transition-none', moreOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+                <div className="min-h-0 overflow-hidden" inert={!moreOpen}>
+                  <div className="pt-3">
+                    <Panel title="Filters">
+                      <div className="space-y-3">
+                        {makeupSeg}
+                        {partnerSel}
+                        {filterControls}
+                      </div>
+                    </Panel>
+                  </div>
+                </div>
+              </div>
             )}
+            {!phone && showFilters && <Panel title="Search limits">{filterControls}</Panel>}
+            {!phone && gradeNote}
 
             {shown.length === 0 ? (
               <Empty title={search.ideas.length ? 'No deals match these filters' : 'No deal here makes both lineups better'}>
-                {minTheirGain >= 0 ? 'Lower "They gain at least" under Limits to see offers you would have to talk someone into.' : 'Try a different makeup or partner.'}
+                {minTheirGain >= 0 ? `Lower "They gain at least" under ${phone ? 'Filters' : 'Limits'} to see offers you would have to talk someone into.` : 'Try a different makeup or partner.'}
               </Empty>
             ) : (
               <>
@@ -412,23 +450,19 @@ const TradesView = ({
                   ))}
                 </div>
                 {shown.length > visible && (
-                  <div className="flex justify-center">
-                    <Button onClick={() => setVisible((v) => v + 10)}>
-                      Show {Math.min(10, shown.length - visible)} more <span className="num text-ff-muted">of {shown.length - visible}</span>
-                    </Button>
-                  </div>
+                  <ShowMore step={step} left={shown.length - visible} onMore={() => setVisible((v) => v + step)} rows=":scope > *" />
                 )}
               </>
             )}
-            <p className="text-[11.5px] leading-relaxed text-ff-muted">
+            {phone && gradeNote}
+            <Disclosure from="md" summary="How deals are found" className="text-[11.5px] leading-relaxed text-ff-muted">
               Deals start from every one-for-one that helps you and grow only when a piece improves them. Numbers are points per week added to each best lineup, injuries priced in; the side taking more players cuts its weakest.
-            </p>
-          
+            </Disclosure>
         </TabSection>
 
-        <TabSection id="targets" label="Targets" count={targets.length} active={tab === 'targets'} stacked={stacked} bare>
+        <TabSection id="targets" active={tab === 'targets'}>
           <Panel
-            title="Who would lift your lineup"
+            title={phone ? 'Lift your lineup' : 'Who would lift your lineup'}
             pad={false}
             actions={
               <Segmented
@@ -445,6 +479,7 @@ const TradesView = ({
           >
             <Table
               rows={shownTargets}
+              cap={targetCap}
               rowKey={(t) => t.id}
               canExpand={(t) => !!data.context[t.id]?.notes.length}
               expand={(t) => {
@@ -477,7 +512,9 @@ const TradesView = ({
           </Panel>
         </TabSection>
 
-        <TabSection id="needs" label="League needs" active={tab === 'needs'} stacked={stacked}>
+        <TabSection id="needs" active={tab === 'needs'}>
+          {/* On a phone the team-by-team cards come first: the grid of numbers is wider than the screen. */}
+          <div className="flex flex-col gap-3">
           <Panel
             title={needsView === 'position' ? 'Points per week an average starter would add' : 'Each slot against the league average'}
             pad={false}
@@ -536,7 +573,7 @@ const TradesView = ({
               <SlotGrid analysis={analysis} />
             )}
             {needsView === 'position' ? (
-              <div className="space-y-2 border-t border-ff-line px-3 py-2.5 text-[11.5px] leading-[1.5] text-ff-muted">
+              <Disclosure from="md" inset summary="How to read this" className="space-y-2 text-[11.5px] leading-[1.5] text-ff-muted md:border-t md:border-ff-line md:px-3 md:py-2.5">
                 <p className="max-w-[78ch]">
                   <span className="text-ff-text2">How to read it.</span> Each cell is what a league-average starter at that position would add to the team&apos;s lineup, in points per week, after its flex and the waiver wire. Zero means covered; bigger means that team should pay more to fill it. <span className="text-ff-text2">Lineup</span> is the projected best lineup, points per week.
                 </p>
@@ -555,13 +592,13 @@ const TradesView = ({
                     <span>(within a third of the league&apos;s largest, {fmt(maxNeed)}/wk)</span>
                   </span>
                 </div>
-              </div>
+              </Disclosure>
             ) : (
               <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">Points per week each slot produces against the league average. Blue above, red below.</p>
             )}
           </Panel>
 
-          <Panel title="Biggest needs, team by team" actions={<span>who to call, and with what</span>} pad={false}>
+          <Panel title="Biggest needs, team by team" actions={!phone && <span>who to call, and with what</span>} pad={false} className="max-md:order-first">
             <div className="grid grid-cols-1 gap-px bg-ff-line/60 sm:grid-cols-2 xl:grid-cols-3">
               {needCards.map((c) => (
                 <div key={c.team.rosterId} className={cx('flex min-w-0 flex-col gap-2 bg-ff-panel px-3 py-2.5', c.mine && 'shadow-[inset_2px_0_0_rgb(var(--ff-accent))]')}>
@@ -600,8 +637,7 @@ const TradesView = ({
                       type="button"
                       onClick={() => {
                         setPartner(c.team.rosterId)
-                        if (stacked) spyTo('suggested')
-                        else onSub('suggested')
+                        onSub('suggested')
                       }}
                       className="mt-auto self-start font-mono text-[11px] text-ff-accent hover:underline"
                     >
@@ -612,13 +648,14 @@ const TradesView = ({
               ))}
               <GridFill n={needCards.length} wide="xl" />
             </div>
-            <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
+            <Disclosure from="md" inset summary="What holes mean" className="px-3 py-2 text-[11.5px] text-ff-muted md:border-t md:border-ff-line">
               Holes: positions worth half a point a week or more, red for the league&apos;s biggest. Strongest: the slot furthest above the league average.
-            </p>
+            </Disclosure>
           </Panel>
+          </div>
         </TabSection>
 
-        <TabSection id="injuries" label="Injuries & roles" count={situations.length} active={tab === 'injuries'} stacked={stacked} bare>
+        <TabSection id="injuries" active={tab === 'injuries'}>
           <Panel
             title="Injuries and role changes"
             pad={false}
@@ -638,6 +675,7 @@ const TradesView = ({
           >
             <Table
               rows={shownSituations}
+              cap={situationCap}
               rowKey={(r) => r.id}
               canExpand={(r) => !!data.context[r.id]?.notes.length}
               expand={(r) => {
@@ -670,16 +708,14 @@ const TradesView = ({
           </Panel>
         </TabSection>
 
-        <TabSection id="builder" label="Builder" active={tab === 'builder'} stacked={stacked}>
+        <TabSection id="builder" active={tab === 'builder'}>
           <TradeBuilder deal={deal} setDeal={setDeal} />
         </TabSection>
       </div>
-      {stacked && (
-        <Fab onClick={() => spyTo('builder')} hidden={builderInView}>
-          <TradeIcon size={16} />
-          Build a trade
-        </Fab>
-      )}
+      <Fab hidden={!fab} onClick={() => onSub('builder')}>
+        <TradeIcon size={16} />
+        Build a trade
+      </Fab>
     </>
   )
 }

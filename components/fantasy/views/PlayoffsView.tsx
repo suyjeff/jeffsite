@@ -4,22 +4,24 @@ import { seasonStories, simInputFor, simulateOnce, type Story, type Trace } from
 import { useFantasy } from '../FantasyContext'
 import { Bracket, CHAOS, Delta, Feed, Headline, LEVER_SIMS, SEED, SIMS, Standings, setupKey, type Chaos } from '../PlayoffLab'
 import TeamName from '../TeamName'
-import { Avatar, Button, Empty, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone } from '../ui'
+import { Avatar, Button, Empty, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone, type PageChange } from '../ui'
 import { Callout } from '../Callout'
 import { OddsGrid } from './PowerView'
 
-type Sub = 'race' | 'season' | 'seeds'
-const SUBS: Sub[] = ['race', 'season', 'seeds']
+// What if is a page of its own on phones only; on wide screens it sits beside the race.
+type Sub = 'race' | 'whatif' | 'season' | 'seeds'
+const SUBS: Sub[] = ['race', 'whatif', 'season', 'seeds']
 
 /**
  * The playoff race, simulated. The race is everyone's odds from thousands of seasons played out; "What if" fixes
  * results in the weeks left and reruns the race as if they had happened; "Play a season" plays one season whole,
  * bracket and stories, under the same picks.
  */
-const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) => void }) => {
+const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange }) => {
   const { models, analysis } = useFantasy()
-  const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'race'
   const stacked = usePhone()
+  const picked: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'race'
+  const tab: Sub = picked === 'whatif' && !stacked ? 'race' : picked
   const f = models.forecast
   const input = models.forecastInput
   const me = analysis.myRosterId
@@ -392,11 +394,13 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
         meta={`top ${nPlayoff} of ${analysis.teams.length} make it${weeks.length ? ` · ${weeks.length} weeks left` : ''}`}
         tabs={
           <Tabs<Sub>
+            requested={sub}
             value={tab}
             onChange={onSub}
             stacked={stacked}
             items={[
-              { key: 'race', label: 'The race', mark: nLocks ? `${nLocks} picks` : undefined },
+              { key: 'race', label: 'The race', mark: !stacked && nLocks ? `${nLocks} picks` : undefined },
+              ...(stacked ? [{ key: 'whatif' as const, label: 'What if', mark: nLocks ? `${nLocks} picks` : undefined }] : []),
               { key: 'season', label: 'Play a season' },
               { key: 'seeds', label: 'Every seed' },
             ]}
@@ -404,7 +408,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
         }
       />
       <div className="mt-4 space-y-3">
-        <TabSection id="race" label="The race" active={tab === 'race'} stacked={stacked} bare>
+        <TabSection id="race" active={tab === 'race'}>
           {mine && me != null && (
             <StatGrid>
               <Stat
@@ -439,13 +443,16 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: (s: string) =
           )}
           <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
             {race}
-            {whatIf}
+            {!stacked && whatIf}
           </div>
         </TabSection>
-        <TabSection id="season" label="Play a season" active={tab === 'season'} stacked={stacked} bare>
+        <TabSection id="whatif" active={tab === 'whatif'}>
+          {whatIf}
+        </TabSection>
+        <TabSection id="season" active={tab === 'season'}>
           {season}
         </TabSection>
-        <TabSection id="seeds" label="Every seed" active={tab === 'seeds'} stacked={stacked} bare>
+        <TabSection id="seeds" active={tab === 'seeds'}>
           <OddsGrid onTeam={() => {}} />
         </TabSection>
       </div>

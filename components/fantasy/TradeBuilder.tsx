@@ -4,6 +4,7 @@ import type { TradeIdea } from '../../lib/fantasy/trades'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { AddIcon, TradeIcon } from './icons'
 import { Callout } from './Callout'
+import { Disclosure } from './Disclosure'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
 import { Badge, Button, Dropdown, Panel, PlayerAvatar, WeekBars, cx, fmt, fmtSigned } from './ui'
@@ -399,10 +400,10 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
           </div>
         )}
         {active && (
-          <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
+          <Disclosure from="md" inset summary="How it is priced" className="px-3 py-2 text-[11.5px] text-ff-muted md:border-t md:border-ff-line">
             Lineup: each team&apos;s best lineup week by week, before and after, extra bodies cut. Trade value: as managers price players (reputation, stars, streamers). FAAB counts at a fraction of what it buys
             on waivers, more for a team nearly out of it, shown as a range.
-          </p>
+          </Disclosure>
         )}
       </Panel>
 
@@ -429,7 +430,7 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
           </span>
         }
       >
-        <div className="grid grid-cols-1 gap-1.5 p-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-1.5 p-2 lg:grid-cols-3 2xl:grid-cols-4">
           {sorted.map((id) => {
             const move = deal.moves.find((m) => m.player === id)
             return (

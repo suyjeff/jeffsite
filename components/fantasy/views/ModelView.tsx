@@ -11,8 +11,9 @@ import { HBars, Histogram, Legend, MiniLines } from '../charts'
 import PlayerName from '../PlayerName'
 import { MONKE } from '../Shell'
 import { useFantasy } from '../FantasyContext'
-import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Sentences, Stat, StatGrid, Table, TabSection, Tabs, cx, spyTo, usePhone, fmt, fmtSigned, pct, type Column } from '../ui'
+import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Sentences, Stat, StatGrid, Table, TabSection, Tabs, cx, usePhone, fmt, fmtSigned, pct, type Column, type PageChange } from '../ui'
 import { Callout } from '../Callout'
+import { Disclosure } from '../Disclosure'
 import { BacktestTab, BehaviorTab, ForecastTab, OverviewTab, SystemTab } from './ModelSystem'
 import { COMPONENTS } from './PowerView'
 
@@ -177,7 +178,7 @@ type Props = {
   data: LeagueData
   analysis: Analysis
   sub: string | null
-  onSub: (s: string) => void
+  onSub: PageChange
   model: ModelConfig
   setModel: (m: ModelConfig) => void
   weights: PowerWeights
@@ -190,10 +191,10 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
   const subs = mode === 'readout' ? READOUT : TUNING
   const tab: Sub = subs.includes(sub as Sub) ? (sub as Sub) : subs[0]
   const changed = diffList(model, weights)
-  // Phones stack every section in one scroll, steered by the tab strip.
+  // On phones each tab is a page of its own and the tab choice moves to the top bar.
   const stacked = usePhone()
-  // A link to any tab, on whichever page holds it; on a stacked page, a scroll to it.
-  const open = (s: string) => (subs.includes(s as Sub) ? (stacked ? spyTo(s) : onSub(s)) : go(TUNING.includes(s as Sub) ? 'model' : 'monke', s))
+  // A link to any tab, on whichever page holds it.
+  const open = (s: string) => (subs.includes(s as Sub) ? onSub(s) : go(TUNING.includes(s as Sub) ? 'model' : 'monke', s))
 
   // The same league run at the defaults, so every readout can show what your settings moved.
   // Weights alone only re-rank, so that case skips the full re-analysis.
@@ -225,6 +226,7 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
         }
         tabs={
           <Tabs<Sub>
+            requested={sub}
             value={tab}
             onChange={onSub}
             stacked={stacked}
@@ -236,7 +238,7 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
         {subs.map((k) => {
           const intro = INTRO[k]
           return (
-            <TabSection key={k} id={k} label={LABEL[k]} active={tab === k} stacked={stacked}>
+            <TabSection key={k} id={k} active={tab === k}>
               {intro &&
                 (intro.you || intro.how ? (
                   <Callout kind="instruction" action={<span className={cx('font-mono text-[10.5px]', intro.you ? 'text-ff-accent' : 'text-ff-muted')}>{intro.you ? 'tunable' : 'read-only'}</span>}>
@@ -317,134 +319,162 @@ const ValueTab = ({ data, analysis, baseline, model, setModel }: { data: LeagueD
 
   const top = useMemo(() => [...withGames].sort((a, b) => b.war - a.war).slice(0, 12), [withGames])
 
-  return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
-      <div className="space-y-3">
-        <Panel title="Parameters" pad={false} actions={<span className="font-mono text-[10.5px]">war.ts</span>}>
-          <Param
-            name="benchFactor"
-            label="Replacement depth"
-            value={model.benchFactor}
-            def={DEFAULT_MODEL.benchFactor}
-            min={0}
-            max={1.5}
-            step={0.05}
-            format={(v) => v.toFixed(2)}
-            onChange={(v) => setModel({ ...model, benchFactor: v })}
-            hint={
-              <>
-                Where replacement sits past the league&apos;s starters. <N>0</N> = the worst starter (classic VBD); <N>0.6</N> ≈ the best free agent.
-              </>
-            }
-          />
-          <Param
-            name="halfLife"
-            label="Recency half-life"
-            value={model.halfLife}
-            def={DEFAULT_MODEL.halfLife}
-            min={0}
-            max={8}
-            step={1}
-            format={(v) => (v === 0 ? 'off' : `${v} wk`)}
-            onChange={(v) => setModel({ ...model, halfLife: v })}
-            hint="How fast old weeks fade in “Now” WAR and roster strength. A week this old counts half."
-          />
-          <Param
-            name="riskAversion"
-            label="Risk aversion"
-            value={model.riskAversion}
-            def={DEFAULT_MODEL.riskAversion}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => v.toFixed(2)}
-            onChange={(v) => setModel({ ...model, riskAversion: v })}
-            hint={
-              <>
-                <N>PPG − λ·σ</N>. Raise it to favour floors over ceilings.
-              </>
-            }
-          />
-        </Panel>
-        <Panel title="Definitions" bodyClassName="space-y-2 text-[12.5px] leading-relaxed text-ff-text2">
-          <Code>{`PAR_w  = pts_w − repl(pos, w)
+  const phone = usePhone()
+  const params = (
+    <Panel title="Parameters" pad={false} actions={<span className="font-mono text-[10.5px]">war.ts</span>}>
+      <Param
+        name="benchFactor"
+        label="Replacement depth"
+        value={model.benchFactor}
+        def={DEFAULT_MODEL.benchFactor}
+        min={0}
+        max={1.5}
+        step={0.05}
+        format={(v) => v.toFixed(2)}
+        onChange={(v) => setModel({ ...model, benchFactor: v })}
+        hint={
+          <>
+            Where replacement sits past the league&apos;s starters. <N>0</N> = the worst starter (classic VBD); <N>0.6</N> ≈ the best free agent.
+          </>
+        }
+      />
+      <Param
+        name="halfLife"
+        label="Recency half-life"
+        value={model.halfLife}
+        def={DEFAULT_MODEL.halfLife}
+        min={0}
+        max={8}
+        step={1}
+        format={(v) => (v === 0 ? 'off' : `${v} wk`)}
+        onChange={(v) => setModel({ ...model, halfLife: v })}
+        hint="How fast old weeks fade in “Now” WAR and roster strength. A week this old counts half."
+      />
+      <Param
+        name="riskAversion"
+        label="Risk aversion"
+        value={model.riskAversion}
+        def={DEFAULT_MODEL.riskAversion}
+        min={0}
+        max={1}
+        step={0.05}
+        format={(v) => v.toFixed(2)}
+        onChange={(v) => setModel({ ...model, riskAversion: v })}
+        hint={
+          <>
+            <N>PPG − λ·σ</N>. Raise it to favour floors over ceilings.
+          </>
+        }
+      />
+    </Panel>
+  )
+  const definitions = (
+    <Panel title="Definitions" bodyClassName="space-y-2 text-[12.5px] leading-relaxed text-ff-text2">
+      <Code>{`PAR_w  = pts_w − repl(pos, w)
 WAR_w  = Φ(PAR_w / σ√2) − 0.5
 σ      = ${fmt(analysis.sigma, 2)}  (team score sd)
 Value  = perActive − repl_horizon(pos)`}</Code>
-          <p>
-            WAR converts points to wins against a random opponent, so one huge week caps at one win. <b className="font-medium text-ff-text">Value</b> is the forward-looking version trades
-            use.
-          </p>
-        </Panel>
-      </div>
-
-      <div className="min-w-0 space-y-3">
-        <StatGrid>
-          <Stat
-            label="Above replacement"
-            value={above}
-            delta={!isDefault && above !== aboveBase ? <Num value={above - aboveBase} signed digits={0} /> : undefined}
-            sub={`of ${withGames.length} with games`}
-          />
-          <Stat label="Team score σ" value={fmt(analysis.sigma, 1)} sub="pts, sets WAR scale" />
-          <Stat label="Trade prices moved" value={isDefault ? '–' : repriced} sub={isDefault ? 'at defaults' : 'rostered, ≥0.25 pts/wk'} />
-          <Stat label="Value weeks" value={data.valueWeeks.length} sub={`${data.valueSeason} · wks ${data.valueWeeks[0] ?? '–'}–${data.valueWeeks[data.valueWeeks.length - 1] ?? '–'}`} />
-        </StatGrid>
-
-        <Panel title="Replacement level by position" pad={false} actions={!isDefault && <Badge tone="accent">Δ vs default</Badge>}>
+      <p>
+        WAR converts points to wins against a random opponent, so one huge week caps at one win. <b className="font-medium text-ff-text">Value</b> is the forward-looking version trades
+        use.
+      </p>
+    </Panel>
+  )
+  const effect = (
+    <StatGrid>
+      <Stat
+        label="Above replacement"
+        value={above}
+        delta={!isDefault && above !== aboveBase ? <Num value={above - aboveBase} signed digits={0} /> : undefined}
+        sub={`of ${withGames.length} with games`}
+      />
+      <Stat label="Team score σ" value={fmt(analysis.sigma, 1)} sub="pts, sets WAR scale" />
+      <Stat label="Trade prices moved" value={isDefault ? '–' : repriced} sub={isDefault ? 'at defaults' : 'rostered, ≥0.25 pts/wk'} />
+      <Stat label="Value weeks" value={data.valueWeeks.length} sub={`${data.valueSeason} · wks ${data.valueWeeks[0] ?? '–'}–${data.valueWeeks[data.valueWeeks.length - 1] ?? '–'}`} />
+    </StatGrid>
+  )
+  const levels = (
+    <Panel title="Replacement level by position" pad={false} actions={!isDefault && <Badge tone="accent">Δ vs default</Badge>}>
+      <Table
+        rows={levelRows}
+        rowKey={(r) => r.pos}
+        dense
+        columns={[
+          { key: 'pos', label: 'Pos', render: (r) => <span className="font-mono text-[11.5px] text-ff-text">{r.pos}</span> },
+          { key: 'demand', label: 'Started/wk', align: 'right', title: 'League-wide starter demand, flex slots split by typical usage', render: (r) => fmt(r.demand) },
+          { key: 'rank', label: 'Repl rank', align: 'right', render: (r) => `${r.pos}${r.rank}` },
+          { key: 'td', label: 'To date', align: 'right', title: 'Replacement points per week, season to date', render: (r) => <span className="text-ff-text">{fmt(r.toDate)}</span> },
+          ...(!isDefault ? [{ key: 'tdd', label: 'Δ', align: 'right' as const, render: (r: (typeof levelRows)[number]) => <Num value={r.toDate - r.toDateBase} signed /> }] : []),
+          { key: 'ah', label: 'Ahead', align: 'right', title: 'Replacement points per active week over the pricing horizon', render: (r) => <span className="text-ff-text">{fmt(r.ahead)}</span> },
+          ...(!isDefault ? [{ key: 'ahd', label: 'Δ', align: 'right' as const, render: (r: (typeof levelRows)[number]) => <Num value={r.ahead - r.aheadBase} signed /> }] : []),
+        ]}
+      />
+    </Panel>
+  )
+  const spread = (
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <Panel title="WAR distribution" actions={<span className="num">{withGames.length} players</span>}>
+        <Histogram values={withGames.map((v) => v.war)} bins={24} marker={0} markerLabel="replacement" format={(v) => fmt(v, 1)} />
+      </Panel>
+      {isDefault ? (
+        <Panel title="Top WAR" pad={false}>
           <Table
-            rows={levelRows}
-            rowKey={(r) => r.pos}
+            rows={top}
+            rowKey={(v) => v.id}
             dense
+            maxHeight={260}
             columns={[
-              { key: 'pos', label: 'Pos', render: (r) => <span className="font-mono text-[11.5px] text-ff-text">{r.pos}</span> },
-              { key: 'demand', label: 'Started/wk', align: 'right', title: 'League-wide starter demand, flex slots split by typical usage', render: (r) => fmt(r.demand) },
-              { key: 'rank', label: 'Repl rank', align: 'right', render: (r) => `${r.pos}${r.rank}` },
-              { key: 'td', label: 'To date', align: 'right', title: 'Replacement points per week, season to date', render: (r) => <span className="text-ff-text">{fmt(r.toDate)}</span> },
-              ...(!isDefault ? [{ key: 'tdd', label: 'Δ', align: 'right' as const, render: (r: (typeof levelRows)[number]) => <Num value={r.toDate - r.toDateBase} signed /> }] : []),
-              { key: 'ah', label: 'Ahead', align: 'right', title: 'Replacement points per active week over the pricing horizon', render: (r) => <span className="text-ff-text">{fmt(r.ahead)}</span> },
-              ...(!isDefault ? [{ key: 'ahd', label: 'Δ', align: 'right' as const, render: (r: (typeof levelRows)[number]) => <Num value={r.ahead - r.aheadBase} signed /> }] : []),
+              { key: 'p', label: 'Player', render: (v) => <PlayerName player={players[v.id]} id={v.id} size={22} /> },
+              { key: 'ppg', label: 'PPG', align: 'right', render: (v) => fmt(v.ppg) },
+              { key: 'war', label: 'WAR', align: 'right', render: (v) => <Num value={v.war} signed digits={2} /> },
             ]}
           />
         </Panel>
+      ) : (
+        <Panel title="Value rank, reordered" pad={false} actions={<span>top 100</span>}>
+          <Table
+            rows={movers}
+            rowKey={(m) => m.id}
+            dense
+            maxHeight={260}
+            empty="No one in the top 100 changed places."
+            columns={[
+              { key: 'rk', label: 'Rk', align: 'right', render: (m) => <span className="num text-ff-text">{m.rank}</span> },
+              { key: 'mv', label: 'Δ', render: (m) => <RankDelta d={m.move} /> },
+              { key: 'p', label: 'Player', render: (m) => <PlayerName player={players[m.id]} id={m.id} size={22} /> },
+              { key: 'v', label: 'Value', align: 'right', title: 'Pts/wk above replacement over the horizon', render: (m) => <span className="text-ff-text">{fmt(m.value)}</span> },
+              { key: 'd', label: 'Δ', align: 'right', render: (m) => <Num value={m.delta} signed /> },
+            ]}
+          />
+        </Panel>
+      )}
+    </div>
+  )
 
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          <Panel title="WAR distribution" actions={<span className="num">{withGames.length} players</span>}>
-            <Histogram values={withGames.map((v) => v.war)} bins={24} marker={0} markerLabel="replacement" format={(v) => fmt(v, 1)} />
-          </Panel>
-          {isDefault ? (
-            <Panel title="Top WAR" pad={false}>
-              <Table
-                rows={top}
-                rowKey={(v) => v.id}
-                dense
-                maxHeight={260}
-                columns={[
-                  { key: 'p', label: 'Player', render: (v) => <PlayerName player={players[v.id]} id={v.id} size={22} /> },
-                  { key: 'ppg', label: 'PPG', align: 'right', render: (v) => fmt(v.ppg) },
-                  { key: 'war', label: 'WAR', align: 'right', render: (v) => <Num value={v.war} signed digits={2} /> },
-                ]}
-              />
-            </Panel>
-          ) : (
-            <Panel title="Value rank, reordered" pad={false} actions={<span>top 100</span>}>
-              <Table
-                rows={movers}
-                rowKey={(m) => m.id}
-                dense
-                maxHeight={260}
-                empty="No one in the top 100 changed places."
-                columns={[
-                  { key: 'rk', label: 'Rk', align: 'right', render: (m) => <span className="num text-ff-text">{m.rank}</span> },
-                  { key: 'mv', label: 'Δ', render: (m) => <RankDelta d={m.move} /> },
-                  { key: 'p', label: 'Player', render: (m) => <PlayerName player={players[m.id]} id={m.id} size={22} /> },
-                  { key: 'v', label: 'Value', align: 'right', title: 'Pts/wk above replacement over the horizon', render: (m) => <span className="text-ff-text">{fmt(m.value)}</span> },
-                  { key: 'd', label: 'Δ', align: 'right', render: (m) => <Num value={m.delta} signed /> },
-                ]}
-              />
-            </Panel>
-          )}
-        </div>
+  // On a phone the sliders and what they did come first; the definitions and the distributions fold away.
+  if (phone)
+    return (
+      <div className="space-y-3">
+        {params}
+        {effect}
+        {levels}
+        <Disclosure summary="The working: definitions, WAR distribution, top players" className="space-y-3">
+          {definitions}
+          {spread}
+        </Disclosure>
+      </div>
+    )
+
+  return (
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+      <div className="space-y-3">
+        {params}
+        {definitions}
+      </div>
+      <div className="min-w-0 space-y-3">
+        {effect}
+        {levels}
+        {spread}
       </div>
     </div>
   )
@@ -461,6 +491,7 @@ const POWER_HINT: Record<keyof PowerWeights, string> = {
 }
 
 const PowerTab = ({ analysis, baseline, weights, setWeights }: { analysis: Analysis; baseline: Analysis; weights: PowerWeights; setWeights: (w: PowerWeights) => void }) => {
+  const phone = usePhone()
   const sum = COMPONENTS.reduce((a, c) => a + Math.max(0, weights[c.key]), 0) || 1
   const shares = COMPONENTS.map((c) => ({ ...c, share: Math.max(0, weights[c.key]) / sum }))
   const changed = analysis !== baseline
@@ -502,6 +533,20 @@ const PowerTab = ({ analysis, baseline, weights, setWeights }: { analysis: Analy
     })),
   ]
 
+  const method = (
+    <Panel title="Method">
+      <Code>{`z_k    = (x_k − μ_k) / σ_k
+r      = n / (n + ${RESULTS_PRIOR_GAMES})   results only; roster r = 1
+c      = Σ (w_k / Σw) · r · z_k
+margin = c · sd(PPG)          pts/wk vs avg
+power  = 100 · Φ(margin / (σ√2))`}</Code>
+      <p className="mt-2 text-[12px] leading-relaxed text-ff-muted">
+        Components are z-scored across the <N>{analysis.teams.length}</N> teams, so only weight shares matter; one with no data yet drops out. Results shrink toward average by
+        games played; roster strength doesn&apos;t. <N>50</N> = an average team. Bars show regressed z, clipped at <N>±2.5</N>.
+      </p>
+    </Panel>
+  )
+
   return (
     <div className="space-y-3">
       <Panel title="Weights" pad={false} actions={<span className="font-mono text-[10.5px]">power.ts</span>}>
@@ -534,17 +579,9 @@ const PowerTab = ({ analysis, baseline, weights, setWeights }: { analysis: Analy
         <Panel title="Rankings at these weights" pad={false} actions={changed ? <span className="num">{moved} teams moved</span> : <span>defaults</span>}>
           <Table rows={analysis.power} rowKey={(p) => p.rosterId} columns={columns} defaultSort="rk" defaultDesc rowClass={(p) => cx(p.rosterId === analysis.myRosterId && 'ff-mine')} />
         </Panel>
-        <Panel title="Method">
-          <Code>{`z_k    = (x_k − μ_k) / σ_k
-r      = n / (n + ${RESULTS_PRIOR_GAMES})   results only; roster r = 1
-c      = Σ (w_k / Σw) · r · z_k
-margin = c · sd(PPG)          pts/wk vs avg
-power  = 100 · Φ(margin / (σ√2))`}</Code>
-          <p className="mt-2 text-[12px] leading-relaxed text-ff-muted">
-            Components are z-scored across the <N>{analysis.teams.length}</N> teams, so only weight shares matter; one with no data yet drops out. Results shrink toward average by
-            games played; roster strength doesn&apos;t. <N>50</N> = an average team. Bars show regressed z, clipped at <N>±2.5</N>.
-          </p>
-        </Panel>
+        <Disclosure from="md" summary="How the weights become a score">
+          {method}
+        </Disclosure>
       </div>
     </div>
   )
@@ -553,6 +590,7 @@ power  = 100 · Φ(margin / (σ√2))`}</Code>
 // ---------- Availability ----------
 
 const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analysis }) => {
+  const phone = usePhone()
   const players = data.players
   const rostered = Object.keys(analysis.rosteredBy).filter((id) => SKILL_POSITIONS.includes(players[id]?.pos as (typeof SKILL_POSITIONS)[number]))
   const rates = rostered.map((id) => data.availability[id]?.rate).filter((r): r is number => r != null)
@@ -575,15 +613,8 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
   const totalGained = adjusted.reduce((a, r) => a + r.c.gained, 0)
   const owner = (id: string) => (analysis.rosteredBy[id] === analysis.myRosterId ? <span className="text-ff-accent">you</span> : analysis.teamById[analysis.rosteredBy[id]]?.name)
 
-  return (
-    <div className="space-y-3">
-      <StatGrid>
-        <Stat label="League prior" value={pct(BASE_AVAILABILITY)} sub="share of games suited up" />
-        <Stat label="Rostered median" value={rates.length ? pct([...rates].sort((a, b) => a - b)[Math.floor(rates.length / 2)]) : '–'} sub={`${rates.length} skill players`} />
-        <Stat label="Pts/wk removed" value={fmt(totalLost)} sub="injury risk, league-wide" />
-        <Stat label="Pts/wk reassigned" value={fmt(totalGained)} sub="to next men up" />
-      </StatGrid>
-
+  const pricing = (
+    <>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title="P(play) for a healthy player, by weeks ahead">
           <MiniLines
@@ -627,47 +658,73 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
           <p className="mt-2 text-[11.5px] text-ff-muted">Measured on 2026 weeks where Sleeper zeroed a starter, then brought him back.</p>
         </Panel>
       </div>
+    </>
+  )
+  const adjustments = (
+    <Panel title="Largest adjustments on rosters" pad={false} actions={<span className="num">{adjusted.length} players</span>}>
+      <Table
+        rows={adjusted}
+        rowKey={(r) => r.id}
+        maxHeight={420}
+        defaultSort="net"
+        columns={[
+          { key: 'p', label: 'Player', sticky: true, sort: (r) => players[r.id]?.name ?? '', render: (r) => <PlayerName player={players[r.id]} id={r.id} size={22} sub={owner(r.id)} /> },
+          { key: 'raw', label: 'Base', align: 'right', title: 'Before injury and role adjustments', sort: (r) => r.c.raw, render: (r) => fmt(r.c.raw) },
+          { key: 'adj', label: 'Exp', align: 'right', sort: (r) => r.c.adjusted, render: (r) => <span className="text-ff-text">{fmt(r.c.adjusted)}</span> },
+          {
+            key: 'lost',
+            label: 'Risk',
+            align: 'right',
+            hideBelow: 'sm',
+            sort: (r) => r.c.lost,
+            render: (r) => (r.c.lost > 0.05 ? <span className="text-ff-neg">−{fmt(r.c.lost, 2)}</span> : <span className="text-ff-muted">·</span>),
+          },
+          {
+            key: 'gain',
+            label: 'Inherits',
+            align: 'right',
+            hideBelow: 'sm',
+            sort: (r) => r.c.gained,
+            render: (r) => (r.c.gained > 0.05 ? <span className="text-ff-pos">+{fmt(r.c.gained, 2)}</span> : <span className="text-ff-muted">·</span>),
+          },
+          { key: 'net', label: 'Net', align: 'right', sort: (r) => Math.abs(r.c.adjusted - r.c.raw), render: (r) => <Num value={r.c.adjusted - r.c.raw} signed digits={2} /> },
+          { key: 'play', label: 'Plays', align: 'right', sort: (r) => r.c.play, render: (r) => <span className={r.c.play < 0.8 ? 'text-ff-neg' : ''}>{pct(r.c.play)}</span> },
+          {
+            key: 'hist',
+            label: 'History',
+            align: 'right',
+            hideBelow: 'md',
+            title: 'Games played of team games in the seasons counted, and the shrunk rate',
+            sort: (r) => r.c.availability?.rate ?? 1,
+            render: (r) => (r.c.availability ? `${r.c.availability.played}/${r.c.availability.games} · ${pct(r.c.availability.rate)}` : '–'),
+          },
+        ]}
+      />
+    </Panel>
+  )
 
-      <Panel title="Largest adjustments on rosters" pad={false} actions={<span className="num">{adjusted.length} players</span>}>
-        <Table
-          rows={adjusted}
-          rowKey={(r) => r.id}
-          maxHeight={420}
-          defaultSort="net"
-          columns={[
-            { key: 'p', label: 'Player', sticky: true, sort: (r) => players[r.id]?.name ?? '', render: (r) => <PlayerName player={players[r.id]} id={r.id} size={22} sub={owner(r.id)} /> },
-            { key: 'raw', label: 'Base', align: 'right', title: 'Before injury and role adjustments', sort: (r) => r.c.raw, render: (r) => fmt(r.c.raw) },
-            { key: 'adj', label: 'Exp', align: 'right', sort: (r) => r.c.adjusted, render: (r) => <span className="text-ff-text">{fmt(r.c.adjusted)}</span> },
-            {
-              key: 'lost',
-              label: 'Risk',
-              align: 'right',
-              hideBelow: 'sm',
-              sort: (r) => r.c.lost,
-              render: (r) => (r.c.lost > 0.05 ? <span className="text-ff-neg">−{fmt(r.c.lost, 2)}</span> : <span className="text-ff-muted">·</span>),
-            },
-            {
-              key: 'gain',
-              label: 'Inherits',
-              align: 'right',
-              hideBelow: 'sm',
-              sort: (r) => r.c.gained,
-              render: (r) => (r.c.gained > 0.05 ? <span className="text-ff-pos">+{fmt(r.c.gained, 2)}</span> : <span className="text-ff-muted">·</span>),
-            },
-            { key: 'net', label: 'Net', align: 'right', sort: (r) => Math.abs(r.c.adjusted - r.c.raw), render: (r) => <Num value={r.c.adjusted - r.c.raw} signed digits={2} /> },
-            { key: 'play', label: 'Plays', align: 'right', sort: (r) => r.c.play, render: (r) => <span className={r.c.play < 0.8 ? 'text-ff-neg' : ''}>{pct(r.c.play)}</span> },
-            {
-              key: 'hist',
-              label: 'History',
-              align: 'right',
-              hideBelow: 'md',
-              title: 'Games played of team games in the seasons counted, and the shrunk rate',
-              sort: (r) => r.c.availability?.rate ?? 1,
-              render: (r) => (r.c.availability ? `${r.c.availability.played}/${r.c.availability.games} · ${pct(r.c.availability.rate)}` : '–'),
-            },
-          ]}
-        />
-      </Panel>
+  return (
+    <div className="space-y-3">
+      <StatGrid>
+        <Stat label="League prior" value={pct(BASE_AVAILABILITY)} sub="share of games suited up" />
+        <Stat label="Rostered median" value={rates.length ? pct([...rates].sort((a, b) => a - b)[Math.floor(rates.length / 2)]) : '–'} sub={`${rates.length} skill players`} />
+        <Stat label="Pts/wk removed" value={fmt(totalLost)} sub="injury risk, league-wide" />
+        <Stat label="Pts/wk reassigned" value={fmt(totalGained)} sub="to next men up" />
+      </StatGrid>
+
+      {phone ? (
+        <>
+          {adjustments}
+          <Disclosure summary="How availability is priced" className="space-y-3">
+            {pricing}
+          </Disclosure>
+        </>
+      ) : (
+        <>
+          {pricing}
+          {adjustments}
+        </>
+      )}
     </div>
   )
 }
@@ -692,12 +749,87 @@ const CONFIG_NOTES: Record<keyof TradeConfig, string> = {
 }
 
 const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: Analysis; baseline: Analysis }) => {
+  const phone = usePhone()
   const positions = Object.keys(analysis.horizonStarter).filter((p) => analysis.horizonReplacement[p] != null)
   const rows = positions.map((pos) => ({ pos, repl: analysis.horizonReplacement[pos] ?? 0, starter: analysis.horizonStarter[pos] ?? 0, base: baseline.horizonReplacement[pos] ?? 0 }))
   const maxStarter = Math.max(1, ...rows.map((r) => r.starter))
   const playoff = new Set(data.playoffWeeks)
   const totalWeight = data.horizon.reduce((a, w) => a + (w.weight ?? 1), 0) || 1
   const modeLabel = data.horizonMode === 'next6' ? 'Next 6 weeks' : data.horizonMode === 'regular' ? 'Rest of regular season' : 'Rest of season + playoffs'
+
+  const posPricing = (
+    <Panel title="Position pricing over the horizon" pad={false}>
+      <Table
+        rows={rows}
+        rowKey={(r) => r.pos}
+        dense
+        columns={[
+          { key: 'pos', label: 'Pos', render: (r) => <span className="font-mono text-[11.5px] text-ff-text">{r.pos}</span> },
+          { key: 'repl', label: 'Waiver floor', align: 'right', title: 'Replacement level per active week: what an empty slot is filled with', render: (r) => fmt(r.repl) },
+          ...(analysis !== baseline ? [{ key: 'd', label: 'Δ', align: 'right' as const, render: (r: (typeof rows)[number]) => <Num value={r.repl - r.base} signed /> }] : []),
+          { key: 'st', label: 'Avg starter', align: 'right', render: (r) => <span className="text-ff-text">{fmt(r.starter)}</span> },
+          {
+            key: 'gap',
+            label: 'Starter premium',
+            align: 'right',
+            title: 'Average starter minus waiver floor: what a hole at this position costs per week',
+            render: (r) => (
+              <span className="flex items-center justify-end gap-2">
+                <span className="hidden h-2 w-20 overflow-hidden rounded-[2px] bg-ff-sunken sm:block">
+                  <span className="block h-full rounded-r-[3px] bg-ff-s1" style={{ width: `${Math.max(0, (r.starter - r.repl) / maxStarter) * 100}%` }} />
+                </span>
+                <span className="text-ff-text">{fmt(r.starter - r.repl)}</span>
+              </span>
+            ),
+          },
+        ]}
+      />
+    </Panel>
+  )
+  const config = (
+    <Panel title="Search config, as the Trades page runs it" pad={false}>
+      <Spec
+        rows={(Object.keys(DEFAULT_TRADE_CONFIG) as (keyof TradeConfig)[]).map((k) => {
+          const live = SUGGESTED_TRADE_CONFIG[k] ?? DEFAULT_TRADE_CONFIG[k]
+          return { k, v: live, note: live !== DEFAULT_TRADE_CONFIG[k] ? `${CONFIG_NOTES[k]} Library default ${DEFAULT_TRADE_CONFIG[k]}.` : CONFIG_NOTES[k] }
+        })}
+      />
+    </Panel>
+  )
+  const objective = (
+    <Panel title="Search objective">
+      <Code>{`objective = myGain
+          + 0.30 · min(theirGain, myGain)
+          − 2.50 · max(0, minTheirGain − theirGain)
+          − 0.60 · valueImbalance(get, give)
+          − 0.15 · max(0, players − 2)`}</Code>
+      <p className="mt-2 text-[12px] leading-relaxed text-ff-muted">
+        Ranks partial deals during the search. Finalists are scored exactly: both teams&apos; best lineups, week by week, before and after, with the side taking extra bodies cutting its
+        weakest player.
+      </p>
+    </Panel>
+  )
+  const pipeline = (
+    <Panel title="Pipeline" pad={false}>
+      <ol className="divide-y divide-ff-line">
+        {[
+          ['price', 'Each player’s trade value: the model blended with consensus rank and draft slot, convex in points, streamers cheap. Deals outside the fair band, either way, are dropped.'],
+          ['seed', `Every 1-for-1: their top ${DEFAULT_TRADE_CONFIG.getPerTeam} by what they add to you × all of yours.`],
+          ['grow', `Add one player to either side, keep the best ${DEFAULT_TRADE_CONFIG.beamWidth} per partner, only when the objective improves by > 0.05.`],
+          ['diversify', 'Keep each makeup’s best (1-for-1, consolidate, depth, swap) so one shape can’t crowd out the rest.'],
+          ['score', `Exact week-by-week scoring on ${DEFAULT_TRADE_CONFIG.scoredPerTeam} per partner.`],
+          ['trim', 'Drop any player whose removal leaves both sides at least as well off.'],
+          ['dedupe', 'Near-copies (≥ 60% overlap) fold into versions, at most 3, each better for them.'],
+        ].map(([k, v], i) => (
+          <li key={k} className="grid grid-cols-[22px_74px_minmax(0,1fr)] items-baseline gap-2 px-3 py-1.5 text-[12px]">
+            <span className="num text-ff-muted">{i + 1}</span>
+            <code className="font-mono text-[11.5px] text-ff-text">{k}</code>
+            <span className="text-ff-text2">{v}</span>
+          </li>
+        ))}
+      </ol>
+    </Panel>
+  )
 
   return (
     <div className="space-y-3">
@@ -739,76 +871,27 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
         </div>
       </Panel>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Panel title="Position pricing over the horizon" pad={false}>
-          <Table
-            rows={rows}
-            rowKey={(r) => r.pos}
-            dense
-            columns={[
-              { key: 'pos', label: 'Pos', render: (r) => <span className="font-mono text-[11.5px] text-ff-text">{r.pos}</span> },
-              { key: 'repl', label: 'Waiver floor', align: 'right', title: 'Replacement level per active week: what an empty slot is filled with', render: (r) => fmt(r.repl) },
-              ...(analysis !== baseline ? [{ key: 'd', label: 'Δ', align: 'right' as const, render: (r: (typeof rows)[number]) => <Num value={r.repl - r.base} signed /> }] : []),
-              { key: 'st', label: 'Avg starter', align: 'right', render: (r) => <span className="text-ff-text">{fmt(r.starter)}</span> },
-              {
-                key: 'gap',
-                label: 'Starter premium',
-                align: 'right',
-                title: 'Average starter minus waiver floor: what a hole at this position costs per week',
-                render: (r) => (
-                  <span className="flex items-center justify-end gap-2">
-                    <span className="hidden h-2 w-20 overflow-hidden rounded-[2px] bg-ff-sunken sm:block">
-                      <span className="block h-full rounded-r-[3px] bg-ff-s1" style={{ width: `${Math.max(0, (r.starter - r.repl) / maxStarter) * 100}%` }} />
-                    </span>
-                    <span className="text-ff-text">{fmt(r.starter - r.repl)}</span>
-                  </span>
-                ),
-              },
-            ]}
-          />
-        </Panel>
-        <Panel title="Search config, as the Trades page runs it" pad={false}>
-          <Spec
-            rows={(Object.keys(DEFAULT_TRADE_CONFIG) as (keyof TradeConfig)[]).map((k) => {
-              const live = SUGGESTED_TRADE_CONFIG[k] ?? DEFAULT_TRADE_CONFIG[k]
-              return { k, v: live, note: live !== DEFAULT_TRADE_CONFIG[k] ? `${CONFIG_NOTES[k]} Library default ${DEFAULT_TRADE_CONFIG[k]}.` : CONFIG_NOTES[k] }
-            })}
-          />
-        </Panel>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Panel title="Search objective">
-          <Code>{`objective = myGain
-          + 0.30 · min(theirGain, myGain)
-          − 2.50 · max(0, minTheirGain − theirGain)
-          − 0.60 · valueImbalance(get, give)
-          − 0.15 · max(0, players − 2)`}</Code>
-          <p className="mt-2 text-[12px] leading-relaxed text-ff-muted">
-            Ranks partial deals during the search. Finalists are scored exactly: both teams&apos; best lineups, week by week, before and after, with the side taking extra bodies cutting its
-            weakest player.
-          </p>
-        </Panel>
-        <Panel title="Pipeline" pad={false}>
-          <ol className="divide-y divide-ff-line">
-            {[
-              ['price', 'Each player’s trade value: the model blended with consensus rank and draft slot, convex in points, streamers cheap. Deals outside the fair band, either way, are dropped.'],
-              ['seed', `Every 1-for-1: their top ${DEFAULT_TRADE_CONFIG.getPerTeam} by what they add to you × all of yours.`],
-              ['grow', `Add one player to either side, keep the best ${DEFAULT_TRADE_CONFIG.beamWidth} per partner, only when the objective improves by > 0.05.`],
-              ['diversify', 'Keep each makeup’s best (1-for-1, consolidate, depth, swap) so one shape can’t crowd out the rest.'],
-              ['score', `Exact week-by-week scoring on ${DEFAULT_TRADE_CONFIG.scoredPerTeam} per partner.`],
-              ['trim', 'Drop any player whose removal leaves both sides at least as well off.'],
-              ['dedupe', 'Near-copies (≥ 60% overlap) fold into versions, at most 3, each better for them.'],
-            ].map(([k, v], i) => (
-              <li key={k} className="grid grid-cols-[22px_74px_minmax(0,1fr)] items-baseline gap-2 px-3 py-1.5 text-[12px]">
-                <span className="num text-ff-muted">{i + 1}</span>
-                <code className="font-mono text-[11.5px] text-ff-text">{k}</code>
-                <span className="text-ff-text2">{v}</span>
-              </li>
-            ))}
-          </ol>
-        </Panel>
-      </div>
+      {phone ? (
+        <>
+          {posPricing}
+          <Disclosure summary="How the search works" className="space-y-3">
+            {config}
+            {objective}
+            {pipeline}
+          </Disclosure>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {posPricing}
+            {config}
+          </div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {objective}
+            {pipeline}
+          </div>
+        </>
+      )}
     </div>
   )
 }

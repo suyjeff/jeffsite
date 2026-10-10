@@ -1,6 +1,7 @@
 import React from 'react'
 import { ELO, EFFICIENCY_PRIOR_GAMES, SIM } from '../../lib/fantasy/forecast'
 import { RESULTS_PRIOR_GAMES } from '../../lib/fantasy/power'
+import { Disclosure } from './Disclosure'
 import { N } from './ui'
 
 export type RankingModel = 'forecast' | 'composite' | 'elo'
@@ -54,13 +55,12 @@ const TEXT: Record<RankingModel, { title: string; body: React.ReactNode }> = {
 
 /** A quiet "how this works" under a ranking: closed by default, there for the curious. */
 const ModelExplainer = ({ model }: { model: RankingModel }) => (
-  <details className="group border border-t-0 border-ff-line bg-ff-panel">
-    <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 font-mono text-[11px] text-ff-muted hover:text-ff-text [&::-webkit-details-marker]:hidden">
-      <span className="inline-block transition-transform group-open:rotate-90">›</span>
-      {TEXT[model].title}
-    </summary>
-    <div className="max-w-[72ch] space-y-2 px-3 pb-3 text-[12.5px] leading-relaxed text-ff-text2">{TEXT[model].body}</div>
-  </details>
+  // Sits on the panel above it: the overlap makes one hairline of the two borders.
+  <div className="-mt-px">
+    <Disclosure summary={TEXT[model].title} className="max-w-[72ch] space-y-2 text-[12.5px] leading-relaxed text-ff-text2">
+      {TEXT[model].body}
+    </Disclosure>
+  </div>
 )
 
 export default ModelExplainer

@@ -7,7 +7,7 @@ import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
 import TeamName from '../TeamName'
-import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, probShade, simOdds, type Column } from '../ui'
+import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, probShade, simOdds, type Column, type PageChange } from '../ui'
 
 type Sub = 'rankings' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'standings', 'schedule']
@@ -42,13 +42,14 @@ const PowerView = ({
   data: LeagueData
   analysis: Analysis
   sub: string | null
-  onSub: (s: string) => void
+  onSub: PageChange
   onTeam: (rosterId: number) => void
   weights: PowerWeights
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'rankings'
-  // Phones stack every section in one scroll, steered by the tab strip.
   const stacked = usePhone()
+  // Wide screens keep all six figures above the tabs. A phone page gets the ones that belong to it.
+  const here = (page: Sub) => !stacked || tab === page
   const [view, setView] = useState<'table' | 'breakdown'>('table')
   const { models } = useFantasy()
   const forecast = models.forecast
@@ -228,6 +229,7 @@ const PowerView = ({
         title="Power"
         tabs={
           <Tabs<Sub>
+            requested={sub}
             value={tab}
             onChange={onSub}
             stacked={stacked}
@@ -242,8 +244,8 @@ const PowerView = ({
       <div className="mt-4 space-y-3">
         {me && (
           <StatGrid>
-            <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.eloRated[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />
-            {forecast && (
+            {here('rankings') && <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.eloRated[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />}
+            {forecast && here('rankings') && (
               <Stat
                 label="Playoff odds"
                 value={simOdds(forecast.sim[myRosterId!], 'playoffs')}
@@ -251,31 +253,35 @@ const PowerView = ({
                 sub={`title ${simOdds(forecast.sim[myRosterId!], 'title', 1)} · bye ${simOdds(forecast.sim[myRosterId!], 'bye')}`}
               />
             )}
-            <Stat
-              label="Standing"
-              value={standingRank ? `#${standingRank}` : '–'}
-              badge={
-                standingRank && playoffTeams
-                  ? standingRank <= playoffTeams
-                    ? { text: 'in a playoff spot', tone: 'pos' }
-                    : { text: `${standingRank - playoffTeams} spot${standingRank - playoffTeams === 1 ? '' : 's'} out`, tone: 'warn' }
-                  : undefined
-              }
-              sub={playoffTeams ? `top ${playoffTeams} make it` : undefined}
-            />
-            <Stat label="Record" value={`${me.season.wins}-${me.season.losses}${me.season.ties ? `-${me.season.ties}` : ''}`} sub={`all-play ${pct(me.season.allPlayPct)}`} />
-            <Stat label="Points per game" value={fmt(me.season.ppg)} delta={<DeltaChip value={me.season.ppg - leagueAvgPpg} title="Against the league average" />} sub={`league ${fmt(leagueAvgPpg)}`} />
-            {!forecast && <Stat label="Luck" value={fmtSigned(me.season.luck, 1)} sub="wins above all-play expectation" />}
-            <Stat
-              label="Schedule ahead"
-              value={fmt(me.power.sos, 0)}
-              badge={me.power.sos != null && Math.abs(me.power.sos - 50) >= 1 ? { text: me.power.sos > 50 ? 'harder than average' : 'easier than average', tone: me.power.sos > 50 ? 'warn' : 'pos' } : undefined}
-              sub="opponents' power, 50 = average"
-            />
+            {here('standings') && (
+              <Stat
+                label="Standing"
+                value={standingRank ? `#${standingRank}` : '–'}
+                badge={
+                  standingRank && playoffTeams
+                    ? standingRank <= playoffTeams
+                      ? { text: 'in a playoff spot', tone: 'pos' }
+                      : { text: `${standingRank - playoffTeams} spot${standingRank - playoffTeams === 1 ? '' : 's'} out`, tone: 'warn' }
+                    : undefined
+                }
+                sub={playoffTeams ? `top ${playoffTeams} make it` : undefined}
+              />
+            )}
+            {here('standings') && <Stat label="Record" value={`${me.season.wins}-${me.season.losses}${me.season.ties ? `-${me.season.ties}` : ''}`} sub={`all-play ${pct(me.season.allPlayPct)}`} />}
+            {here('standings') && <Stat label="Points per game" value={fmt(me.season.ppg)} delta={<DeltaChip value={me.season.ppg - leagueAvgPpg} title="Against the league average" />} sub={`league ${fmt(leagueAvgPpg)}`} />}
+            {!forecast && here('standings') && <Stat label="Luck" value={fmtSigned(me.season.luck, 1)} sub="wins above all-play expectation" />}
+            {here('schedule') && (
+              <Stat
+                label="Schedule ahead"
+                value={fmt(me.power.sos, 0)}
+                badge={me.power.sos != null && Math.abs(me.power.sos - 50) >= 1 ? { text: me.power.sos > 50 ? 'harder than average' : 'easier than average', tone: me.power.sos > 50 ? 'warn' : 'pos' } : undefined}
+                sub="opponents' power, 50 = average"
+              />
+            )}
           </StatGrid>
         )}
 
-        <TabSection id="rankings" label="Rankings" active={tab === 'rankings'} stacked={stacked}>
+        <TabSection id="rankings" active={tab === 'rankings'}>
           <div>
             <Panel
               title={rankModel !== 'composite' ? 'Power rankings' : view === 'table' ? 'Power rankings' : 'Where each score comes from'}
@@ -354,7 +360,7 @@ const PowerView = ({
           </div>
         </TabSection>
 
-        <TabSection id="standings" label="Standings" active={tab === 'standings'} stacked={stacked} bare>
+        <TabSection id="standings" active={tab === 'standings'}>
           <Panel title="Standings" pad={false} actions={playoffTeams ? <span>playoff line after #{playoffTeams}</span> : null}>
             <Table
               rows={standings.map((t, i) => ({ rosterId: t.rosterId, seed: i + 1 }))}
@@ -374,23 +380,23 @@ const PowerView = ({
                   },
                 },
                 { key: 'pf', label: 'PF', align: 'right', render: (r) => fmt(seasonById[r.rosterId].pf, 1) },
-                { key: 'pa', label: 'PA', align: 'right', render: (r) => fmt(seasonById[r.rosterId].pa, 1) },
+                { key: 'pa', label: 'PA', align: 'right', hideBelow: 'md', render: (r) => fmt(seasonById[r.rosterId].pa, 1) },
                 {
                   key: 'ap',
                   label: 'All-play',
                   align: 'right',
                   render: (r) => `${fmt(seasonById[r.rosterId].allPlayWins, 0)}-${fmt(seasonById[r.rosterId].allPlayLosses, 0)}`,
                 },
-                { key: 'xw', label: 'xW', align: 'right', title: 'Expected wins from all-play', render: (r) => fmt(seasonById[r.rosterId].expectedWins, 1) },
-                { key: 'luck', label: 'Luck', align: 'right', render: (r) => <Num value={seasonById[r.rosterId].luck} signed /> },
-                { key: 'streak', label: 'Strk', align: 'right', render: (r) => seasonById[r.rosterId].streak || '–' },
+                { key: 'xw', label: 'xW', align: 'right', hideBelow: 'md', title: 'Expected wins from all-play', render: (r) => fmt(seasonById[r.rosterId].expectedWins, 1) },
+                { key: 'luck', label: 'Luck', align: 'right', hideBelow: 'md', render: (r) => <Num value={seasonById[r.rosterId].luck} signed /> },
+                { key: 'streak', label: 'Strk', align: 'right', hideBelow: 'md', render: (r) => seasonById[r.rosterId].streak || '–' },
                 { key: 'power', label: 'Power', align: 'right', hideBelow: 'sm', render: (r) => <span className="text-ff-muted">#{powerById[r.rosterId].rank}</span> },
               ]}
             />
           </Panel>
         </TabSection>
 
-        <TabSection id="schedule" label="Remaining schedule" active={tab === 'schedule'} stacked={stacked} bare>
+        <TabSection id="schedule" active={tab === 'schedule'}>
           <ScheduleGrid data={data} analysis={analysis} onTeam={onTeam} />
         </TabSection>
       </div>

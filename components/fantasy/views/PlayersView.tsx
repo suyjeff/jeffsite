@@ -6,7 +6,8 @@ import type { PlayerContext } from '../../../lib/fantasy/context'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Badge, Button, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, PlayerAvatar, type Column } from '../ui'
+import { ShowMore } from './ShowMore'
+import { Badge, FadeStrip, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, PlayerAvatar, usePhone, type Column } from '../ui'
 
 const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
 type Pos = (typeof POSITIONS)[number]
@@ -40,6 +41,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
   useEffect(() => setLimit(PAGE), [pos, own, query, basis])
   const { adjust, openPlayer } = useFantasy()
+  const phone = usePhone()
   const adjusted = Object.entries(adjust.all)
 
   const ids = useMemo(() => {
@@ -254,7 +256,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       />
       <div className="mt-4 space-y-3">
         <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-          <div className="no-scrollbar ff-bleed ff-gutter flex gap-2 overflow-x-auto md:!mx-0 md:flex-wrap md:overflow-visible md:!px-0">
+          <FadeStrip className="no-scrollbar ff-bleed ff-gutter flex gap-2 overflow-x-auto md:!mx-0 md:flex-wrap md:overflow-visible md:!px-0">
             <Segmented<Basis>
               label="Basis"
               value={basis}
@@ -276,7 +278,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                 ...(myRosterId != null ? [{ key: 'mine' as const, label: 'Mine' }] : []),
               ]}
             />
-          </div>
+          </FadeStrip>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -327,7 +329,8 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             rowClass={(id) => cx(rosteredBy[id] === myRosterId && 'ff-mine')}
             onRowClick={(id) => openPlayer(id)}
             canExpand={(id) => !!data.context[id]?.notes.length}
-            defaultOpen={(id) => prominent(data.context[id]?.notes)}
+            // On a phone the notes stay closed until asked for: a few open ones push the list a screen apart.
+            defaultOpen={(id) => !phone && prominent(data.context[id]?.notes)}
             expand={(id) => {
               const items = contextReasons(data.context[id], players)
               return items.length ? <Reasons items={items} /> : null
@@ -336,11 +339,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
           />
         </Panel>
         {ids.length > limit && (
-          <div className="flex justify-center">
-            <Button onClick={() => setLimit((l) => l + PAGE)}>
-              Show {Math.min(PAGE, ids.length - limit)} more <span className="num text-ff-muted">of {ids.length - limit}</span>
-            </Button>
-          </div>
+          <ShowMore step={PAGE} left={ids.length - limit} onMore={() => setLimit((l) => l + PAGE)} rows="tbody > tr:not([id])" />
         )}
       </div>
     </>

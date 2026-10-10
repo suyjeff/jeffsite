@@ -19,10 +19,11 @@ import {
 import { suggestBid, type BidAdvice } from '../../../lib/fantasy/faab'
 import { ContextNotes, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
-import WaiverMoves from './WaiverMoves'
+import WaiverMoves, { TrendingFree } from './WaiverMoves'
+import { Disclosure } from '../Disclosure'
 import { useStatLines } from '../useStatLines'
 import PlayerName from '../PlayerName'
-import { DeltaChip, Badge, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
+import { DeltaChip, Badge, Button, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, usePhoneCap, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
 
 type Sub = 'moves' | 'stream' | 'adds'
 const SUBS: Sub[] = ['moves', 'stream', 'adds']
@@ -63,14 +64,17 @@ const TotalCell = ({ t, low }: { t: TeamTotal | null; low?: boolean }) =>
 
 const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis: Analysis; sub: string | null; onSub: (s: string) => void }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'moves'
-  // Phones stack every section in one scroll, steered by the tab strip.
-  const stacked = usePhone()
+  // On a phone each tab is its own page, so pages are kept short and the small print folds away.
+  const phone = usePhone()
   const { models } = useFantasy()
   const { players } = data
   const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
   const startable = useMemo(() => new Set(analysis.slots.flatMap((s) => s.eligible)), [analysis.slots])
   const positions = STREAM_POSITIONS.filter((p) => startable.has(p))
   const [pos, setPos] = useState<StreamPos>(positions[positions.length - 1] ?? 'DEF')
+  // A phone gets the top of each long table, and asks for more; a new position starts the streamers over.
+  const streamCap = usePhoneCap(12, pos)
+  const addsCap = usePhoneCap(12)
   const weeks = useMemo(
     () =>
       data.horizon
@@ -143,7 +147,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   }, [stream.rows])
 
   // Everyone off the wire who would start for you, with the cut it forces already priced in.
-  const adds = useMemo(() => ((stacked || tab === 'adds' || tab === 'moves') && me ? waiverTargets(data, analysis) : []), [stacked, tab, me, data, analysis])
+  const adds = useMemo(() => ((tab === 'adds' || tab === 'moves') && me ? waiverTargets(data, analysis) : []), [tab, me, data, analysis])
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
   // The weakest bench player, with the consensus price as a floor (lib/fantasy/moves).
   const dropCandidate = useMemo(() => (me ? dropCandidateFor(analysis, me.rosterId, models.perceived) : null), [me, analysis, models.perceived])
@@ -256,11 +260,11 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   // A suggested bid for every listed add. Moves prices its own few.
   const bids = useMemo(() => {
     const f = models.faab
-    if (!f || !me || (!stacked && tab !== 'adds')) return {} as Record<string, BidAdvice>
+    if (!f || !me || tab !== 'adds') return {} as Record<string, BidAdvice>
     const out: Record<string, BidAdvice> = {}
     for (const t of adds) out[t.id] = suggestBid(f, me.rosterId, { gain: t.add, value: analysis.market[t.id] ?? 0, trending: trending[t.id] ?? 0, pos: players[t.id]?.pos ?? '' })
     return out
-  }, [models.faab, me, stacked, tab, adds, analysis.market, players, trending])
+  }, [models.faab, me, tab, adds, analysis.market, players, trending])
   const addWhy = (t: TradeTarget) => {
     const items: Reason[] = [...contextReasons(data.context[t.id], players), ...(bids[t.id]?.reasons ?? [])]
     return items.length ? <Reasons items={items} /> : null
@@ -355,7 +359,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             ]}
             value={tab}
             onChange={onSub}
-            stacked={stacked && !!me}
+            stacked={phone && !!me}
           />
         }
       />
@@ -363,13 +367,13 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
         {!me && <Empty title="You are not in this league">Waiver picks are read against your roster.</Empty>}
 
         {me && (
-          <TabSection id="moves" label="Moves" active={tab === 'moves'} stacked={stacked}>
+          <TabSection id="moves" active={tab === 'moves'}>
             <WaiverMoves data={data} analysis={analysis} adds={adds} trending={trending} drop={dropCandidate} />
           </TabSection>
         )}
 
         {me && (
-          <TabSection id="stream" label="Streamers" active={tab === 'stream'} stacked={stacked}>
+          <TabSection id="stream" active={tab === 'stream'}>
             {data.horizonSource !== 'projections' ? (
               <Empty title="No projections to stream from">Streaming reads Sleeper&apos;s projections for the weeks ahead, and there are none right now (the season may be over).</Empty>
             ) : (
@@ -405,17 +409,20 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                     sub={picks ? players[picks.week.id]?.name : 'no free agents projected'}
                     delta={picks?.week.vsMine != null ? <DeltaChip value={picks.week.vsMine} title={`Against ${mineLabel}`} /> : undefined}
                   />
-                  <Stat label="Most upside" value={picks ? pct(picks.upside.boom) : '–'} sub={picks ? `${players[picks.upside.id]?.name} · boom odds` : '–'} />
-                  <Stat
-                    label={`Best ${weeks.length}-wk hold`}
-                    value={picks ? fmt(picks.hold.ahead.reduce((a, w) => a + w.proj, 0)) : '–'}
-                    sub={picks ? `${players[picks.hold.id]?.name} · wks ${weeks[0]}–${weeks[weeks.length - 1]}` : '–'}
-                  />
+                  {!phone && <Stat label="Most upside" value={picks ? pct(picks.upside.boom) : '–'} sub={picks ? `${players[picks.upside.id]?.name} · boom odds` : '–'} />}
+                  {!phone && (
+                    <Stat
+                      label={`Best ${weeks.length}-wk hold`}
+                      value={picks ? fmt(picks.hold.ahead.reduce((a, w) => a + w.proj, 0)) : '–'}
+                      sub={picks ? `${players[picks.hold.id]?.name} · wks ${weeks[0]}–${weeks[weeks.length - 1]}` : '–'}
+                    />
+                  )}
                 </StatGrid>
-                <Panel title={`Free-agent ${posLabel}s · week ${week}`} pad={false} actions={<span>{stream.rows.length} shown</span>}>
+                <Panel title={`Free-agent ${posLabel}s · week ${week}`} pad={false} actions={<span>{stream.rows.length > streamCap.limit ? `${streamCap.limit} of ${stream.rows.length}` : `${stream.rows.length} shown`}</span>}>
                   {stream.rows.length ? (
                     <Table
                       rows={stream.rows}
+                      cap={streamCap}
                       rowKey={(r) => r.id}
                       columns={streamCols}
                       defaultSort="proj"
@@ -428,13 +435,13 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                     <div className="p-4 text-[13px] text-ff-muted">No free agent at this position has a projection for week {week}.</div>
                   )}
                 </Panel>
-                <p className="text-[11.5px] leading-relaxed text-ff-muted">
+                <Disclosure from="md" summary="What the columns mean" className="text-[11.5px] leading-relaxed text-ff-muted">
                   <span className="text-ff-text2">Proj</span> blends prop lines into next week. <span className="text-ff-text2">{pos === 'DEF' ? 'Opp total' : 'Team total'}</span>{' '}
                   {pos === 'DEF' ? 'is what the offense he faces should score' : 'is what his offense should score'} (<N>m</N> = from props, else Vegas via Sleeper).{' '}
                   <span className="text-ff-text2">Matchup</span> is what this opponent {pos === 'DEF' ? 'gives up to defenses' : `allows ${pos}s`} vs average
                   {!ownSeason ? ' (needs this season’s results)' : ''}. <span className="text-ff-text2">Boom</span> is the chance of <N>{fmt(starter)}+</N>, an average starter
                   (<N>±{fmt(sd)}</N> weekly). Green weeks ahead are easy, red tough.
-                </p>
+                </Disclosure>
               </>
             )}
           </>
@@ -443,7 +450,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
         )}
 
         {me && (
-          <TabSection id="adds" label="All adds" count={adds.length} active={tab === 'adds'} stacked={stacked}>
+          <TabSection id="adds" active={tab === 'adds'}>
           <>
             <StatGrid>
               <Stat
@@ -451,7 +458,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                 value={adds[0] ? <Num value={adds[0].add} signed /> : '–'}
                 sub={adds[0] ? `${players[adds[0].id]?.name} · pts/wk to your lineup` : 'nobody cracks your lineup'}
               />
-              <Stat
+              {!phone && <Stat
                 label="Hottest add"
                 value={data.trending[0] ? data.trending[0].count.toLocaleString() : '–'}
                 sub={
@@ -459,7 +466,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                     ? `${players[data.trending[0].player_id]?.name ?? '–'} · Sleeper adds, last 24h${analysis.rosteredBy[data.trending[0].player_id] != null ? ' · rostered here' : ''}`
                     : 'no trend data'
                 }
-              />
+              />}
               <Stat
                 label="Drop candidate"
                 value={dropCandidate ? (players[dropCandidate]?.name.split(' ').slice(-1)[0] ?? '–') : '–'}
@@ -467,11 +474,13 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               />
             </StatGrid>
             <Panel title={`Free agents who would start for you · wks ${data.horizon[0]?.week ?? ''}–${data.horizon[data.horizon.length - 1]?.week ?? ''}`} pad={false}>
-              <Table rows={adds} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." expand={addWhy} canExpand={(t) => !!bids[t.id]?.reasons.length || !!data.context[t.id]?.notes.length} />
+              <Table rows={adds} cap={addsCap} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." expand={addWhy} canExpand={(t) => !!bids[t.id]?.reasons.length || !!data.context[t.id]?.notes.length} />
             </Panel>
-            <p className="text-[11.5px] leading-relaxed text-ff-muted">
+            {/* Moves holds this list on wide screens; on a phone it lives here, with the other free-agent lists. */}
+            {phone && <TrendingFree data={data} analysis={analysis} adds={adds} />}
+            <Disclosure from="md" summary="How gain is figured" className="text-[11.5px] leading-relaxed text-ff-muted">
               Gain: your best lineup with him in and your weakest player out, against today&apos;s, week by week. Any positive gain is an upgrade. Value: what the league would pay.
-            </p>
+            </Disclosure>
           </>
           </TabSection>
         )}
