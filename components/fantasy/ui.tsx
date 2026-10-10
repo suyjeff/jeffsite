@@ -1636,11 +1636,13 @@ export type Reason = {
   label?: ReactNode
 }
 
-const REASON_MARK: Record<NonNullable<Reason['tone']>, { glyph: string; sr: string; cls: string }> = {
-  pos: { glyph: '+', sr: 'Helps: ', cls: 'bg-ff-pos/15 text-ff-pos' },
-  neg: { glyph: '−', sr: 'Hurts: ', cls: 'bg-ff-neg/12 text-ff-neg' },
-  warn: { glyph: '!', sr: 'Caution: ', cls: 'bg-ff-warn/15 text-ff-warn' },
-  accent: { glyph: '›', sr: '', cls: 'bg-ff-accent/12 text-ff-accent' },
+// Solid in the tone, the glyph in the panel's colour. Every tone ink clears 4.5:1 against the panel, so the glyph clears
+// it against the ink; a faint tint read as pink, not red. The news cards on My team use the same squares.
+export const REASON_MARK: Record<NonNullable<Reason['tone']>, { glyph: string; sr: string; cls: string }> = {
+  pos: { glyph: '+', sr: 'Helps: ', cls: 'bg-ff-pos text-ff-panel' },
+  neg: { glyph: '−', sr: 'Hurts: ', cls: 'bg-ff-neg text-ff-panel' },
+  warn: { glyph: '!', sr: 'Caution: ', cls: 'bg-ff-warn text-ff-panel' },
+  accent: { glyph: '›', sr: '', cls: 'bg-ff-accent text-ff-on-accent' },
   neutral: { glyph: 'i', sr: '', cls: 'bg-ff-sunken text-ff-muted' },
 }
 

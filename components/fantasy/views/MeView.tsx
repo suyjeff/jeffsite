@@ -10,7 +10,7 @@ import FreeAgentPick from '../FreeAgentPick'
 import { INSIGHT_ROW, InsightMark } from '../InsightMark'
 import ScoutReport, { scoutPlayers, useScout } from '../ScoutReport'
 import MovesPanel from '../Moves'
-import { Button, DeltaChip, Empty, Num, PageHeader, Panel, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone, type PageChange, type Reason } from '../ui'
+import { Button, DeltaChip, Empty, Num, PageHeader, Panel, REASON_MARK, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone, type PageChange, type Reason } from '../ui'
 import { Callout } from '../Callout'
 import RosterTable, { type Basis } from './RosterTable'
 
@@ -23,16 +23,6 @@ const WIDE_SUBS: Sub[] = ['overview', 'lineup', 'roster']
 const PHONE_SUBS: Sub[] = ['overview', 'news', 'lineup', 'roster']
 /** Old page keys, kept so links to them still land: slot strength now lives in the lineup. */
 const MOVED: Record<string, Sub> = { slots: 'lineup' }
-
-// A reason's square in the news cards: solid in its tone, the glyph in the panel's colour. Every tone ink clears
-// 4.5:1 against the panel, so the glyph clears it against the ink; a faint tint read as pink, not red.
-const MARK: Record<NonNullable<Reason['tone']>, { glyph: string; sr: string; cls: string }> = {
-  pos: { glyph: '+', sr: 'Helps: ', cls: 'bg-ff-pos text-ff-panel' },
-  neg: { glyph: '−', sr: 'Hurts: ', cls: 'bg-ff-neg text-ff-panel' },
-  warn: { glyph: '!', sr: 'Caution: ', cls: 'bg-ff-warn text-ff-panel' },
-  accent: { glyph: '›', sr: '', cls: 'bg-ff-accent text-ff-on-accent' },
-  neutral: { glyph: 'i', sr: '', cls: 'bg-ff-sunken text-ff-muted' },
-}
 
 /**
  * One player's news as a card on two columns: the portrait and each reason's square share the narrow one, and the
@@ -47,7 +37,7 @@ const NewsCard = ({ id, data }: { id: string; data: LeagueData }) => {
       {why.length ? (
         <ul className="mt-2 space-y-2">
           {why.map((r, i) => {
-            const m = MARK[r.tone ?? 'neutral']
+            const m = REASON_MARK[r.tone ?? 'neutral']
             return (
               <li key={i} className="grid grid-cols-[24px_minmax(0,1fr)] gap-x-2">
                 {/* 18px square on the label's 18px line, centred under the portrait. */}
