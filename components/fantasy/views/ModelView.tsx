@@ -900,18 +900,27 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
 
 const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analysis; reload: () => void }) => {
   const matchupWeeks = Object.keys(data.matchupsByWeek).length
+  const espn = data.provider === 'espn'
   const scheduleGames = data.schedule ? Object.values(data.schedule.opp).reduce((a, o) => a + Object.keys(o).length, 0) / 2 : 0
   const rows: { src: string; what: string; n: ReactNode; ttl: string }[] = [
     { src: '/players/nfl', what: 'Player database', n: Object.keys(data.players).length, ttl: '24h' },
-    { src: '/league/{id}', what: data.league.name, n: `${data.league.total_rosters} teams`, ttl: '30m' },
-    { src: '/league/{id}/rosters', what: 'Rosters', n: data.rosters.length, ttl: '10m' },
-    { src: '/league/{id}/matchups/{w}', what: 'Weekly matchups', n: `${matchupWeeks} wks`, ttl: 'past 24h · live 5m' },
+    // An ESPN league comes from ESPN's league API; everything else is Sleeper's either way.
+    ...(espn
+      ? [
+          { src: 'espn:/leagues/{id}?view=mSettings…', what: `${data.league.name} · rosters · schedule`, n: `${data.league.total_rosters} teams`, ttl: '10m' },
+          { src: 'espn:/leagues/{id}?scoringPeriodId={w}', what: 'Weekly lineups and moves', n: `${matchupWeeks} wks`, ttl: 'past 24h · live 5m' },
+        ]
+      : [
+          { src: '/league/{id}', what: data.league.name, n: `${data.league.total_rosters} teams`, ttl: '30m' },
+          { src: '/league/{id}/rosters', what: 'Rosters', n: data.rosters.length, ttl: '10m' },
+          { src: '/league/{id}/matchups/{w}', what: 'Weekly matchups', n: `${matchupWeeks} wks`, ttl: 'past 24h · live 5m' },
+        ]),
     { src: '/stats/nfl/regular/{s}/{w}', what: `Weekly stats (${data.valueSeason})`, n: `${data.valueWeeks.length} wks`, ttl: 'past 24h · live 10m' },
     { src: '/projections/nfl/regular/{s}/{w}', what: 'Weekly projections', n: `${data.rawHorizon.length} wks`, ttl: '3h near · 12h far' },
     { src: '/stats/nfl/regular/{s}', what: 'Season games played (history)', n: `${Object.keys(data.availability).length} players`, ttl: '7d' },
     { src: '/schedule/nfl/regular/{s}', what: 'NFL schedule', n: `${Math.round(scheduleGames)} games`, ttl: '12h' },
     { src: '/players/nfl/trending/add', what: 'Trending adds', n: data.trending.length, ttl: '1h' },
-    { src: '/league/{id}/transactions/{w}', what: `Transactions${data.history ? ` (+${data.history.season})` : ''}`, n: data.transactions.length + (data.history?.transactions.length ?? 0), ttl: 'past 24h · live 10m' },
+    { src: espn ? 'espn:view=mTransactions2' : '/league/{id}/transactions/{w}', what: `Transactions${data.history ? ` (+${data.history.season})` : ''}`, n: data.transactions.length + (data.history?.transactions.length ?? 0), ttl: 'past 24h · live 10m' },
     { src: '/lines/available?sports[]=nfl', what: `Prop lines${data.market ? ` (wk ${data.market.week})` : ''}`, n: data.market ? `${data.market.props} props · ${data.market.players} players` : 'none open', ttl: '20m' },
     { src: 'github:dynastyprocess/…/db_fpecr_latest.csv', what: `FantasyPros ECR ${data.consensus?.date ?? ''}`, n: data.consensus ? `${data.consensus.matched} matched` : 'unavailable', ttl: '12h' },
   ]
@@ -923,7 +932,7 @@ const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analy
         <Stat label="Horizon source" value={<span className="text-[15px]">{data.horizonSource}</span>} sub="for trade pricing" />
         <Stat label="Players modelled" value={Object.keys(analysis.values).length} sub={`${Object.keys(analysis.rosteredBy).length} rostered`} />
       </StatGrid>
-      <Panel title="Sources" pad={false} actions={<span className="font-mono text-[10.5px]">sleeper · github raw</span>}>
+      <Panel title="Sources" pad={false} actions={<span className="font-mono text-[10.5px]">{espn ? 'espn · ' : ''}sleeper · github raw</span>}>
         <Table
           rows={rows}
           rowKey={(r) => r.src}

@@ -4,7 +4,7 @@ import SheetHost, { sheetKey, type SheetRef } from '../../components/fantasy/She
 import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../../components/fantasy/Shell'
 import { Label, Segmented, Select, cx, simOdds } from '../../components/fantasy/ui'
 import DashboardView from '../../components/fantasy/views/DashboardView'
-import Onboarding from '../../components/fantasy/Onboarding'
+import Onboarding, { type OnboardResult } from '../../components/fantasy/Onboarding'
 import MeView from '../../components/fantasy/views/MeView'
 import ModelView, { READOUT } from '../../components/fantasy/views/ModelView'
 import MatchupsView from '../../components/fantasy/views/MatchupsView'
@@ -26,9 +26,11 @@ import { purgeStaleCache } from '../../lib/fantasy/sleeper'
 import {
   DEFAULT_HORIZON_MODE,
   DEFAULT_PLAYOFF_WEIGHT,
+  providerName,
   useLeagueData,
   type HorizonMode,
   type LoadOptions,
+  type Provider,
 } from '../../lib/fantasy/useLeagueData'
 import { useRoute } from '../../lib/fantasy/useRoute'
 import { DEFAULT_MODEL, type ModelConfig } from '../../lib/fantasy/war'
@@ -41,10 +43,16 @@ import { useTheme } from '../../lib/fantasy/useTheme'
 const PREFS_KEY = 'ff:prefs'
 
 export type Prefs = {
-  /** True once a username has been confirmed against Sleeper; until then the page shows onboarding. */
+  /** True once a league has been confirmed (a Sleeper username, or an ESPN league and team); until then the page shows onboarding. */
   onboarded: boolean
+  /** Where the league lives. Missing in prefs saved before ESPN support, which were all Sleeper. */
+  provider: Provider
   username: string
+  /** The Sleeper league picked in the switcher. */
   leagueId: string | null
+  /** ESPN's league id and your team in it. */
+  espnLeagueId: string | null
+  espnTeamId: number | null
   season: string | null
   horizon: HorizonMode
   playoffWeight: number
@@ -73,8 +81,11 @@ const HORIZON_LONG: Record<HorizonMode, string> = {
 const loadPrefs = (): Prefs => {
   const base: Prefs = {
     onboarded: false,
+    provider: 'sleeper',
     username: '',
     leagueId: null,
+    espnLeagueId: null,
+    espnTeamId: null,
     season: null,
     horizon: DEFAULT_HORIZON_MODE,
     playoffWeight: DEFAULT_PLAYOFF_WEIGHT,
@@ -91,7 +102,8 @@ const loadPrefs = (): Prefs => {
     if (!raw) return base
     const p = JSON.parse(raw) as Partial<Prefs>
     // Prefs saved before onboarding existed carry a username but no flag: they get the (pre-filled) form once.
-    return { ...base, ...p, onboarded: p.onboarded === true && !!p.username, model: { ...DEFAULT_MODEL, ...(p.model ?? {}) }, weights: { ...DEFAULT_POWER_WEIGHTS, ...(p.weights ?? {}) } }
+    const known = p.provider === 'espn' ? !!p.espnLeagueId : !!p.username
+    return { ...base, ...p, onboarded: p.onboarded === true && known, model: { ...DEFAULT_MODEL, ...(p.model ?? {}) }, weights: { ...DEFAULT_POWER_WEIGHTS, ...(p.weights ?? {}) } }
   } catch {
     return base
   }
@@ -139,13 +151,13 @@ const FantasyPage = () => {
   useEffect(() => {
     if (prefs?.onboarded) setReady(true)
   }, [prefs?.onboarded])
-  const opts = useMemo<LoadOptions | null>(
-    () =>
-      prefs && ready
-        ? { username: prefs.username, leagueId: prefs.leagueId, season: prefs.season, horizon: prefs.horizon, playoffWeight: prefs.playoffWeight }
-        : null,
-    [ready, prefs?.username, prefs?.leagueId, prefs?.season, prefs?.horizon, prefs?.playoffWeight], // eslint-disable-line react-hooks/exhaustive-deps
-  )
+  const opts = useMemo<LoadOptions | null>(() => {
+    if (!prefs || !ready) return null
+    const common = { season: prefs.season, horizon: prefs.horizon, playoffWeight: prefs.playoffWeight }
+    return prefs.provider === 'espn' && prefs.espnLeagueId
+      ? { ...common, provider: 'espn', leagueId: prefs.espnLeagueId, teamId: prefs.espnTeamId }
+      : { ...common, provider: 'sleeper', username: prefs.username, leagueId: prefs.leagueId }
+  }, [ready, prefs?.provider, prefs?.username, prefs?.leagueId, prefs?.espnLeagueId, prefs?.espnTeamId, prefs?.season, prefs?.horizon, prefs?.playoffWeight]) // eslint-disable-line react-hooks/exhaustive-deps
   const { data: loaded, error, loading, progress, reload } = useLeagueData(opts)
   // Your nudges for this league, applied to the data itself so every model downstream uses them.
   // Read in the same render the league arrives in, so no model is built with another league's reads.
@@ -348,7 +360,12 @@ const FantasyPage = () => {
       <div className="space-y-1.5">
         <div className={row}>
           <span className={key}>User</span>
-          <UserMenu username={prefs.username} onSwitch={() => update({ onboarded: false })} onTour={() => setTour(true)} />
+          <UserMenu
+            provider={prefs.provider}
+            username={prefs.provider === 'espn' ? `ESPN ${prefs.espnLeagueId ?? ''}` : prefs.username}
+            onSwitch={() => update({ onboarded: false })}
+            onTour={() => setTour(true)}
+          />
         </div>
         <div className={row}>
           <span className={key}>Season</span>
@@ -383,7 +400,7 @@ const FantasyPage = () => {
   const section = route.section as SectionKey
   const title = data ? `${SECTIONS.find((s) => s.key === route.section)?.label ?? 'Fantasy'} · ${data.league.name}` : 'Fantasy'
   const status = [
-    data?.state.season_type === 'regular' ? { label: 'WEEK', value: String(data.state.week), title: 'NFL week, from Sleeper' } : null,
+    data?.state.season_type === 'regular' ? { label: 'WEEK', value: String(data.state.week), title: 'NFL week, from Sleeper\'s calendar' } : null,
     models?.forecast ? { label: 'SIMS', value: models.forecast.sims.toLocaleString(), title: 'Seasons simulated for the playoff odds' } : null,
     models?.forecast ? { label: 'σ', value: models.forecast.sigma.toFixed(1), title: 'Weekly score noise: how far a team-week strays from its projection' } : null,
     { label: 'ECR', value: data?.consensus ? 'on' : 'off', title: data?.consensus ? 'FantasyPros consensus ranks loaded' : 'FantasyPros consensus ranks unavailable' },
@@ -394,12 +411,18 @@ const FantasyPage = () => {
   if (!prefs.onboarded) {
     return (
       <Onboarding
-        initial={prefs.username}
-        onDone={(username) => {
-          const same = username.toLowerCase() === prefs.username.trim().toLowerCase()
-          update({ onboarded: true, username, leagueId: same ? prefs.leagueId : null, season: same ? prefs.season : null })
+        initial={{ provider: prefs.provider, username: prefs.username, espnLeagueId: prefs.espnLeagueId, espnTeamId: prefs.espnTeamId }}
+        onDone={(r: OnboardResult) => {
+          if (r.provider === 'espn') {
+            const same = prefs.provider === 'espn' && r.leagueId === prefs.espnLeagueId
+            update({ onboarded: true, provider: 'espn', espnLeagueId: r.leagueId, espnTeamId: r.teamId, season: r.season ?? (same ? prefs.season : null) })
+            return
+          }
+          const same = prefs.provider !== 'espn' && r.username.toLowerCase() === prefs.username.trim().toLowerCase()
+          update({ onboarded: true, provider: 'sleeper', username: r.username, leagueId: same ? prefs.leagueId : null, season: same ? prefs.season : null })
         }}
-        onCancel={prefs.username ? () => update({ onboarded: true }) : undefined}
+        onCancel={(prefs.provider === 'espn' ? prefs.espnLeagueId : prefs.username) ? () => update({ onboarded: true }) : undefined}
+        cancelLabel={prefs.provider === 'espn' ? `keep ESPN league ${prefs.espnLeagueId}` : `keep @${prefs.username}`}
       />
     )
   }
@@ -421,6 +444,7 @@ const FantasyPage = () => {
       loading={loading}
       progress={progress}
       onRefresh={reload}
+      source={providerName(data?.provider ?? prefs.provider)}
       loadedAt={loadedAt}
       status={status}
       onSearch={data ? () => setPalette(true) : undefined}
@@ -487,6 +511,7 @@ const FantasyPage = () => {
           density={prefs.density}
           onDensity={(d) => update({ density: d })}
           onReload={reload}
+          source={providerName(data.provider)}
           onTour={() => setTour(true)}
           leagues={(data.leagues ?? []).map((l) => ({ id: l.league_id, name: l.name }))}
           onLeague={(id) => update({ leagueId: id })}

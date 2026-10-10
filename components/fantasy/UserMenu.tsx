@@ -12,10 +12,11 @@ export const startOver = () => {
 }
 
 /**
- * Your Sleeper username in the settings rail, as a small menu: switch users, replay the tour, or start over.
+ * Your Sleeper username (or ESPN league) in the settings rail, as a small menu: switch, replay the tour, or start over.
  * Remembering you is automatic; this is where you undo it. Starting over asks once more, inline, before it clears.
  */
-const UserMenu = ({ username, onSwitch, onTour }: { username: string; onSwitch: () => void; onTour: () => void }) => {
+const UserMenu = ({ username, provider = 'sleeper', onSwitch, onTour }: { username: string; provider?: 'sleeper' | 'espn'; onSwitch: () => void; onTour: () => void }) => {
+  const espn = provider === 'espn'
   const [open, setOpen] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const id = useId()
@@ -71,8 +72,8 @@ const UserMenu = ({ username, onSwitch, onTour }: { username: string; onSwitch: 
           open ? 'border-ff-line2' : 'border-ff-line hover:border-ff-line2',
         )}
       >
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ff-text" title={`Sleeper user @${username}`}>
-          @{username}
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ff-text" title={espn ? `${username}, read from ESPN` : `Sleeper user @${username}`}>
+          {espn ? username : `@${username}`}
         </span>
         <span aria-hidden className={cx('font-mono text-[10px] text-ff-muted motion-safe:transition-transform motion-safe:duration-150', open && 'rotate-180')}>
           ▾
@@ -89,7 +90,7 @@ const UserMenu = ({ username, onSwitch, onTour }: { username: string; onSwitch: 
           {!confirm ? (
             <>
               <button type="button" role="menuitem" className={item} onClick={act(onSwitch)}>
-                Switch Sleeper user
+                {espn ? 'Switch league or team' : 'Switch league or user'}
               </button>
               <button type="button" role="menuitem" className={item} onClick={act(onTour)}>
                 Replay the tour
@@ -101,7 +102,7 @@ const UserMenu = ({ username, onSwitch, onTour }: { username: string; onSwitch: 
             </>
           ) : (
             <div className="space-y-2 px-3 py-2" role="group" aria-label="Start over">
-              <p className="text-[12px] leading-[1.45] text-ff-text2">Clear everything this browser keeps: your username, settings, trade grades, player reads and dashboard.</p>
+              <p className="text-[12px] leading-[1.45] text-ff-text2">Clear everything this browser keeps: your {espn ? 'league' : 'username'}, settings, trade grades, player reads and dashboard.</p>
               <div className="flex gap-1.5">
                 <button
                   type="button"

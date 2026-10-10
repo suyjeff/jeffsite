@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useFantasy } from '../FantasyContext'
+import { providerName } from '../../../lib/fantasy/useLeagueData'
 import { Deciders, MatchupScore, OddsBar, decidedBy, useMatchups, type MatchupRead } from '../matchup'
 import TeamName from '../TeamName'
 import { Badge, Button, Empty, PageHeader, Panel, Pts, PtsKey, RowCover, Segmented, cx, pct, usePhone } from '../ui'
@@ -138,7 +139,7 @@ const MatchupsView = () => {
       <>
         <PageHeader title="Matchups" />
         <div className="mt-4">
-          <Empty title="No matchups this week">They show here once Sleeper sets the week&apos;s pairings during the regular season.</Empty>
+          <Empty title="No matchups this week">They show here once {providerName(data.provider)} sets the week&apos;s pairings during the regular season.</Empty>
         </div>
       </>
     )
