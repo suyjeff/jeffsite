@@ -5,7 +5,7 @@ import { ProjectionChart } from '../charts'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import FreeAgentPick from '../FreeAgentPick'
-import ScoutReport from '../ScoutReport'
+import ScoutReport, { scoutPlayers, useScout } from '../ScoutReport'
 import MovesPanel from '../Moves'
 import TeamName from '../TeamName'
 import type { TeamInfo } from '../../../lib/fantasy/analysis'
@@ -200,6 +200,9 @@ const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<Teams
   const stacked = usePhone()
   const tab: Inner = stacked ? inner ?? 'overview' : !inner || inner === 'overview' ? 'roster' : inner
   const [basis, setBasis] = useState<Basis>('ahead')
+  // The players the scouting line is built on, marked where they stand in the roster.
+  const scout = useScout(rosterId)
+  const scouted = useMemo(() => scoutPlayers(scout), [scout])
   const players = data.players
   const { models } = useFantasy()
   const expected = models.expectedPast[rosterId] ?? {}
@@ -326,7 +329,7 @@ const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<Teams
             }
           >
             <Swap k={basis}>
-              <RosterTable data={data} analysis={analysis} rosterId={rosterId} basis={basis} />
+              <RosterTable data={data} analysis={analysis} rosterId={rosterId} basis={basis} marked={scouted} />
             </Swap>
           </Panel>
         </TabSection>

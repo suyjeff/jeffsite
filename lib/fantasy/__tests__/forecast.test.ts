@@ -310,6 +310,10 @@ describe('scouting report', () => {
     expect(s.strengths.map((f) => f.key)).toEqual(['pos:RB', 'schedule'])
     expect(s.strengths[0].value).toBeCloseTo(3.5)
     expect(s.strengths[0].detail).toBe('One, Two')
+    // The room's starters ride along for marking; an empty slot adds no one, and luck names no player.
+    expect(s.strengths[0].players).toEqual(['a', 'b'])
+    expect(s.weaknesses[1].players).toEqual(['c'])
+    expect(s.weaknesses[0].players).toBeUndefined()
     // Luck (1.2 wins ≈ 4.8 pts) outranks a 1.5-point WR hole.
     expect(s.weaknesses.map((f) => f.key)).toEqual(['luck', 'pos:WR'])
     expect(s.summary).toBe('Built on RB (+3.5/wk); held back by bad luck (−1.2 wins).')

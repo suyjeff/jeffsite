@@ -4,6 +4,7 @@ import { blankEmpty, rosterRows, type RosterRow } from '../../../lib/fantasy/ros
 import { makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
+import { INSIGHT_ROW, InsightMark } from '../InsightMark'
 import PlayerName from '../PlayerName'
 import { Num, Reasons, Sparkline, Table, cx, fmt, fmtSigned, pct, type Column } from '../ui'
 
@@ -14,9 +15,9 @@ type Row = RosterRow
 /**
  * A roster as Sleeper has it set: starters in slot order, then bench, IR and
  * taxi. "Ahead" prices each player over the horizon; "to date" shows what he
- * has done.
+ * has done. `marked` holds the players an insight on the page names; their rows carry its mark.
  */
-const RosterTable = ({ data, analysis, rosterId, basis }: { data: LeagueData; analysis: Analysis; rosterId: number; basis: Basis }) => {
+const RosterTable = ({ data, analysis, rosterId, basis, marked }: { data: LeagueData; analysis: Analysis; rosterId: number; basis: Basis; marked?: Set<string> }) => {
   const team = analysis.teamById[rosterId]
   const players = data.players
   const { values, posRanks } = analysis
@@ -38,7 +39,23 @@ const RosterTable = ({ data, analysis, rosterId, basis }: { data: LeagueData; an
     label: 'Slot',
     render: (r) => <span className={cx('font-mono text-[11px]', r.starter ? 'text-ff-text2' : 'text-ff-muted')}>{r.slot}</span>,
   }
-  const playerCol: Column<Row> = { key: 'player', label: 'Player', sticky: true, sort: (r) => players[r.id]?.name ?? r.id, render: (r) => (r.empty ? <span className="text-ff-muted">empty</span> : <PlayerName player={players[r.id]} id={r.id} />) }
+  const playerCol: Column<Row> = {
+    key: 'player',
+    label: 'Player',
+    sticky: true,
+    sort: (r) => players[r.id]?.name ?? r.id,
+    render: (r) =>
+      r.empty ? (
+        <span className="text-ff-muted">empty</span>
+      ) : marked?.has(r.id) ? (
+        <span className="flex min-w-0 items-center gap-1.5">
+          <PlayerName player={players[r.id]} id={r.id} className="min-w-0" />
+          <InsightMark />
+        </span>
+      ) : (
+        <PlayerName player={players[r.id]} id={r.id} />
+      ),
+  }
 
   const ahead: Column<Row>[] = [
     slotCol,
@@ -84,7 +101,7 @@ const RosterTable = ({ data, analysis, rosterId, basis }: { data: LeagueData; an
       rows={rows}
       columns={blankEmpty(basis === 'ahead' ? ahead : todate)}
       rowKey={(r) => r.id}
-      rowClass={(r) => (r.starter ? '' : 'bg-ff-sunken/40')}
+      rowClass={(r) => cx(!r.starter && 'bg-ff-sunken/40', marked?.has(r.id) && INSIGHT_ROW)}
       canExpand={(r) => !!data.context[r.id]?.notes.length}
       expand={(r) => {
         const items = contextReasons(data.context[r.id], players)

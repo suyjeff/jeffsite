@@ -1,7 +1,5 @@
 import React, { useMemo } from 'react'
-import type { Analysis } from '../../lib/fantasy/analysis'
 import { scoutTeam, type ScoutFact, type Scouting } from '../../lib/fantasy/scout'
-import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { Callout } from './Callout'
 import { useFantasy } from './FantasyContext'
 import { INSIGHT_ITEM, InsightMark } from './InsightMark'
@@ -12,25 +10,15 @@ const leads = (s: Scouting) => [s.strengths[0], s.weaknesses[0]].filter(Boolean)
 
 /**
  * The players the summary line is about, to mark where a roster is shown: the starters of a room it names, or the
- * players behind its injury cost. Luck, schedule and lineup calls are about the team, not a player.
+ * players behind its injury cost. Luck, schedule and lineup calls are about the team, not a player. The facts carry
+ * their players; the other arguments are no longer needed and are ignored.
  */
-export const scoutPlayers = (s: Scouting, data: LeagueData, analysis: Analysis, rosterId: number) => {
-  const ids = new Set<string>()
-  const group: Record<string, string> = { SUPER_FLEX: 'Superflex', FLEX: 'Flex', REC_FLEX: 'Flex', WRRB_FLEX: 'Flex' }
-  for (const f of leads(s)) {
-    if (f.key.startsWith('pos:')) {
-      for (const slot of analysis.needs[rosterId]?.slots ?? []) if (slot.starter && (group[slot.slot] ?? slot.slot) === f.key.slice(4)) ids.add(slot.starter)
-    } else if (f.key === 'availability') {
-      // The same three the line's evidence names.
-      const key = f.value < 0 ? 'lost' : 'gained'
-      ;(analysis.teamById[rosterId]?.players ?? [])
-        .filter((id) => (data.context[id]?.[key] ?? 0) >= 0.5)
-        .sort((a, b) => (data.context[b]?.[key] ?? 0) - (data.context[a]?.[key] ?? 0))
-        .slice(0, 3)
-        .forEach((id) => ids.add(id))
-    }
-  }
-  return ids
+export const scoutPlayers = (s: Scouting, ..._unused: unknown[]) => new Set(leads(s).flatMap((f) => f.players ?? []))
+
+/** A team's scouting report, for a page that marks the players it names. */
+export const useScout = (rosterId: number) => {
+  const { data, analysis, models } = useFantasy()
+  return useMemo(() => scoutTeam(data, analysis, models, rosterId), [data, analysis, models, rosterId])
 }
 
 const Fact = ({ f, marked }: { f: ScoutFact; marked?: boolean }) => {
@@ -65,8 +53,7 @@ const Fact = ({ f, marked }: { f: ScoutFact; marked?: boolean }) => {
  * sized in points per week against an average team where it can be.
  */
 const ScoutReport = ({ rosterId, mine }: { rosterId: number; mine?: boolean }) => {
-  const { data, analysis, models } = useFantasy()
-  const s = useMemo(() => scoutTeam(data, analysis, models, rosterId), [data, analysis, models, rosterId])
+  const s = useScout(rosterId)
   const lead = new Set(leads(s).map((f) => f.key))
   if (!s.strengths.length && !s.weaknesses.length) return null
   return (

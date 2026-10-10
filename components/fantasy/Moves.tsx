@@ -166,16 +166,22 @@ export const useMoves = (rosterId: number | null, limit?: number) => {
   return useMemo(() => (rosterId == null ? [] : findMoves(data, analysis, rosterId, { perceived: models.perceived, limit })), [data, analysis, models.perceived, rosterId, limit])
 }
 
+/**
+ * The kind tag sits above its sentence, not beside it, so every sentence starts on the list's own left edge, under the
+ * heading above it, and wraps back to that edge too. In a sheet the heading sits a step further in, and so do the rows.
+ */
 export const MoveList = ({ moves, compact }: { moves: Move[]; compact?: boolean }) => (
   <ol className="divide-y divide-ff-line/70">
     {moves.map((m) => (
-      <li key={m.key} className={cx('grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2.5', compact ? 'px-3 py-1.5 text-[12px]' : 'px-3 py-2 text-[13px]')}>
-        <Badge tone={KIND[m.kind].tone} className="mt-px w-[60px] justify-center">
-          {KIND[m.kind].label}
-        </Badge>
-        <p className="min-w-0 leading-[1.45] text-ff-text2">
-          <Sentence m={m} />
-        </p>
+      <li key={m.key} className={cx('grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 px-3 [.ff-sheet_&]:px-4', compact ? 'py-2 text-[12px]' : 'py-2.5 text-[13px]')}>
+        <div className="min-w-0">
+          <Badge tone={KIND[m.kind].tone}>
+            {KIND[m.kind].label}
+          </Badge>
+          <p className="mt-1 leading-[1.45] text-ff-text2">
+            <Sentence m={m} />
+          </p>
+        </div>
         <Worth m={m} />
       </li>
     ))}

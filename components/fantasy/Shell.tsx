@@ -306,7 +306,7 @@ const Shell = (props: ShellProps) => {
   // The drawer opens with the current section in view, however far down the list it is.
   useEffect(() => {
     if (!drawer) return
-    const id = requestAnimationFrame(() => document.querySelector('[role="dialog"] nav [aria-current="page"]')?.scrollIntoView({ block: 'nearest' }))
+    const id = requestAnimationFrame(() => document.querySelector('[role="dialog"] nav [aria-current="page"]')?.scrollIntoView({ block: 'center' }))
     return () => cancelAnimationFrame(id)
   }, [drawer])
 
