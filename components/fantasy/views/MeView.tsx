@@ -101,7 +101,7 @@ const MeView = ({
     const current = starters.reduce((a, id) => a + (proj[id] ?? 0), 0)
     const best = optimalLineup(slots, toLP(me.players))
     // One list of changes feeds the Lineup badge, the Overview stat and the table, so they cannot disagree.
-    const plan = pairSwaps(slots, [...me.players].reverse().slice(0, slots.length), best.assignments) // TEMPFAKE
+    const plan = pairSwaps(slots, me.roster.starters ?? [], best.assignments)
     return { current, best: best.total, plan, changes: plan.count }
   }, [me, data.projections, players, slots])
 
@@ -153,7 +153,7 @@ const MeView = ({
   // ---- The lineup as set, slot by slot, each with the swap it needs and how strong the slot is ----
   const lineupRows = useMemo(() => {
     if (!me) return []
-    const set = [...me.players].reverse().slice(0, slots.length) // TEMPFAKE
+    const set = me.roster.starters ?? []
     // Each slot whose starter the projected best lineup sits gets the incoming player who is eligible for that slot.
     // A change that needs players moved between slots has no single slot to sit in: it is noted on the slot the best
     // lineup seats him in, and the starter it sits is flagged, so every change still shows on a row.
