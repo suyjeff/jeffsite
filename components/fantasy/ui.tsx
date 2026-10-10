@@ -377,7 +377,7 @@ export type SegOption<K extends string> = {
 }
 
 /** A horizontally scrolling strip that fades its right edge on phones while more sits beyond it. */
-const FadeStrip = ({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) => {
+export const FadeStrip = ({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) => {
   const ref = useRef<HTMLDivElement>(null)
   const [more, setMore] = useState(false)
   useEffect(() => {

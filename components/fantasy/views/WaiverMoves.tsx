@@ -284,14 +284,17 @@ const WaiverMoves = ({
                   <div className="col-span-2 space-y-2 sm:col-span-3">
                     <MoveWhy items={m.why} />
                     {m.alts.length > 0 && (
-                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[12px] text-ff-muted">
-                        <span className="ff-label">or</span>
-                        {m.alts.map((a) => (
-                          <span key={a.id} className="inline-flex items-baseline gap-1.5">
-                            <PlayerName player={players[a.id]} id={a.id} avatar={false} />
-                            <N tone="pos">{fmtSigned(a.add, 1)}</N>
-                          </span>
-                        ))}
+                      <div className="flex items-baseline gap-x-3 text-[12px] text-ff-muted">
+                        <span className="ff-label shrink-0">or</span>
+                        {/* A wrapped alternative lines up under the first, not under "or". */}
+                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                          {m.alts.map((a) => (
+                            <span key={a.id} className="inline-flex items-baseline gap-1.5">
+                              <PlayerName player={players[a.id]} id={a.id} avatar={false} />
+                              <N tone="pos">{fmtSigned(a.add, 1)}</N>
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>

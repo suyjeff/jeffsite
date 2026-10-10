@@ -148,7 +148,7 @@ export const MatchupScore = ({ m, size = 'lg' }: { m: MatchupRead; size?: 'lg' |
 }
 
 // Each side of a slot gets under a third of a phone's width: drop the portrait and let the name take two lines rather than cut it to a few letters.
-const phoneName = 'max-md:[&_.ff-pn-av]:hidden max-md:[&_.ff-pn-name]:overflow-visible max-md:[&_.ff-pn-name]:whitespace-normal max-md:[&_.ff-pn-name]:[text-overflow:clip]'
+const phoneName = 'max-md:[&_.ff-pn-av]:!hidden max-md:[&_.ff-pn-name]:overflow-visible max-md:[&_.ff-pn-name]:whitespace-normal max-md:[&_.ff-pn-name]:[text-overflow:clip]'
 
 /** Every slot against its opposite, with the edge between them. */
 export const SlotTable = ({ m, compact, inset }: { m: MatchupRead; compact?: boolean; inset?: 'sheet' }) => {
