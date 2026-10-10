@@ -1505,7 +1505,8 @@ export function Table<T>({
       return n
     })
   // With a toggle column first, pinned columns sit just right of it.
-  const pin = details ? 'left-7' : 'left-0'
+  // The expand column is 28px, widened to 40px on phones so the arrow is a thumb's target.
+  const pin = details ? 'left-7 max-md:left-10' : 'left-0'
   const span = columns.length + (details ? 1 : 0)
   return (
     <div className="relative">
@@ -1520,14 +1521,14 @@ export function Table<T>({
           <thead className="sticky top-0 z-10">
             <tr>
               {details && (
-                <th className="sticky left-0 z-20 h-8 w-7 border-b border-ff-line bg-ff-panel p-0">
+                <th className="sticky left-0 z-20 h-8 w-7 border-b max-md:w-10 border-ff-line bg-ff-panel p-0">
                   {expandable.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setOpen(allOpen ? new Set() : new Set(expandable))}
                       aria-label={allOpen ? 'Collapse all rows' : 'Expand all rows'}
                       title={allOpen ? 'Collapse all' : 'Expand all'}
-                      className="flex h-8 w-7 items-center justify-center font-mono text-[10px] text-ff-muted hover:text-ff-text"
+                      className="flex h-8 w-7 items-center justify-center font-mono text-[10px] text-ff-muted hover:text-ff-text max-md:w-10"
                     >
                       <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', allOpen && 'rotate-90')}>›</span>
                     </button>
@@ -1591,7 +1592,7 @@ export function Table<T>({
                 )}
               >
                 {details && (
-                  <td className={cx('sticky left-0 z-[1] w-7 p-0 align-middle group-hover:bg-ff-raised', isOpen ? 'bg-ff-raised' : 'bg-ff-panel')}>
+                  <td className={cx('sticky left-0 z-[1] w-7 p-0 align-middle max-md:w-10 group-hover:bg-ff-raised', isOpen ? 'bg-ff-raised' : 'bg-ff-panel')}>
                     {hasDetail.has(k) && (
                       <button
                         type="button"
@@ -1603,7 +1604,7 @@ export function Table<T>({
                         aria-expanded={isOpen}
                         aria-controls={`${id}-${k}`}
                         aria-label={isOpen ? 'Hide details' : 'Show details'}
-                        className="flex h-[38px] w-7 items-center justify-center font-mono text-[11px] text-ff-muted hover:text-ff-text"
+                        className="flex h-[38px] w-7 items-center justify-center font-mono text-[11px] text-ff-muted hover:text-ff-text max-md:h-11 max-md:w-10"
                       >
                         <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', isOpen && 'rotate-90 text-ff-accent')}>›</span>
                       </button>

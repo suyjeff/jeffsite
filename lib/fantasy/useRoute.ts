@@ -42,9 +42,12 @@ export const useRoute = <S extends string>(sections: readonly S[], fallback: S, 
   const setSub = useCallback(
     (sub: string) => {
       const next = `#${route.section}/${sub}`
-      // Keep the existing state: Next's router ignores popstate entries without its own.
-      if (window.matchMedia('(max-width: 767px)').matches && window.location.hash !== next) window.history.pushState(window.history.state, '', next)
-      else window.history.replaceState(window.history.state, '', next)
+      // Keep the existing state: Next's router ignores popstate entries without its own. Its `as` is the URL Next
+      // takes the entry to on Back, so it follows the hash too (stale, Back would land on the page we left).
+      const prev = window.history.state
+      const state = prev && typeof prev === 'object' && 'as' in prev ? { ...prev, as: `${window.location.pathname}${window.location.search}${next}` } : prev
+      if (window.matchMedia('(max-width: 767px)').matches && window.location.hash !== next) window.history.pushState(state && 'key' in state ? { ...state, key: Math.random().toString(36).slice(2, 10) } : state, '', next)
+      else window.history.replaceState(state, '', next)
       setRoute({ section: route.section, sub })
     },
     [route.section],
