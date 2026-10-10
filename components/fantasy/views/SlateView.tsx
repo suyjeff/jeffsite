@@ -35,6 +35,7 @@ import {
   usePhone,
   type Column,
   type Reason,
+  BOX_LINE,
 } from '../ui'
 
 // Lineups is a page of its own on phones only; on wide screens its table sits under Your week.
@@ -80,8 +81,8 @@ const GameTile = ({ g, maxSwing, me, opp, isKey, now }: { g: SlateGame; maxSwing
         <span className="h-1 flex-1 bg-ff-line" aria-hidden>
           <span className={cx('block h-full', g.final ? 'bg-ff-text2/40' : 'bg-ff-accent')} style={{ width: `${Math.min(100, (g.swing / maxSwing) * 100)}%` }} />
         </span>
-        <span className="num w-8 text-right text-[11px] text-ff-text2" title="Win odds it moves across the league's matchups">
-          ±{pts(g.swing / 2)}
+        <span className="num w-8 text-right text-[11px] text-ff-text2" title={g.final ? 'Settled: it no longer moves any win odds' : "Win odds it moves across the league's matchups"}>
+          {g.final ? '–' : `±${pts(g.swing / 2)}`}
         </span>
       </span>
       <span className="min-h-[2.9em] space-y-0.5 text-[11.5px] leading-[1.45]">
@@ -357,7 +358,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
           <span className="block min-w-0">
             <PlayerName player={players[p.id]} id={p.id} size={22} sub={<ManagerTag id={p.owner} me={me} opp={opp} />} />
             {box && (
-              <span className="mt-0.5 block w-0 min-w-full truncate pl-[30px] font-mono text-[10.5px] text-ff-text2" title={box}>
+              <span className={cx('mt-0.5 block w-0 min-w-full truncate pl-[30px]', BOX_LINE)} title={box}>
                 {box}
               </span>
             )}

@@ -16,7 +16,7 @@ export const RangeBar = ({ p, max }: { p: SlatePlayer; max: number }) => {
   const x = (v: number) => `${Math.max(0, Math.min(100, (v / max) * 100))}%`
   const tone = p.actual == null ? '' : p.actual >= p.proj ? 'bg-ff-pos' : 'bg-ff-neg'
   return (
-    <span className="relative block h-3 w-full min-w-[72px] max-w-[140px]" aria-hidden>
+    <span className="relative block h-3 w-full min-w-[48px] max-w-[140px]" aria-hidden>
       <span className="absolute inset-x-0 top-1/2 h-px bg-ff-line" />
       <span className="absolute top-1/2 h-1.5 -translate-y-1/2 bg-ff-accent/25" style={{ left: x(p.low), width: `calc(${x(p.high)} - ${x(p.low)})` }} />
       <span className="absolute top-0 h-3 w-px bg-ff-text2" style={{ left: x(p.proj) }} />

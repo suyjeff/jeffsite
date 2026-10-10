@@ -4,7 +4,7 @@ import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 import { SheetBody, SheetClose, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
 import { ManagerTag, RangeBar, dayOf, pts } from './slateBits'
-import { Badge, ScoreState, WeekScore, cx, fmt } from './ui'
+import { BOX_LINE, Badge, ScoreState, WeekScore, cx, fmt } from './ui'
 import { useSlate } from './useSlate'
 import { boxScore, type WeekNow, useWeekNow } from './useWeekNow'
 import { useBroadcasts } from './useBroadcasts'
@@ -21,7 +21,7 @@ const Row = ({ p, max, me, opp, now }: { p: SlatePlayer; max: number; me: number
       <span className="min-w-0">
         <PlayerName player={data.players[p.id]} id={p.id} size={22} sub={<ManagerTag id={p.owner} me={me} opp={opp} />} />
         {/* What he has done, once his game is on: the box score, on the name's edge. */}
-        {box && <span className="mt-0.5 block truncate pl-[30px] font-mono text-[10.5px] text-ff-text2" title={box}>{box}</span>}
+        {box && <span className={cx('mt-0.5 block truncate pl-[30px]', BOX_LINE)} title={box}>{box}</span>}
       </span>
       <WeekScore s={w} short pre={`${fmt(p.low, 0)}–${fmt(p.high, 0)}`} className="text-[13px]" />
       <span className="flex w-[92px] flex-col items-end gap-0.5">

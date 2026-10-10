@@ -17,7 +17,7 @@ import type { NewsItem } from '../../../lib/fantasy/news'
 import { Button, DeltaChip, Empty, Num, PageHeader, Panel, REASON_MARK, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone, type PageChange, type Reason } from '../ui'
 import { Callout } from '../Callout'
 import RosterTable, { type Basis } from './RosterTable'
-import { WeekScore } from '../ui'
+import { BOX_LINE, WeekScore } from '../ui'
 import { useSlate } from '../useSlate'
 import { boxScore, useWeekNow } from '../useWeekNow'
 
@@ -346,7 +346,7 @@ const MeView = ({
                 )}
                 {!r.swap && !r.shift && r.sit && <div className="mt-1 whitespace-normal pl-[30px] text-[11.5px] leading-tight text-ff-text2">Sits in the best lineup; another starter takes this slot</div>}
                 {played(r.id) && (
-                  <div className="mt-0.5 w-0 min-w-full whitespace-normal pl-[30px] font-mono text-[10.5px] text-ff-text2 md:truncate" title={played(r.id)!}>
+                  <div className={cx('mt-0.5 w-0 min-w-full whitespace-normal pl-[30px] md:truncate', BOX_LINE)} title={played(r.id)!}>
                     {played(r.id)}
                   </div>
                 )}

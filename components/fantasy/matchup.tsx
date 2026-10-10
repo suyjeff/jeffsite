@@ -3,7 +3,7 @@ import type { Slate, SlateMatchup, SlatePlayer, SlateSide } from '../../lib/fant
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
-import { Pts, ScoreState, WeekScore, WinBar, cx, fmt, fmtSigned, pct, type PtsKind } from './ui'
+import { BOX_LINE, Pts, ScoreState, WeekScore, WinBar, cx, fmt, fmtSigned, pct, type PtsKind } from './ui'
 import { useSlate } from './useSlate'
 import { boxScore, useWeekNow, type WeekNow } from './useWeekNow'
 
@@ -214,7 +214,8 @@ export const SlotTable = ({ m, compact, inset }: { m: MatchupRead; compact?: boo
       <span
         title={box || undefined}
         className={cx(
-          'mt-0.5 block font-mono text-[10px] leading-[1.35] text-ff-text2 md:truncate',
+          'mt-0.5 block md:truncate',
+          BOX_LINE,
           align === 'right' ? (compact ? 'md:pr-[28px]' : 'md:pr-[32px]') : compact ? 'md:pl-[28px]' : 'md:pl-[32px]',
         )}
       >

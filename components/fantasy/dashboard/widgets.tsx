@@ -123,7 +123,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
     return (
       <span className={cx('flex flex-col leading-none', k === 'a' ? 'items-end' : 'items-start')} title={`${sd.toGo} starter${sd.toGo === 1 ? '' : 's'} still to play or playing`}>
         <Pts value={sd.value} kind={sd.kind} className={sd.kind === 'proj' ? undefined : 'font-medium'} />
-        <span className="mt-0.5 font-mono text-[9.5px] text-ff-muted">{sd.toGo ? `${sd.toGo} to go` : 'done'}</span>
+        <span className="mt-0.5 font-mono text-[10px] text-ff-muted">{sd.toGo ? `${sd.toGo} to go` : 'done'}</span>
       </span>
     )
   }

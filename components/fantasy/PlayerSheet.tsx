@@ -7,7 +7,7 @@ import LinesBlock from './LinesBlock'
 import PlayerNews from './PlayerNews'
 import TeamName from './TeamName'
 import { SheetBody, SheetContent, SheetHeader, SheetSection } from './Sheet'
-import { Badge, PlayerAvatar, PosTag, Pts, ScoreState, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel } from './ui'
+import { Badge, PlayerAvatar, PosTag, Pts, ScoreDelta, ScoreState, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel } from './ui'
 import { useSlate } from './useSlate'
 import { boxParts, useWeekNow, type PlayerWeek } from './useWeekNow'
 
@@ -44,7 +44,7 @@ const ThisWeek = ({ week, w, pos, loaded }: { week: number; w: PlayerWeek; pos: 
           <span className="font-mono text-[11px] text-ff-muted">
             {w.kind === 'final' ? (
               <>
-                <span className={cx('num', Math.abs(d) < 0.05 ? 'text-ff-text2' : d > 0 ? 'text-ff-pos' : 'text-ff-neg')}>{fmtSigned(d)}</span> against{' '}
+                <ScoreDelta d={d} /> against{' '}
                 <span className="ff-proj num">{fmt(w.proj)}</span> projected
               </>
             ) : (

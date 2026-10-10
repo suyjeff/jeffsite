@@ -204,7 +204,7 @@ export const MiniLines = ({
         ))}
       </svg>
       {hover !== null && (
-        <span className="pointer-events-none absolute z-30 rounded-sm bg-ff-text px-2 py-1 font-mono text-[10.5px] leading-relaxed text-ff-panel" style={{ left: Math.min(x(hover) + 8, w - 150), top: pad.t }}>
+        <span className="pointer-events-none absolute z-30 bg-ff-text px-2 py-1 font-mono text-[10.5px] leading-relaxed text-ff-panel" style={{ left: Math.min(x(hover) + 8, w - 150), top: pad.t }}>
           <span className="block opacity-70">{xLabel(xs[hover])}</span>
           {series.map((s) => (
             <span key={s.label} className="flex items-center gap-1.5">
@@ -229,7 +229,7 @@ const ColumnTip = ({ x, width, top, children }: { x: number; width: number; top:
   const flip = x > width * 0.55
   return (
     <span
-      className="pointer-events-none absolute z-30 rounded-sm bg-ff-text px-2 py-1 font-mono text-[10.5px] leading-relaxed text-ff-panel"
+      className="pointer-events-none absolute z-30 bg-ff-text px-2 py-1 font-mono text-[10.5px] leading-relaxed text-ff-panel"
       style={{ left: flip ? x - 12 : x + 12, top, transform: flip ? 'translateX(-100%)' : undefined }}
     >
       {children}

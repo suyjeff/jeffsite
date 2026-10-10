@@ -857,6 +857,16 @@ export const ScoreState = ({ kind, clock, className }: { kind: PtsKind; clock?: 
     </span>
   )
 
+/** How far a final score landed from its projection: green over, red under, muted when level. One tone everywhere. */
+export const ScoreDelta = ({ d, title, className }: { d: number; title?: string; className?: string }) => (
+  <span className={cx('num', Math.abs(d) < 0.05 ? 'text-ff-muted' : d > 0 ? 'text-ff-pos' : 'text-ff-neg', className)} title={title}>
+    {fmtSigned(d)}
+  </span>
+)
+
+/** The box-score line under a player's name once his game is on: one size and tone wherever it appears. */
+export const BOX_LINE = 'font-mono text-[10.5px] leading-[1.35] text-ff-text2'
+
 /**
  * A player's score this week, read the same way in every table and scorecard. Before kickoff it is his projection,
  * with `pre` under it (his range, say). Once his game starts it is what he has scored, in solid ink, over a line that
@@ -874,16 +884,14 @@ export const WeekScore = ({ s, pre, align = 'right', short, className }: { s: We
         <span className="mt-0.5 inline-flex items-center gap-1 whitespace-nowrap font-mono text-[10px] text-ff-muted">
           <ScoreState kind={s.kind} clock={s.clock} />
           {s.kind === 'final' ? (
-            <span className={cx('num', Math.abs(d) < 0.05 ? 'text-ff-muted' : d > 0 ? 'text-ff-pos' : 'text-ff-neg')} title={`Against a projection of ${fmt(s.proj)}`}>
-              {fmtSigned(d)}
-            </span>
+            <ScoreDelta d={d} title={`Against a projection of ${fmt(s.proj)}`} />
           ) : s.heading != null ? (
-            <span className="num text-ff-text2" title="Heading for: what he has, plus his projection for the time left">
+            <span className="ff-proj num text-ff-text2" title="Heading for: what he has, plus his projection for the time left">
               →{fmt(s.heading)}
             </span>
           ) : null}
           {!short && (
-            <span className="num" title={`Projected ${fmt(s.proj)} before kickoff`}>
+            <span className="ff-proj num" title={`Projected ${fmt(s.proj)} before kickoff`}>
               {s.kind === 'final' ? 'proj' : 'of'} {fmt(s.proj)}
             </span>
           )}
