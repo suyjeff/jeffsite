@@ -39,6 +39,10 @@ import RosterTable, { type Basis } from './RosterTable'
 // Wide screens show it above the tabs, and a link to the phone-only page lands on the roster.
 type Inner = 'overview' | 'roster' | 'results' | 'slots'
 const INNERS: Inner[] = ['overview', 'roster', 'results', 'slots']
+const readInner = (): Inner | null => {
+  const part = typeof window === 'undefined' ? '' : window.location.hash.replace(/^#\/?/, '').split('/')[2]
+  return INNERS.includes(part as Inner) ? (part as Inner) : null
+}
 
 const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis: Analysis; sub: string | null; onTeam: (id: number | null) => void }) => {
   const requested = sub ? Number(sub) : NaN
@@ -173,7 +177,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
           <Table rows={rows} rowKey={(t) => t.rosterId} columns={columns} dense onRowClick={(t) => openTeam(t.rosterId)} rowClass={(t) => (t.rosterId === myRosterId ? 'ff-mine' : '')} />
         </Panel>
         <p className="text-[11.5px] text-ff-muted">
-          Power: chance to beat an average team. Lineup: the best lineup&apos;s points per week ahead, against the league average.{' '}
+          <span className="hidden md:inline">Power: chance to beat an average team. Lineup: the best lineup&apos;s points per week ahead, against the league average. </span>
           {myRosterId != null && (
             <button type="button" onClick={() => onTeam(myRosterId)} className="text-ff-text2 underline-offset-2 hover:underline">
               Your team page →
@@ -192,10 +196,13 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
   const season = seasonById[rosterId]
   const power = powerById[rosterId]
   // The page within the team lives in the hash after the team (#teams/3/results). Null: the default for the screen.
-  const [inner, setInner] = useState<Inner | null>(() => {
-    const part = typeof window === 'undefined' ? '' : window.location.hash.replace(/^#\/?/, '').split('/')[2]
-    return INNERS.includes(part as Inner) ? (part as Inner) : null
-  })
+  const [inner, setInner] = useState<Inner | null>(readInner)
+  // The route only carries the team, so a link or back button that changes just the page has to be read here.
+  useEffect(() => {
+    const read = () => setInner((cur) => readInner() ?? cur)
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
+  }, [])
   const stacked = usePhone()
   const tab: Inner = stacked ? inner ?? 'overview' : !inner || inner === 'overview' ? 'roster' : inner
   // Moving to another team keeps the page, so rosters can be compared; the route drops it, so write it back.
@@ -338,9 +345,20 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
             {chartWeeks.length > 0 && (
               <div className="border-b border-ff-line px-2 pb-2 pt-3">
                 <ProjectionChart weeks={chartWeeks} actual={chartWeeks.map((w) => scored[w] ?? null)} projected={chartWeeks.map((w) => expected[w] ?? ahead[w] ?? null)} />
-                <p className="mt-1.5 px-1 text-[11px] leading-snug text-ff-muted">
-                  Projected = best possible lineup on pre-game projections × the manager&apos;s efficiency. A bye or empty slot left in shows as a miss. Dashed weeks are ahead.
-                </p>
+                {/* On a phone the explainer folds away so the chart and the table share the screen. */}
+                {stacked ? (
+                  <details className="group mt-1 px-1 text-[11px] leading-snug text-ff-muted">
+                    <summary className="cursor-pointer list-none py-1 font-mono text-ff-text2 [&::-webkit-details-marker]:hidden">
+                      <span className="group-open:hidden">How projected is figured ▾</span>
+                      <span className="hidden group-open:inline">How projected is figured ▴</span>
+                    </summary>
+                    <p>Projected = best possible lineup on pre-game projections × the manager&apos;s efficiency. A bye or empty slot left in shows as a miss. Dashed weeks are ahead.</p>
+                  </details>
+                ) : (
+                  <p className="mt-1.5 px-1 text-[11px] leading-snug text-ff-muted">
+                    Projected = best possible lineup on pre-game projections × the manager&apos;s efficiency. A bye or empty slot left in shows as a miss. Dashed weeks are ahead.
+                  </p>
+                )}
               </div>
             )}
             <Table
