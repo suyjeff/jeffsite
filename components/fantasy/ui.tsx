@@ -351,9 +351,6 @@ export const TabSection = ({
   id: string
   active: boolean
   children: ReactNode
-  /** Not used any more; the last call sites still pass them. */
-  label?: string
-  count?: number | null
 }) => {
   const phone = usePhone()
   if (!active) return null

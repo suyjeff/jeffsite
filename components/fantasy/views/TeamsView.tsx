@@ -179,7 +179,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
         <p className="text-[11.5px] text-ff-muted">
           <span className="hidden md:inline">Power: chance to beat an average team. Lineup: the best lineup&apos;s points per week ahead, against the league average. </span>
           {myRosterId != null && (
-            <button type="button" onClick={() => onTeam(myRosterId)} className="max-md:relative max-md:before:absolute max-md:before:-inset-y-3 max-md:before:inset-x-0 max-md:before:content-[''] text-ff-text2 underline-offset-2 hover:underline">
+            <button type="button" onClick={() => onTeam(myRosterId)} className="ff-hit text-ff-text2 underline-offset-2 hover:underline">
               Your team page →
             </button>
           )}
