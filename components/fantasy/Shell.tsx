@@ -1,10 +1,10 @@
-import React, { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Head from 'next/head'
 import { MONKE } from './brand'
 import Tour, { TOUR } from './Tour'
 import { PanelIcon } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
-import { Avatar, Dropdown, cx, shortcutLabel, usePhone } from './ui'
+import { Avatar, CrumbContext, Dropdown, cx, shortcutLabel, usePhone } from './ui'
 
 export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
@@ -363,10 +363,20 @@ const Shell = (props: ShellProps) => {
     el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 170, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' })
   }, [sidebarOpen, phone])
   const current = SECTIONS.find((s) => s.key === section)
+  // The top bar's breadcrumb: the section crumb is the shell's; a page with tabs portals its page crumb into the slot.
+  const [crumbSlot, setCrumbSlot] = useState<HTMLElement | null>(null)
+  const [paged, setPaged] = useState(false)
+  const home = useRef<(() => boolean) | null>(null)
+  const crumbs = useMemo(() => ({ slot: crumbSlot, section: current?.label ?? '', home, setPaged }), [crumbSlot, current?.label])
+  // Tapping the section goes to its first page; already there (or nothing to go to), it opens the menu.
+  const crumbHome = () => {
+    if (!home.current?.()) setDrawer(true)
+  }
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
 
   return (
     // Page headers read data-sidebar to leave room for the show-sidebar button when the sidebar is folded.
+    <CrumbContext.Provider value={crumbs}>
     <div className="ff group/shell min-h-dvh bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
       <FantasyHead title={title} />
 
@@ -394,8 +404,20 @@ const Shell = (props: ShellProps) => {
           <PanelIcon />
         </button>
         <div className="min-w-0 flex-1 px-3 leading-tight">
-          <div className="truncate text-[15px] font-medium">{current?.label}</div>
-          {leagueName && <div className="truncate font-mono text-[10.5px] text-ff-muted">{leagueName}</div>}
+          {/* The crumbs are taller than their text so a thumb can hit them; the league line under them lets taps through. */}
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center text-[15px] font-medium">
+            <button
+              type="button"
+              onClick={crumbHome}
+              title={current?.label}
+              aria-label={paged ? `${current?.label}: first page` : `${current?.label}: open menu`}
+              className={cx('-my-3.5 max-w-[45%] shrink-0 truncate py-3.5 text-left', paged ? 'font-normal text-ff-text2' : 'text-ff-text')}
+            >
+              {current?.label}
+            </button>
+            <div ref={setCrumbSlot} className="contents" />
+          </nav>
+          {leagueName && <div className="pointer-events-none truncate font-mono text-[10.5px] text-ff-muted">{leagueName}</div>}
         </div>
         {props.onSearch && (
           <button onClick={props.onSearch} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] tracking-[0.1em] text-ff-text2" aria-label="Find a page, player or team">
@@ -449,6 +471,7 @@ const Shell = (props: ShellProps) => {
         </button>
       </nav>
     </div>
+    </CrumbContext.Provider>
   )
 }
 

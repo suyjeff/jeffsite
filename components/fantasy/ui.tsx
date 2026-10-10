@@ -1,4 +1,5 @@
-import React, { Children, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { Children, createContext, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
 
 // ---------- Formatting ----------
@@ -182,13 +183,26 @@ const tabLabel = (t: TabItem<string>) => (
 )
 
 /**
- * A page's sub-views. On wide screens they are tabs, one view at a time. With `stacked` (phones),
- * the page shows every view in one scroll and this becomes a scrollspy: a sticky strip whose
- * underline follows the scroll position continuously and jumps to a section on tap.
+ * What the phone's top bar lends a page's tabs: a slot beside the section crumb to portal the page crumb into,
+ * the section's name for labels, and the hooks to say "this page has pages" and to answer a tap on the section crumb.
+ */
+export type CrumbHost = {
+  slot: HTMLElement | null
+  section: string
+  /** Set by the tabs while mounted: goes to the section's first page and says so, or says there was nowhere to go. */
+  home: React.MutableRefObject<(() => boolean) | null>
+  setPaged: (paged: boolean) => void
+}
+export const CrumbContext = createContext<CrumbHost | null>(null)
+
+/**
+ * A page's sub-views. On wide screens they are tabs, one view at a time. On phones (`stacked`) there is no strip
+ * in the page: the same choice lives in the top bar as the second crumb, `Section › Page ▾`, and each view is
+ * its own page.
  */
 export const Tabs = <K extends string>({ items, value, onChange, stacked }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void; stacked?: boolean }) =>
   stacked ? (
-    <SpyStrip items={items} value={value} />
+    <PageCrumb items={items} value={value} onChange={onChange} />
   ) : (
     <div role="tablist" className="no-scrollbar -mb-px flex overflow-x-auto border-b border-ff-line [mask-image:linear-gradient(to_right,black_88%,transparent)] md:[mask-image:none]">
       {items.map((t) => {
@@ -209,214 +223,96 @@ export const Tabs = <K extends string>({ items, value, onChange, stacked }: { it
     </div>
   )
 
-const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
-const spySection = (key: string) => document.querySelector<HTMLElement>(`[data-spy="${CSS.escape(key)}"]`)
-/** Where a section counts as reached: just under the sticky page header. */
-const spyLine = () => (document.querySelector('.ff-pagetabs')?.getBoundingClientRect().bottom ?? 0) + 12
-
-/** Scroll a stacked page to one of its sections, and put focus on its heading for keyboards and screen readers. */
-export const spyTo = (key: string) => {
-  const el = spySection(key)
-  if (!el) return
-  const target = () => window.scrollY + el.getBoundingClientRect().top - (spyLine() - 12) + 1
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  window.scrollTo({ top: Math.max(0, target()), behavior: reduce ? 'auto' : 'smooth' })
-  el.querySelector<HTMLElement>('[data-spy-head]')?.focus({ preventScroll: true })
-  // Sections mount as the scroll passes them, which can move the target; once the scroll settles, land on it exactly.
-  let tries = 0
-  const settle = () => {
-    const off = target() - window.scrollY
-    if (Math.abs(off) > 4 && tries++ < 3) {
-      window.scrollTo({ top: Math.max(0, target()) })
-      window.setTimeout(settle, 200)
-    }
-  }
-  let last = -1
-  const wait = () => {
-    // Settled when the position stops changing between two checks.
-    if (window.scrollY === last) return settle()
-    last = window.scrollY
-    window.setTimeout(wait, 120)
-  }
-  window.setTimeout(wait, reduce ? 0 : 160)
-}
-
-const SpyStrip = <K extends string>({ items, value }: { items: TabItem<K>[]; value: K }) => {
-  const strip = useRef<HTMLDivElement>(null)
-  const bar = useRef<HTMLSpanElement>(null)
-  const btns = useRef<(HTMLButtonElement | null)[]>([])
-  const [active, setActive] = useState(0)
-  const keys = items.map((t) => t.key).join('|')
-
+/** The second crumb: the current page with a caret, opening a list of the section's pages under the top bar. */
+const PageCrumb = <K extends string>({ items, value, onChange }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void }) => {
+  const host = useContext(CrumbContext)
+  const first = items[0]?.key
+  const latest = useRef({ value, first, onChange })
+  latest.current = { value, first, onChange }
   useEffect(() => {
-    let raf = 0
-    let anim = 0
-    let lastY = NaN
-    // Where the scroll says the underline belongs, and where it is drawn. The drawn one eases toward the
-    // target (a critically damped follow, ~60 ms), so even a fling that crosses a section in two frames glides.
-    const tgt = { x: 0, w: 0 }
-    const cur = { x: NaN, w: NaN }
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    let prev = 0
-    const draw = () => {
-      const s = strip.current
-      const b = bar.current
-      if (!s || !b) return
-      b.style.transform = `translateX(${cur.x}px) scaleX(${cur.w})`
-      b.style.opacity = '1'
-      // Keep the current label in view, but leave the strip alone while only it is being swiped.
-      if (window.scrollY !== lastY || anim) s.scrollLeft = cur.x + cur.w / 2 - s.clientWidth / 2
+    if (!host) return
+    const { home, setPaged } = host
+    home.current = () => {
+      const { value, first, onChange } = latest.current
+      if (first == null || value === first) return false
+      onChange(first)
+      return true
     }
-    const step = (t: number) => {
-      const dt = prev ? Math.min(64, t - prev) : 16
-      prev = t
-      const k = 1 - Math.exp(-dt / 60)
-      cur.x += (tgt.x - cur.x) * k
-      cur.w += (tgt.w - cur.w) * k
-      const done = Math.abs(tgt.x - cur.x) < 0.25 && Math.abs(tgt.w - cur.w) < 0.25
-      if (done) {
-        cur.x = tgt.x
-        cur.w = tgt.w
-      }
-      draw()
-      anim = done ? 0 : requestAnimationFrame(step)
-      if (done) prev = 0
-    }
-    const update = () => {
-      raf = 0
-      const H = window.innerHeight
-      const line0 = spyLine()
-      // Near the bottom the reading line slides down the screen, so short last sections still get their turn.
-      const remaining = document.documentElement.scrollHeight - (window.scrollY + H)
-      const line = line0 + clamp01(1 - remaining / (H * 0.4)) * (H - 72 - line0)
-      const tops = keys.split('|').map((k) => spySection(k)?.getBoundingClientRect().top ?? Infinity)
-      let i = 0
-      tops.forEach((t, j) => t <= line && (i = j))
-      // Between two sections the underline travels with the scroll across a zone, rather than snapping at a threshold.
-      const zone = Math.max(96, H * 0.28)
-      const next = tops[i + 1]
-      const f = next != null && Number.isFinite(next) ? clamp01(1 - (next - line) / zone) : 0
-      const a = btns.current[i]
-      const c = btns.current[i + 1] ?? a
-      if (!a || !c) return
-      tgt.x = a.offsetLeft + (c.offsetLeft - a.offsetLeft) * f
-      tgt.w = a.offsetWidth + (c.offsetWidth - a.offsetWidth) * f
-      setActive(f > 0.5 ? i + 1 : i)
-      if (reduce || Number.isNaN(cur.x)) {
-        cur.x = tgt.x
-        cur.w = tgt.w
-        draw()
-      } else if (!anim) anim = requestAnimationFrame(step)
-      lastY = window.scrollY
-    }
-    const on = () => {
-      if (!raf) raf = requestAnimationFrame(update)
-    }
-    on()
-    window.addEventListener('scroll', on, { passive: true })
-    window.addEventListener('resize', on)
-    const ro = new ResizeObserver(on)
-    const main = document.querySelector('main')
-    if (main) ro.observe(main)
+    setPaged(true)
     return () => {
-      cancelAnimationFrame(raf)
-      cancelAnimationFrame(anim)
-      window.removeEventListener('scroll', on)
-      window.removeEventListener('resize', on)
-      ro.disconnect()
+      home.current = null
+      setPaged(false)
     }
-  }, [keys])
+  }, [host])
 
-  // Arriving with a section named (a link, the palette), go to it once the page has laid out.
-  const shown = useRef<string | null>(null)
+  // A page is a screen of its own: arriving on one starts at its top, with no scroll animation.
+  const shown = useRef(value)
   useEffect(() => {
-    const first = shown.current == null
+    if (shown.current === value) return
     shown.current = value
-    if (first && value === items[0]?.key) return
-    const t = window.setTimeout(() => spyTo(value), first ? 120 : 0)
-    return () => window.clearTimeout(t)
-  }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
+  }, [value])
 
-  return (
-    <nav aria-label="Sections on this page" className="relative -mb-px border-b border-ff-line">
-      <div ref={strip} className="no-scrollbar relative flex overflow-x-auto [mask-image:linear-gradient(to_right,black_85%,transparent)]">
-        {items.map((t, i) => (
-          <button
-            key={t.key}
-            ref={(el) => {
-              btns.current[i] = el
-            }}
-            type="button"
-            aria-current={i === active ? 'location' : undefined}
-            onClick={() => spyTo(t.key)}
-            className={cx('relative h-9 shrink-0 px-3 text-[13px] transition-colors duration-150 first:pl-0.5', i === active ? 'text-ff-text' : 'text-ff-muted')}
-          >
-            {tabLabel(t)}
-          </button>
-        ))}
-        <span ref={bar} aria-hidden className="pointer-events-none absolute bottom-0 left-0 h-[2px] w-px origin-left bg-ff-text opacity-0" />
-      </div>
-    </nav>
+  const slot = host?.slot
+  const cur = items.find((t) => t.key === value) ?? items[0]
+  if (!slot || !cur) return null
+  return createPortal(
+    <>
+      <span aria-hidden className="shrink-0 px-1.5 font-mono text-[12px] font-normal text-ff-muted">
+        ›
+      </span>
+      <Dropdown
+        label={`Page in ${host.section}: ${cur.label}`}
+        value={value}
+        onChange={(k) => onChange(k as K)}
+        options={items.map((t) => ({ value: t.key, label: tabLabel(t), text: t.label }))}
+        // The list is the width of the screen under the top bar (anchored to the bar, not to the crumb), with touch-sized rows.
+        className="!static -my-3.5"
+        menuClassName="!inset-x-0 !top-full !mt-0 !max-h-[60dvh] !min-w-0 border-x-0 [&_[role=option]]:min-h-11 [&_[role=option]]:pl-4 [&_[role=option]]:text-[14px]"
+        renderButton={(_, open) => (
+          <span title={cur.label} className="flex min-w-0 items-center gap-1.5 py-3.5 text-ff-text">
+            <span className="truncate">{cur.label}</span>
+            <span aria-hidden className="shrink-0 font-mono text-[10px] font-normal text-ff-muted">
+              {open ? '▴' : '▾'}
+            </span>
+          </span>
+        )}
+      />
+      {/* Changing page keeps focus on the crumb; this tells a screen reader where it landed. */}
+      <span role="status" className="sr-only">
+        {cur.label}
+      </span>
+    </>,
+    slot,
   )
 }
 
 /**
- * One tab's content. Alone on wide screens when its tab is picked; on stacked (phone) pages always
- * rendered, under a heading the scrollspy steers by.
+ * Pages used to stack on phones, with a scrollspy that steered by section. They no longer do; this moves
+ * to the page by writing it into the route, for call sites that have not switched to `onSub` yet.
+ */
+export const spyTo = (key: string) => {
+  const section = window.location.hash.replace(/^#\/?/, '').split('/')[0]
+  if (section) window.location.hash = `#${section}/${key}`
+}
+
+/**
+ * One tab's content: only the picked tab renders, on phones as on wide screens. `label`, `count`, `stacked` and
+ * `bare` are accepted so older call sites compile; they no longer do anything.
  */
 export const TabSection = ({
-  id,
-  label,
-  count,
   active,
-  stacked,
-  bare,
   children,
-  className,
 }: {
   id: string
-  label: string
+  label?: string
   count?: number | null
   active: boolean
   stacked?: boolean
-  /** No heading of its own: for a section that is already one titled panel. */
   bare?: boolean
   children: ReactNode
   className?: string
-}) => {
-  // Stacked, a section mounts once it comes within a screen of view and then stays: a phone opening a long page
-  // builds the top of it, not every panel at once. Its heading is there from the start, so the strip can steer to it.
-  const ref = useRef<HTMLElement>(null)
-  const [near, setNear] = useState(false)
-  useEffect(() => {
-    if (!stacked || near) return
-    const el = ref.current
-    if (!el || typeof IntersectionObserver === 'undefined') return setNear(true)
-    const io = new IntersectionObserver(([e]) => e.isIntersecting && setNear(true), { rootMargin: '100% 0px' })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [stacked, near])
-  if (!stacked) return active ? <>{children}</> : null
-  const body = near ? children : <div aria-hidden className="min-h-[60vh]" />
-  if (bare)
-    return (
-      <section ref={ref} data-spy={id} aria-label={label} aria-busy={!near || undefined} className={cx('space-y-3', className)}>
-        <span data-spy-head tabIndex={-1} className="sr-only">
-          {label}
-        </span>
-        {body}
-      </section>
-    )
-  return (
-    <section ref={ref} data-spy={id} aria-labelledby={`spy-${id}`} aria-busy={!near || undefined} className={cx('space-y-3 pt-5 first:pt-0', className)}>
-      <h2 id={`spy-${id}`} data-spy-head tabIndex={-1} className="flex items-baseline gap-2 border-b border-ff-line pb-2 text-[15px] font-medium tracking-[-0.01em] text-ff-text outline-none">
-        {label}
-        {count != null && <span className="num text-[11px] font-normal text-ff-muted">{count}</span>}
-      </h2>
-      {body}
-    </section>
-  )
-}
+}) => (active ? <>{children}</> : null)
 
 export type SegOption<K extends string> = {
   key: K

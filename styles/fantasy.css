@@ -666,23 +666,6 @@ html:has(body .ff) body {
   }
 }
 
-/* A stacked page's first section sits right under the strip that already names it: keep its heading for
-   screen readers and focus, hide it from view. */
-.ff section[data-spy]:first-child > h2[data-spy-head] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
-.ff section[data-spy]:first-child {
-  padding-top: 0;
-}
-
 /* ---------- Density: comfortable ----------
  * The app is set compact. Comfortable is one switch on the root that scales every type size the components
  * use by about a tenth and opens up rows, controls and panel padding, so it reaches every screen without each
