@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import type { SlateGame, SlatePlayer } from '../../../lib/fantasy/slate'
-import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
+import { providerName, type LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { Disclosure } from '../Disclosure'
 import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
@@ -523,12 +523,12 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
               {yours && !stacked && lineups}
             </>
           ) : (
-            <Empty title="No matchup for you this week">You are not paired this week, or Sleeper has not set the week&apos;s matchups yet.</Empty>
+            <Empty title="No matchup for you this week">You are not paired this week, or {providerName(data.provider)} has not set the week&apos;s matchups yet.</Empty>
           )}
         </TabSection>
 
         <TabSection id="lineups" active={tab === 'lineups'}>
-          {lineups ?? <Empty title="No matchup for you this week">You are not paired this week, or Sleeper has not set the week&apos;s matchups yet.</Empty>}
+          {lineups ?? <Empty title="No matchup for you this week">You are not paired this week, or {providerName(data.provider)} has not set the week&apos;s matchups yet.</Empty>}
         </TabSection>
 
         <TabSection id="games" active={tab === 'games'}>

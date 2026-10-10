@@ -19,6 +19,20 @@ import {
   getWeekStatLines,
   getWeekStats,
 } from './sleeper'
+import {
+  buildEspnIndex,
+  convertEspnLeague,
+  EspnError,
+  espnLeagueSettings,
+  espnUnnamedPlayers,
+  espnUserId,
+  findEspnLeague,
+  getEspnLeague,
+  getEspnPlayerNames,
+  getEspnWeek,
+  nflSeasons,
+  type EspnWeek,
+} from './espn'
 import { scoreStatLine, statLinePlayed } from './scoring'
 import type { ScheduleGame } from './context'
 import type {
@@ -69,7 +83,16 @@ export const DEFAULT_PLAYOFF_WEIGHT = 1
 /** Games each NFL team plays in a regular season since 2021. */
 const TEAM_GAMES = 17
 
+/** Where a league lives. Everything but the league itself comes from Sleeper either way. */
+export type Provider = 'sleeper' | 'espn'
+
+/** The platform's name, for copy that points a manager back to it ("Read it in ESPN"). */
+export const providerName = (p: Provider | undefined) => (p === 'espn' ? 'ESPN' : 'Sleeper')
+
 export type LeagueData = {
+  provider: Provider
+  /** Whether a trade can include FAAB: Sleeper's can, ESPN's cannot. Every trade-FAAB control and suggestion reads this. */
+  tradeFaab: boolean
   state: SleeperState
   me: SleeperUser
   leagues: SleeperLeague[]
@@ -140,13 +163,21 @@ export type LeagueHistory = {
   rosterMap: Record<number, number>
 }
 
-export type LoadOptions = {
-  username: string
-  leagueId?: string | null
+type CommonOptions = {
   season?: string | null
   horizon?: HorizonMode
   playoffWeight?: number
 }
+
+/** Saved settings from before ESPN support carry no provider: those are Sleeper. */
+export type LoadOptions = CommonOptions &
+  (
+    | { provider?: 'sleeper'; username: string; leagueId?: string | null }
+    | { provider: 'espn'; /** ESPN's league id, the number after leagueId= in its address bar. */ leagueId: string; teamId?: number | null }
+  )
+
+/** What the ESPN branch hands the shared pipeline besides the league itself. */
+type EspnExtras = { transactions: SleeperTransaction[]; draft: DraftBoard | null; history: LeagueHistory | null }
 
 const MAX_WEEK = 18
 
@@ -208,58 +239,161 @@ const currentSeasonGames = (weeks: { week: number; stats: WeekStats }[], schedul
   return { gp, teamGames }
 }
 
-export const loadLeagueData = async (
-  opts: LoadOptions,
-  onProgress: (msg: string) => void = () => {},
-): Promise<LeagueData> => {
-  const warnings: string[] = []
-  onProgress('Looking up user and NFL state')
-  const [state, me] = await Promise.all([getState(), getUser(opts.username.trim())])
-  if (!me?.user_id) throw new Error(`Sleeper user "${opts.username}" not found`)
-
-  const currentSeason = state.league_season ?? state.season
-  const season = opts.season ?? currentSeason
-  onProgress(`Loading ${season} leagues`)
-  let leagues = await getUserLeagues(me.user_id, season)
-  if ((!leagues || leagues.length === 0) && !opts.season && state.previous_season) {
-    leagues = await getUserLeagues(me.user_id, state.previous_season)
-    if (leagues?.length) warnings.push(`No ${season} leagues yet; showing ${state.previous_season}.`)
-  }
-  if (!leagues?.length) throw new Error(`No NFL leagues found for ${me.display_name ?? opts.username} in ${season}`)
-
-  const chosen = leagues.find((l) => l.league_id === opts.leagueId) ?? leagues[0]
-
-  onProgress(`Loading ${chosen.name}`)
-  const [league, rosters, users, players] = await Promise.all([
-    getLeague(chosen.league_id),
-    getRosters(chosen.league_id),
-    getLeagueUsers(chosen.league_id),
-    getPlayers(),
-  ])
-
+/** The first week not yet settled: a finished season is past every week, a preseason one starts at its first. */
+const currentWeekOf = (league: SleeperLeague, state: SleeperState) => {
   const startWeek = league.settings?.start_week ?? 1
-  const playoffStart = league.settings?.playoff_week_start ?? 15
   const isCurrentSeason = league.season === state.season
-  let currentWeek: number
-  if (!isCurrentSeason || state.season_type === 'post' || league.status === 'complete') currentWeek = MAX_WEEK + 1
-  else if (state.season_type === 'regular') {
+  if (!isCurrentSeason || state.season_type === 'post' || league.status === 'complete') return MAX_WEEK + 1
+  if (state.season_type === 'regular') {
     // `state.week` rolls over before the last games of the old week are final,
     // so a week can be "past" while its Monday night score is still moving.
     // `last_scored_leg` is the league's own answer to what is settled; take
     // whichever is earlier so a half-scored week never enters the model.
     const lastScored = league.settings?.last_scored_leg
-    currentWeek = typeof lastScored === 'number' && lastScored >= 0 ? Math.min(state.week, lastScored + 1) : state.week
-  } else currentWeek = startWeek
+    return typeof lastScored === 'number' && lastScored >= 0 ? Math.min(state.week, lastScored + 1) : state.week
+  }
+  return startWeek
+}
 
-  onProgress('Loading matchups')
-  const weekList = Array.from({ length: MAX_WEEK - startWeek + 1 }, (_, i) => startWeek + i)
-  const matchupResults = await settled(
-    weekList.map((w) => getMatchups(league.league_id, w, w < currentWeek)),
-  )
-  const matchupsByWeek: Record<number, SleeperMatchup[]> = {}
-  weekList.forEach((w, i) => {
-    if (matchupResults[i]) matchupsByWeek[w] = matchupResults[i]!
-  })
+const range = (from: number, to: number) => Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i)
+
+/**
+ * An ESPN league in the shapes the rest of the loader reads. The league, its
+ * rosters and lineups come from ESPN; players are Sleeper's, matched by id.
+ */
+const loadEspn = async (
+  opts: Extract<LoadOptions, { provider: 'espn' }>,
+  state: SleeperState,
+  warnings: string[],
+  onProgress: (msg: string) => void,
+) => {
+  const id = opts.leagueId.trim()
+  onProgress(`Loading ESPN league ${id}`)
+  // Together, so a failure in either is handled (and the first one reported).
+  const [found, players] = await Promise.all([findEspnLeague(id, opts.season, await nflSeasons(state)), getPlayers()])
+  const { league: raw, season } = found
+  if (found.fallback) warnings.push(`ESPN league ${id} has not started its ${state.league_season ?? state.season} season yet; showing ${season}.`)
+  if (!raw.teams.length) throw new Error(`ESPN league ${id} has no teams yet.`)
+
+  // The league payload has every week's team scores; lineups and player points come a week at a time,
+  // alongside last season's league (team scores only, for the rating model's prior).
+  const settings = espnLeagueSettings(raw)
+  const currentWeek = currentWeekOf(settings.league, state)
+  const lineupWeeks = range(settings.league.settings?.start_week ?? 1, Math.min(currentWeek, MAX_WEEK))
+  const prevSeason = Number(raw.season) - 1
+  onProgress('Loading ESPN lineups and last season')
+  const [weekResults, [prev]] = await Promise.all([
+    settled(lineupWeeks.map((w) => getEspnWeek(id, season, w, w < currentWeek))),
+    raw.previousSeasons.includes(prevSeason) ? settled([getEspnLeague(id, String(prevSeason))]) : Promise.resolve([null]),
+  ])
+  const weeks = weekResults.filter((w): w is EspnWeek => !!w)
+  if (weeks.length < lineupWeeks.length) warnings.push(`ESPN lineups missing for ${lineupWeeks.length - weeks.length} week(s); those weeks have team scores only.`)
+  // Moves and draft picks name players by id alone; a player no lineup carried needs ESPN's name for him.
+  const unnamed = espnUnnamedPlayers(raw, weeks)
+  const [names] = unnamed.length ? await settled([getEspnPlayerNames(season)]) : [null]
+  const ix = buildEspnIndex(players)
+  const conv = convertEspnLeague(raw, weeks, ix, names ?? {})
+  warnings.push(...conv.warnings)
+
+  const team = raw.teams.find((t) => t.id === opts.teamId) ?? raw.teams[0]
+  if (opts.teamId != null && team.id !== opts.teamId) warnings.push(`Team ${opts.teamId} is not in this ESPN league any more; showing ${team.name}.`)
+  const me = conv.users.find((u) => u.user_id === espnUserId(team.id))!
+
+  // Last season, for the rating model's prior: team scores only.
+  let history: LeagueHistory | null = null
+  if (prev) {
+    const pc = convertEspnLeague(prev, [], ix)
+    const byOwner = new Map(raw.teams.filter((t) => t.ownerId).map((t) => [t.ownerId!, t.id]))
+    const now = new Set(raw.teams.map((t) => t.id))
+    const rosterMap: Record<number, number> = {}
+    for (const t of prev.teams) {
+      const to = (t.ownerId ? byOwner.get(t.ownerId) : undefined) ?? (now.has(t.id) ? t.id : undefined)
+      if (to != null) rosterMap[t.id] = to
+    }
+    const prevPlayoff = pc.league.settings?.playoff_week_start ?? 15
+    const mbw: Record<number, SleeperMatchup[]> = {}
+    for (const w of Object.keys(pc.matchupsByWeek).map(Number)) if (w < prevPlayoff && weekHasScores(pc.matchupsByWeek[w])) mbw[w] = pc.matchupsByWeek[w]
+    history = {
+      league: pc.league,
+      season: pc.league.season,
+      matchupsByWeek: mbw,
+      weeks: Object.keys(mbw).map(Number).sort((a, b) => a - b),
+      transactions: [],
+      rosterMap,
+    }
+  }
+  if (currentWeek > (conv.league.settings?.start_week ?? 1) && !conv.transactions.length)
+    warnings.push('No ESPN transactions could be read; trade and waiver history starts empty.')
+
+  const extras: EspnExtras = { transactions: conv.transactions, draft: conv.draft, history }
+  return { me, league: conv.league, users: conv.users, rosters: conv.rosters, players, matchupsByWeek: conv.matchupsByWeek, currentWeek, extras }
+}
+
+export const loadLeagueData = async (
+  opts: LoadOptions,
+  onProgress: (msg: string) => void = () => {},
+): Promise<LeagueData> => {
+  const warnings: string[] = []
+  let state: SleeperState
+  let me: SleeperUser
+  let leagues: SleeperLeague[]
+  let league: SleeperLeague
+  let rosters: SleeperRoster[]
+  let users: SleeperUser[]
+  let players: PlayerMap
+  let matchupsByWeek: Record<number, SleeperMatchup[]> = {}
+  let currentWeek: number
+  let espn: EspnExtras | null = null
+
+  if (opts.provider === 'espn') {
+    // Sleeper's NFL calendar still says what week it is.
+    onProgress('Reading the NFL calendar')
+    state = await getState()
+    const src = await loadEspn(opts, state, warnings, onProgress)
+    ;({ me, league, users, rosters, players, matchupsByWeek, currentWeek } = src)
+    leagues = [league]
+    espn = src.extras
+  } else {
+    onProgress('Looking up user and NFL state')
+    const [st, user] = await Promise.all([getState(), getUser(opts.username.trim())])
+    state = st
+    if (!user?.user_id) throw new Error(`Sleeper user "${opts.username}" not found`)
+    me = user
+
+    const currentSeason = state.league_season ?? state.season
+    const season = opts.season ?? currentSeason
+    onProgress(`Loading ${season} leagues`)
+    leagues = await getUserLeagues(me.user_id, season)
+    if ((!leagues || leagues.length === 0) && !opts.season && state.previous_season) {
+      leagues = await getUserLeagues(me.user_id, state.previous_season)
+      if (leagues?.length) warnings.push(`No ${season} leagues yet; showing ${state.previous_season}.`)
+    }
+    if (!leagues?.length) throw new Error(`No NFL leagues found for ${me.display_name ?? opts.username} in ${season}`)
+
+    const chosen = leagues.find((l) => l.league_id === opts.leagueId) ?? leagues[0]
+
+    onProgress(`Loading ${chosen.name}`)
+    ;[league, rosters, users, players] = await Promise.all([
+      getLeague(chosen.league_id),
+      getRosters(chosen.league_id),
+      getLeagueUsers(chosen.league_id),
+      getPlayers(),
+    ])
+    currentWeek = currentWeekOf(league, state)
+
+    onProgress('Loading matchups')
+    const startWk = league.settings?.start_week ?? 1
+    const weeks = range(startWk, MAX_WEEK)
+    const matchupResults = await settled(weeks.map((w) => getMatchups(league.league_id, w, w < currentWeek)))
+    weeks.forEach((w, i) => {
+      if (matchupResults[i]) matchupsByWeek[w] = matchupResults[i]!
+    })
+  }
+
+  const startWeek = league.settings?.start_week ?? 1
+  const playoffStart = league.settings?.playoff_week_start ?? 15
+  const isCurrentSeason = league.season === state.season
+  const weekList = range(startWeek, MAX_WEEK)
 
   const playedWeeks = weekList.filter((w) => w < currentWeek && weekHasScores(matchupsByWeek[w]))
   const regularWeeks = playedWeeks.filter((w) => w < playoffStart)
@@ -451,11 +585,12 @@ export const loadLeagueData = async (
   onProgress('Reading league history')
   const txWeeks = weekList.filter((w) => w <= Math.min(currentWeek, MAX_WEEK))
   const [txResults, projResults, consensusRows, draftResult] = await Promise.all([
-    settled(txWeeks.map((w) => getTransactions(league.league_id, w, w < currentWeek))),
+    // An ESPN league's moves and draft came with its weekly payloads.
+    espn ? Promise.resolve([espn.transactions]) : settled(txWeeks.map((w) => getTransactions(league.league_id, w, w < currentWeek))),
     settled(regularWeeks.map((w) => getScoredProjections(league.league_id, league.season, w, league.scoring_settings, false))),
     isCurrentSeason ? settled([getConsensusCsv(reduceConsensusCsv)]).then((r) => r[0]) : Promise.resolve(null),
     // Dynasty leagues' latest draft is a rookie draft: its order says nothing about the rest of the pool.
-    league.settings?.type === 2 ? Promise.resolve(null) : settled([getDraftBoard(league.league_id)]).then((r) => r[0]),
+    league.settings?.type === 2 ? Promise.resolve(null) : espn ? Promise.resolve(espn.draft) : settled([getDraftBoard(league.league_id)]).then((r) => r[0]),
   ])
   const transactions = txResults.flatMap((r) => r ?? [])
   const pastProjections: Record<number, Record<string, number>> = {}
@@ -466,8 +601,8 @@ export const loadLeagueData = async (
   if (consensusRows?.length) consensus = matchConsensus(consensusRows, players)
   else if (isCurrentSeason) warnings.push('FantasyPros consensus unavailable right now; consensus columns are hidden.')
 
-  let history: LeagueHistory | null = null
-  if (league.previous_league_id && league.previous_league_id !== '0') {
+  let history: LeagueHistory | null = espn?.history ?? null
+  if (!espn && league.previous_league_id && league.previous_league_id !== '0') {
     const prevId = league.previous_league_id
     const [prevLeague, prevRosters] = await settled<unknown>([getLeague(prevId), getRosters(prevId)])
     if (prevLeague && Array.isArray(prevRosters)) {
@@ -501,6 +636,8 @@ export const loadLeagueData = async (
   }
 
   return {
+    provider: espn ? 'espn' : 'sleeper',
+    tradeFaab: !espn,
     state,
     me,
     leagues,
@@ -551,8 +688,8 @@ export const useLeagueData = (opts: LoadOptions | null) => {
   useEffect(() => {
     if (!opts) return
     const id = ++active.current
-    // A different user's league must never stay on screen under the new name, even if their load fails.
-    const who = opts.username.trim().toLowerCase()
+    // A different user's (or ESPN league's) data must never stay on screen under the new name, even if their load fails.
+    const who = opts.provider === 'espn' ? `espn:${opts.leagueId.trim()}` : opts.username.trim().toLowerCase()
     if (lastUser.current !== null && lastUser.current !== who) setData(null)
     lastUser.current = who
     setLoading(true)
@@ -566,12 +703,13 @@ export const useLeagueData = (opts: LoadOptions | null) => {
       .catch((e: unknown) => {
         if (active.current !== id) return
         const msg = e instanceof Error ? e.message : String(e)
-        setError(/Failed to fetch|NetworkError/i.test(msg) ? `Could not reach the Sleeper API (${msg}).` : msg)
+        // ESPN's errors already say what to do; a bare network failure here is Sleeper's.
+        setError(e instanceof EspnError || !/Failed to fetch|NetworkError/i.test(msg) ? msg : `Could not reach the Sleeper API (${msg}).`)
       })
       .finally(() => {
         if (active.current === id) setLoading(false)
       })
-  }, [opts?.username, opts?.leagueId, opts?.season, opts?.horizon, opts?.playoffWeight, nonce]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [opts?.provider, opts && 'username' in opts ? opts.username : null, opts?.leagueId, opts?.provider === 'espn' ? opts.teamId : null, opts?.season, opts?.horizon, opts?.playoffWeight, nonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reload = useCallback(() => setNonce((n) => n + 1), [])
   return { data, error, loading, progress, reload }

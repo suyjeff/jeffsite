@@ -104,6 +104,8 @@ export type SleeperPlayer = {
   injury_start_date?: string | null
   /** When Sleeper last attached news to the player, ms since epoch. */
   news_updated?: number | null
+  /** The same player's id on ESPN, when Sleeper knows it. ESPN leagues map their rosters through it. */
+  espn_id?: number | string | null
   active?: boolean
 }
 
@@ -122,6 +124,8 @@ export type TrimmedPlayer = {
   injuryBody?: string | null
   /** When Sleeper last attached news to him, ms since epoch. */
   newsAt?: number | null
+  /** His ESPN player id, for reading ESPN leagues. */
+  espnId?: string | null
 }
 
 export type PlayerMap = Record<string, TrimmedPlayer>

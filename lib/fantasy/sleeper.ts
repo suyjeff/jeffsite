@@ -90,6 +90,8 @@ export const purgeStaleCache = () => {
   removeKeys((k) => /^ff:v\d+:/.test(k) && !k.startsWith(CACHE_PREFIX))
   // Transactions moved to tx2 (FAAB bids kept); the old copies are dead weight.
   removeKeys((k) => k.startsWith(`${CACHE_PREFIX}tx:`))
+  // The player database moved to its own versioned key; the old copy is the biggest thing kept.
+  removeKeys((k) => k === `${CACHE_PREFIX}${BASE}/players/nfl`)
 }
 
 export class SleeperError extends Error {
@@ -124,6 +126,18 @@ const cachedGet = async <T, R = T>(
   const raw = await fetchJson<T>(url, opts.text)
   const data = (opts.transform ? opts.transform(raw) : (raw as unknown)) as R
   writeCache(cacheKey, data, opts.persist ?? true)
+  return data
+}
+
+/**
+ * The same two-level cache for a request this file does not make (ESPN's
+ * league API): `load` runs only on a miss, and what it returns is stored.
+ */
+export const cached = async <R>(key: string, ttl: number, load: () => Promise<R>, persist = true): Promise<R> => {
+  const hit = readCache<R>(key, ttl)
+  if (hit !== null) return hit
+  const data = await load()
+  writeCache(key, data, persist)
   return data
 }
 
@@ -181,8 +195,12 @@ export const trimPlayer = (p: SleeperPlayer): TrimmedPlayer | null => {
     depth: p.depth_chart_order ?? null,
     injuryBody: p.injury_body_part ?? null,
     newsAt: p.news_updated ?? null,
+    // Only when known: most players have none, and the cached copy has to fit in localStorage.
+    ...(p.espn_id != null ? { espnId: String(p.espn_id) } : {}),
   }
 }
+
+const PLAYERS_KEY = 'players:v2'
 
 /**
  * The full player dump is ~5MB and Sleeper asks that it be pulled at most daily.
@@ -190,6 +208,8 @@ export const trimPlayer = (p: SleeperPlayer): TrimmedPlayer | null => {
  */
 export const getPlayers = () =>
   cachedGet<Record<string, SleeperPlayer>, PlayerMap>('/players/nfl', 24 * HOUR, {
+    // Keyed by version: v2 keeps each player's ESPN id, which an ESPN league needs to read its rosters.
+    key: PLAYERS_KEY,
     transform: (raw) => {
       const out: PlayerMap = {}
       for (const id of Object.keys(raw)) {

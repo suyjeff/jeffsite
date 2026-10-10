@@ -69,8 +69,8 @@ const Frame = ({ children, title }: { children: ReactNode; title: string }) => (
 )
 
 const Welcome = () => (
-  <Frame title={`Sleeper data flows into one model, ${MONKE.name} (${MONKE.long}), which feeds every page`}>
-    <Box x={16} y={62} w={110} h={44} label="SLEEPER" sub="league · stats" at={0} />
+  <Frame title={`Your league, from Sleeper or ESPN, and Sleeper's player stats flow into one model, ${MONKE.name} (${MONKE.long}), which feeds every page`}>
+    <Box x={16} y={62} w={110} h={44} label="LEAGUE" sub="sleeper · espn" at={0} />
     <Box x={194} y={50} w={92} h={68} label="M.O.N.K.E." sub="one model" hot at={250} />
     <Box x={364} y={20} w={92} h={30} label="ODDS" at={700} />
     <Box x={364} y={69} w={92} h={30} label="TRADES" at={820} />

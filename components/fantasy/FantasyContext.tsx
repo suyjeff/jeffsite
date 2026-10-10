@@ -51,12 +51,14 @@ export const useFantasy = () => {
  * (the bare read is what a new grade is measured against).
  */
 export const useTradeRead = () => {
-  const { analysis, models, grades } = useFantasy()
+  const { data, analysis, models, grades } = useFantasy()
+  // Where trades cannot carry FAAB (ESPN), there is no sweetener to suggest.
+  const faab = data.tradeFaab ? models.faab : null
   return useCallback(
     (idea: TradeIdea, graded = true) => {
-      const base = acceptRead(idea, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, models.faab)
+      const base = acceptRead(idea, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, faab)
       return graded ? grades.apply(base, idea) : base
     },
-    [analysis, models, grades],
+    [analysis, models, grades, faab],
   )
 }

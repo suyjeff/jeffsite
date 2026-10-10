@@ -55,6 +55,8 @@ export type ShellProps = {
   loading: boolean
   progress: string
   onRefresh: () => void
+  /** Where the league loads from (Sleeper or ESPN), for the reload button's label. */
+  source?: string
   loadedAt: Date | null
   /** Opens the command palette; without it there is no search entry. */
   onSearch?: () => void
@@ -112,6 +114,7 @@ const SidebarBody = ({
   loading,
   progress,
   onRefresh,
+  source = 'Sleeper',
   loadedAt,
   status,
   onClose,
@@ -263,7 +266,7 @@ const SidebarBody = ({
           <span className={cx('h-1.5 w-1.5 shrink-0', loading ? 'ff-pulse bg-ff-warn' : 'bg-ff-pos')} aria-hidden />
           <span className="min-w-0 truncate">{loading ? progress.toLowerCase() : `synced ${clock(loadedAt)}`}</span>
         </span>
-        <button onClick={onRefresh} disabled={loading} className="-mr-3 h-10 shrink-0 px-3 text-ff-text2 md:-mr-1.5 md:h-6 md:px-1.5 hover:bg-ff-raised hover:text-ff-text disabled:opacity-50" title="Reload from Sleeper (R)">
+        <button onClick={onRefresh} disabled={loading} className="-mr-3 h-10 shrink-0 px-3 text-ff-text2 md:-mr-1.5 md:h-6 md:px-1.5 hover:bg-ff-raised hover:text-ff-text disabled:opacity-50" title={`Reload from ${source} (R)`}>
           reload
         </button>
       </div>
@@ -414,7 +417,7 @@ const Shell = (props: ShellProps) => {
             FIND
           </button>
         )}
-        <button onClick={onRefresh} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] text-ff-text2" aria-label="Reload from Sleeper">
+        <button onClick={onRefresh} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] text-ff-text2" aria-label={`Reload from ${props.source ?? 'Sleeper'}`}>
           {loading ? <span className="ff-pulse">SYNC</span> : '↻'}
         </button>
       </header>

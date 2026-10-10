@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { acceptRead, leagueBehavior } from '../behavior'
-import { matchConsensus, normName, parseCsv, perceivedValues, reduceConsensusCsv } from '../consensus'
+import { matchConsensus, parseCsv, perceivedValues, reduceConsensusCsv } from '../consensus'
+import { normName } from '../names'
 import { deadStarters, startingSlots } from '../lineup'
 import type { TeamWeek } from '../power'
 import { backtest, bracketOrder, clinchStatus, eloWinProb, gamesFrom, managedPoints, persistMean, phi, preseasonElo, runElo, simulateSeason, ELO } from '../forecast'

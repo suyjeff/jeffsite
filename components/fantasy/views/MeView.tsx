@@ -2,12 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { optimalLineup, type LineupPlayer } from '../../../lib/fantasy/lineup'
 import { availabilityDrag } from '../../../lib/fantasy/scout'
-import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
+import { providerName, type LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import FreeAgentPick from '../FreeAgentPick'
-import { INSIGHT_ROW, InsightMark } from '../InsightMark'
+import { InsightMark } from '../InsightMark'
 import { pairSwaps } from '../../../lib/fantasy/swaps'
 import ScoutReport, { scoutPlayers, useScout } from '../ScoutReport'
 import MovesPanel from '../Moves'
@@ -207,7 +207,7 @@ const MeView = ({
         <GridFill n={fresh.length} wide="2xl" />
       </div>
       <Callout kind="instruction" className="m-3">
-        Sleeper flags news but not what it says, once a day. Read it in Sleeper, then click a name to set your read.
+        Sleeper flags news but not what it says, once a day. Read it in {providerName(data.provider)}, then click a name to set your read.
       </Callout>
     </Panel>
   ) : null
@@ -263,7 +263,6 @@ const MeView = ({
         dense
         rows={lineupRows}
         rowKey={(r) => r.i}
-        rowClass={(r) => (r.flag ? INSIGHT_ROW : '')}
         columns={[
           { key: 'slot', label: 'Slot', render: (r) => <span className="font-mono text-[11px] text-ff-text2">{r.slot}</span> },
           {
@@ -338,7 +337,7 @@ const MeView = ({
         ]}
       />
       <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-        Starters as set in Sleeper{proj ? `, with week ${week} projections` : ''}. The Best/wk to Rank columns rate the slot, not the starter shown:{' '}
+        Starters as set in {providerName(data.provider)}{proj ? `, with week ${week} projections` : ''}. The Best/wk to Rank columns rate the slot, not the starter shown:{' '}
         {slotBasis === 'ahead' ? 'what your best lineup is expected to put in it a week over the horizon' : 'what your best possible lineup averaged in it in weeks played'}, against the same slot of every team's best lineup. Bench depth is on the
         Roster page.
       </p>

@@ -36,7 +36,8 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
   const me = analysis.myRosterId!
   const players = data.players
   const perWeek = analysis.horizon.perWeek
-  const faab = models.faab
+  // Only where trades can carry FAAB (not ESPN): otherwise the money controls never show.
+  const faab = data.tradeFaab ? models.faab : null
   const rosters = useMemo(() => rostersOf(analysis), [analysis])
   const [view, setView] = useState<number>(deal.teams.find((t) => t !== me) ?? me)
   // A deal loaded from elsewhere (a suggested trade) brings its own partner: show that roster, not the last one.

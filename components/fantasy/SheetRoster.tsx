@@ -2,7 +2,7 @@ import React, { useMemo } from 'react'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 import { blankEmpty, rosterRows, type RosterRow as Row } from '../../lib/fantasy/roster'
-import { INSIGHT_ROW, InsightMark } from './InsightMark'
+import { InsightMark } from './InsightMark'
 import { Table, cx, fmt, pct, type Column } from './ui'
 
 /**
@@ -82,7 +82,7 @@ const SheetRoster = ({ rosterId, marked }: { rosterId: number; /** Players an in
     [players, data.context, week, perWeek, marked],
   )
 
-  return <Table rows={rows} columns={blankEmpty(columns)} rowKey={(r) => r.id} dense rowClass={(r) => cx(r.starter ? '' : 'bg-ff-sunken/40', marked?.has(r.id) && INSIGHT_ROW)} />
+  return <Table rows={rows} columns={blankEmpty(columns)} rowKey={(r) => r.id} dense rowClass={(r) => (r.starter ? '' : 'bg-ff-sunken/40')} />
 }
 
 export default SheetRoster
