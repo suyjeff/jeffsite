@@ -42,7 +42,7 @@
   /* The phone top bar's height, notch included, for everything that sits under it. */
   --ff-top: calc(48px + env(safe-area-inset-top, 0px));
   /* Page gutters, widened past a notch or rounded corner in landscape. Every page sits this far in, the dashboard's
-     widget grid included. Edge-to-edge strips (sticky headers, the dashboard canvas) pull out by exactly these and
+     widget grid included, and on phones the widgets stack the same 10px apart. Edge-to-edge strips (sticky headers, the dashboard canvas) pull out by exactly these and
      pad back in by them. */
   --ff-gl: max(10px, env(safe-area-inset-left, 0px));
   --ff-gr: max(10px, env(safe-area-inset-right, 0px));

@@ -185,8 +185,13 @@ const tabLabel = (t: TabItem<string>) => (
   </>
 )
 
-/** Where each set of pages was scrolled to when a page was left, so Back lands where the reader was. */
+/** Where each page was scrolled to when it was left, by its place in the URL, so Back lands where the reader was. */
 const pageScroll = new Map<string, number>()
+/** The route a page belongs to (`trades`, `teams/3`): the hash without the page itself, so each team keeps its own. */
+const routeOf = (page: string) => {
+  const h = window.location.hash.replace(/^#/, '')
+  return h.endsWith(`/${page}`) ? h.slice(0, -page.length - 1) : h
+}
 
 /**
  * A page's sub-views, as a strip of tabs. On phones (`stacked`) each tab is a page of its own: a fresh pick starts
@@ -195,16 +200,16 @@ const pageScroll = new Map<string, number>()
  */
 export const Tabs = <K extends string>({ items, value, onChange, stacked, requested }: { items: TabItem<K>[]; value: K; onChange: PageChange<K>; stacked?: boolean; requested?: string | null }) => {
   const keys = items.map((t) => t.key).join()
-  const first = items[0]?.key
-  const latest = useRef({ onChange, first })
-  latest.current = { onChange, first }
+  const latest = useRef({ onChange, items })
+  latest.current = { onChange, items }
 
   // If the URL asks for a page that is not in the list (a stale link, or a page that only exists with data, like your
   // lineup), it is rewritten to the first page in place, not as a step to go Back to.
   useEffect(() => {
     if (!stacked) return
-    const known = (k: string) => keys.split(',').includes(k)
-    const { first, onChange } = latest.current
+    const { items, onChange } = latest.current
+    const known = (k: string) => items.some((t) => t.key === k)
+    const first = items[0]?.key
     if (first != null && ((requested != null && !known(requested)) || !known(value))) onChange(first, { replace: true })
   }, [stacked, requested, value, keys])
 
@@ -231,25 +236,27 @@ export const Tabs = <K extends string>({ items, value, onChange, stacked, reques
     shown.current = value
     if (!stacked) return
     // The scroll offset the leaving page had, read from the listener: by now the new page has already shortened or lengthened the document.
-    pageScroll.set(`${keys}/${left}`, at.current)
+    const route = routeOf(value)
+    pageScroll.set(`${route}/${left}`, at.current)
     const back = Date.now() - popped.current < 600
-    const top = back ? (pageScroll.get(`${keys}/${value}`) ?? 0) : 0
+    const top = back ? (pageScroll.get(`${route}/${value}`) ?? 0) : 0
     at.current = top
     window.scrollTo({ top, left: 0, behavior: 'instant' as ScrollBehavior })
   }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the picked tab in view in a strip that scrolls: centred when it can be, and with no travel on the first paint.
-  const phone = usePhone()
   const activeTab = useRef<HTMLButtonElement | null>(null)
   const painted = useRef(false)
   useIsoLayoutEffect(() => {
     const tab = activeTab.current
     const strip = tab?.parentElement
-    if (!phone || !tab || !strip || strip.scrollWidth <= strip.clientWidth) return
+    if (!stacked || !tab || !strip || strip.scrollWidth <= strip.clientWidth) return
     const calm = !painted.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches
     painted.current = true
-    strip.scrollTo({ left: tab.offsetLeft - (strip.clientWidth - tab.offsetWidth) / 2, behavior: calm ? 'instant' : 'smooth' } as ScrollToOptions)
-  }, [phone, value, keys])
+    // Measured against the strip itself, so the page gutter around it never shifts the target.
+    const from = strip.scrollLeft + tab.getBoundingClientRect().left - strip.getBoundingClientRect().left
+    strip.scrollTo({ left: from - (strip.clientWidth - tab.offsetWidth) / 2, behavior: calm ? 'instant' : 'smooth' } as ScrollToOptions)
+  }, [stacked, value, keys])
 
   return (
     <FadeStrip role="tablist" className="no-scrollbar -mb-px flex overflow-x-auto border-b border-ff-line">
