@@ -11,9 +11,15 @@ import { InsightMark } from '../InsightMark'
 import { pairSwaps } from '../../../lib/fantasy/swaps'
 import ScoutReport, { scoutPlayers, useScout } from '../ScoutReport'
 import MovesPanel from '../Moves'
+import { NewsBlurb } from '../PlayerNews'
+import { useNews } from '../useNews'
+import type { NewsItem } from '../../../lib/fantasy/news'
 import { Button, DeltaChip, Empty, Num, PageHeader, Panel, REASON_MARK, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone, type PageChange, type Reason } from '../ui'
 import { Callout } from '../Callout'
 import RosterTable, { type Basis } from './RosterTable'
+import { WeekScore } from '../ui'
+import { useSlate } from '../useSlate'
+import { boxScore, useWeekNow } from '../useWeekNow'
 
 // Three questions, a page each. Overview: what to do now and why the team is where it is. Lineup: who starts this
 // week, slot by slot, and how strong each slot is against the league. Roster: every player, bench and IR included,
@@ -22,6 +28,7 @@ type Sub = 'overview' | 'news' | 'lineup' | 'roster'
 // Wide screens keep the news under Overview; on phones it is a page of its own.
 const WIDE_SUBS: Sub[] = ['overview', 'lineup', 'roster']
 const PHONE_SUBS: Sub[] = ['overview', 'news', 'lineup', 'roster']
+const NO_IDS: string[] = []
 /** Old page keys, kept so links to them still land: slot strength now lives in the lineup. */
 const MOVED: Record<string, Sub> = { slots: 'lineup' }
 
@@ -29,12 +36,15 @@ const MOVED: Record<string, Sub> = { slots: 'lineup' }
  * One player's news as a card on two columns: the portrait and each reason's square share the narrow one, and the
  * name, his line and every reason's words start on the same edge of the wide one.
  */
-const NewsCard = ({ id, data }: { id: string; data: LeagueData }) => {
+const NewsCard = ({ id, data, item }: { id: string; data: LeagueData; item?: NewsItem }) => {
   const players = data.players
   const why = contextReasons(data.context[id], players).slice(0, 3)
+  const flagged = players[id].newsAt
   return (
     <div className="min-w-0 bg-ff-panel px-3 py-2.5">
-      <PlayerName player={players[id]} id={id} size={24} sub={`news ${ago(players[id].newsAt!)} ago`} />
+      {/* With a headline the story is the news; without one, only that Sleeper flagged it. */}
+      <PlayerName player={players[id]} id={id} size={24} sub={item ? undefined : flagged ? `news ${ago(flagged)} ago` : undefined} />
+      {item && <NewsBlurb item={item} className="mt-2 pl-8" />}
       {why.length ? (
         <ul className="mt-2 space-y-2">
           {why.map((r, i) => {
@@ -85,6 +95,9 @@ const MeView = ({
   const me = myRosterId != null ? teamById[myRosterId] : null
   const scout = useScout(myRosterId ?? -1)
   const scouted = useMemo(() => scoutPlayers(scout), [scout])
+  // The week as played, for the lineup: each starter's game state, score and box score once he has kicked off.
+  const { slate, proj: slateProj } = useSlate(data, analysis)
+  const weekNow = useWeekNow(slate, slateProj)
 
   // A link to a page that moved lands on its new home, in place rather than as a step to go Back to.
   const moved = sub != null ? MOVED[sub] : undefined
@@ -108,11 +121,25 @@ const MeView = ({
   // ---- Fresh news: players on your roster Sleeper flagged in the day before the player file was pulled ----
   // The file refreshes once a day (Sleeper asks for no more), so the window is anchored to it rather than to now.
   const newsAsOf = useMemo(() => Object.values(players).reduce((a, p) => Math.max(a, p.newsAt ?? 0), 0), [players])
-  const fresh = useMemo(() => {
-    if (!me || !newsAsOf) return []
-    const cutoff = newsAsOf - 24 * 3600_000
-    return me.players.filter((id) => (players[id]?.newsAt ?? 0) > cutoff).sort((a, b) => (players[b].newsAt ?? 0) - (players[a].newsAt ?? 0))
-  }, [me, players, newsAsOf])
+  // ESPN's headlines come on their own clock, so a player with a story from the last day counts even if Sleeper has not flagged him.
+  const espn = useNews(me?.players ?? NO_IDS, players)
+  const { fresh, stories } = useMemo(() => {
+    const stories: Record<string, NewsItem> = {}
+    if (!me) return { fresh: [] as string[], stories }
+    const flagCut = newsAsOf - 24 * 3600_000
+    const storyCut = Date.now() - 24 * 3600_000
+    // When each player's news landed: his latest story if it is from the last day, else Sleeper's flag if that is.
+    const landed: Record<string, number> = {}
+    for (const id of me.players) {
+      if (!players[id]) continue
+      const story = espn[id]?.[0]
+      if (story && story.at > storyCut) stories[id] = story
+      const flag = newsAsOf && (players[id].newsAt ?? 0) > flagCut ? players[id].newsAt! : 0
+      const at = Math.max(stories[id]?.at ?? 0, flag)
+      if (at) landed[id] = at
+    }
+    return { fresh: Object.keys(landed).sort((a, b) => landed[b] - landed[a]), stories }
+  }, [me, players, newsAsOf, espn])
 
   // ---- Headline numbers ----
   const kpis = useMemo(() => {
@@ -186,6 +213,12 @@ const MeView = ({
   const tab: Sub = pages.includes(want as Sub) ? (want as Sub) : 'overview'
   const proj = data.projections
   const week = data.projectionWeek ?? data.horizon[0]?.week
+  // This week's lineup once its games have started: scores and box scores beside the projections.
+  const weekOn = weekNow.started && week === slate.week
+  const played = (id: string | null) => {
+    const w = weekOn && id ? weekNow.of(id) : null
+    return w && w.kind !== 'proj' ? boxScore(w.line, players[id!]?.pos ?? '').join(' · ') || null : null
+  }
   const swaps = lineupRows.filter((r) => r.swap)
   const shifts = lineupRows.filter((r) => r.shift)
   // Every change the best lineup makes, whether or not it fits one slot: the one number the badge and the stat share.
@@ -199,15 +232,18 @@ const MeView = ({
   )
 
   const newsPanel = fresh.length > 0 ? (
-    <Panel title="Recent news on your roster" actions={<span>player file {ago(newsAsOf)} old</span>} pad={false}>
+    <Panel title="Recent news on your roster" actions={<span>{Object.keys(stories).length ? 'headlines from ESPN' : `player file ${ago(newsAsOf)} old`}</span>} pad={false}>
       <div className="grid grid-cols-1 gap-px bg-ff-line/60 sm:grid-cols-2 2xl:grid-cols-3">
         {fresh.map((id) => (
-          <NewsCard key={id} id={id} data={data} />
+          <NewsCard key={id} id={id} data={data} item={stories[id]} />
         ))}
         <GridFill n={fresh.length} wide="2xl" />
       </div>
       <Callout kind="instruction" className="m-3">
-        Sleeper flags news but not what it says, once a day. Read it in {providerName(data.provider)}, then click a name to set your read.
+        {Object.keys(stories).length
+          ? `Headlines are ESPN's. Sleeper only flags that news landed, once a day, so a player with no headline here needs a look in ${providerName(data.provider)}.`
+          : `Sleeper flags that news landed, once a day, but not what it says, and ESPN's headlines did not load. Read it in ${providerName(data.provider)}.`}{' '}
+        Click a name to set your read.
       </Callout>
     </Panel>
   ) : null
@@ -309,11 +345,28 @@ const MeView = ({
                   </div>
                 )}
                 {!r.swap && !r.shift && r.sit && <div className="mt-1 whitespace-normal pl-[30px] text-[11.5px] leading-tight text-ff-text2">Sits in the best lineup; another starter takes this slot</div>}
+                {played(r.id) && (
+                  <div className="mt-0.5 w-0 min-w-full whitespace-normal pl-[30px] font-mono text-[10.5px] text-ff-text2 md:truncate" title={played(r.id)!}>
+                    {played(r.id)}
+                  </div>
+                )}
               </div>
             ),
           },
           ...(proj
-            ? [{ key: 'pts', label: 'Proj', align: 'right' as const, title: `Sleeper's projection for week ${week}`, render: (r: (typeof lineupRows)[number]) => (r.id ? <span className="text-ff-text">{fmt(proj[r.id])}</span> : null) }]
+            ? [
+                {
+                  key: 'pts',
+                  label: weekOn ? 'Pts' : 'Proj',
+                  align: 'right' as const,
+                  title: weekOn ? `Week ${week}: final against his projection, live with the clock, or projected` : `Sleeper's projection for week ${week}`,
+                  render: (r: (typeof lineupRows)[number]) => {
+                    if (!r.id) return null
+                    const w = weekOn ? weekNow.of(r.id) : null
+                    return <WeekScore s={w ?? { kind: 'proj', value: proj[r.id] ?? 0, proj: proj[r.id] ?? 0 }} short={stacked} />
+                  },
+                },
+              ]
             : []),
           { key: 'ctx', label: '', hideBelow: 'lg', render: (r) => (r.id ? <ContextNotes context={data.context[r.id]} players={players} max={1} /> : null) },
           {

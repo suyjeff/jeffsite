@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { findMoves, type Move, type MoveKind } from '../../lib/fantasy/moves'
 import { useFantasy } from './FantasyContext'
 import { providerName } from '../../lib/fantasy/useLeagueData'
+import { useNews } from './useNews'
 import { Badge, Empty, Panel, PlayerAvatar, ago, cx, fmt, fmtSigned } from './ui'
 
 const KIND: Record<MoveKind, { label: string; tone: 'pos' | 'warn' | 'neg' | 'accent' | 'neutral' }> = {
@@ -31,6 +32,27 @@ const Who = ({ id }: { id: string | null | undefined }) => {
 const Platform = () => <>{providerName(useFantasy().data.provider)}</>
 
 const Pts = ({ v }: { v: number | undefined }) => (v != null ? <span className="num text-ff-muted"> {fmt(v)}</span> : null)
+
+/** News on a starter: ESPN's headline when it has one, else only that Sleeper flagged it. */
+const NewsSentence = ({ m }: { m: Move }) => {
+  const { data } = useFantasy()
+  const ids = useMemo(() => (m.outId ? [m.outId] : []), [m.outId])
+  const story = useNews(ids, data.players)[m.outId ?? '']?.[0]
+  if (story)
+    return (
+      <>
+        <Who id={m.outId} />: {story.headline}{' '}
+        <span className="text-ff-muted">
+          {ago(story.at)} ago, with nothing on his status yet. Read it in <Platform /> before kickoff.
+        </span>
+      </>
+    )
+  return (
+    <>
+      News on <Who id={m.outId} /> {m.at ? `${ago(m.at)} ago` : 'today'}, with nothing on his status yet. Read it in <Platform /> before kickoff.
+    </>
+  )
+}
 
 /** One sentence per move: what to do, then the fact that makes it worth doing. */
 const Sentence = ({ m }: { m: Move }) => {
@@ -139,11 +161,7 @@ const Sentence = ({ m }: { m: Move }) => {
         </>
       )
     case 'news':
-      return (
-        <>
-          News on <Who id={m.outId} /> {m.at ? `${ago(m.at)} ago` : 'today'}, with nothing on his status yet. Read it in <Platform /> before kickoff.
-        </>
-      )
+      return <NewsSentence m={m} />
   }
 }
 
