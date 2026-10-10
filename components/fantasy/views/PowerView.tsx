@@ -379,16 +379,16 @@ const PowerView = ({
                   },
                 },
                 { key: 'pf', label: 'PF', align: 'right', render: (r) => fmt(seasonById[r.rosterId].pf, 1) },
-                { key: 'pa', label: 'PA', align: 'right', render: (r) => fmt(seasonById[r.rosterId].pa, 1) },
+                { key: 'pa', label: 'PA', align: 'right', hideBelow: 'md', render: (r) => fmt(seasonById[r.rosterId].pa, 1) },
                 {
                   key: 'ap',
                   label: 'All-play',
                   align: 'right',
                   render: (r) => `${fmt(seasonById[r.rosterId].allPlayWins, 0)}-${fmt(seasonById[r.rosterId].allPlayLosses, 0)}`,
                 },
-                { key: 'xw', label: 'xW', align: 'right', title: 'Expected wins from all-play', render: (r) => fmt(seasonById[r.rosterId].expectedWins, 1) },
-                { key: 'luck', label: 'Luck', align: 'right', render: (r) => <Num value={seasonById[r.rosterId].luck} signed /> },
-                { key: 'streak', label: 'Strk', align: 'right', render: (r) => seasonById[r.rosterId].streak || '–' },
+                { key: 'xw', label: 'xW', align: 'right', hideBelow: 'md', title: 'Expected wins from all-play', render: (r) => fmt(seasonById[r.rosterId].expectedWins, 1) },
+                { key: 'luck', label: 'Luck', align: 'right', hideBelow: 'md', render: (r) => <Num value={seasonById[r.rosterId].luck} signed /> },
+                { key: 'streak', label: 'Strk', align: 'right', hideBelow: 'md', render: (r) => seasonById[r.rosterId].streak || '–' },
                 { key: 'power', label: 'Power', align: 'right', hideBelow: 'sm', render: (r) => <span className="text-ff-muted">#{powerById[r.rosterId].rank}</span> },
               ]}
             />

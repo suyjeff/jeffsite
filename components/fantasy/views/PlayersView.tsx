@@ -6,7 +6,8 @@ import type { PlayerContext } from '../../../lib/fantasy/context'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Badge, Button, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, PlayerAvatar, usePhone, type Column } from '../ui'
+import { ShowMore } from './ShowMore'
+import { Badge, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, PlayerAvatar, usePhone, type Column } from '../ui'
 
 const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
 type Pos = (typeof POSITIONS)[number]
@@ -338,11 +339,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
           />
         </Panel>
         {ids.length > limit && (
-          <div className="flex justify-center">
-            <Button onClick={() => setLimit((l) => l + PAGE)}>
-              Show {Math.min(PAGE, ids.length - limit)} more <span className="num text-ff-muted">of {ids.length - limit}</span>
-            </Button>
-          </div>
+          <ShowMore step={PAGE} left={ids.length - limit} onMore={() => setLimit((l) => l + PAGE)} rows="tbody > tr:not([id])" />
         )}
       </div>
     </>

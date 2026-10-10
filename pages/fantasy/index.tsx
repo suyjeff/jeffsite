@@ -100,7 +100,7 @@ const loadPrefs = (): Prefs => {
 const FantasyPage = () => {
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const route = useRoute(SECTION_KEYS, 'dash', { matchup: 'slate/week' })
-  useTheme(prefs?.theme, prefs?.scheme ?? 'system', prefs != null)
+  const mode = useTheme(prefs?.theme, prefs?.scheme ?? 'system', prefs != null)
   // Density is one attribute on the root; styles/fantasy.css scales type and rows from it.
   useEffect(() => {
     if (!prefs) return
@@ -428,6 +428,7 @@ const FantasyPage = () => {
       onSidebar={(open) => update({ sidebar: open })}
       tour={tour && appUp}
       onTourEnd={endTour}
+      mode={mode}
     >
       {error && (
         <div className="mt-4 border border-ff-neg/40 bg-ff-neg/10 px-3 py-2.5 font-mono text-[12px] text-ff-neg">ERR · {error}</div>

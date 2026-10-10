@@ -191,7 +191,8 @@ export type CrumbHost = {
   section: string
   /** Set by the tabs while mounted: goes to the section's first page and says so, or says there was nowhere to go. */
   home: React.MutableRefObject<(() => boolean) | null>
-  setPaged: (paged: boolean) => void
+  /** The tabs say whether the section has pages and whether the one showing is the first (null: no pages). */
+  setPaged: (at: 'first' | 'later' | null) => void
   /** Set while the page list is open, so the shell can put its scrim under the list. */
   setMenuOpen: (open: boolean) => void
 }
@@ -234,6 +235,9 @@ const MenuState = ({ open, onChange }: { open: boolean; onChange?: (open: boolea
   return null
 }
 
+/** Where each page of each section was scrolled to when it was left, so Back lands where the reader was. */
+const pageScroll = new Map<string, number>()
+
 /** The second crumb: the current page with a caret, opening a list of the section's pages under the top bar. */
 const PageCrumb =<K extends string>({ items, value, onChange }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void }) => {
   const host = useContext(CrumbContext)
@@ -249,20 +253,39 @@ const PageCrumb =<K extends string>({ items, value, onChange }: { items: TabItem
       onChange(first)
       return true
     }
-    setPaged(true)
     return () => {
       home.current = null
-      setPaged(false)
+      setPaged(null)
     }
   }, [host])
+  useEffect(() => host?.setPaged(value === first ? 'first' : 'later'), [host, value, first])
 
-  // A page is a screen of its own: arriving on one starts at its top, with no scroll animation.
+  // A page is a screen of its own: a fresh pick starts at its top, with no scroll animation. Back and Forward
+  // (popstate comes just ahead of the hashchange that moves the page) return to where that page was left.
   const shown = useRef(value)
+  const at = useRef(0)
+  const popped = useRef(0)
   useEffect(() => {
+    const onScroll = () => (at.current = window.scrollY)
+    const onPop = () => (popped.current = Date.now())
+    at.current = window.scrollY
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('popstate', onPop)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('popstate', onPop)
+    }
+  }, [])
+  useIsoLayoutEffect(() => {
     if (shown.current === value) return
+    // The scroll offset the leaving page had, read from the listener: by now the new page has already shortened or lengthened the document.
+    pageScroll.set(`${host?.section}/${shown.current}`, at.current)
     shown.current = value
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
-  }, [value])
+    const back = Date.now() - popped.current < 600
+    const top = back ? (pageScroll.get(`${host?.section}/${value}`) ?? 0) : 0
+    at.current = top
+    window.scrollTo({ top, left: 0, behavior: 'instant' as ScrollBehavior })
+  }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const slot = host?.slot
   const cur = items.find((t) => t.key === value) ?? items[0]
@@ -277,15 +300,21 @@ const PageCrumb =<K extends string>({ items, value, onChange }: { items: TabItem
         value={value}
         onChange={(k) => onChange(k as K)}
         options={items.map((t) => ({ value: t.key, label: tabLabel(t), text: t.label }))}
+        reveal
+        current
         // The list is the width of the screen under the top bar (anchored to the bar, not to the crumb), with touch-sized rows.
+        // The ring is drawn on the text (see below), so it sits wholly inside the bar; the button's own tall hit area would clip it.
         className="!static -my-3.5"
+        buttonClassName="group/crumb focus-visible:!ring-0"
         menuClassName="!inset-x-0 !top-full !mt-0 !max-h-[60dvh] !min-w-0 border-x-0 [&_[role=option]]:min-h-11 [&_[role=option]]:pl-4 [&_[role=option]]:text-[14px]"
         renderButton={(_, open) => (
-          <span title={cur.label} className="flex min-w-0 items-center gap-1.5 py-3.5 text-ff-text">
+          <span title={cur.label} className="flex min-w-0 items-center py-3.5 text-ff-text">
             <MenuState open={open} onChange={host?.setMenuOpen} />
-            <span className="truncate">{cur.label}</span>
-            <span aria-hidden className="shrink-0 font-mono text-[10px] font-normal text-ff-muted">
-              {open ? '▴' : '▾'}
+            <span className="-mx-1.5 flex min-w-0 items-center gap-1.5 px-1.5 py-1 group-focus-visible/crumb:ring-2 group-focus-visible/crumb:ring-inset group-focus-visible/crumb:ring-ff-accent">
+              <span className="truncate">{cur.label}</span>
+              <span aria-hidden className={cx('shrink-0 font-mono text-[10px] font-normal text-ff-muted motion-safe:transition-transform duration-200 ease-ff-out', open && 'rotate-180')}>
+                ▾
+              </span>
             </span>
           </span>
         )}
@@ -313,6 +342,7 @@ export const spyTo = (key: string) => {
  * `bare` are accepted so older call sites compile; they no longer do anything.
  */
 export const TabSection = ({
+  id,
   active,
   children,
 }: {
@@ -324,7 +354,19 @@ export const TabSection = ({
   bare?: boolean
   children: ReactNode
   className?: string
-}) => (active ? <>{children}</> : null)
+}) => {
+  const phone = usePhone()
+  if (!active) return null
+  // A phone page replaces the last at once, so it fades up (120ms, opacity only; reduced motion skips it in CSS).
+  // Keyed by the tab so each pick plays it. Wide screens keep the bare content: no wrapper, no layout change.
+  return phone ? (
+    <div key={id} className="ff-page-in">
+      {children}
+    </div>
+  ) : (
+    <>{children}</>
+  )
+}
 
 export type SegOption<K extends string> = {
   key: K
@@ -332,6 +374,30 @@ export type SegOption<K extends string> = {
   title?: string
   /** Replaces the default selected look (bg-ff-text text-ff-panel), for options that carry a tone. */
   activeClassName?: string
+}
+
+/** A horizontally scrolling strip that fades its right edge on phones while more sits beyond it. */
+const FadeStrip = ({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) => {
+  const ref = useRef<HTMLDivElement>(null)
+  const [more, setMore] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => setMore(el.scrollWidth - el.scrollLeft - el.clientWidth > 2)
+    measure()
+    el.addEventListener('scroll', measure, { passive: true })
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', measure)
+      ro.disconnect()
+    }
+  }, [])
+  return (
+    <div ref={ref} {...rest} className={cx(className, more && 'max-md:[mask-image:linear-gradient(to_right,black_88%,transparent)]')}>
+      {children}
+    </div>
+  )
 }
 
 /** Same data, a different cut of it. */
@@ -354,7 +420,7 @@ export const Segmented = <K extends string>({
   /** Arrows move focus only; Enter or Space picks. For choices that save something (a grade), not a view switch. */
   manual?: boolean
 }) => (
-  <div role="radiogroup" aria-label={label} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex')}>
+  <FadeStrip role="radiogroup" aria-label={label} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex')}>
     {options.map((o, i) => {
       const active = o.key === value
       return (
@@ -378,7 +444,7 @@ export const Segmented = <K extends string>({
           }}
           className={cx(
             'min-w-6 shrink-0 whitespace-nowrap border-r border-ff-line transition-colors last:border-r-0',
-            size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[12px]',
+            size === 'sm' ? 'h-6 px-2 text-[11px] max-md:h-10' : 'h-7 px-2.5 text-[12px] max-md:h-10',
             active ? (o.activeClassName ?? 'bg-ff-text text-ff-panel') : 'text-ff-text2 hover:bg-ff-raised hover:text-ff-text',
           )}
         >
@@ -386,7 +452,7 @@ export const Segmented = <K extends string>({
         </button>
       )
     })}
-  </div>
+  </FadeStrip>
 )
 
 /** The command palette's shortcut as this platform writes it. */
@@ -485,6 +551,8 @@ export const Dropdown = ({
   buttonClassName,
   renderButton,
   menuClassName,
+  reveal,
+  current: isCurrent,
 }: {
   value: string
   options: DropdownOption[]
@@ -495,14 +563,37 @@ export const Dropdown = ({
   /** Custom face for the trigger; gets the current option and whether the list is open. */
   renderButton?: (current: DropdownOption | undefined, open: boolean) => ReactNode
   menuClassName?: string
+  /** Wipe the list open and shut (full-width lists) instead of popping it, keeping it mounted for the way out. */
+  reveal?: boolean
+  /** This is the page the reader is on (a breadcrumb's last crumb). */
+  current?: boolean
 }) => {
   const [open, setOpen] = useState(false)
+  const [closing, setClosing] = useState(false)
   const [up, setUp] = useState(false)
   const [active, setActive] = useState(0)
   const root = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
   const list = useRef<HTMLDivElement>(null)
   const id = useId()
   const current = options.find((o) => o.value === value)
+
+  // A revealed list stays mounted while it wipes shut; animationend unmounts it, and the timer is the fallback
+  // for when no animation runs (reduced motion in a tab that never paints, a display:none ancestor).
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true
+      setClosing(false)
+      return
+    }
+    if (!wasOpen.current) return
+    wasOpen.current = false
+    if (!reveal) return
+    setClosing(true)
+    const t = window.setTimeout(() => setClosing(false), 200)
+    return () => window.clearTimeout(t)
+  }, [open, reveal])
 
   useEffect(() => {
     if (!open) return
@@ -525,6 +616,8 @@ export const Dropdown = ({
     const o = options[i]
     if (!o || o.disabled) return
     setOpen(false)
+    // A tap on an option would otherwise leave focus on a node that is about to unmount (and so on the page).
+    trigger.current?.focus({ preventScroll: true })
     if (o.value !== value) onChange(o.value)
   }
   const step = (d: number) => {
@@ -569,6 +662,7 @@ export const Dropdown = ({
   return (
     <div ref={root} className={cx('relative min-w-0', className)}>
       <button
+        ref={trigger}
         type="button"
         // A select-only combobox (APG): focus stays here while the arrows move through the list.
         role="combobox"
@@ -577,6 +671,7 @@ export const Dropdown = ({
         aria-controls={`${id}-list`}
         aria-activedescendant={open ? `${id}-${active}` : undefined}
         aria-label={label}
+        aria-current={isCurrent ? 'page' : undefined}
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={onKey}
         className={cx(
@@ -596,14 +691,17 @@ export const Dropdown = ({
           </>
         )}
       </button>
-      {open && (
+      {(open || closing) && (
         <div
           ref={list}
           id={`${id}-list`}
           role="listbox"
           aria-label={label}
+          aria-hidden={!open || undefined}
+          onAnimationEnd={(e) => e.target === e.currentTarget && !open && setClosing(false)}
           className={cx(
-            'ff-pop ff-scroll absolute left-0 z-50 max-h-[260px] min-w-full overflow-y-auto overscroll-contain border border-ff-line2 bg-ff-panel py-1 shadow-[0_10px_28px_rgba(0,0,0,0.22)]',
+            reveal ? cx('ff-reveal', !open && 'ff-reveal-out') : 'ff-pop',
+            'ff-scroll absolute left-0 z-50 max-h-[260px] min-w-full overflow-y-auto overscroll-contain border border-ff-line2 bg-ff-panel py-1 shadow-[0_10px_28px_rgba(0,0,0,0.22)]',
             up ? 'ff-pop-up bottom-full mb-1' : 'top-full mt-1',
             menuClassName,
           )}
@@ -624,11 +722,12 @@ export const Dropdown = ({
                 role="option"
                 aria-selected={selected}
                 aria-disabled={o.disabled || undefined}
-                onPointerEnter={() => setActive(i)}
+                // Touch has no hover: a finger resting on a row would light it up, and the tick already marks the current page.
+                onPointerEnter={() => window.matchMedia('(hover: hover)').matches && setActive(i)}
                 onClick={() => pick(i)}
                 className={cx(
                   'flex min-h-8 cursor-pointer items-center gap-2 py-1 pl-2 pr-3 text-[12.5px]',
-                  i === active && 'bg-ff-raised',
+                  i === active && '[@media(hover:hover)]:bg-ff-raised',
                   o.disabled ? 'cursor-default text-ff-muted' : selected ? 'text-ff-text' : 'text-ff-text2',
                 )}
               >
@@ -681,6 +780,7 @@ export const Button = ({
   title,
   type = 'button',
   disabled,
+  ...rest
 }: {
   children: ReactNode
   onClick?: () => void
@@ -691,15 +791,17 @@ export const Button = ({
   title?: string
   type?: 'button' | 'submit'
   disabled?: boolean
-}) => (
+} & React.AriaAttributes & { [K in `data-${string}`]?: string | number | boolean | undefined }) => (
   <button
+    {...rest}
     type={type}
     title={title}
     disabled={disabled}
     onClick={onClick}
     className={cx(
       'ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40',
-      size === 'sm' ? 'h-7 px-2 text-[11.5px]' : 'h-8 px-3 text-[12.5px]',
+      // Phone targets are 40px; the desktop sizes are for a pointer.
+      size === 'sm' ? 'h-7 px-2 text-[11.5px] max-md:h-10' : 'h-8 px-3 text-[12.5px] max-md:h-10',
       variant === 'primary' && 'bg-ff-text text-ff-panel hover:bg-ff-text/85',
       variant === 'aqua' && 'ff-aqua',
       variant === 'outline' && 'border border-ff-line bg-ff-panel text-ff-text hover:border-ff-line2 hover:bg-ff-raised',
@@ -733,8 +835,9 @@ export const Fab = ({ children, onClick, hidden, label }: { children: ReactNode;
     className={cx(
       'pointer-events-none fixed right-[max(12px,env(safe-area-inset-right))] z-30 md:hidden',
       'bottom-[calc(48px+env(safe-area-inset-bottom)+14px)]',
-      'motion-safe:transition-[opacity,transform] motion-safe:duration-200 motion-safe:ease-ff-out',
-      hidden ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100',
+      // In over 200ms, out over 120ms: the state being entered sets the duration.
+      'motion-safe:transition-[opacity,transform] motion-safe:ease-ff-out',
+      hidden ? 'translate-y-2 opacity-0 motion-safe:duration-[120ms]' : 'translate-y-0 opacity-100 motion-safe:duration-200',
     )}
   >
     <button type="button" onClick={onClick} aria-label={label} tabIndex={hidden ? -1 : undefined} aria-hidden={hidden || undefined} className={cx('ff-aqua ff-aqua-fab', !hidden && 'pointer-events-auto')}>

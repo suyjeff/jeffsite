@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import type { SlateGame, SlatePlayer } from '../../../lib/fantasy/slate'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
-import { Fold } from '../charts'
+import { Disclosure } from '../Disclosure'
 import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
@@ -567,7 +567,9 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
               )}
             </div>
           ))}
-          {stacked ? <Fold title="What the columns mean">{legend}</Fold> : legend}
+          <Disclosure from="md" summary="What the columns mean">
+            {legend}
+          </Disclosure>
         </TabSection>
 
         <TabSection id="managers" active={tab === 'managers'}>

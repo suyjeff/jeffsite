@@ -20,7 +20,8 @@ import { suggestBid, type BidAdvice } from '../../../lib/fantasy/faab'
 import { ContextNotes, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import WaiverMoves, { TrendingFree } from './WaiverMoves'
-import { Note } from '../Note'
+import { ShowMore } from './ShowMore'
+import { Disclosure } from '../Disclosure'
 import { useStatLines } from '../useStatLines'
 import PlayerName from '../PlayerName'
 import { DeltaChip, Badge, Button, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
@@ -436,19 +437,15 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                   )}
                 </Panel>
                 {stream.rows.length > cap(rowsMore.stream) && (
-                  <div className="flex justify-center">
-                    <Button onClick={() => setRowsMore((r) => ({ ...r, stream: r.stream + PHONE_ROWS }))}>
-                      Show {Math.min(PHONE_ROWS, stream.rows.length - cap(rowsMore.stream))} more <span className="num text-ff-muted">of {stream.rows.length - cap(rowsMore.stream)}</span>
-                    </Button>
-                  </div>
+                  <ShowMore step={PHONE_ROWS} left={stream.rows.length - cap(rowsMore.stream)} onMore={() => setRowsMore((r) => ({ ...r, stream: r.stream + PHONE_ROWS }))} rows="tbody > tr:not([id])" />
                 )}
-                <Note summary="What the columns mean" className="text-[11.5px] leading-relaxed text-ff-muted">
+                <Disclosure from="md" summary="What the columns mean" className="text-[11.5px] leading-relaxed text-ff-muted">
                   <span className="text-ff-text2">Proj</span> blends prop lines into next week. <span className="text-ff-text2">{pos === 'DEF' ? 'Opp total' : 'Team total'}</span>{' '}
                   {pos === 'DEF' ? 'is what the offense he faces should score' : 'is what his offense should score'} (<N>m</N> = from props, else Vegas via Sleeper).{' '}
                   <span className="text-ff-text2">Matchup</span> is what this opponent {pos === 'DEF' ? 'gives up to defenses' : `allows ${pos}s`} vs average
                   {!ownSeason ? ' (needs this season’s results)' : ''}. <span className="text-ff-text2">Boom</span> is the chance of <N>{fmt(starter)}+</N>, an average starter
                   (<N>±{fmt(sd)}</N> weekly). Green weeks ahead are easy, red tough.
-                </Note>
+                </Disclosure>
               </>
             )}
           </>
@@ -484,17 +481,13 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
               <Table rows={adds.slice(0, cap(rowsMore.adds))} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." expand={addWhy} canExpand={(t) => !!bids[t.id]?.reasons.length || !!data.context[t.id]?.notes.length} />
             </Panel>
             {adds.length > cap(rowsMore.adds) && (
-              <div className="flex justify-center">
-                <Button onClick={() => setRowsMore((r) => ({ ...r, adds: r.adds + PHONE_ROWS }))}>
-                  Show {Math.min(PHONE_ROWS, adds.length - cap(rowsMore.adds))} more <span className="num text-ff-muted">of {adds.length - cap(rowsMore.adds)}</span>
-                </Button>
-              </div>
+              <ShowMore step={PHONE_ROWS} left={adds.length - cap(rowsMore.adds)} onMore={() => setRowsMore((r) => ({ ...r, adds: r.adds + PHONE_ROWS }))} rows="tbody > tr:not([id])" />
             )}
             {/* Moves holds this list on wide screens; on a phone it lives here, with the other free-agent lists. */}
             {phone && <TrendingFree data={data} analysis={analysis} adds={adds} />}
-            <Note summary="How gain is figured" className="text-[11.5px] leading-relaxed text-ff-muted">
+            <Disclosure from="md" summary="How gain is figured" className="text-[11.5px] leading-relaxed text-ff-muted">
               Gain: your best lineup with him in and your weakest player out, against today&apos;s, week by week. Any positive gain is an upgrade. Value: what the league would pay.
-            </Note>
+            </Disclosure>
           </>
           </TabSection>
         )}

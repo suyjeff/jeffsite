@@ -432,14 +432,3 @@ export const HBars = ({
     </div>
   )
 }
-
-/** A closed-by-default disclosure for the working behind a page: the part you read once, not each visit. */
-export const Fold = ({ title, children, className }: { title: React.ReactNode; children: React.ReactNode; className?: string }) => (
-  <details className={cx('group', className)}>
-    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 border border-ff-line bg-ff-panel px-3 font-mono text-[11px] text-ff-muted hover:text-ff-text [&::-webkit-details-marker]:hidden">
-      <span className="inline-block transition-transform group-open:rotate-90">›</span>
-      {title}
-    </summary>
-    <div className="mt-3 space-y-3">{children}</div>
-  </details>
-)

@@ -66,6 +66,8 @@ export type ShellProps = {
   /** The desktop sidebar shown (the default) or folded away; folding needs `onSidebar`. */
   sidebar?: boolean
   onSidebar?: (open: boolean) => void
+  /** The resolved light or dark mode, for the few styles that depend on it (the page list's scrim). */
+  mode?: 'light' | 'dark'
 }
 
 /** The wordmark. Shared by the shell and onboarding. */
@@ -365,7 +367,8 @@ const Shell = (props: ShellProps) => {
   const current = SECTIONS.find((s) => s.key === section)
   // The top bar's breadcrumb: the section crumb is the shell's; a page with tabs portals its page crumb into the slot.
   const [crumbSlot, setCrumbSlot] = useState<HTMLElement | null>(null)
-  const [paged, setPaged] = useState(false)
+  // null: this page has no sub-pages; otherwise whether the one showing is the first.
+  const [paged, setPaged] = useState<'first' | 'later' | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const home = useRef<(() => boolean) | null>(null)
   const crumbs = useMemo(() => ({ slot: crumbSlot, section: current?.label ?? '', home, setPaged, setMenuOpen }), [crumbSlot, current?.label])
@@ -373,12 +376,13 @@ const Shell = (props: ShellProps) => {
   const crumbHome = () => {
     if (!home.current?.()) setDrawer(true)
   }
+  const toFirst = paged === 'later'
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
 
   return (
     // Page headers read data-sidebar to leave room for the show-sidebar button when the sidebar is folded.
     <CrumbContext.Provider value={crumbs}>
-    <div className="ff group/shell min-h-dvh bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
+    <div className="ff group/shell min-h-dvh bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'} data-mode={props.mode}>
       <FantasyHead title={title} />
 
       {/* Desktop sidebar. Folded, it slides off to the left and leaves the tab order. */}
@@ -411,10 +415,13 @@ const Shell = (props: ShellProps) => {
               type="button"
               onClick={crumbHome}
               title={current?.label}
-              aria-label={paged ? `${current?.label}: first page` : `${current?.label}: open menu`}
-              className={cx('-my-3.5 max-w-[45%] shrink-0 truncate py-3.5 text-left', paged ? 'font-normal text-ff-text2' : 'text-ff-text')}
+              // On the first page (or a section with none) it opens the menu; on a later page it goes back to the first.
+              aria-label={toFirst ? `${current?.label}: go to first page` : `${current?.label}: open menu`}
+              aria-current={paged ? undefined : 'page'}
+              // The ring sits on the text, inside the bar; the button itself is taller than the bar's text for a thumb.
+              className={cx('group/crumb -my-3.5 max-w-[45%] shrink-0 py-3.5 text-left outline-none', paged ? 'font-normal text-ff-text2' : 'text-ff-text')}
             >
-              {current?.label}
+              <span className="-mx-1.5 block truncate px-1.5 py-1 group-focus-visible/crumb:ring-2 group-focus-visible/crumb:ring-inset group-focus-visible/crumb:ring-ff-accent">{current?.label}</span>
             </button>
             <div ref={setCrumbSlot} className="contents" />
           </nav>
@@ -476,8 +483,9 @@ const Shell = (props: ShellProps) => {
       <div
         aria-hidden
         className={cx(
-          'fixed inset-x-0 bottom-0 top-[var(--ff-top)] z-[31] bg-black/20 md:hidden motion-safe:transition-opacity motion-safe:duration-150 motion-safe:ease-ff-out',
-          !menuOpen && 'pointer-events-none opacity-0',
+          // In over 200ms with the list, out over 120ms: the state being entered sets the duration.
+          'ff-scrim fixed inset-x-0 bottom-0 top-[var(--ff-top)] z-[31] md:hidden motion-safe:transition-opacity motion-safe:ease-ff-out',
+          menuOpen ? 'motion-safe:duration-200' : 'pointer-events-none opacity-0 motion-safe:duration-[120ms]',
         )}
       />
     </div>

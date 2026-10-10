@@ -4,7 +4,7 @@ import type { TradeIdea } from '../../lib/fantasy/trades'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { AddIcon, TradeIcon } from './icons'
 import { Callout } from './Callout'
-import { Note } from './Note'
+import { Disclosure } from './Disclosure'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
 import { Badge, Button, Dropdown, Panel, PlayerAvatar, WeekBars, cx, fmt, fmtSigned } from './ui'
@@ -400,10 +400,10 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
           </div>
         )}
         {active && (
-          <Note inset summary="How it is priced" className="px-3 py-2 text-[11.5px] text-ff-muted md:border-t md:border-ff-line">
+          <Disclosure from="md" inset summary="How it is priced" className="px-3 py-2 text-[11.5px] text-ff-muted md:border-t md:border-ff-line">
             Lineup: each team&apos;s best lineup week by week, before and after, extra bodies cut. Trade value: as managers price players (reputation, stars, streamers). FAAB counts at a fraction of what it buys
             on waivers, more for a team nearly out of it, shown as a range.
-          </Note>
+          </Disclosure>
         )}
       </Panel>
 

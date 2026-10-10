@@ -11,7 +11,8 @@ import TradeCard from '../TradeCard'
 import TradeBuilder from '../TradeBuilder'
 import { TradeIcon } from '../icons'
 import { Callout } from '../Callout'
-import { Note } from '../Note'
+import { ShowMore } from './ShowMore'
+import { Disclosure } from '../Disclosure'
 import { emptyDeal, type Deal } from '../../../lib/fantasy/deal'
 import { useFantasy, useTradeRead } from '../FantasyContext'
 import {
@@ -405,17 +406,27 @@ const TradesView = ({
                 <Button size="md" variant={moreOpen ? 'primary' : 'outline'} onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
                   Filters
                   {activeFilters > 0 && <span className="num text-ff-warn">{activeFilters}</span>}
+                  <span aria-hidden className={cx('text-[10px] motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-ff-out', moreOpen && 'rotate-180')}>
+                    ▾
+                  </span>
                 </Button>
               )}
             </div>
-            {phone && moreOpen && (
-              <Panel title="Filters">
-                <div className="space-y-3">
-                  {makeupSeg}
-                  {partnerSel}
-                  {filterControls}
+            {/* Always mounted so it can slide: the row grows from 0 to its height, and closed it leaves the tab order. */}
+            {phone && (
+              <div className={cx('!mt-0 grid transition-[grid-template-rows] duration-[220ms] ease-ff-drawer motion-reduce:transition-none', moreOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+                <div className="min-h-0 overflow-hidden" inert={!moreOpen}>
+                  <div className="pt-3">
+                    <Panel title="Filters">
+                      <div className="space-y-3">
+                        {makeupSeg}
+                        {partnerSel}
+                        {filterControls}
+                      </div>
+                    </Panel>
+                  </div>
                 </div>
-              </Panel>
+              </div>
             )}
             {!phone && showFilters && <Panel title="Search limits">{filterControls}</Panel>}
             {!phone && gradeNote}
@@ -439,18 +450,14 @@ const TradesView = ({
                   ))}
                 </div>
                 {shown.length > visible && (
-                  <div className="flex justify-center">
-                    <Button onClick={() => setVisible((v) => v + step)}>
-                      Show {Math.min(step, shown.length - visible)} more <span className="num text-ff-muted">of {shown.length - visible}</span>
-                    </Button>
-                  </div>
+                  <ShowMore step={step} left={shown.length - visible} onMore={() => setVisible((v) => v + step)} rows=":scope > *" />
                 )}
               </>
             )}
             {phone && gradeNote}
-            <Note summary="How deals are found" className="text-[11.5px] leading-relaxed text-ff-muted">
+            <Disclosure from="md" summary="How deals are found" className="text-[11.5px] leading-relaxed text-ff-muted">
               Deals start from every one-for-one that helps you and grow only when a piece improves them. Numbers are points per week added to each best lineup, injuries priced in; the side taking more players cuts its weakest.
-            </Note>
+            </Disclosure>
         </TabSection>
 
         <TabSection id="targets" label="Targets" count={targets.length} active={tab === 'targets'}>
@@ -503,11 +510,7 @@ const TradesView = ({
             />
           </Panel>
           {shownTargets.length > cap(rowsMore.targets) && (
-            <div className="flex justify-center">
-              <Button onClick={() => setRowsMore((r) => ({ ...r, targets: r.targets + PHONE_ROWS }))}>
-                Show {Math.min(PHONE_ROWS, shownTargets.length - cap(rowsMore.targets))} more <span className="num text-ff-muted">of {shownTargets.length - cap(rowsMore.targets)}</span>
-              </Button>
-            </div>
+            <ShowMore step={PHONE_ROWS} left={shownTargets.length - cap(rowsMore.targets)} onMore={() => setRowsMore((r) => ({ ...r, targets: r.targets + PHONE_ROWS }))} rows="tbody > tr:not([id])" />
           )}
         </TabSection>
 
@@ -572,7 +575,7 @@ const TradesView = ({
               <SlotGrid analysis={analysis} />
             )}
             {needsView === 'position' ? (
-              <Note inset className="space-y-2 text-[11.5px] leading-[1.5] text-ff-muted md:border-t md:border-ff-line md:px-3 md:py-2.5">
+              <Disclosure from="md" inset summary="How to read this" className="space-y-2 text-[11.5px] leading-[1.5] text-ff-muted md:border-t md:border-ff-line md:px-3 md:py-2.5">
                 <p className="max-w-[78ch]">
                   <span className="text-ff-text2">How to read it.</span> Each cell is what a league-average starter at that position would add to the team&apos;s lineup, in points per week, after its flex and the waiver wire. Zero means covered; bigger means that team should pay more to fill it. <span className="text-ff-text2">Lineup</span> is the projected best lineup, points per week.
                 </p>
@@ -591,7 +594,7 @@ const TradesView = ({
                     <span>(within a third of the league&apos;s largest, {fmt(maxNeed)}/wk)</span>
                   </span>
                 </div>
-              </Note>
+              </Disclosure>
             ) : (
               <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">Points per week each slot produces against the league average. Blue above, red below.</p>
             )}
@@ -647,9 +650,9 @@ const TradesView = ({
               ))}
               <GridFill n={needCards.length} wide="xl" />
             </div>
-            <Note inset summary="What holes mean" className="px-3 py-2 text-[11.5px] text-ff-muted md:border-t md:border-ff-line">
+            <Disclosure from="md" inset summary="What holes mean" className="px-3 py-2 text-[11.5px] text-ff-muted md:border-t md:border-ff-line">
               Holes: positions worth half a point a week or more, red for the league&apos;s biggest. Strongest: the slot furthest above the league average.
-            </Note>
+            </Disclosure>
           </Panel>
           </div>
         </TabSection>
@@ -705,11 +708,7 @@ const TradesView = ({
             />
           </Panel>
           {shownSituations.length > cap(rowsMore.situations) && (
-            <div className="flex justify-center">
-              <Button onClick={() => setRowsMore((r) => ({ ...r, situations: r.situations + PHONE_ROWS }))}>
-                Show {Math.min(PHONE_ROWS, shownSituations.length - cap(rowsMore.situations))} more <span className="num text-ff-muted">of {shownSituations.length - cap(rowsMore.situations)}</span>
-              </Button>
-            </div>
+            <ShowMore step={PHONE_ROWS} left={shownSituations.length - cap(rowsMore.situations)} onMore={() => setRowsMore((r) => ({ ...r, situations: r.situations + PHONE_ROWS }))} rows="tbody > tr:not([id])" />
           )}
         </TabSection>
 
@@ -717,12 +716,10 @@ const TradesView = ({
           <TradeBuilder deal={deal} setDeal={setDeal} />
         </TabSection>
       </div>
-      {fab && (
-        <Fab onClick={() => onSub('builder')}>
-          <TradeIcon size={16} />
-          Build a trade
-        </Fab>
-      )}
+      <Fab hidden={!fab} onClick={() => onSub('builder')}>
+        <TradeIcon size={16} />
+        Build a trade
+      </Fab>
     </>
   )
 }

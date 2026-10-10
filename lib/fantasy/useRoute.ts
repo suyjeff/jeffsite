@@ -35,12 +35,16 @@ export const useRoute = <S extends string>(sections: readonly S[], fallback: S, 
     else setRoute({ section, sub: sub ?? null })
   }, [])
 
-  /** Change the sub-tab without adding a history entry for every click. */
+  /**
+   * Change the sub-tab. On phones each page is a screen of its own, so Back steps through them; on wide screens
+   * the tabs are a strip and a click does not add a history entry. Back and Forward come back through hashchange.
+   */
   const setSub = useCallback(
     (sub: string) => {
       const next = `#${route.section}/${sub}`
       // Keep the existing state: Next's router ignores popstate entries without its own.
-      window.history.replaceState(window.history.state, '', next)
+      if (window.matchMedia('(max-width: 767px)').matches && window.location.hash !== next) window.history.pushState(window.history.state, '', next)
+      else window.history.replaceState(window.history.state, '', next)
       setRoute({ section: route.section, sub })
     },
     [route.section],

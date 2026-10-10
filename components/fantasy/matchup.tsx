@@ -147,6 +147,9 @@ export const MatchupScore = ({ m, size = 'lg' }: { m: MatchupRead; size?: 'lg' |
   )
 }
 
+// Each side of a slot gets under a third of a phone's width: drop the portrait and let the name take two lines rather than cut it to a few letters.
+const phoneName = 'max-md:[&_.ff-pn-av]:hidden max-md:[&_.ff-pn-name]:overflow-visible max-md:[&_.ff-pn-name]:whitespace-normal max-md:[&_.ff-pn-name]:[text-overflow:clip]'
+
 /** Every slot against its opposite, with the edge between them. */
 export const SlotTable = ({ m, compact, inset }: { m: MatchupRead; compact?: boolean; inset?: 'sheet' }) => {
   const { data, openPlayer } = useFantasy()
@@ -156,7 +159,7 @@ export const SlotTable = ({ m, compact, inset }: { m: MatchupRead; compact?: boo
     id ? (
       <span className={cx('ff-pn-host relative -mx-1.5 flex min-w-0 items-center self-stretch px-1.5 py-1.5 transition-colors hover:bg-ff-raised/60', align === 'right' && 'justify-end')}>
         <button type="button" tabIndex={-1} aria-hidden onClick={() => openPlayer(id)} className="absolute inset-0 cursor-pointer" />
-        <PlayerName player={data.players[id]} id={id} size={compact ? 20 : 24} className={align === 'right' ? 'flex-row-reverse text-right' : undefined} />
+        <PlayerName player={data.players[id]} id={id} size={compact ? 20 : 24} className={cx(phoneName, align === 'right' && 'flex-row-reverse text-right')} />
       </span>
     ) : (
       <span className="py-1.5 text-[12px] text-ff-neg">empty</span>

@@ -33,6 +33,7 @@ import {
   simOdds,
   type Column,
 } from '../ui'
+import { Disclosure } from '../Disclosure'
 import RosterTable, { type Basis } from './RosterTable'
 
 // Phones get a page per section, so the team's summary (figures, moves, scout) is a page of its own there.
@@ -173,7 +174,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
     <>
       <PageHeader title="Teams" meta={`${analysis.teams.length} teams${next[0] ? ` · wk ${next[0].week}` : ''}`} />
       <div className="mt-4 space-y-3">
-        <Panel title="League" pad={false} actions={<span>by power · click a team for its summary</span>}>
+        <Panel title="League" pad={false} actions={<span>by power · <span className="max-md:hidden">click</span><span className="md:hidden">tap</span> a team for its summary</span>}>
           <Table rows={rows} rowKey={(t) => t.rosterId} columns={columns} dense onRowClick={(t) => openTeam(t.rosterId)} rowClass={(t) => (t.rosterId === myRosterId ? 'ff-mine' : '')} />
         </Panel>
         <p className="text-[11.5px] text-ff-muted">
@@ -346,19 +347,9 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
               <div className="border-b border-ff-line px-2 pb-2 pt-3">
                 <ProjectionChart weeks={chartWeeks} actual={chartWeeks.map((w) => scored[w] ?? null)} projected={chartWeeks.map((w) => expected[w] ?? ahead[w] ?? null)} />
                 {/* On a phone the explainer folds away so the chart and the table share the screen. */}
-                {stacked ? (
-                  <details className="group mt-1 px-1 text-[11px] leading-snug text-ff-muted">
-                    <summary className="cursor-pointer list-none py-1 font-mono text-ff-text2 [&::-webkit-details-marker]:hidden">
-                      <span className="group-open:hidden">How projected is figured ▾</span>
-                      <span className="hidden group-open:inline">How projected is figured ▴</span>
-                    </summary>
-                    <p>Projected = best possible lineup on pre-game projections × the manager&apos;s efficiency. A bye or empty slot left in shows as a miss. Dashed weeks are ahead.</p>
-                  </details>
-                ) : (
-                  <p className="mt-1.5 px-1 text-[11px] leading-snug text-ff-muted">
-                    Projected = best possible lineup on pre-game projections × the manager&apos;s efficiency. A bye or empty slot left in shows as a miss. Dashed weeks are ahead.
-                  </p>
-                )}
+                <Disclosure from="md" summary="How projected is figured" className="text-[11px] leading-snug text-ff-muted md:mt-1.5 md:px-1">
+                  Projected = best possible lineup on pre-game projections × the manager&apos;s efficiency. A bye or empty slot left in shows as a miss. Dashed weeks are ahead.
+                </Disclosure>
               </div>
             )}
             <Table

@@ -7,12 +7,13 @@ import { clearFantasyCache } from '../../../lib/fantasy/sleeper'
 import { DEFAULT_TRADE_CONFIG, DEFAULT_WAIVER_DEPTH, SUGGESTED_TRADE_CONFIG, type TradeConfig } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DEFAULT_MODEL, type ModelConfig } from '../../../lib/fantasy/war'
-import { Fold, HBars, Histogram, Legend, MiniLines } from '../charts'
+import { HBars, Histogram, Legend, MiniLines } from '../charts'
 import PlayerName from '../PlayerName'
 import { MONKE } from '../Shell'
 import { useFantasy } from '../FantasyContext'
 import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Sentences, Stat, StatGrid, Table, TabSection, Tabs, cx, usePhone, fmt, fmtSigned, pct, type Column } from '../ui'
 import { Callout } from '../Callout'
+import { Disclosure } from '../Disclosure'
 import { BacktestTab, BehaviorTab, ForecastTab, OverviewTab, SystemTab } from './ModelSystem'
 import { COMPONENTS } from './PowerView'
 
@@ -456,10 +457,10 @@ Value  = perActive − repl_horizon(pos)`}</Code>
         {params}
         {effect}
         {levels}
-        <Fold title="The working: definitions, WAR distribution, top players">
+        <Disclosure summary="The working: definitions, WAR distribution, top players" className="space-y-3">
           {definitions}
           {spread}
-        </Fold>
+        </Disclosure>
       </div>
     )
 
@@ -577,7 +578,9 @@ power  = 100 · Φ(margin / (σ√2))`}</Code>
         <Panel title="Rankings at these weights" pad={false} actions={changed ? <span className="num">{moved} teams moved</span> : <span>defaults</span>}>
           <Table rows={analysis.power} rowKey={(p) => p.rosterId} columns={columns} defaultSort="rk" defaultDesc rowClass={(p) => cx(p.rosterId === analysis.myRosterId && 'ff-mine')} />
         </Panel>
-        {phone ? <Fold title="How the weights become a score">{method}</Fold> : method}
+        <Disclosure from="md" summary="How the weights become a score">
+          {method}
+        </Disclosure>
       </div>
     </div>
   )
@@ -711,7 +714,9 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
       {phone ? (
         <>
           {adjustments}
-          <Fold title="How availability is priced">{pricing}</Fold>
+          <Disclosure summary="How availability is priced" className="space-y-3">
+            {pricing}
+          </Disclosure>
         </>
       ) : (
         <>
@@ -868,11 +873,11 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
       {phone ? (
         <>
           {posPricing}
-          <Fold title="How the search works">
+          <Disclosure summary="How the search works" className="space-y-3">
             {config}
             {objective}
             {pipeline}
-          </Fold>
+          </Disclosure>
         </>
       ) : (
         <>
