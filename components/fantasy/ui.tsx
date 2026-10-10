@@ -1,5 +1,4 @@
-import React, { Children, createContext, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import React, { Children, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
 import { ShowMore } from './views/ShowMore'
 
@@ -169,7 +168,7 @@ export const PageHeader = ({
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
     </div>
-    {tabs && <div className="ff-pagehead ff-pagetabs max-md:empty:hidden ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-11">{tabs}</div>}
+    {tabs && <div className="ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-11">{tabs}</div>}
   </>
 )
 
@@ -186,91 +185,28 @@ const tabLabel = (t: TabItem<string>) => (
   </>
 )
 
-/**
- * What the phone's top bar lends a page's tabs: a slot beside the section crumb to portal the page crumb into,
- * the section's name for labels, and the hooks to say "this page has pages" and to answer a tap on the section crumb.
- */
-export type CrumbHost = {
-  slot: HTMLElement | null
-  section: string
-  /** Set by the tabs while mounted: goes to the section's first page and says so, or says there was nowhere to go. */
-  home: React.MutableRefObject<(() => boolean) | null>
-  /** The tabs say whether the section has pages and whether the one showing is the first (null: no pages). */
-  setPaged: (at: 'first' | 'later' | null) => void
-  /** Set while the page list is open, so the shell can put its scrim under the list. */
-  setMenuOpen: (open: boolean) => void
-}
-export const CrumbContext = createContext<CrumbHost | null>(null)
-
-/**
- * A page's sub-views. On wide screens they are tabs, one view at a time. On phones (`stacked`) there is no strip
- * in the page: the same choice lives in the top bar as the second crumb, `Section › Page ▾`, and each view is
- * its own page.
- */
-export const Tabs = <K extends string>({ items, value, onChange, stacked, requested }: { items: TabItem<K>[]; value: K; onChange: PageChange<K>; stacked?: boolean; requested?: string | null }) =>
-  stacked ? (
-    <PageCrumb items={items} value={value} onChange={onChange} requested={requested} />
-  ) : (
-    <div role="tablist" className="no-scrollbar -mb-px flex overflow-x-auto border-b border-ff-line [mask-image:linear-gradient(to_right,black_88%,transparent)] md:[mask-image:none]">
-      {items.map((t) => {
-        const active = t.key === value
-        return (
-          <button
-            key={t.key}
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(t.key)}
-            className={cx('relative h-9 shrink-0 px-3 text-[13px] transition-colors first:pl-0.5', active ? 'text-ff-text' : 'text-ff-muted hover:text-ff-text')}
-          >
-            {tabLabel(t)}
-            {active && <span className="absolute inset-x-0 -bottom-px h-[2px] bg-ff-text" />}
-          </button>
-        )
-      })}
-    </div>
-  )
-
-/** Tells the shell whether the list is open. Unmounting (the page went away) reports closed. */
-const MenuState = ({ open, onChange }: { open: boolean; onChange?: (open: boolean) => void }) => {
-  useEffect(() => {
-    onChange?.(open)
-    return () => onChange?.(false)
-  }, [open, onChange])
-  return null
-}
-
-/** Where each page of each section was scrolled to when it was left, so Back lands where the reader was. */
+/** Where each set of pages was scrolled to when a page was left, so Back lands where the reader was. */
 const pageScroll = new Map<string, number>()
 
-/** The second crumb: the current page with a caret, opening a list of the section's pages under the top bar. */
-const PageCrumb = <K extends string>({ items, value, onChange, requested }: { items: TabItem<K>[]; value: K; onChange: PageChange<K>; requested?: string | null }) => {
-  const host = useContext(CrumbContext)
-  const first = items[0]?.key
-  const latest = useRef({ value, first, onChange })
-  latest.current = { value, first, onChange }
-  useEffect(() => {
-    if (!host) return
-    const { home, setPaged } = host
-    home.current = () => {
-      const { value, first, onChange } = latest.current
-      if (first == null || value === first) return false
-      onChange(first)
-      return true
-    }
-    return () => {
-      home.current = null
-      setPaged(null)
-    }
-  }, [host])
-  useEffect(() => host?.setPaged(value === first ? 'first' : 'later'), [host, value, first])
-
-  // The crumb names the page the URL names. If the URL asks for one that is not in the list (a stale link, or a page
-  // that only exists with data, like your lineup), it is rewritten to the first page in place, not as a step to go Back to.
+/**
+ * A page's sub-views, as a strip of tabs. On phones (`stacked`) each tab is a page of its own: a fresh pick starts
+ * at the top, Back returns to where the last page was left, and a page the URL asks for that does not exist falls
+ * back to the first. The strip scrolls sideways when it is longer than the screen, with the picked tab kept in view.
+ */
+export const Tabs = <K extends string>({ items, value, onChange, stacked, requested }: { items: TabItem<K>[]; value: K; onChange: PageChange<K>; stacked?: boolean; requested?: string | null }) => {
   const keys = items.map((t) => t.key).join()
+  const first = items[0]?.key
+  const latest = useRef({ onChange, first })
+  latest.current = { onChange, first }
+
+  // If the URL asks for a page that is not in the list (a stale link, or a page that only exists with data, like your
+  // lineup), it is rewritten to the first page in place, not as a step to go Back to.
   useEffect(() => {
+    if (!stacked) return
     const known = (k: string) => keys.split(',').includes(k)
-    if (first != null && ((requested != null && !known(requested)) || !known(value))) latest.current.onChange(first, { replace: true })
-  }, [requested, value, first, keys])
+    const { first, onChange } = latest.current
+    if (first != null && ((requested != null && !known(requested)) || !known(value))) onChange(first, { replace: true })
+  }, [stacked, requested, value, keys])
 
   // A page is a screen of its own: a fresh pick starts at its top, with no scroll animation. Back and Forward
   // (popstate comes just ahead of the hashchange that moves the page) return to where that page was left.
@@ -278,6 +214,7 @@ const PageCrumb = <K extends string>({ items, value, onChange, requested }: { it
   const at = useRef(0)
   const popped = useRef(0)
   useEffect(() => {
+    if (!stacked) return
     const onScroll = () => (at.current = window.scrollY)
     const onPop = () => (popped.current = Date.now())
     at.current = window.scrollY
@@ -287,56 +224,53 @@ const PageCrumb = <K extends string>({ items, value, onChange, requested }: { it
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('popstate', onPop)
     }
-  }, [])
+  }, [stacked])
   useIsoLayoutEffect(() => {
     if (shown.current === value) return
-    // The scroll offset the leaving page had, read from the listener: by now the new page has already shortened or lengthened the document.
-    pageScroll.set(`${host?.section}/${shown.current}`, at.current)
+    const left = shown.current
     shown.current = value
+    if (!stacked) return
+    // The scroll offset the leaving page had, read from the listener: by now the new page has already shortened or lengthened the document.
+    pageScroll.set(`${keys}/${left}`, at.current)
     const back = Date.now() - popped.current < 600
-    const top = back ? (pageScroll.get(`${host?.section}/${value}`) ?? 0) : 0
+    const top = back ? (pageScroll.get(`${keys}/${value}`) ?? 0) : 0
     at.current = top
     window.scrollTo({ top, left: 0, behavior: 'instant' as ScrollBehavior })
   }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const slot = host?.slot
-  const cur = items.find((t) => t.key === value) ?? items[0]
-  if (!slot || !cur) return null
-  return createPortal(
-    <>
-      <span aria-hidden className="shrink-0 px-1.5 font-mono text-[12px] font-normal text-ff-muted">
-        ›
-      </span>
-      <Dropdown
-        label={`Page in ${host.section}: ${cur.label}`}
-        value={value}
-        onChange={(k) => onChange(k as K)}
-        options={items.map((t) => ({ value: t.key, label: tabLabel(t), text: t.label }))}
-        reveal
-        current
-        // The list is the width of the screen under the top bar (anchored to the bar, not to the crumb), with touch-sized rows.
-        // The ring is drawn on the text (see below), so it sits wholly inside the bar; the button's own tall hit area would clip it.
-        className="!static -my-3.5"
-        buttonClassName="group/crumb focus-visible:!ring-0"
-        menuClassName="!inset-x-0 !top-full !mt-0 !max-h-[60dvh] !min-w-0 border-x-0 [&_[role=option]]:min-h-11 [&_[role=option]]:pl-4 [&_[role=option]]:text-[14px]"
-        renderButton={(_, open) => (
-          <span title={cur.label} className="flex min-w-0 items-center py-3.5 text-ff-text">
-            <MenuState open={open} onChange={host?.setMenuOpen} />
-            <span className="-mx-1.5 flex min-w-0 items-center gap-1.5 px-1.5 py-1 group-focus-visible/crumb:ring-2 group-focus-visible/crumb:ring-inset group-focus-visible/crumb:ring-ff-accent">
-              <span className="truncate">{cur.label}</span>
-              <span aria-hidden className={cx('shrink-0 font-mono text-[10px] font-normal text-ff-muted motion-safe:transition-transform duration-200 ease-ff-out', open && 'rotate-180')}>
-                ▾
-              </span>
-            </span>
-          </span>
-        )}
-      />
-      {/* Changing page keeps focus on the crumb; this tells a screen reader where it landed. */}
-      <span role="status" className="sr-only">
-        {cur.label}
-      </span>
-    </>,
-    slot,
+  // Keep the picked tab in view in a strip that scrolls: centred when it can be, and with no travel on the first paint.
+  const phone = usePhone()
+  const activeTab = useRef<HTMLButtonElement | null>(null)
+  const painted = useRef(false)
+  useIsoLayoutEffect(() => {
+    const tab = activeTab.current
+    const strip = tab?.parentElement
+    if (!phone || !tab || !strip || strip.scrollWidth <= strip.clientWidth) return
+    const calm = !painted.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    painted.current = true
+    strip.scrollTo({ left: tab.offsetLeft - (strip.clientWidth - tab.offsetWidth) / 2, behavior: calm ? 'instant' : 'smooth' } as ScrollToOptions)
+  }, [phone, value, keys])
+
+  return (
+    <FadeStrip role="tablist" className="no-scrollbar -mb-px flex overflow-x-auto border-b border-ff-line">
+      {items.map((t) => {
+        const active = t.key === value
+        return (
+          <button
+            key={t.key}
+            ref={active ? activeTab : undefined}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(t.key)}
+            // A thumb needs 44px; the strip sits under the top bar, so the taller row costs a little page.
+            className={cx('relative h-9 shrink-0 px-3 text-[13px] transition-colors first:pl-0.5 max-md:h-11', active ? 'text-ff-text' : 'text-ff-muted hover:text-ff-text')}
+          >
+            {tabLabel(t)}
+            {active && <span className="absolute inset-x-0 -bottom-px h-[2px] bg-ff-text" />}
+          </button>
+        )
+      })}
+    </FadeStrip>
   )
 }
 
@@ -549,8 +483,6 @@ export const Dropdown = ({
   buttonClassName,
   renderButton,
   menuClassName,
-  reveal,
-  current: isCurrent,
 }: {
   value: string
   options: DropdownOption[]
@@ -561,13 +493,8 @@ export const Dropdown = ({
   /** Custom face for the trigger; gets the current option and whether the list is open. */
   renderButton?: (current: DropdownOption | undefined, open: boolean) => ReactNode
   menuClassName?: string
-  /** Wipe the list open and shut (full-width lists) instead of popping it, keeping it mounted for the way out. */
-  reveal?: boolean
-  /** This is the page the reader is on (a breadcrumb's last crumb). */
-  current?: boolean
 }) => {
   const [open, setOpen] = useState(false)
-  const [closing, setClosing] = useState(false)
   const [up, setUp] = useState(false)
   const [active, setActive] = useState(0)
   // Whether the active row was last moved by the keyboard. Then it is always lit; a pointer-set one is lit only where hover exists.
@@ -577,23 +504,6 @@ export const Dropdown = ({
   const list = useRef<HTMLDivElement>(null)
   const id = useId()
   const current = options.find((o) => o.value === value)
-
-  // A revealed list stays mounted while it wipes shut; animationend unmounts it, and the timer is the fallback
-  // for when no animation runs (reduced motion in a tab that never paints, a display:none ancestor).
-  const wasOpen = useRef(false)
-  useEffect(() => {
-    if (open) {
-      wasOpen.current = true
-      setClosing(false)
-      return
-    }
-    if (!wasOpen.current) return
-    wasOpen.current = false
-    if (!reveal) return
-    setClosing(true)
-    const t = window.setTimeout(() => setClosing(false), 200)
-    return () => window.clearTimeout(t)
-  }, [open, reveal])
 
   useEffect(() => {
     if (!open) return
@@ -677,7 +587,6 @@ export const Dropdown = ({
         aria-controls={`${id}-list`}
         aria-activedescendant={open ? `${id}-${active}` : undefined}
         aria-label={label}
-        aria-current={isCurrent ? 'page' : undefined}
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={onKey}
         className={cx(
@@ -697,17 +606,14 @@ export const Dropdown = ({
           </>
         )}
       </button>
-      {(open || closing) && (
+      {open && (
         <div
           ref={list}
           id={`${id}-list`}
           role="listbox"
           aria-label={label}
-          aria-hidden={!open || undefined}
-          onAnimationEnd={(e) => e.target === e.currentTarget && !open && setClosing(false)}
           className={cx(
-            reveal ? cx('ff-reveal', !open && 'ff-reveal-out') : 'ff-pop',
-            'ff-scroll absolute left-0 z-50 max-h-[260px] min-w-full overflow-y-auto overscroll-contain border border-ff-line2 bg-ff-panel py-1 shadow-[0_10px_28px_rgba(0,0,0,0.22)]',
+            'ff-pop ff-scroll absolute left-0 z-50 max-h-[260px] min-w-full overflow-y-auto overscroll-contain border border-ff-line2 bg-ff-panel py-1 shadow-[0_10px_28px_rgba(0,0,0,0.22)]',
             up ? 'ff-pop-up bottom-full mb-1' : 'top-full mt-1',
             menuClassName,
           )}

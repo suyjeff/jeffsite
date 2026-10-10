@@ -1,10 +1,10 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import Head from 'next/head'
 import { MONKE } from './brand'
 import Tour, { TOUR } from './Tour'
 import { PanelIcon } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
-import { Avatar, CrumbContext, Dropdown, cx, shortcutLabel, usePhone } from './ui'
+import { Avatar, Dropdown, cx, shortcutLabel, usePhone } from './ui'
 
 export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
@@ -66,8 +66,6 @@ export type ShellProps = {
   /** The desktop sidebar shown (the default) or folded away; folding needs `onSidebar`. */
   sidebar?: boolean
   onSidebar?: (open: boolean) => void
-  /** The resolved light or dark mode, for the few styles that depend on it (the page list's scrim). */
-  mode?: 'light' | 'dark'
 }
 
 /** The wordmark. Shared by the shell and onboarding. */
@@ -365,24 +363,11 @@ const Shell = (props: ShellProps) => {
     el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 170, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' })
   }, [sidebarOpen, phone])
   const current = SECTIONS.find((s) => s.key === section)
-  // The top bar's breadcrumb: the section crumb is the shell's; a page with tabs portals its page crumb into the slot.
-  const [crumbSlot, setCrumbSlot] = useState<HTMLElement | null>(null)
-  // null: this page has no sub-pages; otherwise whether the one showing is the first.
-  const [paged, setPaged] = useState<'first' | 'later' | null>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const home = useRef<(() => boolean) | null>(null)
-  const crumbs = useMemo(() => ({ slot: crumbSlot, section: current?.label ?? '', home, setPaged, setMenuOpen }), [crumbSlot, current?.label])
-  // Tapping the section goes to its first page; already there (or nothing to go to), it opens the menu.
-  const crumbHome = () => {
-    if (!home.current?.()) setDrawer(true)
-  }
-  const toFirst = paged === 'later'
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
 
   return (
     // Page headers read data-sidebar to leave room for the show-sidebar button when the sidebar is folded.
-    <CrumbContext.Provider value={crumbs}>
-    <div className="ff group/shell min-h-dvh bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'} data-mode={props.mode}>
+    <div className="ff group/shell min-h-dvh bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
       <FantasyHead title={title} />
 
       {/* Desktop sidebar. Folded, it slides off to the left and leaves the tab order. */}
@@ -404,28 +389,13 @@ const Shell = (props: ShellProps) => {
       {props.tour && props.onTourEnd && <Tour step={tourStep} setStep={setTourStep} onClose={endTour} phone={phone} />}
 
       {/* Phone top bar */}
-      <header className="fixed inset-x-0 top-0 z-[32] flex h-[var(--ff-top)] items-center border-b border-ff-line bg-ff-panel/95 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
+      <header className="fixed inset-x-0 top-0 z-30 flex h-[var(--ff-top)] items-center border-b border-ff-line bg-ff-panel/95 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
         <button onClick={() => setDrawer(true)} className="flex h-full items-center border-r border-ff-line px-3 text-ff-text2" aria-label="Open menu">
           <PanelIcon />
         </button>
         <div className="min-w-0 flex-1 px-3 leading-tight">
-          {/* The crumbs are taller than their text so a thumb can hit them; the league line under them lets taps through. */}
-          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center text-[15px] font-medium">
-            <button
-              type="button"
-              onClick={crumbHome}
-              title={current?.label}
-              // On the first page (or a section with none) it opens the menu; on a later page it goes back to the first.
-              aria-label={toFirst ? `${current?.label}: go to first page` : `${current?.label}: open menu`}
-              aria-current={paged ? undefined : 'page'}
-              // The ring sits on the text, inside the bar; the button itself is taller than the bar's text for a thumb.
-              className={cx('group/crumb -my-3.5 max-w-[45%] shrink-0 py-3.5 text-left outline-none', paged ? 'font-normal text-ff-text2' : 'text-ff-text')}
-            >
-              <span className="-mx-1.5 block truncate px-1.5 py-1 group-focus-visible/crumb:ring-2 group-focus-visible/crumb:ring-inset group-focus-visible/crumb:ring-ff-accent">{current?.label}</span>
-            </button>
-            <div ref={setCrumbSlot} className="contents" />
-          </nav>
-          {leagueName && <div className="pointer-events-none truncate font-mono text-[10.5px] text-ff-muted">{leagueName}</div>}
+          <div className="truncate text-[15px] font-medium">{current?.label}</div>
+          {leagueName && <div className="truncate font-mono text-[10.5px] text-ff-muted">{leagueName}</div>}
         </div>
         {props.onSearch && (
           <button onClick={props.onSearch} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] tracking-[0.1em] text-ff-text2" aria-label="Find a page, player or team">
@@ -478,18 +448,7 @@ const Shell = (props: ShellProps) => {
           More
         </button>
       </nav>
-      {/* Under the open page list, below the top bar: a tap out here closes the list and does nothing else. It stays
-          mounted and only turns off its pointer events when shut, so the tap's click lands on no button. */}
-      <div
-        aria-hidden
-        className={cx(
-          // In over 200ms with the list, out over 120ms: the state being entered sets the duration.
-          'ff-scrim fixed inset-x-0 bottom-0 top-[var(--ff-top)] z-[31] md:hidden motion-safe:transition-opacity motion-safe:ease-ff-out',
-          menuOpen ? 'motion-safe:duration-200' : 'pointer-events-none opacity-0 motion-safe:duration-[120ms]',
-        )}
-      />
     </div>
-    </CrumbContext.Provider>
   )
 }
 
