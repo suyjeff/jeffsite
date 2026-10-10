@@ -7,7 +7,7 @@ import { ContextNotes, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import FreeAgentPick from '../FreeAgentPick'
-import { INSIGHT_ROW, InsightMark } from '../InsightMark'
+import { InsightMark } from '../InsightMark'
 import { pairSwaps } from '../../../lib/fantasy/swaps'
 import ScoutReport, { scoutPlayers, useScout } from '../ScoutReport'
 import MovesPanel from '../Moves'
@@ -263,7 +263,6 @@ const MeView = ({
         dense
         rows={lineupRows}
         rowKey={(r) => r.i}
-        rowClass={(r) => (r.flag ? INSIGHT_ROW : '')}
         columns={[
           { key: 'slot', label: 'Slot', render: (r) => <span className="font-mono text-[11px] text-ff-text2">{r.slot}</span> },
           {

@@ -6,9 +6,9 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Badge, Empty, N, Panel, Reasons, Stat, StatGrid, Table, cx, fmt, fmtSigned, usePhone, type Reason } from '../ui'
+import { Badge, Empty, N, Panel, Reasons, Stat, StatGrid, Table, fmt, fmtSigned, usePhone, type Reason } from '../ui'
 import { Callout } from '../Callout'
-import { INSIGHT_ITEM, InsightMark } from '../InsightMark'
+import { InsightMark } from '../InsightMark'
 import { Disclosure } from '../Disclosure'
 
 type Move = { target: TradeTarget; drop: string | null; bid: BidAdvice | null; why: Reason[]; rivals: number; alts: TradeTarget[] }
@@ -250,7 +250,7 @@ const WaiverMoves = ({
         ) : (
           <ol className="divide-y divide-ff-line">
             {moves.map((m, i) => (
-              <li key={m.target.id} className={cx('px-3 py-3', lowValue && i === 0 && INSIGHT_ITEM)}>
+              <li key={m.target.id} className="px-3 py-3">
                 <div className="grid grid-cols-[20px_minmax(0,1fr)] gap-x-2 gap-y-2 sm:grid-cols-[20px_minmax(0,1fr)_auto]">
                   <span className="num pt-1 text-[11px] text-ff-muted">{String(i + 1).padStart(2, '0')}</span>
                   <div className="min-w-0 space-y-1.5">

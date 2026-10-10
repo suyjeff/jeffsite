@@ -5,10 +5,10 @@ import TeamName, { TopMark } from './TeamName'
 import FreeAgentPick from './FreeAgentPick'
 import SheetRoster from './SheetRoster'
 import { Callout } from './Callout'
-import { INSIGHT_ITEM, InsightMark } from './InsightMark'
+import { InsightMark } from './InsightMark'
 import { scoutPlayers, useScout } from './ScoutReport'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
-import { Avatar, Badge, Button, DeltaChip, Stat, cx, fmt, pct, simOdds } from './ui'
+import { Avatar, Badge, Button, DeltaChip, Stat, fmt, pct, simOdds } from './ui'
 
 /**
  * One team at a glance, over the page: where it stands, what it projects, how it got here and what it starts this
@@ -110,7 +110,7 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
             )}
 
             {mine && moves.length > 0 && (
-              <section className={cx('border-t border-ff-line', INSIGHT_ITEM)}>
+              <section className={'border-t border-ff-line'}>
                 <h3 className="ff-label flex items-center gap-1.5 px-4 pb-1 pt-3">
                   Moves to make <InsightMark label="advice" title="Advice for your lineup" />
                 </h3>

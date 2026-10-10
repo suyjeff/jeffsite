@@ -4,7 +4,7 @@ import { blankEmpty, rosterRows, type RosterRow } from '../../../lib/fantasy/ros
 import { makeHorizonEval } from '../../../lib/fantasy/trades'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
-import { INSIGHT_ROW, InsightMark } from '../InsightMark'
+import { InsightMark } from '../InsightMark'
 import PlayerName from '../PlayerName'
 import { Num, Reasons, Sparkline, Table, cx, fmt, fmtSigned, pct, type Column } from '../ui'
 
@@ -101,7 +101,7 @@ const RosterTable = ({ data, analysis, rosterId, basis, marked }: { data: League
       rows={rows}
       columns={blankEmpty(basis === 'ahead' ? ahead : todate)}
       rowKey={(r) => r.id}
-      rowClass={(r) => cx(!r.starter && 'bg-ff-sunken/40', marked?.has(r.id) && INSIGHT_ROW)}
+      rowClass={(r) => (r.starter ? '' : 'bg-ff-sunken/40')}
       canExpand={(r) => !!data.context[r.id]?.notes.length}
       expand={(r) => {
         const items = contextReasons(data.context[r.id], players)
