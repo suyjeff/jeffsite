@@ -416,7 +416,7 @@ const Power = ({ sel, select }: WidgetProps) => {
           onChange={setM}
           options={[
             ...(models.forecast ? [{ key: 'forecast' as const, label: 'Forecast', title: 'Expected points per week: projected lineup × lineup efficiency' }] : []),
-            { key: 'composite', label: 'Composite', title: 'Results-weighted composite (Power page weights)' },
+            { key: 'composite', label: 'Composite', title: 'Results-weighted composite (Power Rank weights)' },
             { key: 'elo', label: 'Elo', title: 'Results-only Elo with a carried-over prior' },
           ]}
         />
@@ -924,7 +924,7 @@ export const WIDGETS: Record<WidgetKind, Meta> = {
   scoreboard: { title: 'Scoreboard', blurb: "This week's games with expected scores and win odds.", w: 6, h: 7, Body: Scoreboard },
   trades: { title: 'Trade ideas', blurb: 'Best deal from each partner, and how likely each lands.', w: 7, h: 9, Body: TradeIdeas },
   lineup: { title: 'My lineup', blurb: "Next week's optimal lineup from adjusted projections.", w: 4, h: 9, Body: Lineup },
-  power: { title: 'Power', blurb: 'Rankings under any of the three models.', w: 4, h: 9, Body: Power },
+  power: { title: 'Power Rank', blurb: 'Rankings under any of the three models.', w: 4, h: 9, Body: Power },
   standings: { title: 'Standings', blurb: 'Record, points and the playoff line.', w: 6, h: 7, Body: Standings },
   injuries: { title: 'Injury watch', blurb: 'Flagged players and who inherits their work.', w: 4, h: 9, Body: Injuries },
   waivers: { title: 'Waiver wire', blurb: 'Free agents who would start for you.', w: 4, h: 9, Body: Waivers },

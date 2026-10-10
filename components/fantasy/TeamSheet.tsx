@@ -47,7 +47,7 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
             lead={<Avatar src={team.avatar} name={team.name} size={48} />}
             eyebrow={
               <>
-                <span className="num">#{power?.rank ?? '–'} power</span>
+                <span className="num">#{power?.rank ?? '–'} power rank</span>
                 {power?.rank === 1 && <TopMark />}
                 {mine && <Badge tone="accent">you</Badge>}
               </>
@@ -60,7 +60,7 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
             <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line">
               <Stat inset="sheet" label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`${fmt(season.ppg)} pts a game`} />
               <Stat inset="sheet" label="Playoffs" value={sim ? simOdds(sim, 'playoffs') : '–'} meter={sim?.playoffs} sub={sim ? `title ${simOdds(sim, 'title')}` : 'no forecast'} />
-              <Stat inset="sheet" label="Power" value={power ? `${fmt(power.score, 0)}%` : '–'} sub="vs an average team" />
+              <Stat inset="sheet" label="Power Rank" value={power ? `#${power.rank}` : '–'} sub={power ? `${fmt(power.score, 0)}% vs an average team` : undefined} />
               <Stat
                 inset="sheet"
                 label="Lineup"
