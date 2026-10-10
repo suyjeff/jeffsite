@@ -19,7 +19,20 @@ import {
   getWeekStatLines,
   getWeekStats,
 } from './sleeper'
-import { convertEspnLeague, EspnError, espnUserId, getEspnLeague, getEspnWeek, type EspnLeague, type EspnWeek } from './espn'
+import {
+  buildEspnIndex,
+  convertEspnLeague,
+  EspnError,
+  espnLeagueSettings,
+  espnUnnamedPlayers,
+  espnUserId,
+  findEspnLeague,
+  getEspnLeague,
+  getEspnPlayerNames,
+  getEspnWeek,
+  nflSeasons,
+  type EspnWeek,
+} from './espn'
 import { scoreStatLine, statLinePlayed } from './scoring'
 import type { ScheduleGame } from './context'
 import type {
@@ -78,6 +91,8 @@ export const providerName = (p: Provider | undefined) => (p === 'espn' ? 'ESPN' 
 
 export type LeagueData = {
   provider: Provider
+  /** Whether a trade can include FAAB: Sleeper's can, ESPN's cannot. Every trade-FAAB control and suggestion reads this. */
+  tradeFaab: boolean
   state: SleeperState
   me: SleeperUser
   leagues: SleeperLeague[]
@@ -253,63 +268,58 @@ const loadEspn = async (
   onProgress: (msg: string) => void,
 ) => {
   const id = opts.leagueId.trim()
-  let season = opts.season ?? state.league_season ?? state.season
   onProgress(`Loading ESPN league ${id}`)
-  const playersP = getPlayers()
-  let raw: EspnLeague
-  try {
-    raw = await getEspnLeague(id, season)
-  } catch (e) {
-    // Until a league renews for the new season, ESPN only has last year's.
-    if (!(e instanceof EspnError && e.kind === 'not-found') || opts.season || !state.previous_season) throw e
-    raw = await getEspnLeague(id, state.previous_season)
-    warnings.push(`ESPN league ${id} has no ${season} season yet; showing ${state.previous_season}.`)
-    season = state.previous_season
-  }
+  // Together, so a failure in either is handled (and the first one reported).
+  const [found, players] = await Promise.all([findEspnLeague(id, opts.season, await nflSeasons(state)), getPlayers()])
+  const { league: raw, season } = found
+  if (found.fallback) warnings.push(`ESPN league ${id} has not started its ${state.league_season ?? state.season} season yet; showing ${season}.`)
   if (!raw.teams.length) throw new Error(`ESPN league ${id} has no teams yet.`)
-  const players = await playersP
 
-  // The league payload has every week's team scores; lineups and player points come a week at a time.
-  const shell = convertEspnLeague(raw, [], players)
-  const currentWeek = currentWeekOf(shell.league, state)
-  const lineupWeeks = range(shell.league.settings?.start_week ?? 1, Math.min(currentWeek, MAX_WEEK))
-  onProgress('Loading ESPN lineups')
-  const weekResults = await settled(lineupWeeks.map((w) => getEspnWeek(id, season, w, w < currentWeek)))
+  // The league payload has every week's team scores; lineups and player points come a week at a time,
+  // alongside last season's league (team scores only, for the rating model's prior).
+  const settings = espnLeagueSettings(raw)
+  const currentWeek = currentWeekOf(settings.league, state)
+  const lineupWeeks = range(settings.league.settings?.start_week ?? 1, Math.min(currentWeek, MAX_WEEK))
+  const prevSeason = Number(raw.season) - 1
+  onProgress('Loading ESPN lineups and last season')
+  const [weekResults, [prev]] = await Promise.all([
+    settled(lineupWeeks.map((w) => getEspnWeek(id, season, w, w < currentWeek))),
+    raw.previousSeasons.includes(prevSeason) ? settled([getEspnLeague(id, String(prevSeason))]) : Promise.resolve([null]),
+  ])
   const weeks = weekResults.filter((w): w is EspnWeek => !!w)
   if (weeks.length < lineupWeeks.length) warnings.push(`ESPN lineups missing for ${lineupWeeks.length - weeks.length} week(s); those weeks have team scores only.`)
-  const conv = convertEspnLeague(raw, weeks, players)
+  // Moves and draft picks name players by id alone; a player no lineup carried needs ESPN's name for him.
+  const unnamed = espnUnnamedPlayers(raw, weeks)
+  const [names] = unnamed.length ? await settled([getEspnPlayerNames(season)]) : [null]
+  const ix = buildEspnIndex(players)
+  const conv = convertEspnLeague(raw, weeks, ix, names ?? {})
   warnings.push(...conv.warnings)
 
   const team = raw.teams.find((t) => t.id === opts.teamId) ?? raw.teams[0]
   if (opts.teamId != null && team.id !== opts.teamId) warnings.push(`Team ${opts.teamId} is not in this ESPN league any more; showing ${team.name}.`)
   const me = conv.users.find((u) => u.user_id === espnUserId(team.id))!
 
-  // Last season, for the rating model's prior: team scores only, so one request.
+  // Last season, for the rating model's prior: team scores only.
   let history: LeagueHistory | null = null
-  const prevSeason = Number(raw.season) - 1
-  if (raw.previousSeasons.includes(prevSeason)) {
-    onProgress('Reading league history')
-    const [prev] = await settled([getEspnLeague(id, String(prevSeason))])
-    if (prev) {
-      const pc = convertEspnLeague(prev, [], players)
-      const byOwner = new Map(raw.teams.filter((t) => t.ownerId).map((t) => [t.ownerId!, t.id]))
-      const now = new Set(raw.teams.map((t) => t.id))
-      const rosterMap: Record<number, number> = {}
-      for (const t of prev.teams) {
-        const to = (t.ownerId ? byOwner.get(t.ownerId) : undefined) ?? (now.has(t.id) ? t.id : undefined)
-        if (to != null) rosterMap[t.id] = to
-      }
-      const prevPlayoff = pc.league.settings?.playoff_week_start ?? 15
-      const mbw: Record<number, SleeperMatchup[]> = {}
-      for (const w of Object.keys(pc.matchupsByWeek).map(Number)) if (w < prevPlayoff && weekHasScores(pc.matchupsByWeek[w])) mbw[w] = pc.matchupsByWeek[w]
-      history = {
-        league: pc.league,
-        season: pc.league.season,
-        matchupsByWeek: mbw,
-        weeks: Object.keys(mbw).map(Number).sort((a, b) => a - b),
-        transactions: [],
-        rosterMap,
-      }
+  if (prev) {
+    const pc = convertEspnLeague(prev, [], ix)
+    const byOwner = new Map(raw.teams.filter((t) => t.ownerId).map((t) => [t.ownerId!, t.id]))
+    const now = new Set(raw.teams.map((t) => t.id))
+    const rosterMap: Record<number, number> = {}
+    for (const t of prev.teams) {
+      const to = (t.ownerId ? byOwner.get(t.ownerId) : undefined) ?? (now.has(t.id) ? t.id : undefined)
+      if (to != null) rosterMap[t.id] = to
+    }
+    const prevPlayoff = pc.league.settings?.playoff_week_start ?? 15
+    const mbw: Record<number, SleeperMatchup[]> = {}
+    for (const w of Object.keys(pc.matchupsByWeek).map(Number)) if (w < prevPlayoff && weekHasScores(pc.matchupsByWeek[w])) mbw[w] = pc.matchupsByWeek[w]
+    history = {
+      league: pc.league,
+      season: pc.league.season,
+      matchupsByWeek: mbw,
+      weeks: Object.keys(mbw).map(Number).sort((a, b) => a - b),
+      transactions: [],
+      rosterMap,
     }
   }
   if (currentWeek > (conv.league.settings?.start_week ?? 1) && !conv.transactions.length)
@@ -627,6 +637,7 @@ export const loadLeagueData = async (
 
   return {
     provider: espn ? 'espn' : 'sleeper',
+    tradeFaab: !espn,
     state,
     me,
     leagues,

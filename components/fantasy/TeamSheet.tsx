@@ -110,7 +110,7 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
             )}
 
             {mine && moves.length > 0 && (
-              <section className={'border-t border-ff-line'}>
+              <section className="border-t border-ff-line">
                 <h3 className="ff-label flex items-center gap-1.5 px-4 pb-1 pt-3">
                   Moves to make <InsightMark label="advice" title="Advice for your lineup" />
                 </h3>

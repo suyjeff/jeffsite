@@ -12,13 +12,15 @@
 //    sent; if ESPN still refuses the page, fetch rejects and the loader says so
 //    in words a manager can act on.
 
-import { cached, draftBoard } from './sleeper'
+import { normName } from './names'
+import { cached, draftBoard, getState } from './sleeper'
 import type {
   DraftBoard,
   PlayerMap,
   SleeperLeague,
   SleeperMatchup,
   SleeperRoster,
+  SleeperState,
   SleeperTransaction,
   SleeperUser,
   TrimmedPlayer,
@@ -349,6 +351,72 @@ export const getEspnWeek = (leagueId: string, season: string, week: number, isPa
     isPast,
   )
 
+export type NflSeasons = { current: string; previous: string | null }
+
+/** The season an ESPN league is looked up in: Sleeper's NFL calendar, or this year if that is down. */
+export const nflSeasons = async (state?: SleeperState | null): Promise<NflSeasons> => {
+  try {
+    const s = state ?? (await getState())
+    return { current: s.league_season ?? s.season, previous: s.previous_season ?? String(Number(s.league_season ?? s.season) - 1) }
+  } catch {
+    const y = new Date().getFullYear()
+    return { current: String(y), previous: String(y - 1) }
+  }
+}
+
+/**
+ * An ESPN league in the season asked for, or else this season, or, until the
+ * league renews for it, last season (`fallback` says so). Setup and the loader
+ * both find a league this way, so they never disagree about which season it is.
+ */
+export const findEspnLeague = async (
+  leagueId: string,
+  season: string | null | undefined,
+  seasons: NflSeasons,
+): Promise<{ league: EspnLeague; season: string; fallback: boolean }> => {
+  if (season) return { league: await getEspnLeague(leagueId, season), season, fallback: false }
+  try {
+    return { league: await getEspnLeague(leagueId, seasons.current), season: seasons.current, fallback: false }
+  } catch (e) {
+    if (!(e instanceof EspnError && e.kind === 'not-found') || !seasons.previous) throw e
+    return { league: await getEspnLeague(leagueId, seasons.previous), season: seasons.previous, fallback: true }
+  }
+}
+
+/** ESPN player id → name, position and pro team, for players a payload names by id alone. */
+export type EspnNames = Record<number, { name: string; pos: number; team: number }>
+
+/**
+ * ESPN's list of every player, reduced to names. Only fetched when a move or
+ * draft pick names a player no lineup carried, so the fallback match has a name
+ * to go on. A plain GET without ESPN's filter header (which would need a
+ * preflight); like the rest of this file, its shape is unverified.
+ */
+export const getEspnPlayerNames = (season: string) =>
+  cached(
+    `espn:players:${season}`,
+    24 * HOUR,
+    async () => {
+      const raw = await espnFetch(`${ESPN_API}/seasons/${season}/players?scoringPeriodId=0&view=players_wl`, 'players', season)
+      const out: EspnNames = {}
+      for (const p of Array.isArray(raw) ? (raw as RawPlayer[]) : [])
+        if (p && typeof p.id === 'number') out[p.id] = { name: p.fullName ?? [p.firstName, p.lastName].filter(Boolean).join(' '), pos: p.defaultPositionId ?? 0, team: p.proTeamId ?? 0 }
+      return out
+    },
+    false,
+  )
+
+/** Players a move or draft pick names that no roster or lineup carried: these need names from elsewhere. */
+export const espnUnnamedPlayers = (l: EspnLeague, weeks: EspnWeek[]): number[] => {
+  const seen = new Set<number>()
+  for (const t of l.teams) for (const e of t.entries) seen.add(e.pid)
+  for (const wk of weeks) for (const g of wk.games) for (const s of [g.home, g.away]) for (const e of s?.entries ?? []) seen.add(e.pid)
+  const out = new Set<number>()
+  for (const p of l.picks) if (!seen.has(p.pid) && p.pid > 0) out.add(p.pid)
+  for (const wk of weeks) for (const t of wk.transactions) for (const x of t.items) if (!seen.has(x.pid) && x.pid > 0) out.add(x.pid)
+  return [...out]
+}
+
 /** The teams to choose from during setup: name, manager and logo. */
 export const espnTeamChoices = (l: EspnLeague) =>
   [...l.teams].sort((a, b) => a.name.localeCompare(b.name)).map((t) => ({ id: t.id, name: t.name, owner: t.owner, logo: t.logo }))
@@ -662,18 +730,6 @@ const ESPN_POS: Record<number, string[]> = {
 }
 const DST = 16
 
-export const normName = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[.'’`]/g, '')
-    .replace(/-/g, ' ')
-    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '')
-    .replace(/[^a-z ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
 export type EspnIndex = { byEspn: Map<string, string>; byName: Map<string, TrimmedPlayer[]>; players: PlayerMap }
 
 export const buildEspnIndex = (players: PlayerMap): EspnIndex => {
@@ -729,6 +785,13 @@ export type EspnConverted = {
   warnings: string[]
 }
 
+/**
+ * The steps of a trade that mean it went through. ESPN files a proposal, then
+ * an acceptance, then (after review) an upholding; a veto or a decline marks
+ * one that did not happen, whatever its status says.
+ */
+const TRADE_DONE = new Set(['TRADE_ACCEPT', 'TRADE_UPHOLD'])
+
 /** NFL weeks in each matchup period; a period missing from the settings is the week of the same number. */
 const periodWeeks = (l: EspnLeague, period: number): number[] => {
   const w = l.matchupPeriods[String(period)]
@@ -737,26 +800,13 @@ const periodWeeks = (l: EspnLeague, period: number): number[] => {
 
 const splitPoints = (pts: number) => ({ whole: Math.floor(pts), decimal: Math.round((pts - Math.floor(pts)) * 100) })
 
-export const convertEspnLeague = (l: EspnLeague, weeks: EspnWeek[], players: PlayerMap): EspnConverted => {
+/**
+ * The league's settings in Sleeper's shape: roster positions, scoring, the
+ * season's calendar. Separate from the rosters and schedule so the loader can
+ * learn which weeks to fetch before it has them.
+ */
+export const espnLeagueSettings = (l: EspnLeague): { league: SleeperLeague; positions: string[]; warnings: string[] } => {
   const warnings: string[] = []
-  const ix = buildEspnIndex(players)
-  const ids = new Map<number, string | null>()
-  const missed = new Map<number, string>()
-  const idOf = (e: EspnEntry): string | null => {
-    if (!ids.has(e.pid)) {
-      const id = matchEspnPlayer(ix, e)
-      ids.set(e.pid, id)
-      if (!id) missed.set(e.pid, e.name || `ESPN player ${e.pid}`)
-    }
-    return ids.get(e.pid)!
-  }
-  /** Players as Sleeper ids, keeping each one's ESPN slot. */
-  const mapped = (entries: EspnEntry[]) =>
-    entries.flatMap((e) => {
-      const id = idOf(e)
-      return id ? [{ id, slot: e.slot, pts: e.pts }] : []
-    })
-
   if (l.scoringType && !/POINTS/i.test(l.scoringType))
     warnings.push(`This ESPN league scores by categories (${l.scoringType}); the app reads it as a points league.`)
 
@@ -795,6 +845,42 @@ export const convertEspnLeague = (l: EspnLeague, weeks: EspnWeek[], players: Pla
     previous_league_id: null,
     avatar: null,
   }
+
+  return { league, positions, warnings }
+}
+
+/**
+ * The whole league in Sleeper's shapes. `ix` is built once from Sleeper's
+ * players and shared between seasons; `names` covers players that moves or
+ * draft picks name by id alone.
+ */
+export const convertEspnLeague = (l: EspnLeague, weeks: EspnWeek[], ix: EspnIndex, names: EspnNames = {}): EspnConverted => {
+  const warnings: string[] = []
+  const ids = new Map<number, string | null>()
+  const missed = new Map<number, string>()
+  const idOf = (e: EspnEntry): string | null => {
+    if (!ids.has(e.pid)) {
+      const id = matchEspnPlayer(ix, e)
+      ids.set(e.pid, id)
+      if (!id) missed.set(e.pid, e.name || `ESPN player ${e.pid}`)
+    }
+    return ids.get(e.pid)!
+  }
+  // Every name ESPN gave anywhere, for players a move or a pick names by id alone.
+  const known = new Map<number, EspnEntry>()
+  for (const pid of Object.keys(names).map(Number)) known.set(pid, { pid, slot: 20, pts: null, ...names[pid] })
+  for (const t of l.teams) for (const e of t.entries) known.set(e.pid, e)
+  for (const wk of weeks) for (const g of wk.games) for (const s of [g.home, g.away]) for (const e of s?.entries ?? []) known.set(e.pid, e)
+  const idOfPid = (pid: number) => idOf(known.get(pid) ?? { pid, slot: 20, name: '', pos: 0, team: 0, pts: null })
+  /** Players as Sleeper ids, keeping each one's ESPN slot. */
+  const mapped = (entries: EspnEntry[]) =>
+    entries.flatMap((e) => {
+      const id = idOf(e)
+      return id ? [{ id, slot: e.slot, pts: e.pts }] : []
+    })
+
+  const { league, positions, warnings: settingsWarnings } = espnLeagueSettings(l)
+  warnings.push(...settingsWarnings)
 
   const users: SleeperUser[] = l.teams.map((t) => ({
     user_id: espnUserId(t.id),
@@ -876,7 +962,7 @@ export const convertEspnLeague = (l: EspnLeague, weeks: EspnWeek[], players: Pla
   for (const wk of weeks)
     for (const t of wk.transactions) {
       if (t.status !== 'EXECUTED') continue
-      const type = t.type === 'FREEAGENT' ? 'free_agent' : t.type === 'WAIVER' ? 'waiver' : /TRADE/.test(t.type) ? 'trade' : null
+      const type = t.type === 'FREEAGENT' ? 'free_agent' : t.type === 'WAIVER' ? 'waiver' : TRADE_DONE.has(t.type) ? 'trade' : null
       if (!type) continue
       const moves = t.items.filter((x) => x.type === 'ADD' || x.type === 'DROP' || x.type === 'TRADE')
       if (!moves.length) continue
@@ -887,7 +973,7 @@ export const convertEspnLeague = (l: EspnLeague, weeks: EspnWeek[], players: Pla
       const drops: Record<string, number> = {}
       const teams = new Set<number>()
       for (const x of moves) {
-        const id = ids.has(x.pid) ? ids.get(x.pid) : matchEspnPlayer(ix, { pid: x.pid, name: '', pos: 0, team: 0 })
+        const id = idOfPid(x.pid)
         if (!id) continue
         if ((x.type === 'ADD' || x.type === 'TRADE') && x.to > 0) {
           adds[id] = x.to
@@ -916,7 +1002,7 @@ export const convertEspnLeague = (l: EspnLeague, weeks: EspnWeek[], players: Pla
   let draft: DraftBoard | null = null
   if (l.picks.length) {
     const picks = l.picks.flatMap((p) => {
-      const id = ids.has(p.pid) ? ids.get(p.pid) : matchEspnPlayer(ix, { pid: p.pid, name: '', pos: 0, team: 0 })
+      const id = idOfPid(p.pid)
       return id ? [{ player_id: id, pick_no: p.overall, metadata: p.bid != null ? { amount: p.bid } : null }] : []
     })
     draft = draftBoard(picks, /AUCTION/i.test(l.draftType) ? 'auction' : 'snake')

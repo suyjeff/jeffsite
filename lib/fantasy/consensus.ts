@@ -8,6 +8,7 @@
 // the experts part ways) and the "perceived" side of how a trade looks.
 
 import type { PlayerMap } from './types'
+import { normName } from './names'
 
 export type ConsensusEntry = {
   /** Overall rest-of-season rank among all positions. */
@@ -101,18 +102,6 @@ export const reduceConsensusCsv = (text: string): ConsensusRow[] => {
   }
   return out
 }
-
-const SUFFIX = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v'])
-/** "Kenneth Walker III" and "Kenneth Walker" meet at "kenneth walker". */
-export const normName = (name: string) =>
-  name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[.'’`-]/g, '')
-    .split(/\s+/)
-    .filter((w) => w && !SUFFIX.has(w))
-    .join(' ')
 
 /** FantasyPros team codes that differ from Sleeper's. */
 const TEAM_FIX: Record<string, string> = { JAC: 'JAX', WSH: 'WAS', LA: 'LAR' }

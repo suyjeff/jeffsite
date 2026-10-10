@@ -52,8 +52,8 @@ export const useFantasy = () => {
  */
 export const useTradeRead = () => {
   const { data, analysis, models, grades } = useFantasy()
-  // ESPN trades cannot carry FAAB, so there is no sweetener to suggest there.
-  const faab = data.provider === 'espn' ? null : models.faab
+  // Where trades cannot carry FAAB (ESPN), there is no sweetener to suggest.
+  const faab = data.tradeFaab ? models.faab : null
   return useCallback(
     (idea: TradeIdea, graded = true) => {
       const base = acceptRead(idea, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, faab)

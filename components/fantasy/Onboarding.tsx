@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { EspnError, ESPN_PRIVATE_HELP, espnTeamChoices, getEspnLeague, type EspnLeague } from '../../lib/fantasy/espn'
-import { getState, getUser, SleeperError } from '../../lib/fantasy/sleeper'
+import { EspnError, ESPN_PRIVATE_HELP, espnTeamChoices, findEspnLeague, nflSeasons, type EspnLeague } from '../../lib/fantasy/espn'
+import { getUser, SleeperError } from '../../lib/fantasy/sleeper'
 import type { Provider } from '../../lib/fantasy/useLeagueData'
 import { Brand, FantasyHead } from './Shell'
 import { DIAGRAMS } from './TourDiagrams'
 import { Avatar, Button, Segmented, cx } from './ui'
 
-export type OnboardResult = { provider: 'sleeper'; username: string } | { provider: 'espn'; leagueId: string; teamId: number; season: string | null }
+export type OnboardResult = { provider: 'sleeper'; username: string } | { provider: 'espn'; leagueId: string; teamId: number }
 
 export type OnboardInitial = { provider: Provider; username: string; espnLeagueId: string | null; espnTeamId: number | null }
 
@@ -16,17 +16,6 @@ type Status = { kind: 'idle' } | { kind: 'checking' } | { kind: 'error'; msg: st
 const parseLeagueId = (s: string) => {
   const t = s.trim()
   return t.match(/leagueId=(\d+)/i)?.[1] ?? (/^\d+$/.test(t) ? t : null)
-}
-
-/** The season to look an ESPN league up in: Sleeper's NFL calendar, or this year if that is down. */
-const nflSeason = async () => {
-  try {
-    const s = await getState()
-    return { season: s.league_season ?? s.season, previous: s.previous_season ?? null }
-  } catch {
-    const y = new Date().getFullYear()
-    return { season: String(y), previous: String(y - 1) }
-  }
 }
 
 /**
@@ -42,7 +31,7 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: Onboa
   const [leagueText, setLeagueText] = useState(initial.espnLeagueId ?? '')
   const [state, setState] = useState<Status>({ kind: 'idle' })
   // ESPN's second step: the league, found, and the team you pick in it.
-  const [found, setFound] = useState<{ league: EspnLeague; season: string; asked: string } | null>(null)
+  const [found, setFound] = useState<{ league: EspnLeague; season: string; fallback: boolean; current: string } | null>(null)
   const [teamId, setTeamId] = useState<number | null>(initial.espnTeamId)
   const input = useRef<HTMLInputElement>(null)
   const teamList = useRef<HTMLDivElement>(null)
@@ -81,20 +70,11 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: Onboa
     const id = parseLeagueId(leagueText)
     if (!id) return setState({ kind: 'error', msg: 'Enter the league ID: the number after leagueId= in your league’s address on fantasy.espn.com.' })
     setState({ kind: 'checking' })
-    const { season, previous } = await nflSeason()
     try {
-      let league: EspnLeague
-      let used = season
-      try {
-        league = await getEspnLeague(id, season)
-      } catch (err) {
-        // Until a league renews, ESPN only has last season's.
-        if (!(err instanceof EspnError && err.kind === 'not-found') || !previous) throw err
-        league = await getEspnLeague(id, previous)
-        used = previous
-      }
+      const seasons = await nflSeasons()
+      const { league, season, fallback } = await findEspnLeague(id, null, seasons)
       if (!league.teams.length) return setState({ kind: 'error', msg: `ESPN league ${id} has no teams yet.` })
-      setFound({ league, season: used, asked: season })
+      setFound({ league, season, fallback, current: seasons.current })
       if (!league.teams.some((t) => t.id === teamId)) setTeamId(null)
       setState({ kind: 'idle' })
     } catch (err) {
@@ -107,8 +87,8 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: Onboa
     if (provider === 'sleeper') return void submitSleeper()
     if (!found) return void findEspn()
     if (teamId == null) return setState({ kind: 'error', msg: 'Pick your team.' })
-    // A league still on last season keeps that season pinned, so the loader does not look for this one first.
-    onDone({ provider: 'espn', leagueId: found.league.id, teamId, season: found.season === found.asked ? null : found.season })
+    // No season is saved: the loader looks for this season first, so a league that renews later moves over by itself.
+    onDone({ provider: 'espn', leagueId: found.league.id, teamId })
   }
 
   const checking = state.kind === 'checking'
@@ -232,6 +212,11 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: Onboa
                   <p className="mt-1.5 text-[13px] leading-relaxed text-ff-text2">
                     {found.league.name} · {found.season} · {teams.length} teams
                   </p>
+                  {found.fallback && (
+                    <p className="mt-2 border-l-2 border-ff-warn/60 pl-2.5 text-[12px] leading-[1.5] text-ff-text2">
+                      This league hasn&apos;t started its {found.current} season on ESPN yet, so these are last season&apos;s teams. It switches to {found.current} by itself once the league renews.
+                    </p>
+                  )}
                 </div>
                 <div ref={teamList} role="radiogroup" aria-label="Your team" className="ff-scroll max-h-[44vh] overflow-y-auto border border-ff-line">
                   {teams.map((t, i) => {

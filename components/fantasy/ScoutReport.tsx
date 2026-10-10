@@ -24,7 +24,7 @@ export const useScout = (rosterId: number) => {
 const Fact = ({ f, marked }: { f: ScoutFact; marked?: boolean }) => {
   const good = f.value > 0
   return (
-    <li className={cx('flex items-start gap-3 border-b border-ff-line/60 px-3 py-2 last:border-b-0')}>
+    <li className="flex items-start gap-3 border-b border-ff-line/60 px-3 py-2 last:border-b-0">
       <span className={cx('mt-0.5 w-[62px] shrink-0 text-right', good ? 'text-ff-pos' : 'text-ff-neg')}>
         {f.unit === 'rank' ? (
           <span className="font-mono text-[10.5px] uppercase tracking-wide">{good ? 'easy' : 'hard'}</span>

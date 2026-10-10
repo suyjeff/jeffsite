@@ -415,7 +415,7 @@ const FantasyPage = () => {
         onDone={(r: OnboardResult) => {
           if (r.provider === 'espn') {
             const same = prefs.provider === 'espn' && r.leagueId === prefs.espnLeagueId
-            update({ onboarded: true, provider: 'espn', espnLeagueId: r.leagueId, espnTeamId: r.teamId, season: r.season ?? (same ? prefs.season : null) })
+            update({ onboarded: true, provider: 'espn', espnLeagueId: r.leagueId, espnTeamId: r.teamId, season: same ? prefs.season : null })
             return
           }
           const same = prefs.provider !== 'espn' && r.username.toLowerCase() === prefs.username.trim().toLowerCase()

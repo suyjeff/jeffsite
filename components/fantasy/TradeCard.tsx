@@ -221,7 +221,7 @@ const TradeCard = ({
 
   return (
     <article className={cx('flex min-w-0 flex-col border border-ff-line bg-ff-panel transition-opacity', read.ruledOut && 'opacity-60 hover:opacity-100 focus-within:opacity-100')}>
-      <header className={cx('flex items-center justify-between gap-2 border-b border-ff-line px-3 py-2')}>
+      <header className="flex items-center justify-between gap-2 border-b border-ff-line px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <Avatar src={team?.avatar ?? null} name={team?.name ?? '?'} size={24} />
           <div className="min-w-0 leading-tight">
@@ -255,7 +255,7 @@ const TradeCard = ({
           {idea.give.map((id) => (
             <PlayerLine key={id} id={id} data={data} analysis={analysis} />
           ))}
-          {read.faab != null && models.faab && (
+          {read.faab != null && models.faab && data.tradeFaab && (
             <div className="flex items-center gap-2.5 py-1.5" title="Sleeper trades can carry FAAB. This much makes the deal read as fair to them without giving up another player.">
               <span aria-hidden className="flex h-[34px] w-[34px] shrink-0 items-center justify-center border border-ff-line bg-ff-sunken font-mono text-[13px] text-ff-text2">
                 $

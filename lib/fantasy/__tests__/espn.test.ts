@@ -5,6 +5,8 @@ import {
   espnScoring,
   espnTeamChoices,
   buildEspnIndex,
+  espnLeagueSettings,
+  espnUnnamedPlayers,
   matchEspnPlayer,
   slotStarters,
   trimEspnLeague,
@@ -42,6 +44,7 @@ const players: PlayerMap = {
   '4227': tp('4227', 'Taysom Hill', 'TE', 'NO'),
   '1433': tp('1433', 'Brandon Aubrey', 'K', 'DAL'),
   '4984': tp('4984', 'Josh Allen', 'QB', 'BUF', '3918298'),
+  '9600': tp('9600', 'Tank Bigsby', 'RB', 'JAX'),
   KC: tp('KC', 'Kansas City Chiefs', 'DEF', 'KC'),
   PHI: tp('PHI', 'Philadelphia Eagles', 'DEF', 'PHI'),
 }
@@ -161,6 +164,8 @@ const raw: EspnRawLeague = {
     picks: [
       { overallPickNumber: 1, playerId: 3918298, teamId: 2 },
       { overallPickNumber: 2, playerId: 3139477, teamId: 1 },
+      // Drafted, then dropped before any lineup: ESPN names him nowhere.
+      { overallPickNumber: 3, playerId: 4888888, teamId: 1 },
     ],
   },
 }
@@ -197,6 +202,12 @@ const week1: EspnRawLeague = {
     { id: 't2', type: 'WAIVER', status: 'FAILED_INVALIDPLAYERSOURCE', scoringPeriodId: 1, bidAmount: 30, items: [{ playerId: 4262921, type: 'ADD', toTeamId: 2 }] },
     { id: 't3', type: 'TRADE_ACCEPT', status: 'EXECUTED', scoringPeriodId: 1, processDate: 2000, items: [{ playerId: 3139477, type: 'TRADE', fromTeamId: 2, toTeamId: 1 }, { playerId: 3918298, type: 'TRADE', fromTeamId: 1, toTeamId: 2 }] },
     { id: 't4', type: 'TRADE_UPHOLD', status: 'EXECUTED', scoringPeriodId: 1, processDate: 2100, items: [{ playerId: 3918298, type: 'TRADE', fromTeamId: 1, toTeamId: 2 }, { playerId: 3139477, type: 'TRADE', fromTeamId: 2, toTeamId: 1 }] },
+    // Trades that did not go through, whatever the status says.
+    { id: 't6', type: 'TRADE_VETO', status: 'EXECUTED', scoringPeriodId: 1, items: [{ playerId: 3929630, type: 'TRADE', fromTeamId: 1, toTeamId: 2 }] },
+    { id: 't7', type: 'TRADE_DECLINE', status: 'EXECUTED', scoringPeriodId: 1, items: [{ playerId: 4430807, type: 'TRADE', fromTeamId: 1, toTeamId: 2 }] },
+    { id: 't8', type: 'TRADE_PROPOSAL', status: 'EXECUTED', scoringPeriodId: 1, items: [{ playerId: 4262921, type: 'TRADE', fromTeamId: 1, toTeamId: 2 }] },
+    // A pickup of a player no lineup carried: only ESPN's player list names him.
+    { id: 't9', type: 'FREEAGENT', status: 'EXECUTED', scoringPeriodId: 1, processDate: 3000, items: [{ playerId: 4429999, type: 'ADD', fromTeamId: 0, toTeamId: 2 }] },
     { id: 't5', type: 'ROSTER', status: 'EXECUTED', scoringPeriodId: 1, items: [{ playerId: 3139477, type: 'LINEUP', fromTeamId: 1, toTeamId: 1 }] },
   ],
 }
@@ -275,7 +286,16 @@ describe('ESPN player ids', () => {
 
 describe('ESPN league conversion', () => {
   const league = trimEspnLeague(raw)
-  const out = convertEspnLeague(league, [trimEspnWeek(week1, 1)], players)
+  const weeks = [trimEspnWeek(week1, 1)]
+  const out = convertEspnLeague(league, weeks, buildEspnIndex(players), { 4429999: { name: 'Tank Bigsby', pos: 2, team: 30 } })
+
+  it('lists the players only a move or a pick names', () => {
+    expect(espnUnnamedPlayers(league, weeks).sort()).toEqual([4429999, 4888888])
+  })
+
+  it('builds the settings alone, before any lineups', () => {
+    expect(espnLeagueSettings(league).league).toEqual(out.league)
+  })
 
   it('builds the league settings', () => {
     expect(out.league.league_id).toBe('espn:123456')
@@ -305,8 +325,8 @@ describe('ESPN league conversion', () => {
     expect(r.settings).toMatchObject({ wins: 2, losses: 0, fpts: 251, fpts_decimal: 36, waiver_budget_used: 12 })
   })
 
-  it('reports players it could not match', () => {
-    expect(out.warnings.some((w) => /1 ESPN player\(s\).*Nobody Known/.test(w))).toBe(true)
+  it('reports players it could not match, those named by id alone included', () => {
+    expect(out.warnings.some((w) => /2 ESPN player\(s\).*Nobody Known, ESPN player 4888888/.test(w))).toBe(true)
     expect(out.warnings.some((w) => w.includes('HC×1'))).toBe(true)
   })
 
@@ -328,9 +348,10 @@ describe('ESPN league conversion', () => {
     expect(away.players_points).toEqual({ '4984': 30.06 })
   })
 
-  it('reads executed moves once, trades included, in Sleeper form', () => {
-    expect(out.transactions).toHaveLength(2)
-    const [waiver, trade] = out.transactions
+  it('reads executed moves once, only trades that went through, in Sleeper form', () => {
+    expect(out.transactions.map((t) => t.type)).toEqual(['waiver', 'trade', 'free_agent'])
+    const [waiver, trade, pickup] = out.transactions
+    expect(pickup).toMatchObject({ adds: { '9600': 2 } })
     expect(waiver).toMatchObject({ type: 'waiver', leg: 1, bid: 12, adds: { '4866': 1 }, drops: { '4227': 1 } })
     expect(trade).toMatchObject({ type: 'trade', adds: { '4046': 1, '4984': 2 }, drops: { '4046': 2, '4984': 1 } })
     expect(trade.roster_ids.sort()).toEqual([1, 2])
