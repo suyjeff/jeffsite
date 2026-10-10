@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react'
-import { scoutTeam } from '../../lib/fantasy/scout'
 import { useFantasy } from './FantasyContext'
 import { MoveList, useMoves } from './Moves'
 import TeamName, { TopMark } from './TeamName'
@@ -7,7 +6,7 @@ import FreeAgentPick from './FreeAgentPick'
 import SheetRoster from './SheetRoster'
 import { Callout } from './Callout'
 import { INSIGHT_ITEM, InsightMark } from './InsightMark'
-import { scoutPlayers } from './ScoutReport'
+import { scoutPlayers, useScout } from './ScoutReport'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
 import { Avatar, Badge, Button, DeltaChip, Stat, cx, fmt, pct, simOdds } from './ui'
 
@@ -24,8 +23,8 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
   const need = analysis.needs[rosterId]
   const sim = models.forecast?.sim[rosterId]
   const mine = rosterId === analysis.myRosterId
-  const scout = useMemo(() => scoutTeam(data, analysis, models, rosterId), [data, analysis, models, rosterId])
-  const aboutPlayers = useMemo(() => scoutPlayers(scout, data, analysis, rosterId), [scout, data, analysis, rosterId])
+  const scout = useScout(rosterId)
+  const aboutPlayers = useMemo(() => scoutPlayers(scout), [scout])
   const moves = useMoves(mine ? rosterId : null, 3)
   const league = useMemo(() => {
     const xs = analysis.teams.map((t) => analysis.needs[t.rosterId]?.lineup ?? 0).filter((x) => x > 0)

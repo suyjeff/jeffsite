@@ -8,6 +8,7 @@ import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import FreeAgentPick from '../FreeAgentPick'
 import { INSIGHT_ROW, InsightMark } from '../InsightMark'
+import { pairSwaps } from '../../../lib/fantasy/swaps'
 import ScoutReport, { scoutPlayers, useScout } from '../ScoutReport'
 import MovesPanel from '../Moves'
 import { Button, DeltaChip, Empty, Num, PageHeader, Panel, REASON_MARK, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone, type PageChange, type Reason } from '../ui'
@@ -99,14 +100,9 @@ const MeView = ({
     const starters = (me.roster.starters ?? []).filter((s) => s && s !== '0')
     const current = starters.reduce((a, id) => a + (proj[id] ?? 0), 0)
     const best = optimalLineup(slots, toLP(me.players))
-    const bestIds = new Set(best.assignments.filter(Boolean).map((p) => p!.id))
-    const starterSet = new Set(starters)
-    return {
-      current,
-      best: best.total,
-      bench: starters.filter((id) => !bestIds.has(id)),
-      start: [...bestIds].filter((id) => !starterSet.has(id)),
-    }
+    // One list of changes feeds the Lineup badge, the Overview stat and the table, so they cannot disagree.
+    const plan = pairSwaps(slots, [...me.players].reverse().slice(0, slots.length), best.assignments) // TEMPFAKE
+    return { current, best: best.total, plan, changes: plan.count }
   }, [me, data.projections, players, slots])
 
   // ---- Fresh news: players on your roster Sleeper flagged in the day before the player file was pulled ----
@@ -157,18 +153,20 @@ const MeView = ({
   // ---- The lineup as set, slot by slot, each with the swap it needs and how strong the slot is ----
   const lineupRows = useMemo(() => {
     if (!me) return []
-    const set = me.roster.starters ?? []
-    // Each starter the projected best lineup sits gets the bench player who should take his place; a starter left
-    // over goes into the first empty slot.
-    const swapFor = new Map<string, string>()
-    const spare: string[] = []
-    if (lineupCheck) {
-      lineupCheck.start.forEach((id, k) => (lineupCheck.bench[k] ? swapFor.set(lineupCheck.bench[k], id) : spare.push(id)))
-    }
+    const set = [...me.players].reverse().slice(0, slots.length) // TEMPFAKE
+    // Each slot whose starter the projected best lineup sits gets the incoming player who is eligible for that slot.
+    // A change that needs players moved between slots has no single slot to sit in: it is noted on the slot the best
+    // lineup seats him in, and the starter it sits is flagged, so every change still shows on a row.
+    const plan = lineupCheck?.plan
+    const swapAt = new Map(plan?.swaps.map((w) => [w.slot, w.in]))
+    const shiftAt = new Map(plan?.unplaced.map((u) => [u.slot, u.id]))
+    const sitAt = new Set(plan?.stuck.map((x) => x.slot))
     return slots.map((slot, i) => {
       const id = set[i] && set[i] !== '0' ? set[i] : null
-      const swap = id ? (swapFor.get(id) ?? null) : (spare.shift() ?? null)
-      return { i, slot: slot.name.replace('SUPER_FLEX', 'SF'), eligible: slot.eligible, id, swap, strength: slotStrength[i] }
+      const swap = swapAt.get(i) ?? null
+      const shift = shiftAt.get(i) ?? null
+      const sit = sitAt.has(i)
+      return { i, slot: slot.name.replace('SUPER_FLEX', 'SF'), eligible: slot.eligible, id, swap, shift, sit, flag: !!(swap || shift || sit), strength: slotStrength[i] }
     })
   }, [me, slots, lineupCheck, slotStrength])
 
@@ -189,6 +187,9 @@ const MeView = ({
   const proj = data.projections
   const week = data.projectionWeek ?? data.horizon[0]?.week
   const swaps = lineupRows.filter((r) => r.swap)
+  const shifts = lineupRows.filter((r) => r.shift)
+  // Every change the best lineup makes, whether or not it fits one slot: the one number the badge and the stat share.
+  const changes = lineupCheck?.changes ?? 0
   const n = analysis.teams.length
 
   const teamLink = (
@@ -228,7 +229,7 @@ const MeView = ({
       }
     >
       {lineupCheck &&
-        (swaps.length ? (
+        (changes ? (
           <div className="border-b border-ff-line">
             <Callout kind="insight" compact>
               <ul className="space-y-0.5 text-ff-text">
@@ -244,6 +245,11 @@ const MeView = ({
                     )}
                   </li>
                 ))}
+                {shifts.map((r) => (
+                  <li key={`shift-${r.i}`}>
+                    Start {players[r.shift!]?.name} <span className="num text-ff-text2">{fmt(proj?.[r.shift!])}</span> in {r.id ? <>{players[r.id]?.name}'s</> : 'the empty'} {r.slot} slot, shifting starters between slots to fit
+                  </li>
+                ))}
               </ul>
             </Callout>
           </div>
@@ -257,7 +263,7 @@ const MeView = ({
         dense
         rows={lineupRows}
         rowKey={(r) => r.i}
-        rowClass={(r) => (r.swap ? INSIGHT_ROW : '')}
+        rowClass={(r) => (r.flag ? INSIGHT_ROW : '')}
         columns={[
           { key: 'slot', label: 'Slot', render: (r) => <span className="font-mono text-[11px] text-ff-text2">{r.slot}</span> },
           {
@@ -269,9 +275,9 @@ const MeView = ({
                 {r.id ? (
                   <span className="flex min-w-0 items-center gap-1.5">
                     <PlayerName player={players[r.id]} id={r.id} size={22} className="min-w-0" />
-                    {r.swap && <InsightMark />}
+                    {r.flag && <InsightMark />}
                   </span>
-                ) : r.swap ? (
+                ) : r.flag ? (
                   <span className="flex items-center gap-1.5 text-ff-muted">
                     empty <InsightMark />
                   </span>
@@ -294,6 +300,16 @@ const MeView = ({
                     )}
                   </div>
                 )}
+                {!r.swap && r.shift && (
+                  <div className="mt-1 whitespace-normal pl-[30px] text-[11.5px] leading-tight text-ff-text2">
+                    The best lineup starts{' '}
+                    <button type="button" onClick={() => openPlayer(r.shift!)} className="font-medium text-ff-text hover:underline">
+                      {players[r.shift]?.name ?? r.shift}
+                    </button>{' '}
+                    in this slot, moving starters between slots
+                  </div>
+                )}
+                {!r.swap && !r.shift && r.sit && <div className="mt-1 whitespace-normal pl-[30px] text-[11.5px] leading-tight text-ff-text2">Sits in the best lineup; another starter takes this slot</div>}
               </div>
             ),
           },
@@ -303,17 +319,18 @@ const MeView = ({
           { key: 'ctx', label: '', hideBelow: 'lg', render: (r) => (r.id ? <ContextNotes context={data.context[r.id]} players={players} max={1} /> : null) },
           {
             key: 'mine',
-            label: 'Slot/wk',
+            label: 'Best/wk',
             align: 'right',
             hideBelow: 'sm',
-            title: slotBasis === 'ahead' ? 'Points per week this slot is expected to produce over the horizon' : 'Average points this slot of your best possible lineup produced in weeks played',
+            title: slotBasis === 'ahead' ? 'Points per week this slot is expected to produce over the horizon, filled by your best possible lineup (not the starter shown)' : 'Average points this slot produced in weeks played, filled by your best possible lineup each week (not the starter shown)',
             render: (r) => fmt(r.strength?.mine),
           },
-          { key: 'lg', label: 'League', align: 'right', hideBelow: 'md', title: 'The same slot on the average team', render: (r) => fmt(r.strength?.league) },
-          { key: 'gap', label: 'vs lg', align: 'right', title: 'Against the same slot on the average team', sort: (r) => (r.strength ? r.strength.mine - r.strength.league : 0), render: (r) => (r.strength ? <Num value={r.strength.mine - r.strength.league} signed /> : null) },
+          { key: 'lg', label: 'Lg avg', align: 'right', hideBelow: 'md', title: "The same slot of the average team's best lineup", render: (r) => fmt(r.strength?.league) },
+          { key: 'gap', label: 'vs lg', align: 'right', title: "Your best lineup's slot against the same slot of the average team's best lineup", sort: (r) => (r.strength ? r.strength.mine - r.strength.league : 0), render: (r) => (r.strength ? <Num value={r.strength.mine - r.strength.league} signed /> : null) },
           {
             key: 'rank',
             label: 'Rank',
+            title: "Where your best lineup's slot ranks among the league's, not the starter shown",
             align: 'right',
             sort: (r) => -(r.strength?.rank ?? 99),
             render: (r) => (r.strength ? <span className={cx(r.strength.rank <= 3 ? 'text-ff-pos' : r.strength.rank > n - 3 ? 'text-ff-neg' : 'text-ff-text2')}>{r.strength.rank}/{n}</span> : null),
@@ -321,8 +338,8 @@ const MeView = ({
         ]}
       />
       <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-        Starters as set in Sleeper{proj ? `, with week ${week} projections` : ''}. The slot columns are{' '}
-        {slotBasis === 'ahead' ? 'what each slot of your best lineup is expected to produce a week over the horizon' : 'what each slot of your best possible lineup averaged in weeks played'}, against the league. Bench depth is on the
+        Starters as set in Sleeper{proj ? `, with week ${week} projections` : ''}. The Best/wk to Rank columns rate the slot, not the starter shown:{' '}
+        {slotBasis === 'ahead' ? 'what your best lineup is expected to put in it a week over the horizon' : 'what your best possible lineup averaged in it in weeks played'}, against the same slot of every team's best lineup. Bench depth is on the
         Roster page.
       </p>
     </Panel>
@@ -374,7 +391,7 @@ const MeView = ({
             items={[
               { key: 'overview', label: 'Overview' },
               ...(stacked && newsPanel ? [{ key: 'news' as Sub, label: 'News', count: fresh.length }] : []),
-              { key: 'lineup', label: 'Lineup', mark: swaps.length ? `${swaps.length} swap${swaps.length === 1 ? '' : 's'}` : undefined },
+              { key: 'lineup', label: 'Lineup', mark: changes ? `${changes} swap${changes === 1 ? '' : 's'}` : undefined },
               { key: 'roster', label: 'Roster', count: me.players.length },
             ]}
           />
@@ -405,7 +422,7 @@ const MeView = ({
                   label={`Week ${data.projectionWeek} optimal`}
                   value={fmt(lineupCheck.best)}
                   delta={<DeltaChip value={lineupCheck.best - lineupCheck.current} title="Against the lineup you have set" />}
-                  badge={lineupCheck.start.length ? { text: `${lineupCheck.start.length} swap${lineupCheck.start.length === 1 ? '' : 's'} to make`, tone: 'warn' } : { text: 'lineup is optimal', tone: 'pos' }}
+                  badge={changes ? { text: `${changes} swap${changes === 1 ? '' : 's'} to make`, tone: 'warn' } : { text: 'lineup is optimal', tone: 'pos' }}
                   sub="vs your set lineup"
                 />
               ) : (
@@ -414,7 +431,7 @@ const MeView = ({
             </StatGrid>
           )}
           <MovesPanel rosterId={me.rosterId} />
-          <ScoutReport rosterId={me.rosterId} mine />
+          <ScoutReport rosterId={me.rosterId} scout={scout} mine />
           {!stacked && newsPanel}
           {stacked && <div className="flex justify-end">{teamLink}</div>}
         </TabSection>

@@ -37,8 +37,12 @@ const SheetRoster = ({ rosterId, marked }: { rosterId: number; /** Players an in
             <span className="text-ff-muted">empty</span>
           ) : (
             <span className="flex min-w-0 items-center gap-1.5">
-              <PlayerName player={players[r.id]} id={r.id} size={20} />
-              {marked?.has(r.id) && <InsightMark title="The summary above is about him" />}
+              <PlayerName player={players[r.id]} id={r.id} size={20} className="min-w-0" />
+              {marked?.has(r.id) && (
+                <span className="shrink-0">
+                  <InsightMark title="The summary above is about him" />
+                </span>
+              )}
             </span>
           ),
       },

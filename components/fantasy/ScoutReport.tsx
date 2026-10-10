@@ -11,9 +11,9 @@ const leads = (s: Scouting) => [s.strengths[0], s.weaknesses[0]].filter(Boolean)
 /**
  * The players the summary line is about, to mark where a roster is shown: the starters of a room it names, or the
  * players behind its injury cost. Luck, schedule and lineup calls are about the team, not a player. The facts carry
- * their players; the other arguments are no longer needed and are ignored.
+ * their players.
  */
-export const scoutPlayers = (s: Scouting, ..._unused: unknown[]) => new Set(leads(s).flatMap((f) => f.players ?? []))
+export const scoutPlayers = (s: Scouting) => new Set(leads(s).flatMap((f) => f.players ?? []))
 
 /** A team's scouting report, for a page that marks the players it names. */
 export const useScout = (rosterId: number) => {
@@ -50,10 +50,15 @@ const Fact = ({ f, marked }: { f: ScoutFact; marked?: boolean }) => {
 
 /**
  * Why a team is good or bad: the few facts that explain most of it, each
- * sized in points per week against an average team where it can be.
+ * sized in points per week against an average team where it can be. A page that already scouted the team passes
+ * the result in; one that did not leaves it to the report.
  */
-const ScoutReport = ({ rosterId, mine }: { rosterId: number; mine?: boolean }) => {
-  const s = useScout(rosterId)
+const ScoutReport = ({ rosterId, mine, scout }: { rosterId: number; mine?: boolean; scout?: Scouting }) =>
+  scout ? <Report s={scout} mine={mine} /> : <ScoutOwn rosterId={rosterId} mine={mine} />
+
+const ScoutOwn = ({ rosterId, mine }: { rosterId: number; mine?: boolean }) => <Report s={useScout(rosterId)} mine={mine} />
+
+const Report = ({ s, mine }: { s: Scouting; mine?: boolean }) => {
   const lead = new Set(leads(s).map((f) => f.key))
   if (!s.strengths.length && !s.weaknesses.length) return null
   return (

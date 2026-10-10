@@ -126,7 +126,8 @@ const Sheet = ({
     panel.current?.querySelector('.ff-scroll')?.scrollTo({ top: 0 })
   }, [contentKey])
 
-  const dialog = { role: 'dialog', 'aria-modal': true, 'aria-label': label, tabIndex: -1 } as const
+  // data-sheet marks both panels (side and bottom), so content can take the sheet's inset in either.
+  const dialog = { role: 'dialog', 'aria-modal': true, 'aria-label': label, tabIndex: -1, 'data-sheet': '' } as const
   const body = children({ close: () => close.current(), phone })
 
   if (phone)

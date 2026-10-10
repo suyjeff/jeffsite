@@ -173,7 +173,7 @@ export const useMoves = (rosterId: number | null, limit?: number) => {
 export const MoveList = ({ moves, compact }: { moves: Move[]; compact?: boolean }) => (
   <ol className="divide-y divide-ff-line/70">
     {moves.map((m) => (
-      <li key={m.key} className={cx('grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 px-3 [.ff-sheet_&]:px-4', compact ? 'py-2 text-[12px]' : 'py-2.5 text-[13px]')}>
+      <li key={m.key} className={cx('grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 px-3 [[data-sheet]_&]:px-4', compact ? 'py-2 text-[12px]' : 'py-2.5 text-[13px]')}>
         <div className="min-w-0">
           <Badge tone={KIND[m.kind].tone}>
             {KIND[m.kind].label}

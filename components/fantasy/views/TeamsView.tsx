@@ -308,7 +308,7 @@ const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<Teams
         </StatGrid>
 
         {rosterId === myRosterId && <MovesPanel rosterId={rosterId} />}
-        <ScoutReport rosterId={rosterId} mine={rosterId === myRosterId} />
+        <ScoutReport rosterId={rosterId} scout={scout} mine={rosterId === myRosterId} />
           </>
         )}
 

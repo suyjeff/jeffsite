@@ -129,6 +129,15 @@ export type PhoneBarSlot = { title: ReactNode; sub?: ReactNode } | null
 /** Provided by the shell; `PageHeader` uses it so a page can name itself in the top bar. */
 export const PhoneBarContext = createContext<(slot: PhoneBarSlot) => void>(() => {})
 
+/** The text a node shows, to tell whether it changed without comparing elements that are new on every render. */
+const nodeText = (n: ReactNode): string => {
+  if (n == null || typeof n === 'boolean') return ''
+  if (typeof n === 'string' || typeof n === 'number') return String(n)
+  if (Array.isArray(n)) return n.map(nodeText).join('')
+  if (isValidElement(n)) return nodeText((n.props as { children?: ReactNode }).children)
+  return ''
+}
+
 /**
  * Page title row plus the page's tabs. Sticks under the mobile top bar.
  *
@@ -159,11 +168,16 @@ export const PageHeader = ({
 }) => {
   const phone = usePhone()
   const setBar = useContext(PhoneBarContext)
+  // The title and meta are usually fresh elements each render, so the bar follows their text, not their identity.
+  const latest = useRef({ title, meta })
+  latest.current = { title, meta }
+  const titleText = nodeText(title)
+  const metaText = nodeText(meta)
   useEffect(() => {
     if (!phone || !mobileTitle) return
-    setBar({ title, sub: meta })
+    setBar({ title: latest.current.title, sub: latest.current.meta })
     return () => setBar(null)
-  })
+  }, [phone, mobileTitle, titleText, metaText, setBar])
 
   const glass = 'bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80'
   if (phone) {
@@ -171,6 +185,8 @@ export const PageHeader = ({
     const row = !!actions || (!!meta && !inBar)
     return (
       <>
+        {/* The top bar shows the name; this keeps the page's level-one heading for screen readers. */}
+        <h1 className="sr-only">{title}</h1>
         {tabs && <div className={cx('ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20', glass)}>{tabs}</div>}
         {row && (
           <div className={cx('ff-pagehead ff-bleed ff-gutter flex min-h-10 items-center justify-between gap-3 py-1', !tabs && cx('sticky top-[var(--ff-top)] z-20', glass))}>
