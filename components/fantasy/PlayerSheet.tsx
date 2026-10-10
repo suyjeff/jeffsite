@@ -6,7 +6,83 @@ import { useFantasy } from './FantasyContext'
 import LinesBlock from './LinesBlock'
 import TeamName from './TeamName'
 import { SheetBody, SheetContent, SheetHeader, SheetSection } from './Sheet'
-import { Badge, PlayerAvatar, PosTag, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel } from './ui'
+import { Badge, PlayerAvatar, PosTag, Pts, ScoreState, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel } from './ui'
+import { useSlate } from './useSlate'
+import { boxParts, useWeekNow, type PlayerWeek } from './useWeekNow'
+
+/**
+ * His game this week once it has kicked off, apart from what was expected of him: the score in solid ink with its
+ * state, how far it is from his projection, the game's score from his side, and his box score.
+ */
+const ThisWeek = ({ week, w, pos, loaded }: { week: number; w: PlayerWeek; pos: string; loaded: boolean }) => {
+  const d = w.value - w.proj
+  const g = w.game
+  const result = g && g.us != null && g.them != null ? (w.kind === 'final' ? (g.us > g.them ? 'W' : g.us < g.them ? 'L' : 'T') : null) : null
+  const parts = boxParts(w.line, pos)
+  const snaps = w.line?.off_snp && w.line?.tm_off_snp ? w.line.off_snp / w.line.tm_off_snp : null
+  return (
+    <section aria-label={`Week ${week}, as played`} className="border-t border-ff-line px-4 py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="ff-label">Week {week}</span>
+        {g && (
+          <span className="font-mono text-[11px] text-ff-muted">
+            {result && <span className={cx('font-semibold', result === 'W' ? 'text-ff-pos' : result === 'L' ? 'text-ff-neg' : 'text-ff-text2')}>{result} </span>}
+            {g.us != null && g.them != null && (
+              <span className="num text-ff-text2">
+                {g.us}–{g.them}{' '}
+              </span>
+            )}
+            {g.home ? 'vs' : '@'} {g.opp}
+          </span>
+        )}
+      </div>
+      <div className="mt-2 flex items-end gap-3">
+        <Pts value={w.value} kind={w.kind} className="text-[30px] font-medium leading-none tracking-[-0.03em]" />
+        <span className="flex flex-col items-start gap-1 pb-px">
+          <ScoreState kind={w.kind} clock={w.clock} />
+          <span className="font-mono text-[11px] text-ff-muted">
+            {w.kind === 'final' ? (
+              <>
+                <span className={cx('num', Math.abs(d) < 0.05 ? 'text-ff-text2' : d > 0 ? 'text-ff-pos' : 'text-ff-neg')}>{fmtSigned(d)}</span> against{' '}
+                <span className="ff-proj num">{fmt(w.proj)}</span> projected
+              </>
+            ) : (
+              <>
+                of <span className="ff-proj num">{fmt(w.proj)}</span> projected
+                {w.heading != null && (
+                  <>
+                    {' '}
+                    · heading for <span className="num text-ff-text2">{fmt(w.heading)}</span>
+                  </>
+                )}
+              </>
+            )}
+          </span>
+        </span>
+      </div>
+      {parts.length || snaps != null ? (
+        <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-[12.5px]">
+          {parts.map((p) => (
+            <React.Fragment key={p.label}>
+              <dt className="ff-label self-center">{p.label}</dt>
+              <dd className="num text-ff-text">{p.text}</dd>
+            </React.Fragment>
+          ))}
+          {snaps != null && (
+            <>
+              <dt className="ff-label self-center">Snaps</dt>
+              <dd className="num text-ff-text">
+                {Math.round(snaps * 100)}% <span className="text-ff-muted">({Math.round(w.line!.off_snp)} of {Math.round(w.line!.tm_off_snp)})</span>
+              </dd>
+            </>
+          )}
+        </dl>
+      ) : loaded ? (
+        <p className="mt-2 text-[12px] text-ff-muted">{w.kind === 'final' ? 'No stats recorded for him in this game.' : 'No stats for him yet.'}</p>
+      ) : null}
+    </section>
+  )
+}
 
 /**
  * Everything about one player, over the page: a sheet from the right on wide
@@ -21,6 +97,10 @@ const PlayerSheet = ({ id }: { id: string }) => {
   const usage = data.usage[id]
   const perWeek = analysis.horizon.perWeek[id]
   const market = analysis.market[id]
+  // This week as played, once his game has kicked off.
+  const { slate, proj } = useSlate(data, analysis)
+  const now = useWeekNow(slate, proj)
+  const thisWeek = now.of(id)
   const posRank = useMemo(() => {
     if (!p || market == null) return null
     const same = Object.keys(analysis.market)
@@ -72,6 +152,7 @@ const PlayerSheet = ({ id }: { id: string }) => {
         />
 
           <SheetBody>
+            {thisWeek && thisWeek.kind !== 'proj' && <ThisWeek week={slate.week} w={thisWeek} pos={p.pos} loaded={now.hasLines} />}
             <div className="grid grid-cols-2 gap-px border-y border-ff-line bg-ff-line">
               <Stat inset="sheet" label="Exp / wk" value={fmt(perWeek)} sub="rest of season" />
               <Stat

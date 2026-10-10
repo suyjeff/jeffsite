@@ -4,38 +4,26 @@ import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 import { SheetBody, SheetClose, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
 import { ManagerTag, RangeBar, dayOf, pts } from './slateBits'
-import { Badge, Pts, cx, fmt, fmtSigned } from './ui'
+import { Badge, ScoreState, WeekScore, cx, fmt } from './ui'
 import { useSlate } from './useSlate'
+import { boxScore, type WeekNow, useWeekNow } from './useWeekNow'
 import { useBroadcasts } from './useBroadcasts'
 import { teamColor, teamLogo } from '../../lib/fantasy/nfl'
 import { Callout } from './Callout'
 
 /** One league starter in the game: who has him, what he projects or scored, his range and what rides on him. */
-const Row = ({ p, max, me, opp }: { p: SlatePlayer; max: number; me: number | null; opp: number | null }) => {
+const Row = ({ p, max, me, opp, now }: { p: SlatePlayer; max: number; me: number | null; opp: number | null; now: WeekNow }) => {
   const { data } = useFantasy()
+  const w = now.of(p.id) ?? { kind: 'proj' as const, value: p.proj, proj: p.proj, line: null, game: null }
+  const box = w.kind === 'proj' ? '' : boxScore(w.line, p.pos).join(' · ')
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 py-1.5">
-      <PlayerName player={data.players[p.id]} id={p.id} size={22} sub={<ManagerTag id={p.owner} me={me} opp={opp} />} />
-      <span className="flex flex-col items-end leading-tight">
-        {p.actual != null ? (
-          <>
-            <Pts value={p.actual} kind="final" className="text-[13px]" />
-            <span className={cx('num text-[10px]', p.actual >= p.proj ? 'text-ff-pos' : 'text-ff-neg')}>{fmtSigned(p.actual - p.proj)}</span>
-          </>
-        ) : p.live != null ? (
-          <>
-            <Pts value={p.live} kind="live" className="text-[13px]" />
-            <span className="num text-[10px] text-ff-muted">of {fmt(p.proj)}</span>
-          </>
-        ) : (
-          <>
-            <Pts value={p.proj} kind="proj" className="text-[13px]" />
-            <span className="num text-[10px] text-ff-muted">
-              {fmt(p.low, 0)}–{fmt(p.high, 0)}
-            </span>
-          </>
-        )}
+      <span className="min-w-0">
+        <PlayerName player={data.players[p.id]} id={p.id} size={22} sub={<ManagerTag id={p.owner} me={me} opp={opp} />} />
+        {/* What he has done, once his game is on: the box score, on the name's edge. */}
+        {box && <span className="mt-0.5 block truncate pl-[30px] font-mono text-[10.5px] text-ff-text2" title={box}>{box}</span>}
       </span>
+      <WeekScore s={w} short pre={`${fmt(p.low, 0)}–${fmt(p.high, 0)}`} className="text-[13px]" />
       <span className="flex w-[92px] flex-col items-end gap-0.5">
         <RangeBar p={p} max={max} />
         <span className="num text-[10.5px] text-ff-text2" title="How far his game moves his manager's win odds">
@@ -53,7 +41,8 @@ const Row = ({ p, max, me, opp }: { p: SlatePlayer; max: number; me: number | nu
 const GameSheet = ({ gameKey }: { gameKey: string }) => {
   const { data, analysis, go } = useFantasy()
   const { close } = useSheet()
-  const { slate, week } = useSlate(data, analysis)
+  const { slate, week, proj } = useSlate(data, analysis)
+  const now = useWeekNow(slate, proj)
   const casts = useBroadcasts(data.league.season, week)
   const g: SlateGame | undefined = slate.games.find((x) => x.key === gameKey)
   if (!g)
@@ -74,7 +63,9 @@ const GameSheet = ({ gameKey }: { gameKey: string }) => {
   const total = (t: SlateGame['totals']['home']) => (t ? fmt(t.pts) : '–')
   const cast = casts[`${g.away}@${g.home}`]
   // ESPN's score only once ESPN itself has the game under way or over, and only for a game Sleeper agrees has started.
-  const played = (g.final || g.live) && (cast?.state === 'in' || cast?.state === 'post') && cast?.away != null && cast?.home != null
+  // The score: ESPN's, or Sleeper's from each defense's points allowed when ESPN does not answer.
+  const board = g.final || g.live ? now.scoreFor(g.away) : null
+  const played = board?.us != null && board.them != null
   const source = g.totals.home?.source === 'market' || g.totals.away?.source === 'market' ? 'betting lines' : "Sleeper's projections"
 
   return (
@@ -90,7 +81,7 @@ const GameSheet = ({ gameKey }: { gameKey: string }) => {
               <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-ff-muted">
                 <span>wk {g.week}</span>
                 <span aria-hidden>·</span>
-                {g.final ? <span className="text-ff-text2">Final</span> : g.live ? <span className="text-ff-pos">Live</span> : <span>{dayOf(g.date)}</span>}
+                {g.final || g.live ? <ScoreState kind={g.final ? 'final' : 'live'} clock={now.clockOf(g)} /> : <span>{dayOf(g.date)}</span>}
                 {cast?.networks.length ? (
                   <>
                     <span aria-hidden>·</span>
@@ -113,7 +104,7 @@ const GameSheet = ({ gameKey }: { gameKey: string }) => {
                   <span className="min-w-0 leading-tight">
                     <span className="block font-mono text-[20px] font-semibold tracking-[-0.01em] text-ff-text">{t}</span>
                     {played ? (
-                      <span className="num block text-[15px] text-ff-text">{i === 0 ? cast!.away : cast!.home}</span>
+                      <span className="num block text-[15px] text-ff-text">{i === 0 ? board!.us : board!.them}</span>
                     ) : (
                       <span className="num block text-[11px] text-ff-muted">{total(i === 0 ? g.totals.away : g.totals.home)} proj</span>
                     )}
@@ -149,7 +140,7 @@ const GameSheet = ({ gameKey }: { gameKey: string }) => {
                   <SheetSection key={team} title={team} aside={`${side(team).length} league starter${side(team).length === 1 ? '' : 's'}`}>
                     <ul className="divide-y divide-ff-line/60 border-l-2 pl-2.5" style={{ borderLeftColor: teamColor(team) }}>
                       {side(team).map((p) => (
-                        <Row key={p.id} p={p} max={max} me={me} opp={opp} />
+                        <Row key={p.id} p={p} max={max} me={me} opp={opp} now={now} />
                       ))}
                     </ul>
                   </SheetSection>

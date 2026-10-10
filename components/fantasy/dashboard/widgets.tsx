@@ -8,13 +8,13 @@ import AdjustControl from '../AdjustControl'
 import LinesBlock from '../LinesBlock'
 import { describeNote } from '../ContextNotes'
 import { useFantasy, useTradeRead } from '../FantasyContext'
-import { useSlate } from '../useSlate'
+import { countLine, useMatchups } from '../matchup'
 import FreeAgentPick, { bestFreeAgent, FreeAgentName } from '../FreeAgentPick'
 import TeamName from '../TeamName'
 import { MoveList, useMoves } from '../Moves'
 import { ruledOutBy } from '../../../lib/fantasy/grades'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, ScoreState, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -98,6 +98,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
   const { models, data } = useFantasy()
   const f = models.forecast
   const unset = useUnsetLineups(f?.nextWeek[0]?.week ?? null)
+  const { read, week: slateWeek } = useMatchups()
   if (!f || !f.nextWeek.length) return <NoForecast />
   const week = f.nextWeek[0].week
   const live = data.matchupsByWeek[week] ?? []
@@ -109,31 +110,48 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
   const weekGames = (data.schedule?.games ?? []).filter((x) => x.week === week && x.status !== 'canceled')
   const done = weekGames.length > 0 && weekGames.every((x) => x.status === 'complete' || (!!x.date && x.date < today))
   const kind = !started ? 'proj' : done ? 'final' : 'live'
+  // Each side as the slate reads it, once the week is on: points banked, and starters still to play under them.
+  const sideOf = (a: number, b: number, k: 'a' | 'b') => {
+    const r = started && slateWeek === week ? read(a, b) : null
+    if (!r) return null
+    const c = k === 'a' ? r.countA : r.countB
+    return { value: k === 'a' ? r.a.banked : r.b.banked, kind: k === 'a' ? r.kindA : r.kindB, toGo: c.left + c.live }
+  }
+  const score = (g: (typeof f.nextWeek)[number], k: 'a' | 'b') => {
+    const sd = sideOf(g.a, g.b, k)
+    if (!sd) return <Pts value={started ? pts(k === 'a' ? g.a : g.b) : k === 'a' ? g.muA : g.muB} kind={kind} />
+    return (
+      <span className={cx('flex flex-col leading-none', k === 'a' ? 'items-end' : 'items-start')} title={`${sd.toGo} starter${sd.toGo === 1 ? '' : 's'} still to play or playing`}>
+        <Pts value={sd.value} kind={sd.kind} className={sd.kind === 'proj' ? undefined : 'font-medium'} />
+        <span className="mt-0.5 font-mono text-[9.5px] text-ff-muted">{sd.toGo ? `${sd.toGo} to go` : 'done'}</span>
+      </span>
+    )
+  }
   return (
     <div>
       <Th>
         <span className="w-full">wk {week}</span>
-        <span className="shrink-0">{started ? 'live' : 'exp'}</span>
+        <span className="shrink-0">{started ? 'pts' : 'exp'}</span>
         <span className="w-16 shrink-0 text-center" title={started ? 'Pre-game win probability' : undefined}>
           {started ? 'pre' : 'win'}
         </span>
-        <span className="shrink-0">{started ? 'live' : 'exp'}</span>
+        <span className="shrink-0">{started ? 'pts' : 'exp'}</span>
       </Th>
       {f.nextWeek.map((g) => (
-        <Row key={`${g.a}-${g.b}`} active={sel.team === g.a || sel.team === g.b}>
+        <Row key={`${g.a}-${g.b}`} active={sel.team === g.a || sel.team === g.b} className={started ? 'h-10' : undefined}>
           <button onClick={() => select({ team: g.a })} className="min-w-0 flex-1 text-left">
             <TeamTag id={g.a} plain />
           </button>
-          <span className="num w-10 shrink-0 text-right text-ff-text" title={!started && unset[g.a] ? unsetNote(unset[g.a]) : undefined}>
+          <span className="num flex w-12 shrink-0 justify-end text-right text-ff-text" title={!started && unset[g.a] ? unsetNote(unset[g.a]) : undefined}>
             {!started && unset[g.a] && <span className="text-ff-warn">*</span>}
-            <Pts value={started ? pts(g.a) : g.muA} kind={kind} />
+            {score(g, 'a')}
           </span>
           <span className="flex w-16 shrink-0 items-center gap-1">
             <span className="num w-7 text-right text-[10.5px] text-ff-text2">{Math.round(g.pA * 100)}</span>
             <WinBar p={g.pA} />
           </span>
-          <span className="num w-10 shrink-0 text-ff-text" title={!started && unset[g.b] ? unsetNote(unset[g.b]) : undefined}>
-            <Pts value={started ? pts(g.b) : g.muB} kind={kind} />
+          <span className="num flex w-12 shrink-0 text-ff-text" title={!started && unset[g.b] ? unsetNote(unset[g.b]) : undefined}>
+            {score(g, 'b')}
             {!started && unset[g.b] && <span className="text-ff-warn">*</span>}
           </span>
           <button onClick={() => select({ team: g.b })} className="flex min-w-0 flex-1 justify-end text-right">
@@ -142,7 +160,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
         </Row>
       ))}
       <div className="px-3 py-1.5 font-mono text-[10px] text-ff-muted">
-        bar = left team&apos;s pre-game chance · {started ? 'scores are live' : 'scores are expectations'}
+        bar = left team&apos;s pre-game chance · {started ? 'points banked so far, starters to go under each' : 'scores are expectations'}
         {!started && Object.keys(unset).length > 0 && <> · <span className="text-ff-warn">*</span> lineup has a bye/out starter; expectation assumes the swap</>}
       </div>
     </div>
@@ -220,10 +238,14 @@ const Matchup = ({ select }: WidgetProps) => {
   const left = useWeekLineup(mine, game?.week ?? null)
   const right = useWeekLineup(opp, game?.week ?? null)
   const unset = useUnsetLineups(game?.week ?? null)
+  const { read, week: slateWeek } = useMatchups()
   if (!f || !game || mine == null || opp == null) return <NoForecast />
-  const p = flip ? 1 - game.pA : game.pA
-  const muMe = flip ? game.muB : game.muA
-  const muOpp = flip ? game.muA : game.muB
+  // Once the week is on, the matchup as it stands: Sleeper's lineups as set, banked points, live odds.
+  const now = slateWeek === game.week ? read(mine, opp) : null
+  const on = !!now?.started
+  const p = on ? now!.p : flip ? 1 - game.pA : game.pA
+  const muMe = on ? now!.a.mu : flip ? game.muB : game.muA
+  const muOpp = on ? now!.b.mu : flip ? game.muA : game.muB
   const gap = muMe - muOpp
   const winPct = Math.round(p * 100)
   const favored = Math.abs(p - 0.5) < 0.03 ? null : p > 0.5 ? mine : opp
@@ -246,10 +268,21 @@ const Matchup = ({ select }: WidgetProps) => {
           </span>
         </div>
         <div className="mt-1.5 flex items-baseline justify-between gap-3">
-          <Pts value={muMe} kind="proj" className="text-[26px] font-medium leading-none tracking-[-0.03em]" />
-          <span className="font-mono text-[10.5px] text-ff-muted">wk {game.week} · projected</span>
-          <Pts value={muOpp} kind="proj" className="text-[26px] font-medium leading-none tracking-[-0.03em]" />
+          <Pts value={on ? now!.a.banked : muMe} kind={on ? now!.kindA : 'proj'} className="text-[26px] font-medium leading-none tracking-[-0.03em]" />
+          <span className="font-mono text-[10.5px] text-ff-muted">wk {game.week} · {on ? 'as it stands' : 'projected'}</span>
+          <Pts value={on ? now!.b.banked : muOpp} kind={on ? now!.kindB : 'proj'} className="text-[26px] font-medium leading-none tracking-[-0.03em]" />
         </div>
+        {on && (
+          // Banked against still to come: how much of each side is already in, and where it is heading.
+          <div className="mt-1 flex items-baseline justify-between gap-3 font-mono text-[10px] text-ff-muted">
+            <span className="truncate" title={countLine(now!.countA)}>
+              {now!.countA.left + now!.countA.live} to go · → <Pts value={muMe} kind="proj" />
+            </span>
+            <span className="truncate text-right" title={countLine(now!.countB)}>
+              → <Pts value={muOpp} kind="proj" /> · {now!.countB.left + now!.countB.live} to go
+            </span>
+          </div>
+        )}
         <div className="mt-2.5 flex items-center gap-2" title={`Win odds: you ${winPct}%, them ${100 - winPct}%`}>
           <span className={cx('num w-9 text-[13px] font-medium', favored === mine ? 'text-ff-text' : 'text-ff-muted')}>{winPct}%</span>
           <WinBar p={p} />
@@ -263,7 +296,7 @@ const Matchup = ({ select }: WidgetProps) => {
         </div>
       </div>
       {[mine, opp].map((rid) =>
-        unset[rid] ? (
+        unset[rid] && !on ? (
           <div key={rid} className="border-b border-ff-line px-3 py-1.5 text-[11.5px] leading-snug text-ff-text2">
             <span className="text-ff-warn">{rid === mine ? 'Your' : `${analysis.teamById[rid].name}'s`} lineup isn&apos;t set</span>: {unset[rid].names.join(', ')} can&apos;t score. As set it projects{' '}
             <span className="num">{fmt(unset[rid].asSet)}</span>; the {fmt(rid === mine ? muMe : muOpp)} assumes {rid === mine ? 'you swap' : 'they swap'}.
@@ -271,10 +304,21 @@ const Matchup = ({ select }: WidgetProps) => {
         ) : null,
       )}
       <div className="grid flex-1 grid-cols-2 divide-x divide-ff-line">
-        {[left, right].map((side, k) => (
+        {(on
+          ? [0, 1].map((k) => now!.rows.map((r) => ({ slot: r.slot, eligible: [] as string[], id: k === 0 ? r.a : r.b, pts: (k === 0 ? r.sa : r.sb)?.value ?? 0, kind: (k === 0 ? r.sa : r.sb)?.kind ?? 'proj' })))
+          : [left, right].map((side) => (side ?? []).map((s) => ({ ...s, kind: 'proj' as const })))
+        ).map((side, k) => (
           <div key={k}>
-            {(side ?? []).map((s, i) => (
-              <div key={i} className="flex h-6 items-center gap-2 border-b border-ff-line/60 px-3 text-[12px]">
+            {side.map((s, i) => (
+              // A starter whose game is over or on wears a rule on his left edge: ink for final, green for live.
+              <div
+                key={i}
+                className={cx(
+                  'flex h-6 items-center gap-2 border-b border-ff-line/60 px-3 text-[12px]',
+                  s.kind === 'final' && 'shadow-[inset_2px_0_0_rgb(var(--ff-text2))]',
+                  s.kind === 'live' && 'shadow-[inset_2px_0_0_rgb(var(--ff-pos))]',
+                )}
+              >
                 <span className="w-8 shrink-0 font-mono text-[10px] text-ff-muted">{s.slot}</span>
                 {s.id ? (
                   <button onClick={() => select({ player: s.id! })} className="min-w-0 flex-1 truncate text-left text-ff-text hover:underline">
@@ -282,10 +326,10 @@ const Matchup = ({ select }: WidgetProps) => {
                   </button>
                 ) : (
                   <span className="min-w-0 flex-1 truncate text-ff-text2">
-                    <FreeAgentName eligible={s.eligible} week={game.week} />
+                    {on ? <span className="text-ff-neg">empty</span> : <FreeAgentName eligible={s.eligible} week={game.week} />}
                   </span>
                 )}
-                <Pts value={s.pts} kind="proj" className="shrink-0" />
+                <Pts value={s.pts} kind={s.kind} className={cx('shrink-0', s.kind !== 'proj' && 'font-medium')} />
               </div>
             ))}
           </div>
@@ -853,9 +897,10 @@ const Props = ({ sel, select }: WidgetProps) => {
 /** This week from the NFL side: your win odds, what a win is worth, and the games that decide it. */
 const Gameday = () => {
   const { data, analysis, openGame } = useFantasy()
-  const { slate, live } = useSlate(data, analysis)
+  const { slate, live, read, now } = useMatchups()
   const me = analysis.myRosterId
   const mine = me != null ? slate.managers[me] : null
+  const m = me != null && mine?.opponent != null ? read(me, mine.opponent) : null
   if (!live || !mine) return <Empty title="No matchup this week">Gameday follows the NFL regular season.</Empty>
   const games = Object.fromEntries(slate.games.map((g) => [g.key, g]))
   const top = mine.games.slice(0, 5)
@@ -876,6 +921,20 @@ const Gameday = () => {
           <div className="mt-1 truncate text-[11px] text-ff-muted">playoff odds, a win against a loss</div>
         </div>
       </div>
+      {m?.started && (
+        // Banked against still to play, both sides.
+        <div className="flex items-center justify-between gap-2 border-b border-ff-line px-3 py-1.5 text-[11.5px]">
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            <span className="ff-label">banked</span>
+            <Pts value={m.a.banked} kind={m.kindA} className="font-medium" />
+            <span className="text-ff-muted">–</span>
+            <Pts value={m.b.banked} kind={m.kindB} className="font-medium" />
+          </span>
+          <span className="truncate font-mono text-[10px] text-ff-muted" title="Your starters: games over, under way, still to come; then theirs">
+            {m.countA.left + m.countA.live} to go · they {m.countB.left + m.countB.live}
+          </span>
+        </div>
+      )}
       <Th>
         <span className="flex-1">games that decide it</span>
         <span>±win odds</span>
@@ -892,8 +951,8 @@ const Gameday = () => {
               {g.mine.length > 0 && g.theirs.length > 0 && <span className="text-ff-muted"> vs </span>}
               {g.theirs.length > 0 && <span className="text-ff-neg">{g.theirs.map(last).join(', ')}</span>}
             </span>
-            <Bar value={g.swing} max={maxSwing} width={36} />
-            <span className="num w-8 text-right text-[11.5px] text-ff-text">±{((g.swing / 2) * 100).toFixed(0)}</span>
+            {game.final || game.live ? <ScoreState kind={game.final ? 'final' : 'live'} clock={now.clockOf(game)} /> : <Bar value={g.swing} max={maxSwing} width={36} />}
+            <span className="num w-8 text-right text-[11.5px] text-ff-text">{game.final ? '–' : `±${((g.swing / 2) * 100).toFixed(0)}`}</span>
           </Row>
         )
       })}

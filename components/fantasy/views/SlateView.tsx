@@ -6,7 +6,8 @@ import { Disclosure } from '../Disclosure'
 import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { MatchupScore, SlotTable, useMatchups } from '../matchup'
+import { MatchupScore, SlotTable, countLine, useMatchups } from '../matchup'
+import { boxScore, type WeekNow } from '../useWeekNow'
 import { ManagerTag, RangeBar, dayOf, odds, pts } from '../slateBits'
 import {
   Avatar,
@@ -25,6 +26,8 @@ import {
   type PageChange,
   Tabs,
   Pts,
+  ScoreState,
+  WeekScore,
   cx,
   fmt,
   fmtSigned,
@@ -39,9 +42,11 @@ type Sub = 'week' | 'lineups' | 'games' | 'managers'
 const SUBS: Sub[] = ['week', 'lineups', 'games', 'managers']
 
 /** One NFL game as a tile: state, projected score, what it moves, and the league starters who matter most in it. */
-const GameTile = ({ g, maxSwing, me, opp, isKey }: { g: SlateGame; maxSwing: number; me: number | null; opp: number | null; isKey?: boolean }) => {
+const GameTile = ({ g, maxSwing, me, opp, isKey, now }: { g: SlateGame; maxSwing: number; me: number | null; opp: number | null; isKey?: boolean; now: WeekNow }) => {
   const { data, openGame } = useFantasy()
   const top = g.players.slice(0, 3)
+  // From the away side, as the tile reads: away first.
+  const score = g.final || g.live ? now.scoreFor(g.away) : null
   return (
     <button
       type="button"
@@ -55,12 +60,23 @@ const GameTile = ({ g, maxSwing, me, opp, isKey }: { g: SlateGame; maxSwing: num
         <span className="font-mono text-[13px] font-semibold text-ff-text">
           {g.away} <span className="font-normal text-ff-muted">@</span> {g.home}
         </span>
-        <span className={cx('font-mono text-[10.5px]', g.live ? 'text-ff-pos' : g.final ? 'text-ff-text2' : 'text-ff-muted')}>{g.final ? 'Final' : g.live ? 'Live' : dayOf(g.date).split(',')[0]}</span>
+        {g.final || g.live ? (
+          <ScoreState kind={g.final ? 'final' : 'live'} clock={now.clockOf(g)} />
+        ) : (
+          <span className="font-mono text-[10.5px] text-ff-muted">{dayOf(g.date).split(',')[0]}</span>
+        )}
       </span>
       <span className="flex w-full items-center gap-2">
-        <span className="num text-[11px] text-ff-muted" title={g.final ? 'Pre-game projected score' : 'Projected score'}>
-          {g.totals.away ? fmt(g.totals.away.pts) : '–'}–{g.totals.home ? fmt(g.totals.home.pts) : '–'}
-        </span>
+        {score && score.us != null && score.them != null ? (
+          // Once it has started, the score itself, in ink, where the projection was.
+          <span className="num text-[12px] font-medium text-ff-text" title={g.final ? 'Final score' : 'Score so far'}>
+            {score.us}–{score.them}
+          </span>
+        ) : (
+          <span className="num text-[11px] text-ff-muted" title="Projected score">
+            {g.totals.away ? fmt(g.totals.away.pts) : '–'}–{g.totals.home ? fmt(g.totals.home.pts) : '–'}
+          </span>
+        )}
         <span className="h-1 flex-1 bg-ff-line" aria-hidden>
           <span className={cx('block h-full', g.final ? 'bg-ff-text2/40' : 'bg-ff-accent')} style={{ width: `${Math.min(100, (g.swing / maxSwing) * 100)}%` }} />
         </span>
@@ -73,9 +89,13 @@ const GameTile = ({ g, maxSwing, me, opp, isKey }: { g: SlateGame; maxSwing: num
           top.map((p) => (
             <span key={p.id} className="flex min-w-0 items-center gap-1.5">
               <span aria-hidden className={cx('h-1.5 w-1.5 shrink-0', p.owner === me ? 'bg-ff-accent' : p.owner === opp ? 'bg-ff-neg' : 'bg-ff-line2')} />
-              <span className={cx('truncate', p.owner === me ? 'text-ff-text' : 'text-ff-text2')}>{data.players[p.id]?.name}</span>
+              <span className={cx('min-w-0 flex-1 truncate', p.owner === me ? 'text-ff-text' : 'text-ff-text2')}>{data.players[p.id]?.name}</span>
               {p.owner === me && <span className="sr-only">(yours)</span>}
               {p.owner === opp && <span className="sr-only">(your opponent&apos;s)</span>}
+              {/* Once the game is on, what each has: the tile reads as a box score, not a preview. */}
+              {(p.actual != null || p.live != null) && (
+                <Pts value={p.actual ?? p.live} kind={p.actual != null ? 'final' : 'live'} className="shrink-0 font-medium" />
+              )}
             </span>
           ))
         ) : (
@@ -93,17 +113,22 @@ const GameCard = ({
   columns,
   expand,
   isKey,
+  now,
 }: {
   g: SlateGame
   columns: (max: number) => Column<SlatePlayer>[]
   expand: (p: SlatePlayer) => React.ReactNode
   /** The game that decides your week. */
   isKey?: boolean
+  now: WeekNow
 }) => {
   const [all, setAll] = useState(false)
   const { openGame } = useFantasy()
   const max = Math.max(10, ...g.players.map((p) => Math.max(p.high, p.actual ?? 0)))
   const rows = all ? g.players : g.players.slice(0, 6)
+  // The score once the game has started (away, home); projected totals before.
+  const board = g.final || g.live ? now.scoreFor(g.away) : null
+  const score = board && board.us != null && board.them != null ? board : null
   const involved = isKey
   return (
     <Panel
@@ -113,17 +138,17 @@ const GameCard = ({
         <span className="flex items-baseline gap-2 normal-case tracking-normal">
           <button type="button" onClick={() => openGame(g.key)} title="Open the game" className="font-mono text-[12px] font-semibold text-ff-text hover:underline">
             {g.away}
-            {g.totals.away && <span className="ml-1 font-normal text-ff-muted">{fmt(g.totals.away.pts)}</span>}
+            {score ? <span className="num ml-1 text-ff-text">{score.us}</span> : g.totals.away && <span className="ml-1 font-normal text-ff-muted">{fmt(g.totals.away.pts)}</span>}
             <span className="mx-1.5 font-normal text-ff-muted">@</span>
             {g.home}
-            {g.totals.home && <span className="ml-1 font-normal text-ff-muted">{fmt(g.totals.home.pts)}</span>}
+            {score ? <span className="num ml-1 text-ff-text">{score.them}</span> : g.totals.home && <span className="ml-1 font-normal text-ff-muted">{fmt(g.totals.home.pts)}</span>}
           </button>
         </span>
       }
       actions={
         <span className="flex items-center gap-2">
           {involved && <Badge tone="accent">decides your week</Badge>}
-          {g.final ? <span className="text-ff-text2">Final</span> : g.live ? <span className="text-ff-pos">Live</span> : <span>{dayOf(g.date)}</span>}
+          {g.final || g.live ? <ScoreState kind={g.final ? 'final' : 'live'} clock={now.clockOf(g)} /> : <span>{dayOf(g.date)}</span>}
         </span>
       }
     >
@@ -161,7 +186,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
   const tab: Sub = picked === 'lineups' && !stacked ? 'week' : picked
   const players = data.players
   const me = analysis.myRosterId
-  const { slate, live, week, proj, totals, read } = useMatchups()
+  const { slate, live, week, proj, totals, read, now } = useMatchups()
   // Games as full cards or as a grid of tiles that open a sheet; remembered in this browser.
   const [view, setView] = useState<'list' | 'grid'>('list')
   useEffect(() => {
@@ -325,32 +350,27 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
       key: 'p',
       label: 'Player',
       sticky: true,
-      render: (p) => <PlayerName player={players[p.id]} id={p.id} size={22} sub={<ManagerTag id={p.owner} me={me} opp={opp} />} />,
+      render: (p) => {
+        const w = p.actual != null || p.live != null ? now.of(p.id) : null
+        const box = w ? boxScore(w.line, p.pos).join(' · ') : ''
+        return (
+          <span className="block min-w-0">
+            <PlayerName player={players[p.id]} id={p.id} size={22} sub={<ManagerTag id={p.owner} me={me} opp={opp} />} />
+            {box && (
+              <span className="mt-0.5 block w-0 min-w-full truncate pl-[30px] font-mono text-[10.5px] text-ff-text2" title={box}>
+                {box}
+              </span>
+            )}
+          </span>
+        )
+      },
     },
     {
       key: 'proj',
       label: 'Pts',
       align: 'right',
-      title: 'Points: final, live, or projected (dotted) with his 20th to 80th percentile game below',
-      render: (p) =>
-        p.actual != null ? (
-          <span className="inline-flex flex-col items-end leading-tight">
-            <Pts value={p.actual} kind="final" />
-            <span className={cx('text-[10px]', p.actual >= p.proj ? 'text-ff-pos' : 'text-ff-neg')}>{fmtSigned(p.actual - p.proj)} vs proj</span>
-          </span>
-        ) : p.live != null ? (
-          <span className="inline-flex flex-col items-end leading-tight">
-            <Pts value={p.live} kind="live" />
-            <span className="text-[10px] text-ff-muted">of {fmt(p.proj)} projected</span>
-          </span>
-        ) : (
-          <span className="inline-flex flex-col items-end leading-tight">
-            <Pts value={p.proj} kind="proj" />
-            <span className="mt-0.5 text-[10px] text-ff-muted">
-              {fmt(p.low, 0)}–{fmt(p.high, 0)}
-            </span>
-          </span>
-        ),
+      title: 'Points: final against his projection, live with the clock, or projected (dotted) with his 20th to 80th percentile game below',
+      render: (p) => <WeekScore s={now.of(p.id) ?? { kind: 'proj', value: p.proj, proj: p.proj }} pre={`${fmt(p.low, 0)}–${fmt(p.high, 0)}`} short />,
     },
     { key: 'range', label: 'Range', hideBelow: 'sm', render: (p) => <RangeBar p={p} max={max} /> },
     {
@@ -384,6 +404,8 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
     const owner = name(p.owner)
     const st = slate.managers[p.owner]?.stakes
     const items: Reason[] = []
+    const box = p.actual != null || p.live != null ? boxScore(now.of(p.id)?.line, p.pos).join(', ') : ''
+    if (box) items.push({ text: `${p.actual != null ? 'His game' : 'So far'}: ${box}`, tone: 'neutral' })
     if (p.actual != null)
       items.push({
         text: `Scored ${fmt(p.actual)} against a projection of ${fmt(p.proj)}, which moved ${owner}'s win odds ${pts(p.realized ?? 0, true)} points`,
@@ -425,7 +447,11 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
             <li key={g.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-ff-line/60 px-3 py-2 last:border-0">
               <span className="flex min-w-0 items-baseline gap-2">
                 <span className="font-mono text-[12px] font-semibold text-ff-text">{label(game)}</span>
-                <span className="font-mono text-[10.5px] text-ff-muted">{game.final ? 'final' : dayOf(game.date)}</span>
+                {game.final || game.live ? (
+                  <ScoreState kind={game.final ? 'final' : 'live'} clock={now.clockOf(game)} />
+                ) : (
+                  <span className="font-mono text-[10.5px] text-ff-muted">{dayOf(game.date)}</span>
+                )}
               </span>
               <span className="flex items-center gap-2">
                 <Meter value={g.swing} max={maxSwing} width={64} />
@@ -507,7 +533,12 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
                   value={mine.stakes ? `${pts(mine.stakes.win.playoffs - mine.stakes.loss.playoffs)}pt` : '…'}
                   sub={mine.stakes ? `playoff odds: ${pct(mine.stakes.win.playoffs)} with a win, ${pct(mine.stakes.loss.playoffs)} without` : 'simulating the season both ways'}
                 />
-                <Stat label="Banked" value={fmt(mySide.banked)} sub={`${mySide.left} starter${mySide.left === 1 ? '' : 's'} still to play · they have ${fmt(oppSide.banked)}`} />
+                <Stat
+                  label="Banked"
+                  value={fmt(mySide.banked)}
+                  delta={yours ? <ScoreState kind={yours.kindA === 'live' ? 'live' : yours.kindA === 'final' ? 'final' : 'proj'} /> : undefined}
+                  sub={yours ? `${countLine(yours.countA)} · they have ${fmt(oppSide.banked)}, ${yours.countB.left + yours.countB.live} to go` : `${mySide.left} starter${mySide.left === 1 ? '' : 's'} still to play · they have ${fmt(oppSide.banked)}`}
+                />
                 <Stat
                   label="Game to watch"
                   value={mine.games[0] ? label(gameByKey[mine.games[0].key]) : '–'}
@@ -557,13 +588,13 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
               {view === 'grid' ? (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
                   {gs.map((g) => (
-                    <GameTile key={g.key} g={g} maxSwing={maxSwing} me={me} opp={opp} isKey={mine?.games[0]?.key === g.key} />
+                    <GameTile key={g.key} g={g} maxSwing={maxSwing} me={me} opp={opp} isKey={mine?.games[0]?.key === g.key} now={now} />
                   ))}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
                   {gs.map((g) => (
-                    <GameCard key={g.key} g={g} columns={playerCols} expand={playerWhy} isKey={mine?.games[0]?.key === g.key} />
+                    <GameCard key={g.key} g={g} columns={playerCols} expand={playerWhy} isKey={mine?.games[0]?.key === g.key} now={now} />
                   ))}
                 </div>
               )}

@@ -814,7 +814,10 @@ export const Fab = ({ children, onClick, hidden, label }: { children: ReactNode;
   </div>
 )
 
-export type PtsKind = 'proj' | 'live' | 'final'
+/** Banked: a side's points from games already over, with more of its games still to come and none under way. */
+export type PtsKind = 'proj' | 'live' | 'final' | 'banked'
+
+const PTS_TITLE: Record<PtsKind, string> = { proj: 'Projected', live: 'Live: game under way', final: 'Final', banked: 'Banked: points from games already over, more to play' }
 
 /**
  * A fantasy score, marked by what it is, the same way everywhere: a final score in solid ink; a live one with a
@@ -822,20 +825,86 @@ export type PtsKind = 'proj' | 'live' | 'final'
  * readers hear the kind as a word.
  */
 export const Pts = ({ value, kind, digits = 1, className }: { value: number | null | undefined; kind: PtsKind; digits?: number; className?: string }) => (
-  <span className={cx('num whitespace-nowrap', kind === 'proj' ? 'ff-proj' : 'text-ff-text', className)} title={kind === 'proj' ? 'Projected' : kind === 'live' ? 'Live: game under way' : 'Final'}>
+  <span className={cx('num whitespace-nowrap', kind === 'proj' ? 'ff-proj' : 'text-ff-text', className)} title={PTS_TITLE[kind]}>
     {kind === 'live' && <span aria-hidden className="ff-live-dot" />}
     {fmt(value, digits)}
-    <span className="sr-only">{kind === 'proj' ? ' projected' : kind === 'live' ? ' so far' : ''}</span>
+    <span className="sr-only">{kind === 'proj' ? ' projected' : kind === 'live' || kind === 'banked' ? ' so far' : ' final'}</span>
   </span>
 )
+
+/** One player's game this week as it stands: the score to show, its kind, and his projection as the yardstick. */
+export type WeekState = {
+  kind: 'proj' | 'live' | 'final'
+  value: number
+  proj: number
+  /** A game under way: the quarter and clock, when ESPN answers. */
+  clock?: string | null
+  /** A game under way: what he has plus his projection for the time left. */
+  heading?: number | null
+}
+
+/** A game's state as a small square tag: FINAL, or LIVE (the clock when known). Nothing before kickoff. */
+export const ScoreState = ({ kind, clock, className }: { kind: PtsKind; clock?: string | null; className?: string }) =>
+  kind !== 'live' && kind !== 'final' ? null : (
+    <span
+      className={cx(
+        'inline-flex shrink-0 items-center px-[3px] font-mono text-[9px] font-semibold uppercase leading-[13px] tracking-[0.04em]',
+        kind === 'live' ? 'bg-ff-pos/12 text-ff-pos' : 'bg-ff-text/[0.07] text-ff-text2',
+        className,
+      )}
+    >
+      {kind === 'live' ? clock || 'live' : 'final'}
+    </span>
+  )
+
+/**
+ * A player's score this week, read the same way in every table and scorecard. Before kickoff it is his projection,
+ * with `pre` under it (his range, say). Once his game starts it is what he has scored, in solid ink, over a line that
+ * says where it stands: LIVE with the clock and where he is heading, or FINAL with how far he beat or missed his
+ * projection. The projection stays beside it, muted, as the yardstick; `short` drops it where room is tight.
+ */
+export const WeekScore = ({ s, pre, align = 'right', short, className }: { s: WeekState; pre?: ReactNode; align?: 'left' | 'right'; short?: boolean; className?: string }) => {
+  const d = s.value - s.proj
+  return (
+    <span className={cx('inline-flex flex-col leading-tight', align === 'right' ? 'items-end' : 'items-start', className)}>
+      <Pts value={s.value} kind={s.kind} className={s.kind === 'proj' ? undefined : 'font-medium'} />
+      {s.kind === 'proj' ? (
+        pre != null ? <span className="mt-0.5 font-mono text-[10px] text-ff-muted">{pre}</span> : null
+      ) : (
+        <span className="mt-0.5 inline-flex items-center gap-1 whitespace-nowrap font-mono text-[10px] text-ff-muted">
+          <ScoreState kind={s.kind} clock={s.clock} />
+          {s.kind === 'final' ? (
+            <span className={cx('num', Math.abs(d) < 0.05 ? 'text-ff-muted' : d > 0 ? 'text-ff-pos' : 'text-ff-neg')} title={`Against a projection of ${fmt(s.proj)}`}>
+              {fmtSigned(d)}
+            </span>
+          ) : s.heading != null ? (
+            <span className="num text-ff-text2" title="Heading for: what he has, plus his projection for the time left">
+              →{fmt(s.heading)}
+            </span>
+          ) : null}
+          {!short && (
+            <span className="num" title={`Projected ${fmt(s.proj)} before kickoff`}>
+              {s.kind === 'final' ? 'proj' : 'of'} {fmt(s.proj)}
+            </span>
+          )}
+        </span>
+      )}
+    </span>
+  )
+}
 
 /** The key to Pts, for a page that mixes the three. */
 export const PtsKey = ({ className }: { className?: string }) => (
   <span className={cx('inline-flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10.5px] text-ff-muted', className)}>
-    <span className="text-ff-text">12.4 final</span>
-    <span className="text-ff-text">
-      <span aria-hidden className="ff-live-dot" />
-      8.0 live
+    <span className="inline-flex items-center gap-1 text-ff-text">
+      12.4 <ScoreState kind="final" />
+    </span>
+    <span className="inline-flex items-center gap-1 text-ff-text">
+      <span>
+        <span aria-hidden className="ff-live-dot" />
+        8.0
+      </span>
+      <ScoreState kind="live" />
     </span>
     <span className="ff-proj">14.1 projected</span>
   </span>
