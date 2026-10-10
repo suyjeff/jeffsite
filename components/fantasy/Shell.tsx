@@ -366,8 +366,9 @@ const Shell = (props: ShellProps) => {
   // The top bar's breadcrumb: the section crumb is the shell's; a page with tabs portals its page crumb into the slot.
   const [crumbSlot, setCrumbSlot] = useState<HTMLElement | null>(null)
   const [paged, setPaged] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const home = useRef<(() => boolean) | null>(null)
-  const crumbs = useMemo(() => ({ slot: crumbSlot, section: current?.label ?? '', home, setPaged }), [crumbSlot, current?.label])
+  const crumbs = useMemo(() => ({ slot: crumbSlot, section: current?.label ?? '', home, setPaged, setMenuOpen }), [crumbSlot, current?.label])
   // Tapping the section goes to its first page; already there (or nothing to go to), it opens the menu.
   const crumbHome = () => {
     if (!home.current?.()) setDrawer(true)
@@ -399,7 +400,7 @@ const Shell = (props: ShellProps) => {
       {props.tour && props.onTourEnd && <Tour step={tourStep} setStep={setTourStep} onClose={endTour} phone={phone} />}
 
       {/* Phone top bar */}
-      <header className="fixed inset-x-0 top-0 z-30 flex h-[var(--ff-top)] items-center border-b border-ff-line bg-ff-panel/95 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
+      <header className="fixed inset-x-0 top-0 z-[32] flex h-[var(--ff-top)] items-center border-b border-ff-line bg-ff-panel/95 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
         <button onClick={() => setDrawer(true)} className="flex h-full items-center border-r border-ff-line px-3 text-ff-text2" aria-label="Open menu">
           <PanelIcon />
         </button>
@@ -470,6 +471,15 @@ const Shell = (props: ShellProps) => {
           More
         </button>
       </nav>
+      {/* Under the open page list, below the top bar: a tap out here closes the list and does nothing else. It stays
+          mounted and only turns off its pointer events when shut, so the tap's click lands on no button. */}
+      <div
+        aria-hidden
+        className={cx(
+          'fixed inset-x-0 bottom-0 top-[var(--ff-top)] z-[31] bg-black/20 md:hidden motion-safe:transition-opacity motion-safe:duration-150 motion-safe:ease-ff-out',
+          !menuOpen && 'pointer-events-none opacity-0',
+        )}
+      />
     </div>
     </CrumbContext.Provider>
   )

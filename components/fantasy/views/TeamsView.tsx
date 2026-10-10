@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { ProjectionChart } from '../charts'
@@ -35,7 +35,10 @@ import {
 } from '../ui'
 import RosterTable, { type Basis } from './RosterTable'
 
-type Inner = 'roster' | 'results' | 'slots'
+// Phones get a page per section, so the team's summary (figures, moves, scout) is a page of its own there.
+// Wide screens show it above the tabs, and a link to the phone-only page lands on the roster.
+type Inner = 'overview' | 'roster' | 'results' | 'slots'
+const INNERS: Inner[] = ['overview', 'roster', 'results', 'slots']
 
 const TeamsView = ({ data, analysis, sub, onTeam }: { data: LeagueData; analysis: Analysis; sub: string | null; onTeam: (id: number | null) => void }) => {
   const requested = sub ? Number(sub) : NaN
@@ -188,9 +191,17 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
   const team = teamById[rosterId]
   const season = seasonById[rosterId]
   const power = powerById[rosterId]
-  const [inner, setInner] = useState<Inner>('roster')
-  // Phones stack every section in one scroll, steered by the tab strip.
+  // The page within the team lives in the hash after the team (#teams/3/results). Null: the default for the screen.
+  const [inner, setInner] = useState<Inner | null>(() => {
+    const part = typeof window === 'undefined' ? '' : window.location.hash.replace(/^#\/?/, '').split('/')[2]
+    return INNERS.includes(part as Inner) ? (part as Inner) : null
+  })
   const stacked = usePhone()
+  const tab: Inner = stacked ? inner ?? 'overview' : !inner || inner === 'overview' ? 'roster' : inner
+  // Moving to another team keeps the page, so rosters can be compared; the route drops it, so write it back.
+  useEffect(() => {
+    if (inner) window.history.replaceState(window.history.state, '', `#teams/${rosterId}/${inner}`)
+  }, [rosterId, inner])
   const [basis, setBasis] = useState<Basis>('ahead')
   const players = data.players
   const { models } = useFantasy()
@@ -259,10 +270,11 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
         tabs={
           <>
             <Tabs<Inner>
-              value={inner}
+              value={tab}
               onChange={setInner}
               stacked={stacked}
               items={[
+                ...(stacked ? [{ key: 'overview' as Inner, label: 'Overview' }] : []),
                 { key: 'roster', label: 'Roster', count: team.players.length },
                 { key: 'results', label: 'Results', count: season.weeks.length },
                 { key: 'slots', label: 'Lineup slots' },
@@ -273,6 +285,8 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
       />
       <div className="mt-4 space-y-3">
         {stacked && switcher}
+        {(!stacked || tab === 'overview') && (
+          <>
         <StatGrid>
           <Stat label="Power" value={`#${power.rank}`} badge={{ text: `${fmt(power.score, 0)}% vs avg team`, tone: power.score >= 55 ? 'pos' : power.score <= 45 ? 'neg' : 'neutral' }} sub="chance to beat an average team" />
           <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`all-play ${fmt(season.allPlayWins, 0)}-${fmt(season.allPlayLosses, 0)}`} />
@@ -294,8 +308,10 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
 
         {rosterId === myRosterId && <MovesPanel rosterId={rosterId} />}
         <ScoutReport rosterId={rosterId} mine={rosterId === myRosterId} />
+          </>
+        )}
 
-        <TabSection id="roster" label="Roster" active={inner === 'roster'} stacked={stacked} bare>
+        <TabSection id="roster" active={tab === 'roster'}>
           <Panel
             title="Roster"
             pad={false}
@@ -317,7 +333,7 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
           </Panel>
         </TabSection>
 
-        <TabSection id="results" label="Results" active={inner === 'results'} stacked={stacked} bare>
+        <TabSection id="results" active={tab === 'results'}>
           <Panel title="Weekly results" pad={false} actions={<span>scored vs projected</span>}>
             {chartWeeks.length > 0 && (
               <div className="border-b border-ff-line px-2 pb-2 pt-3">
@@ -370,7 +386,7 @@ const TeamPage = ({ data, analysis, rosterId, onTeam }: { data: LeagueData; anal
           </Panel>
         </TabSection>
 
-        <TabSection id="slots" label="Lineup slots" active={inner === 'slots'} stacked={stacked} bare>
+        <TabSection id="slots" active={tab === 'slots'}>
           <Panel title="Lineup slots" actions={<span>wk {data.horizon[0]?.week ?? ''} starters · pts/wk ahead</span>} pad={false}>
             <Table
               rows={needs[rosterId]?.slots ?? []}

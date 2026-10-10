@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import type { SlateGame, SlatePlayer } from '../../../lib/fantasy/slate'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
+import { Fold } from '../charts'
 import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
@@ -32,8 +33,9 @@ import {
   type Reason,
 } from '../ui'
 
-type Sub = 'week' | 'games' | 'managers'
-const SUBS: Sub[] = ['week', 'games', 'managers']
+// Lineups is a page of its own on phones only; on wide screens its table sits under Your week.
+type Sub = 'week' | 'lineups' | 'games' | 'managers'
+const SUBS: Sub[] = ['week', 'lineups', 'games', 'managers']
 
 /** One NFL game as a tile: state, projected score, what it moves, and the league starters who matter most in it. */
 const GameTile = ({ g, maxSwing, me, opp, isKey }: { g: SlateGame; maxSwing: number; me: number | null; opp: number | null; isKey?: boolean }) => {
@@ -153,8 +155,9 @@ const GameCard = ({
 
 const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis: Analysis; sub: string | null; onSub: (s: string) => void }) => {
   const { models } = useFantasy()
-  const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'week'
   const stacked = usePhone()
+  const picked: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'week'
+  const tab: Sub = picked === 'lineups' && !stacked ? 'week' : picked
   const players = data.players
   const me = analysis.myRosterId
   const { slate, live, week, proj, totals, read } = useMatchups()
@@ -162,7 +165,9 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
   const [view, setView] = useState<'list' | 'grid'>('list')
   useEffect(() => {
     try {
-      if (window.localStorage.getItem('ff:slate:view') === 'grid') setView('grid')
+      const saved = window.localStorage.getItem('ff:slate:view')
+      // Fifteen full cards is a long scroll on a phone: tiles unless he chose otherwise.
+      if (saved === 'grid' || (saved !== 'list' && window.matchMedia('(max-width: 767px)').matches)) setView('grid')
     } catch {
       // Storage blocked: the list it is.
     }
@@ -201,7 +206,8 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
   const watch: Reason[] = []
   if (mine && mySide && oppSide) {
     const st = mine.stakes
-    if (st) {
+    // The On the line tile says the same on a phone, where it sits just above.
+    if (st && !stacked) {
       const gap = st.win.playoffs - st.loss.playoffs
       watch.push({
         text: (
@@ -401,6 +407,60 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
     return <Reasons items={items} />
   }
 
+  const lineups = yours ? (
+    <Panel title="Lineups, slot by slot" actions={<span className="max-sm:hidden">edge: expected points, yours left</span>} pad={false}>
+      <SlotTable m={yours} />
+    </Panel>
+  ) : null
+
+  // The games ranked by your win odds at stake. Beside Things to watch on wide screens; on a phone it leads the Games page.
+  const decides = mine ? (
+    <Panel title="What decides it" actions={<span>games, by your win odds at stake</span>} pad={false}>
+      <ul>
+        {mine.games.slice(0, 6).map((g) => {
+          const game = gameByKey[g.key]
+          const maxSwing = Math.max(0.05, mine.games[0]?.swing ?? 0)
+          return (
+            <li key={g.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-ff-line/60 px-3 py-2 last:border-0">
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className="font-mono text-[12px] font-semibold text-ff-text">{label(game)}</span>
+                <span className="font-mono text-[10.5px] text-ff-muted">{game.final ? 'final' : dayOf(game.date)}</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <Meter value={g.swing} max={maxSwing} width={64} />
+                <span className="num w-9 text-right text-[12px] text-ff-text">±{pts(g.swing / 2)}</span>
+              </span>
+              <span className="col-span-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px]">
+                {g.mine.length > 0 && (
+                  <span className="text-ff-text2">
+                    <span className="text-ff-accent">yours</span> {g.mine.map((id) => players[id]?.name.split(' ').slice(-1)[0]).join(', ')}
+                  </span>
+                )}
+                {g.theirs.length > 0 && (
+                  <span className="text-ff-text2">
+                    <span className="text-ff-neg">theirs</span> {g.theirs.map((id) => players[id]?.name.split(' ').slice(-1)[0]).join(', ')}
+                  </span>
+                )}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+      <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted max-md:hidden">
+        How far each game moves your win odds, from a bad day to a good one for everyone in it. Ranges come from each position&apos;s weekly spread this season, scaled
+        to the league&apos;s weekly noise (σ {fmt(models.forecast?.sigma ?? models.forecastInput.sigmaFallback)}).
+      </p>
+    </Panel>
+  ) : null
+
+  // What the columns on the game cards mean: a line to read once, so a phone keeps it behind a disclosure.
+  const legend = (
+    <p className="text-[11.5px] leading-relaxed text-ff-muted">
+      Win odds: how far a player&apos;s game moves his manager&apos;s chance this week, bad game (20th percentile) to good (80th). Playoffs: the same in playoff odds. Final games show what
+      the result did. Numbers beside teams are projected points.
+    </p>
+  )
+
   const maxSwing = Math.max(0.05, ...slate.games.map((g) => g.swing))
   const byDay = slate.games.reduce<Record<string, SlateGame[]>>((acc, g) => ((acc[g.final ? 'Final' : dayOf(g.date)] ??= []).push(g), acc), {})
 
@@ -416,6 +476,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
             stacked={stacked}
             items={[
               { key: 'week', label: 'Your week' },
+              ...(stacked && yours ? [{ key: 'lineups' as const, label: 'Lineups' }] : []),
               { key: 'games', label: 'Games', count: slate.games.length },
               { key: 'managers', label: 'Every manager', count: slate.matchups.length * 2 },
             ]}
@@ -423,7 +484,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
         }
       />
       <div className="mt-4 space-y-3">
-        <TabSection id="week" label="Your week" active={tab === 'week'} stacked={stacked}>
+        <TabSection id="week" active={tab === 'week'}>
           {mine && mySide && oppSide ? (
             <>
               {yours && (
@@ -455,55 +516,21 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
                 <Panel title="Things to watch" actions={<span>your matchup, in sentences</span>} pad={false}>
                   {watch.length ? <Reasons items={watch} columns={1} /> : <p className="px-3 py-3 text-[12px] text-ff-muted">Nothing stands out yet.</p>}
                 </Panel>
-                <Panel title="What decides it" actions={<span>games, by your win odds at stake</span>} pad={false}>
-                  <ul>
-                    {mine.games.slice(0, 6).map((g) => {
-                      const game = gameByKey[g.key]
-                      const maxSwing = Math.max(0.05, mine.games[0]?.swing ?? 0)
-                      return (
-                        <li key={g.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-ff-line/60 px-3 py-2 last:border-0">
-                          <span className="flex min-w-0 items-baseline gap-2">
-                            <span className="font-mono text-[12px] font-semibold text-ff-text">{label(game)}</span>
-                            <span className="font-mono text-[10.5px] text-ff-muted">{game.final ? 'final' : dayOf(game.date)}</span>
-                          </span>
-                          <span className="flex items-center gap-2">
-                            <Meter value={g.swing} max={maxSwing} width={64} />
-                            <span className="num w-9 text-right text-[12px] text-ff-text">±{pts(g.swing / 2)}</span>
-                          </span>
-                          <span className="col-span-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px]">
-                            {g.mine.length > 0 && (
-                              <span className="text-ff-text2">
-                                <span className="text-ff-accent">yours</span> {g.mine.map((id) => players[id]?.name.split(' ').slice(-1)[0]).join(', ')}
-                              </span>
-                            )}
-                            {g.theirs.length > 0 && (
-                              <span className="text-ff-text2">
-                                <span className="text-ff-neg">theirs</span> {g.theirs.map((id) => players[id]?.name.split(' ').slice(-1)[0]).join(', ')}
-                              </span>
-                            )}
-                          </span>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                  <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-                    How far each game moves your win odds, from a bad day to a good one for everyone in it. Ranges come from each position&apos;s weekly spread this season, scaled
-                    to the league&apos;s weekly noise (σ {fmt(models.forecast?.sigma ?? models.forecastInput.sigmaFallback)}).
-                  </p>
-                </Panel>
+                {!stacked && decides}
               </div>
-              {yours && (
-                <Panel title="Lineups, slot by slot" actions={<span>edge: expected points, yours left</span>} pad={false}>
-                  <SlotTable m={yours} />
-                </Panel>
-              )}
+              {yours && !stacked && lineups}
             </>
           ) : (
             <Empty title="No matchup for you this week">You are not paired this week, or Sleeper has not set the week&apos;s matchups yet.</Empty>
           )}
         </TabSection>
 
-        <TabSection id="games" label="Games" count={slate.games.length} active={tab === 'games'} stacked={stacked}>
+        <TabSection id="lineups" active={tab === 'lineups'}>
+          {lineups ?? <Empty title="No matchup for you this week">You are not paired this week, or Sleeper has not set the week&apos;s matchups yet.</Empty>}
+        </TabSection>
+
+        <TabSection id="games" active={tab === 'games'}>
+          {stacked && decides}
           <div className="flex items-center justify-between gap-3">
             <span className="text-[12px] text-ff-muted">{view === 'grid' ? 'Open a game for its league starters.' : 'Every league starter, game by game.'}</span>
             <Segmented<'list' | 'grid'>
@@ -540,13 +567,10 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
               )}
             </div>
           ))}
-          <p className="text-[11.5px] leading-relaxed text-ff-muted">
-            Win odds: how far a player&apos;s game moves his manager&apos;s chance this week, bad game (20th percentile) to good (80th). Playoffs: the same in playoff odds. Final
-            games show what the result did. Numbers beside teams are projected points.
-          </p>
+          {stacked ? <Fold title="What the columns mean">{legend}</Fold> : legend}
         </TabSection>
 
-        <TabSection id="managers" label="Every manager" active={tab === 'managers'} stacked={stacked} bare>
+        <TabSection id="managers" active={tab === 'managers'}>
           <Panel title="Every manager's week" actions={<span>win odds · what a win is worth · the game that decides it</span>} pad={false}>
             <div className="grid grid-cols-1 gap-px bg-ff-line/60 sm:grid-cols-2 xl:grid-cols-3">
               {Object.values(slate.managers)

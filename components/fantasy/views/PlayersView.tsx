@@ -6,7 +6,7 @@ import type { PlayerContext } from '../../../lib/fantasy/context'
 import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Badge, Button, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, PlayerAvatar, type Column } from '../ui'
+import { Badge, Button, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, PlayerAvatar, usePhone, type Column } from '../ui'
 
 const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
 type Pos = (typeof POSITIONS)[number]
@@ -40,6 +40,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
   useEffect(() => setLimit(PAGE), [pos, own, query, basis])
   const { adjust, openPlayer } = useFantasy()
+  const phone = usePhone()
   const adjusted = Object.entries(adjust.all)
 
   const ids = useMemo(() => {
@@ -327,7 +328,8 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             rowClass={(id) => cx(rosteredBy[id] === myRosterId && 'ff-mine')}
             onRowClick={(id) => openPlayer(id)}
             canExpand={(id) => !!data.context[id]?.notes.length}
-            defaultOpen={(id) => prominent(data.context[id]?.notes)}
+            // On a phone the notes stay closed until asked for: a few open ones push the list a screen apart.
+            defaultOpen={(id) => !phone && prominent(data.context[id]?.notes)}
             expand={(id) => {
               const items = contextReasons(data.context[id], players)
               return items.length ? <Reasons items={items} /> : null

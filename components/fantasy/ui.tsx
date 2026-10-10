@@ -168,7 +168,7 @@ export const PageHeader = ({
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
     </div>
-    {tabs && <div className="ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-11">{tabs}</div>}
+    {tabs && <div className="ff-pagehead ff-pagetabs max-md:empty:hidden ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-11">{tabs}</div>}
   </>
 )
 
@@ -192,6 +192,8 @@ export type CrumbHost = {
   /** Set by the tabs while mounted: goes to the section's first page and says so, or says there was nowhere to go. */
   home: React.MutableRefObject<(() => boolean) | null>
   setPaged: (paged: boolean) => void
+  /** Set while the page list is open, so the shell can put its scrim under the list. */
+  setMenuOpen: (open: boolean) => void
 }
 export const CrumbContext = createContext<CrumbHost | null>(null)
 
@@ -223,8 +225,17 @@ export const Tabs = <K extends string>({ items, value, onChange, stacked }: { it
     </div>
   )
 
+/** Tells the shell whether the list is open. Unmounting (the page went away) reports closed. */
+const MenuState = ({ open, onChange }: { open: boolean; onChange?: (open: boolean) => void }) => {
+  useEffect(() => {
+    onChange?.(open)
+    return () => onChange?.(false)
+  }, [open, onChange])
+  return null
+}
+
 /** The second crumb: the current page with a caret, opening a list of the section's pages under the top bar. */
-const PageCrumb = <K extends string>({ items, value, onChange }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void }) => {
+const PageCrumb =<K extends string>({ items, value, onChange }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void }) => {
   const host = useContext(CrumbContext)
   const first = items[0]?.key
   const latest = useRef({ value, first, onChange })
@@ -271,6 +282,7 @@ const PageCrumb = <K extends string>({ items, value, onChange }: { items: TabIte
         menuClassName="!inset-x-0 !top-full !mt-0 !max-h-[60dvh] !min-w-0 border-x-0 [&_[role=option]]:min-h-11 [&_[role=option]]:pl-4 [&_[role=option]]:text-[14px]"
         renderButton={(_, open) => (
           <span title={cur.label} className="flex min-w-0 items-center gap-1.5 py-3.5 text-ff-text">
+            <MenuState open={open} onChange={host?.setMenuOpen} />
             <span className="truncate">{cur.label}</span>
             <span aria-hidden className="shrink-0 font-mono text-[10px] font-normal text-ff-muted">
               {open ? '▴' : '▾'}

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useFantasy } from '../FantasyContext'
 import { Deciders, MatchupScore, OddsBar, decidedBy, useMatchups, type MatchupRead } from '../matchup'
 import TeamName from '../TeamName'
-import { Badge, Button, Empty, PageHeader, Panel, Pts, PtsKey, RowCover, Segmented, cx, pct } from '../ui'
+import { Badge, Button, Empty, PageHeader, Panel, Pts, PtsKey, RowCover, Segmented, cx, pct, usePhone } from '../ui'
 
 type View = 'list' | 'grid'
 
@@ -113,6 +113,7 @@ const Card = ({ m, mine, surname, open }: { m: MatchupRead; mine: boolean; surna
 const MatchupsView = () => {
   const { analysis, data, go, openMatchup } = useFantasy()
   const { slate, live, week, read, started } = useMatchups()
+  const phone = usePhone()
   const [view, setView] = useState<View>('list')
   useEffect(() => {
     try {
@@ -168,7 +169,7 @@ const MatchupsView = () => {
                 <Button size="sm" variant="ghost" onClick={() => open(mine)}>
                   Open matchup
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => go('slate', 'week')}>
+                <Button size="sm" variant="ghost" onClick={() => go('slate', phone ? 'lineups' : 'week')}>
                   Slot by slot on Gameday →
                 </Button>
               </span>
@@ -218,8 +219,12 @@ const MatchupsView = () => {
             </ul>
           )}
           <p className="border-t border-ff-line px-3 py-2 text-[11.5px] text-ff-muted">
-            Closest first. {started ? 'Scores so far; a game under way counts half its projection still to come. ' : 'Projected scores. '}
-            &ldquo;Close&rdquo; means the expected margin is inside a normal week&apos;s swing.
+            Closest first.
+            <span className="max-sm:hidden">
+              {' '}
+              {started ? 'Scores so far; a game under way counts half its projection still to come. ' : 'Projected scores. '}
+              &ldquo;Close&rdquo; means the expected margin is inside a normal week&apos;s swing.
+            </span>
           </p>
         </Panel>
       </div>

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { suggestBid, type BidAdvice } from '../../../lib/fantasy/faab'
 import type { TradeTarget } from '../../../lib/fantasy/trades'
@@ -6,10 +6,80 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Badge, Empty, N, Panel, Reasons, Stat, StatGrid, Table, fmt, fmtSigned, type Reason } from '../ui'
+import { Badge, Empty, N, Panel, Reasons, Stat, StatGrid, Table, fmt, fmtSigned, usePhone, type Reason } from '../ui'
 import { Callout } from '../Callout'
+import { Note } from '../Note'
 
 type Move = { target: TradeTarget; drop: string | null; bid: BidAdvice | null; why: Reason[]; rivals: number; alts: TradeTarget[] }
+
+/** The hottest pickups on Sleeper that are still free here, with what each would do for you. */
+export const TrendingFree = ({ data, analysis, adds }: { data: LeagueData; analysis: Analysis; adds: TradeTarget[] }) => {
+  const players = data.players
+  const gainById = useMemo(() => Object.fromEntries(adds.map((t) => [t.id, t.add])) as Record<string, number>, [adds])
+  const trendingFA = useMemo(
+    () =>
+      data.trending
+        .filter((t) => players[t.player_id] && analysis.rosteredBy[t.player_id] == null)
+        .slice(0, 10)
+        .map((t) => ({ id: t.player_id, count: t.count })),
+    [data.trending, players, analysis.rosteredBy],
+  )
+  if (!trendingFA.length) return null
+  return (
+    <Panel title="Trending free agents" actions={<span>Sleeper adds, last 24h</span>} pad={false}>
+        <Table
+          rows={trendingFA}
+          rowKey={(t) => t.id}
+          defaultSort="adds"
+          columns={[
+            { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} size={24} /> },
+            {
+              key: 'adds',
+              label: 'Adds',
+              align: 'right',
+              title: 'Sleeper managers, across all leagues, who added him in the last 24 hours',
+              sort: (t) => t.count,
+              render: (t) => t.count.toLocaleString(),
+            },
+            {
+              key: 'ecr',
+              label: 'FantasyPros',
+              align: 'right',
+              hideBelow: 'sm',
+              title: 'FantasyPros consensus rank at his position, rest of season',
+              sort: (t) => -(data.consensus?.byId[t.id]?.posRank ?? 999),
+              render: (t) => {
+                const r = data.consensus?.byId[t.id]?.posRank
+                return r != null ? `${players[t.id]?.pos}${Math.round(r)}` : <span className="text-ff-muted">–</span>
+              },
+            },
+            {
+              key: 'exp',
+              label: 'Exp/wk',
+              align: 'right',
+              hideBelow: 'sm',
+              sort: (t) => analysis.horizon.perWeek[t.id] ?? 0,
+              render: (t) => fmt(analysis.horizon.perWeek[t.id]),
+            },
+            {
+              key: 'gain',
+              label: 'For you',
+              align: 'right',
+              title: 'Points per week he would add to your best lineup over the horizon',
+              sort: (t) => gainById[t.id] ?? 0,
+              render: (t) => (gainById[t.id] ? <span className="text-ff-pos">{fmtSigned(gainById[t.id], 1)}</span> : <span className="text-ff-muted">bench</span>),
+            },
+          ]}
+          canExpand={() => true}
+          expand={(t) => {
+            const items = contextReasons(data.context[t.id], players)
+            const why: Reason[] = gainById[t.id] ? items : [{ text: 'Would not start for you: a stash or a block, not an upgrade', tone: 'neutral' }, ...items]
+            return <Reasons items={why} />
+          }}
+        />
+      </Panel>
+  )
+}
 
 /**
  * The waiver moves worth making, ranked, each with the case for it: what it does to your lineup (Sleeper's projections, blended with
@@ -29,6 +99,7 @@ const WaiverMoves = ({
   drop: string | null
 }) => {
   const { models } = useFantasy()
+  const phone = usePhone()
   const faab = models.faab
   const me = analysis.myRosterId
   const players = data.players
@@ -131,17 +202,6 @@ const WaiverMoves = ({
       })
   }, [adds, me, analysis, players, faab, trending, data.consensus, data.context, modelRank, drop])
 
-  // The hottest pickups on Sleeper that are still free here, with what each would do for you.
-  const gainById = useMemo(() => Object.fromEntries(adds.map((t) => [t.id, t.add])) as Record<string, number>, [adds])
-  const trendingFA = useMemo(
-    () =>
-      data.trending
-        .filter((t) => players[t.player_id] && analysis.rosteredBy[t.player_id] == null)
-        .slice(0, 10)
-        .map((t) => ({ id: t.player_id, count: t.count })),
-    [data.trending, players, analysis.rosteredBy],
-  )
-
   if (me == null) return null
   const mine = faab ? (faab.remaining[me] ?? 0) : 0
   const richer = faab ? Object.entries(faab.remaining).filter(([r, v]) => Number(r) !== me && v > mine).length : 0
@@ -167,13 +227,13 @@ const WaiverMoves = ({
             value={faab.going.n ? `$${faab.going.p50}` : '–'}
             sub={faab.going.n ? `median winning bid · top 25% $${faab.going.p75}+` : 'no winning bids yet'}
           />
-          <Stat label="Richest rival" value={rich ? `$${rich[1]}` : '–'} sub={rich ? (analysis.teamById[Number(rich[0])]?.name ?? '–') : '–'} />
-          <Stat
+          {!phone && <Stat label="Richest rival" value={rich ? `$${rich[1]}` : '–'} sub={rich ? (analysis.teamById[Number(rich[0])]?.name ?? '–') : '–'} />}
+          {!phone && <Stat
             label="Weeks left"
             value={faab.weeksLeft}
             tone={faab.weeksLeft <= 3 ? 'warn' : undefined}
             sub={faab.weeksLeft <= 3 ? 'spend it: leftover FAAB is worth nothing' : `regular season · ~$${Math.round(mine / Math.max(1, faab.weeksLeft))} a week to spend`}
-          />
+          />}
         </StatGrid>
       )}
 
@@ -222,7 +282,7 @@ const WaiverMoves = ({
                     )}
                   </div>
                   <div className="col-span-2 space-y-2 sm:col-span-3">
-                    <Reasons items={m.why} />
+                    <MoveWhy items={m.why} />
                     {m.alts.length > 0 && (
                       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[12px] text-ff-muted">
                         <span className="ff-label">or</span>
@@ -241,69 +301,34 @@ const WaiverMoves = ({
           </ol>
         )}
       </Panel>
-      {trendingFA.length > 0 && (
-        <Panel title="Trending free agents" actions={<span>Sleeper adds, last 24h</span>} pad={false}>
-          <Table
-            rows={trendingFA}
-            rowKey={(t) => t.id}
-            defaultSort="adds"
-            columns={[
-              { key: 'p', label: 'Player', sticky: true, render: (t) => <PlayerName player={players[t.id]} id={t.id} size={24} /> },
-              {
-                key: 'adds',
-                label: 'Adds',
-                align: 'right',
-                title: 'Sleeper managers, across all leagues, who added him in the last 24 hours',
-                sort: (t) => t.count,
-                render: (t) => t.count.toLocaleString(),
-              },
-              {
-                key: 'ecr',
-                label: 'FantasyPros',
-                align: 'right',
-                title: 'FantasyPros consensus rank at his position, rest of season',
-                sort: (t) => -(data.consensus?.byId[t.id]?.posRank ?? 999),
-                render: (t) => {
-                  const r = data.consensus?.byId[t.id]?.posRank
-                  return r != null ? `${players[t.id]?.pos}${Math.round(r)}` : <span className="text-ff-muted">–</span>
-                },
-              },
-              {
-                key: 'exp',
-                label: 'Exp/wk',
-                align: 'right',
-                hideBelow: 'sm',
-                sort: (t) => analysis.horizon.perWeek[t.id] ?? 0,
-                render: (t) => fmt(analysis.horizon.perWeek[t.id]),
-              },
-              {
-                key: 'gain',
-                label: 'For you',
-                align: 'right',
-                title: 'Points per week he would add to your best lineup over the horizon',
-                sort: (t) => gainById[t.id] ?? 0,
-                render: (t) => (gainById[t.id] ? <span className="text-ff-pos">{fmtSigned(gainById[t.id], 1)}</span> : <span className="text-ff-muted">bench</span>),
-              },
-            ]}
-            canExpand={() => true}
-            expand={(t) => {
-              const items = contextReasons(data.context[t.id], players)
-              const why: Reason[] = gainById[t.id] ? items : [{ text: 'Would not start for you: a stash or a block, not an upgrade', tone: 'neutral' }, ...items]
-              return <Reasons items={why} />
-            }}
-          />
-        </Panel>
-      )}
+      {!phone && <TrendingFree data={data} analysis={analysis} adds={adds} />}
 
       {faab && best < 0.75 && moves.length > 0 && (
         <Callout kind="insight">
           The best add is worth under <N>0.75</N> pts/wk to you: bid the minimum or hold. FAAB buys the most right after injuries.
         </Callout>
       )}
-      <p className="text-[11.5px] leading-relaxed text-ff-muted">
+      <Note summary="How gain and bids work" className="text-[11.5px] leading-relaxed text-ff-muted">
         Gain: your lineup re-solved each week with him in and your weakest player out. Bids weigh his worth to you against what this league pays for similar value{faab ? `, at about $${Math.round(faab.rate)} per pt/wk${faab.rateN ? ` (${faab.rateN} of this season's bids)` : ' (a default until more bids land)'}` : ''}, and never go past $1 over the richest rival.
-      </p>
+      </Note>
     </div>
+  )
+}
+
+/** The case for a move. A phone sees the first two reasons; the rest are a tap away. */
+const MoveWhy = ({ items }: { items: Reason[] }) => {
+  const phone = usePhone()
+  const [open, setOpen] = useState(false)
+  const long = phone && items.length > 3
+  return (
+    <>
+      <Reasons items={long && !open ? items.slice(0, 2) : items} />
+      {long && (
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="font-mono text-[11px] text-ff-accent hover:underline">
+          {open ? 'fewer reasons' : `${items.length - 2} more reasons`}
+        </button>
+      )}
+    </>
   )
 }
 

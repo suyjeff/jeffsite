@@ -13,7 +13,9 @@ import { Callout } from '../Callout'
 import RosterTable, { type Basis } from './RosterTable'
 
 type Sub = 'overview' | 'roster' | 'news' | 'lineup' | 'slots'
-const SUBS: Sub[] = ['overview', 'roster']
+// Wide screens keep news, lineup and slots under Overview; on phones each is a page of its own.
+const WIDE_SUBS: Sub[] = ['overview', 'roster']
+const PHONE_SUBS: Sub[] = ['overview', 'news', 'lineup', 'slots', 'roster']
 
 const MeView = ({
   data,
@@ -28,10 +30,10 @@ const MeView = ({
   onSub: (s: string) => void
   onTeam: (id: number) => void
 }) => {
-  const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'overview'
-  const [basis, setBasis] = useState<Basis>('ahead')
-  // Phones stack every section in one scroll, steered by the tab strip.
+  // Phones get a page per section. A phone-only key opened on a wide screen (or a link to a section with
+  // nothing in it, like news on a quiet day) lands on Overview, which holds it there.
   const stacked = usePhone()
+  const [basis, setBasis] = useState<Basis>('ahead')
   const [slotBasis, setSlotBasis] = useState<Basis>('ahead')
   const { myRosterId, teamById, needs, slots } = analysis
   const players = data.players
@@ -113,6 +115,8 @@ const MeView = ({
     )
   }
   const season = analysis.seasonById[me.rosterId]
+  const pages = (stacked ? PHONE_SUBS : WIDE_SUBS).filter((k) => (k === 'news' ? !!fresh.length : k === 'lineup' ? !!lineupCheck : true))
+  const tab: Sub = pages.includes(sub as Sub) ? (sub as Sub) : 'overview'
 
   const newsPanel = fresh.length > 0 ? (
     <Panel title="Recent news on your roster" actions={<span>player file {ago(newsAsOf)} old</span>} pad={false}>
@@ -266,7 +270,7 @@ const MeView = ({
         }
       />
       <div className="mt-4 space-y-3">
-        <TabSection id="overview" label="Overview" active={tab === 'overview'} stacked={stacked} bare>
+        <TabSection id="overview" active={tab === 'overview'}>
             {kpis && (
               <StatGrid>
                 <Stat
@@ -309,22 +313,20 @@ const MeView = ({
             </div>
           )}
         </TabSection>
-        {stacked && newsPanel && (
-          <TabSection id="news" label="News" active stacked bare>
-            {newsPanel}
-          </TabSection>
-        )}
-        {stacked && lineupPanel && (
-          <TabSection id="lineup" label="Lineup" active stacked bare>
-            {lineupPanel}
-          </TabSection>
-        )}
         {stacked && (
-          <TabSection id="slots" label="Slots" active stacked bare>
-            {slotsPanel}
-          </TabSection>
+          <>
+            <TabSection id="news" active={tab === 'news'}>
+              {newsPanel}
+            </TabSection>
+            <TabSection id="lineup" active={tab === 'lineup'}>
+              {lineupPanel}
+            </TabSection>
+            <TabSection id="slots" active={tab === 'slots'}>
+              {slotsPanel}
+            </TabSection>
+          </>
         )}
-        <TabSection id="roster" label="Roster" active={tab === 'roster'} stacked={stacked} bare>
+        <TabSection id="roster" active={tab === 'roster'}>
           {rosterPanel}
         </TabSection>
       </div>
