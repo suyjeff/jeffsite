@@ -6,6 +6,7 @@ import { applyTrade, type TradeIdea } from '../../lib/fantasy/trades'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { ContextNotes } from './ContextNotes'
 import { BuildIcon } from './icons'
+import { INSIGHT_ITEM, InsightMark } from './InsightMark'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { PRICING_VERSION } from '../../lib/fantasy/currency'
 import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../../lib/fantasy/grades'
@@ -178,6 +179,7 @@ const TradeCard = ({
   data,
   analysis,
   tag,
+  gradeMoved,
   onBuild,
 }: {
   /** Ways to land the same players from the same team, best first. */
@@ -186,6 +188,8 @@ const TradeCard = ({
   analysis: Analysis
   /** A short distinction, e.g. "Best for you". */
   tag?: string
+  /** Your grades moved this team's odds: the grades note on the Trades page names it. */
+  gradeMoved?: 'up' | 'down'
   onBuild?: (idea: TradeIdea) => void
 }) => {
   const { models, grades } = useFantasy()
@@ -217,11 +221,14 @@ const TradeCard = ({
 
   return (
     <article className={cx('flex min-w-0 flex-col border border-ff-line bg-ff-panel transition-opacity', read.ruledOut && 'opacity-60 hover:opacity-100 focus-within:opacity-100')}>
-      <header className="flex items-center justify-between gap-2 border-b border-ff-line px-3 py-2">
+      <header className={cx('flex items-center justify-between gap-2 border-b border-ff-line px-3 py-2', gradeMoved && INSIGHT_ITEM)}>
         <div className="flex min-w-0 items-center gap-2">
           <Avatar src={team?.avatar ?? null} name={team?.name ?? '?'} size={24} />
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-[13.5px] font-medium text-ff-text">{team?.name}</div>
+            <div className="flex min-w-0 items-center gap-2 text-[13.5px] font-medium text-ff-text">
+              <span className="truncate">{team?.name}</span>
+              {gradeMoved && <InsightMark label={gradeMoved === 'up' ? 'odds up' : 'odds down'} title={`Your grades ${gradeMoved === 'up' ? 'raised' : 'lowered'} this team's odds`} className="max-sm:[&>span]:sr-only" />}
+            </div>
             <div className="mt-0.5 flex items-center gap-1.5 truncate font-mono text-[10.5px] text-ff-muted">
               {season && (
                 <span className="text-ff-text2">
