@@ -118,7 +118,8 @@ const PlayerSheet = ({ id }: { id: string }) => {
     const weeks = [...past, ...ahead]
     return {
       weeks,
-      actual: weeks.map((w) => (past.includes(w) ? (data.weekPoints[w]?.[id] ?? null) : null)),
+      // This week's column fills in once his game is final, before the week itself closes.
+      actual: weeks.map((w) => (past.includes(w) ? (data.weekPoints[w]?.[id] ?? null) : w === slate.week && thisWeek?.kind === 'final' ? thisWeek.value : null)),
       projected: weeks.map((w) => (past.includes(w) ? (data.pastProjections[w]?.[id] ?? null) : (data.horizon.find((h) => h.week === w)?.pts[id] ?? null))),
       // His current team's opponent each week, for the readout; a traded player's old games read against his new team's.
       labels: weeks.map((w) => {
@@ -126,7 +127,7 @@ const PlayerSheet = ({ id }: { id: string }) => {
         return opp ? `vs ${opp}` : null
       }),
     }
-  }, [data, id])
+  }, [data, id, slate.week, thisWeek?.kind, thisWeek?.value])
 
   if (!p) return null
   const out = isOut(p.injury)
