@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 import { blankEmpty, rosterRows, type RosterRow as Row } from '../../lib/fantasy/roster'
+import { INSIGHT_ROW, InsightMark } from './InsightMark'
 import { Table, cx, fmt, pct, type Column } from './ui'
 
 /**
@@ -9,7 +10,7 @@ import { Table, cx, fmt, pct, type Column } from './ui'
  * name), next bye, how likely he plays and points a week ahead. Runs edge to edge in its section; the first and last cells keep the sheet's inset so the slot column lines
  * up with the section title above it.
  */
-const SheetRoster = ({ rosterId }: { rosterId: number }) => {
+const SheetRoster = ({ rosterId, marked }: { rosterId: number; /** Players an insight above is about. */ marked?: Set<string> }) => {
   const { data, analysis } = useFantasy()
   const team = analysis.teamById[rosterId]
   const rows = useMemo(() => (team ? rosterRows(team, data.league.roster_positions) : []), [team, data.league.roster_positions])
@@ -31,7 +32,19 @@ const SheetRoster = ({ rosterId }: { rosterId: number }) => {
         label: 'Player',
         className: 'max-w-[150px] overflow-hidden sm:max-w-[190px]',
         sort: (r) => players[r.id]?.name ?? r.id,
-        render: (r) => (r.empty ? <span className="text-ff-muted">empty</span> : <PlayerName player={players[r.id]} id={r.id} size={20} />),
+        render: (r) =>
+          r.empty ? (
+            <span className="text-ff-muted">empty</span>
+          ) : (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <PlayerName player={players[r.id]} id={r.id} size={20} className="min-w-0" />
+              {marked?.has(r.id) && (
+                <span className="shrink-0">
+                  <InsightMark title="The summary above is about him" />
+                </span>
+              )}
+            </span>
+          ),
       },
       {
         key: 'bye',
@@ -66,10 +79,10 @@ const SheetRoster = ({ rosterId }: { rosterId: number }) => {
         render: (r) => <span className="text-ff-text">{fmt(perWeek[r.id])}</span>,
       },
     ],
-    [players, data.context, week, perWeek],
+    [players, data.context, week, perWeek, marked],
   )
 
-  return <Table rows={rows} columns={blankEmpty(columns)} rowKey={(r) => r.id} dense rowClass={(r) => (r.starter ? '' : 'bg-ff-sunken/40')} />
+  return <Table rows={rows} columns={blankEmpty(columns)} rowKey={(r) => r.id} dense rowClass={(r) => cx(r.starter ? '' : 'bg-ff-sunken/40', marked?.has(r.id) && INSIGHT_ROW)} />
 }
 
 export default SheetRoster

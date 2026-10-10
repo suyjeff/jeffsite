@@ -1,4 +1,4 @@
-import React, { Children, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { Children, createContext, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
 import { ShowMore } from './views/ShowMore'
 
@@ -124,13 +124,33 @@ export const Panel = ({
   </section>
 )
 
+/** What a page asks the phone top bar to show in place of its section name, e.g. a team's name on its own page. */
+export type PhoneBarSlot = { title: ReactNode; sub?: ReactNode } | null
+/** Provided by the shell; `PageHeader` uses it so a page can name itself in the top bar. */
+export const PhoneBarContext = createContext<(slot: PhoneBarSlot) => void>(() => {})
+
+/** The text a node shows, to tell whether it changed without comparing elements that are new on every render. */
+const nodeText = (n: ReactNode): string => {
+  if (n == null || typeof n === 'boolean') return ''
+  if (typeof n === 'string' || typeof n === 'number') return String(n)
+  if (Array.isArray(n)) return n.map(nodeText).join('')
+  if (isValidElement(n)) return nodeText((n.props as { children?: ReactNode }).children)
+  return ''
+}
+
 /**
  * Page title row plus the page's tabs. Sticks under the mobile top bar.
  *
  * On desktop the title row is the same 44px as the sidebar's wordmark row and
  * shares its bottom rule, so the two read as one header line across the
- * screen. On phones the top bar already names the page, so the row only
- * appears when there is something to act on.
+ * screen.
+ *
+ * On phones the tab strip is always the first thing under the top bar. The top
+ * bar already names the section, so nothing else sits above the tabs:
+ * - `mobileTitle` puts the page's own name (and `meta`) in the top bar instead;
+ * - otherwise `meta` and `actions` sit in one slim row just below the tabs,
+ *   which scrolls away with the page. With no tabs that row is the pinned one.
+ * A page whose only action is a link elsewhere should put it in its content.
  */
 export const PageHeader = ({
   title,
@@ -143,34 +163,60 @@ export const PageHeader = ({
   meta?: ReactNode
   actions?: ReactNode
   tabs?: ReactNode
-  /** Show the title on phones too, where the top bar only names the section. */
+  /** On phones, name this page in the top bar (with `meta` beneath), where it otherwise only names the section. */
   mobileTitle?: boolean
-}) => (
-  <>
-    {/* On phones the title row scrolls away and only the tabs stay pinned under the top bar; on wide screens both stay. */}
-    <div
-      className={cx(
-        'ff-pagehead ff-bleed z-20 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:sticky md:top-0',
-        !tabs && 'sticky top-[var(--ff-top)]',
-        actions || meta || mobileTitle ? '' : 'hidden md:block',
-      )}
-    >
-      <div
-        className={cx(
-          'ff-gutter items-center justify-between gap-3 md:flex md:h-11 md:border-b md:border-ff-line md:group-data-[sidebar=closed]/shell:pl-12 motion-safe:md:transition-[padding] motion-safe:md:duration-[170ms] motion-safe:md:ease-ff-drawer',
-          actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden',
+}) => {
+  const phone = usePhone()
+  const setBar = useContext(PhoneBarContext)
+  // The title and meta are usually fresh elements each render, so the bar follows their text, not their identity.
+  const latest = useRef({ title, meta })
+  latest.current = { title, meta }
+  const titleText = nodeText(title)
+  const metaText = nodeText(meta)
+  useEffect(() => {
+    if (!phone || !mobileTitle) return
+    setBar({ title: latest.current.title, sub: latest.current.meta })
+    return () => setBar(null)
+  }, [phone, mobileTitle, titleText, metaText, setBar])
+
+  const glass = 'bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80'
+  if (phone) {
+    const inBar = !!mobileTitle
+    const row = !!actions || (!!meta && !inBar)
+    return (
+      <>
+        {/* The top bar shows the name; this keeps the page's level-one heading for screen readers. */}
+        <h1 className="sr-only">{title}</h1>
+        {tabs && <div className={cx('ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20', glass)}>{tabs}</div>}
+        {row && (
+          <div className={cx('ff-pagehead ff-bleed ff-gutter flex min-h-10 items-center justify-between gap-3 py-1', !tabs && cx('sticky top-[var(--ff-top)] z-20', glass))}>
+            {meta && !inBar ? <span className="min-w-0 flex-1 font-mono text-[10.5px] text-ff-muted">{meta}</span> : <span />}
+            {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          </div>
         )}
-      >
-        <div className="flex min-w-0 items-baseline gap-2.5">
-          <h1 className={cx('min-w-0 truncate text-[15px] font-medium leading-tight tracking-[-0.01em] text-ff-text md:block', mobileTitle ? 'block' : 'hidden')}>{title}</h1>
-          {meta && <span className="min-w-0 truncate font-mono text-[10.5px] text-ff-muted">{meta}</span>}
+      </>
+    )
+  }
+  return (
+    <>
+      <div className={cx('ff-pagehead ff-bleed z-20 md:sticky md:top-0', glass, !tabs && 'sticky top-[var(--ff-top)]', actions || meta || mobileTitle ? '' : 'hidden md:block')}>
+        <div
+          className={cx(
+            'ff-gutter items-center justify-between gap-3 md:flex md:h-11 md:border-b md:border-ff-line md:group-data-[sidebar=closed]/shell:pl-12 motion-safe:md:transition-[padding] motion-safe:md:duration-[170ms] motion-safe:md:ease-ff-drawer',
+            actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden',
+          )}
+        >
+          <div className="flex min-w-0 items-baseline gap-2.5">
+            <h1 className="hidden min-w-0 truncate text-[15px] font-medium leading-tight tracking-[-0.01em] text-ff-text md:block">{title}</h1>
+            {meta && <span className="min-w-0 truncate font-mono text-[10.5px] text-ff-muted">{meta}</span>}
+          </div>
+          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
-    </div>
-    {tabs && <div className="ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80 md:top-11">{tabs}</div>}
-  </>
-)
+      {tabs && <div className={cx('ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 md:top-11', glass)}>{tabs}</div>}
+    </>
+  )
+}
 
 /** Picks a page; `replace` swaps the history entry instead of adding one. */
 export type PageChange<K extends string = string> = (k: K, opts?: { replace?: boolean }) => void
@@ -1606,11 +1652,14 @@ export type Reason = {
   label?: ReactNode
 }
 
-const REASON_MARK: Record<NonNullable<Reason['tone']>, { glyph: string; sr: string; cls: string }> = {
-  pos: { glyph: '+', sr: 'Helps: ', cls: 'bg-ff-pos/15 text-ff-pos' },
-  neg: { glyph: '−', sr: 'Hurts: ', cls: 'bg-ff-neg/12 text-ff-neg' },
-  warn: { glyph: '!', sr: 'Caution: ', cls: 'bg-ff-warn/15 text-ff-warn' },
-  accent: { glyph: '›', sr: '', cls: 'bg-ff-accent/12 text-ff-accent' },
+// Solid in the tone, the glyph in the panel's colour. Every tone ink clears 4.5:1 against the panel (the accent does,
+// though white on it does not in dark mode, so it too takes the panel colour), so the glyph clears it against the ink.
+// A faint tint read as pink, not red. The news cards on My team use the same squares.
+export const REASON_MARK: Record<NonNullable<Reason['tone']>, { glyph: string; sr: string; cls: string }> = {
+  pos: { glyph: '+', sr: 'Helps: ', cls: 'bg-ff-pos text-ff-panel' },
+  neg: { glyph: '−', sr: 'Hurts: ', cls: 'bg-ff-neg text-ff-panel' },
+  warn: { glyph: '!', sr: 'Caution: ', cls: 'bg-ff-warn text-ff-panel' },
+  accent: { glyph: '›', sr: '', cls: 'bg-ff-accent text-ff-panel' },
   neutral: { glyph: 'i', sr: '', cls: 'bg-ff-sunken text-ff-muted' },
 }
 

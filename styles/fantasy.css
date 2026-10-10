@@ -967,3 +967,40 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     inset: -12px 0;
   }
 }
+
+/* What an insight refers to: a 2px rule in the insight hue and a faint tint of it. The tint is a background image,
+   as .ff-mine's is, so the two stack and a pinned cell takes it too. A glyph (InsightMark) rides with it, so the
+   hue is never the only signal. */
+.ff tr.ff-insight-row > td {
+  background-image: linear-gradient(rgb(var(--ff-c4) / 0.08), rgb(var(--ff-c4) / 0.08));
+}
+.ff tr.ff-insight-row.ff-mine > td {
+  background-image:
+    linear-gradient(rgb(var(--ff-c4) / 0.08), rgb(var(--ff-c4) / 0.08)),
+    linear-gradient(rgb(var(--ff-accent) / 0.08), rgb(var(--ff-accent) / 0.08));
+}
+.ff tr.ff-insight-row > td:first-child {
+  box-shadow: inset 2px 0 0 rgb(var(--ff-c4));
+}
+.ff .ff-insight-item {
+  background-image: linear-gradient(rgb(var(--ff-c4) / 0.06), rgb(var(--ff-c4) / 0.06));
+  box-shadow: inset 2px 0 0 rgb(var(--ff-c4));
+}
+
+/* The phone drawer is a touch surface: the settings controls (made 28px for a pointer) reach 40px, and the
+   menus they open get 44px rows. Scoped to the drawer, so the desktop sidebar keeps its density. */
+@media (max-width: 767px) {
+  .ff .ff-drawer #ff-settings .h-7 {
+    height: 2.5rem;
+  }
+  .ff .ff-drawer #ff-settings button {
+    min-height: 2.5rem;
+  }
+  .ff .ff-drawer #ff-settings button.w-7 {
+    width: 2.5rem;
+  }
+  .ff .ff-drawer [role='option'],
+  .ff .ff-drawer [role='menuitem'] {
+    min-height: 2.75rem;
+  }
+}

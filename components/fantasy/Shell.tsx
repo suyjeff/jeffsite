@@ -4,7 +4,7 @@ import { MONKE } from './brand'
 import Tour, { TOUR } from './Tour'
 import { PanelIcon } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
-import { Avatar, Dropdown, cx, shortcutLabel, usePhone } from './ui'
+import { Avatar, Dropdown, PhoneBarContext, cx, shortcutLabel, usePhone, type PhoneBarSlot } from './ui'
 
 export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
@@ -79,7 +79,7 @@ const SidebarToggle = ({ open, onClick, className }: { open: boolean; onClick: (
     aria-label={open ? 'Hide sidebar' : 'Show sidebar'}
     aria-keyshortcuts="["
     title={`${open ? 'Hide' : 'Show'} sidebar ([)`}
-    className={cx('flex h-7 w-7 items-center justify-center rounded text-ff-muted/60 transition-colors hover:bg-ff-raised hover:text-ff-text2', className)}
+    className={cx('flex h-7 w-7 items-center justify-center text-ff-muted/60 transition-colors hover:bg-ff-raised hover:text-ff-text2', className)}
   >
     <PanelIcon open={open} />
   </button>
@@ -127,13 +127,15 @@ const SidebarBody = ({
       <Brand />
       <span className="flex items-center gap-1">
         {onClose && (
-          <button onClick={onClose} className="h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text" aria-label="Close menu">
+          <button onClick={onClose} className="h-10 px-3 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text md:h-8 md:px-2" aria-label="Close menu">
             ESC
           </button>
         )}
       </span>
     </div>
 
+    {/* On phones the league, search and sections scroll together, so taller rows never push sections out of reach; on desktop this wrapper adds no box. */}
+    <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain md:contents">
     <div className="shrink-0 border-b border-ff-line">
       <Dropdown
         label="League"
@@ -167,7 +169,7 @@ const SidebarBody = ({
     </div>
 
     {onSearch && (
-      <div className="shrink-0 border-b border-ff-line px-3 py-2">
+      <div className="shrink-0 border-b border-ff-line px-3 py-2.5 md:py-2">
         <button
           type="button"
           onClick={() => {
@@ -176,7 +178,7 @@ const SidebarBody = ({
           }}
           data-tour-key="finish"
           className={cx(
-            'flex h-7 w-full items-center gap-2 border bg-ff-sunken px-2 text-left text-[12px] text-ff-muted hover:border-ff-line2 hover:text-ff-text2',
+            'flex h-11 w-full items-center gap-2 border bg-ff-sunken px-2 text-left md:h-7 text-[12px] text-ff-muted hover:border-ff-line2 hover:text-ff-text2',
             tourKey === 'finish' ? 'border-ff-accent text-ff-text2' : 'border-ff-line',
           )}
           aria-keyshortcuts="Meta+K Control+K"
@@ -185,15 +187,15 @@ const SidebarBody = ({
             ›
           </span>
           <span className="flex-1">Jump to…</span>
-          <kbd className="font-mono text-[10px]">{shortcutLabel()}</kbd>
+          <kbd className="font-mono text-[10px] max-md:hidden">{shortcutLabel()}</kbd>
         </button>
       </div>
     )}
 
-    <nav className="ff-scroll flex-1 overflow-y-auto py-1.5" aria-label="Sections">
+    <nav className="ff-scroll py-1.5 md:flex-1 md:overflow-y-auto md:overscroll-contain" aria-label="Sections">
       {GROUPS.map((g) => (
         <div key={g} className="pb-1.5">
-          <div className="ff-label px-3 pb-1 pt-2">{g}</div>
+          <div className="ff-label px-3 pb-1 pt-3 md:pt-2">{g}</div>
           {SECTIONS.filter((s) => s.group === g).map(({ key, label }) => {
             const i = SECTIONS.findIndex((s) => s.key === key) + 1
             const active = key === section
@@ -206,7 +208,7 @@ const SidebarBody = ({
                 aria-keyshortcuts={i <= 9 ? String(i) : i === 10 ? '0' : undefined}
                 title={key === 'monke' ? MONKE.long : undefined}
                 className={cx(
-                  'group flex h-7 w-full items-center gap-3 px-3 text-left text-[13px] transition-colors',
+                  'group flex h-11 w-full items-center gap-3 px-3 text-left text-[14px] transition-colors md:h-7 md:text-[13px]',
                   tourKey === key
                     ? 'bg-ff-accent/10 text-ff-text shadow-[inset_2px_0_0_rgb(var(--ff-accent))]'
                     : active
@@ -229,6 +231,7 @@ const SidebarBody = ({
         </div>
       ))}
     </nav>
+    </div>
 
     {controls && (
       <div className="shrink-0 border-t border-ff-line">
@@ -238,7 +241,7 @@ const SidebarBody = ({
           aria-expanded={!!controlsOpen}
           aria-controls="ff-settings"
           onClick={() => onControls?.(!controlsOpen)}
-          className="flex h-9 w-full items-center gap-2 px-3 text-left hover:bg-ff-raised"
+          className="flex h-11 w-full items-center gap-2 px-3 text-left hover:bg-ff-raised md:h-9"
         >
           <span className="ff-label shrink-0">Settings</span>
           <span className="min-w-0 flex-1 truncate text-right font-mono text-[10.5px] text-ff-muted">{controlsSummary}</span>
@@ -255,12 +258,12 @@ const SidebarBody = ({
     )}
 
     <div className="shrink-0 border-t border-ff-line px-3 pb-2.5 pt-2 font-mono text-[10.5px] text-ff-muted">
-      <div className="flex h-6 items-center justify-between gap-2">
+      <div className="flex h-10 items-center justify-between gap-2 md:h-6">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className={cx('h-1.5 w-1.5 shrink-0', loading ? 'ff-pulse bg-ff-warn' : 'bg-ff-pos')} aria-hidden />
           <span className="min-w-0 truncate">{loading ? progress.toLowerCase() : `synced ${clock(loadedAt)}`}</span>
         </span>
-        <button onClick={onRefresh} disabled={loading} className="-mr-1.5 h-6 shrink-0 px-1.5 text-ff-text2 hover:bg-ff-raised hover:text-ff-text disabled:opacity-50" title="Reload from Sleeper (R)">
+        <button onClick={onRefresh} disabled={loading} className="-mr-3 h-10 shrink-0 px-3 text-ff-text2 md:-mr-1.5 md:h-6 md:px-1.5 hover:bg-ff-raised hover:text-ff-text disabled:opacity-50" title="Reload from Sleeper (R)">
           reload
         </button>
       </div>
@@ -287,6 +290,8 @@ const typing = (e: KeyboardEvent) => {
 const Shell = (props: ShellProps) => {
   const { section, onNavigate, children, title, loading, onRefresh, leagues, leagueId, onSidebar } = props
   const [drawer, setDrawer] = useState(false)
+  // A page can name itself in the phone top bar (see PageHeader); otherwise it shows the section and league.
+  const [bar, setBar] = useState<PhoneBarSlot>(null)
   const phone = usePhone()
   // The tour lights entries in the sidebar, so it shows the sidebar while it runs.
   const sidebarOpen = props.sidebar !== false || !onSidebar || !!props.tour
@@ -297,6 +302,13 @@ const Shell = (props: ShellProps) => {
   const drawerSheet = useRef<SwipeSheetHandle>(null)
   // Closing slides the drawer away first; it unmounts once it is off screen.
   const closeDrawer = () => (drawerSheet.current ? drawerSheet.current.dismiss() : setDrawer(false))
+
+  // The drawer opens with the current section in view, however far down the list it is.
+  useEffect(() => {
+    if (!drawer) return
+    const id = requestAnimationFrame(() => document.querySelector('[role="dialog"] nav [aria-current="page"]')?.scrollIntoView({ block: 'center' }))
+    return () => cancelAnimationFrame(id)
+  }, [drawer])
 
   useEffect(() => {
     if (!drawer) return
@@ -394,8 +406,8 @@ const Shell = (props: ShellProps) => {
           <PanelIcon />
         </button>
         <div className="min-w-0 flex-1 px-3 leading-tight">
-          <div className="truncate text-[15px] font-medium">{current?.label}</div>
-          {leagueName && <div className="truncate font-mono text-[10.5px] text-ff-muted">{leagueName}</div>}
+          <div className="truncate text-[15px] font-medium">{bar ? bar.title : current?.label}</div>
+          {(bar ? bar.sub : leagueName) && <div className="truncate font-mono text-[10.5px] text-ff-muted">{bar ? bar.sub : leagueName}</div>}
         </div>
         {props.onSearch && (
           <button onClick={props.onSearch} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] tracking-[0.1em] text-ff-text2" aria-label="Find a page, player or team">
@@ -417,7 +429,7 @@ const Shell = (props: ShellProps) => {
             onDismissed={() => setDrawer(false)}
             backdropClassName="bg-black/60"
             panelProps={{ role: 'dialog', 'aria-label': 'Menu' }}
-            panelClassName="h-full w-[86vw] max-w-[320px] shrink-0 border-r border-ff-line bg-ff-panel"
+            panelClassName="ff-drawer h-full w-[86vw] max-w-[320px] shrink-0 border-r border-ff-line bg-ff-panel"
           >
             <SidebarBody {...props} onNavigate={navigate} onClose={closeDrawer} />
           </SwipeSheet>
@@ -425,7 +437,9 @@ const Shell = (props: ShellProps) => {
       )}
 
       <main className={cx('overflow-x-clip pt-[var(--ff-top)] md:pt-0', sidebarOpen && 'md:pl-[calc(220px+env(safe-area-inset-left))]')}>
-        <div ref={page} className={cx('ff-gutter mx-auto pb-24 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
+        <PhoneBarContext.Provider value={setBar}>
+          <div ref={page} className={cx('ff-gutter mx-auto pb-24 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
+        </PhoneBarContext.Provider>
       </main>
 
       {/* Phone tab bar: words, not pictures. */}

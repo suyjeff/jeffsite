@@ -1,12 +1,14 @@
 import React, { useMemo } from 'react'
-import { scoutTeam } from '../../lib/fantasy/scout'
 import { useFantasy } from './FantasyContext'
 import { MoveList, useMoves } from './Moves'
 import TeamName, { TopMark } from './TeamName'
 import FreeAgentPick from './FreeAgentPick'
 import SheetRoster from './SheetRoster'
+import { Callout } from './Callout'
+import { INSIGHT_ITEM, InsightMark } from './InsightMark'
+import { scoutPlayers, useScout } from './ScoutReport'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
-import { Avatar, Badge, Button, DeltaChip, Stat, fmt, pct, simOdds } from './ui'
+import { Avatar, Badge, Button, DeltaChip, Stat, cx, fmt, pct, simOdds } from './ui'
 
 /**
  * One team at a glance, over the page: where it stands, what it projects, how it got here and what it starts this
@@ -21,7 +23,8 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
   const need = analysis.needs[rosterId]
   const sim = models.forecast?.sim[rosterId]
   const mine = rosterId === analysis.myRosterId
-  const scout = useMemo(() => scoutTeam(data, analysis, models, rosterId), [data, analysis, models, rosterId])
+  const scout = useScout(rosterId)
+  const aboutPlayers = useMemo(() => scoutPlayers(scout), [scout])
   const moves = useMoves(mine ? rosterId : null, 3)
   const league = useMemo(() => {
     const xs = analysis.teams.map((t) => analysis.needs[t.rosterId]?.lineup ?? 0).filter((x) => x > 0)
@@ -67,7 +70,11 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
               />
             </div>
 
-            {scout.summary && <p className="px-4 py-3 text-[13px] leading-[1.5] text-ff-text2">{scout.summary}</p>}
+            {scout.summary && (
+              <Callout kind="insight" compact className="border-b border-b-ff-line">
+                <span className="text-[13px] text-ff-text">{scout.summary}</span>
+              </Callout>
+            )}
 
             {game && opp != null && p != null && (
               <SheetSection title={`Week ${game.week}`} aside="projected">
@@ -103,8 +110,10 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
             )}
 
             {mine && moves.length > 0 && (
-              <section className="border-t border-ff-line">
-                <h3 className="ff-label px-4 pb-1 pt-3">Moves to make</h3>
+              <section className={cx('border-t border-ff-line', INSIGHT_ITEM)}>
+                <h3 className="ff-label flex items-center gap-1.5 px-4 pb-1 pt-3">
+                  Moves to make <InsightMark label="advice" title="Advice for your lineup" />
+                </h3>
                 <MoveList moves={moves} compact />
               </section>
             )}
@@ -129,7 +138,7 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
 
             {team.players.length > 0 && (
               <SheetSection title="Roster" aside={`${team.players.length} players · pts/wk ahead`} flush>
-                <SheetRoster rosterId={rosterId} />
+                <SheetRoster rosterId={rosterId} marked={aboutPlayers} />
               </SheetSection>
             )}
           </SheetBody>

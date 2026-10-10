@@ -11,13 +11,17 @@ const KIND = {
   insight: {
     Icon: BulbIcon,
     sr: 'Insight: ',
-    box: 'border-[rgb(var(--ff-c4)/0.45)] bg-[rgb(var(--ff-c4)/0.08)]',
+    edge: 'border-[rgb(var(--ff-c4)/0.45)]',
+    wash: 'bg-[rgb(var(--ff-c4)/0.08)]',
+    rule: 'border-l-[rgb(var(--ff-c4))]',
     icon: 'text-[rgb(var(--ff-c4))]',
   },
   instruction: {
     Icon: InfoIcon,
     sr: 'How to: ',
-    box: 'border-ff-accent/45 bg-ff-accent/[0.07]',
+    edge: 'border-ff-accent/45',
+    wash: 'bg-ff-accent/[0.07]',
+    rule: 'border-l-ff-accent',
     icon: 'text-ff-accent',
   },
 }
@@ -27,6 +31,7 @@ export const Callout = ({
   title,
   children,
   action,
+  compact,
   className,
 }: {
   kind: keyof typeof KIND
@@ -35,6 +40,8 @@ export const Callout = ({
   children?: ReactNode
   /** A control at the end of the note: a link or a small button that acts on what it says. */
   action?: ReactNode
+  /** For inside a panel or sheet that already has its frame: no outer border, just the edge colour down the left side. */
+  compact?: boolean
   className?: string
 }) => {
   const k = KIND[kind]
@@ -42,7 +49,13 @@ export const Callout = ({
     // Muted ink drops just under 4.5:1 on a tint over the light page, so inside a note it steps up to the body ink.
     <div
       role="note"
-      className={cx('flex items-start gap-2.5 border px-3 py-2 text-[12.5px] leading-[1.45] text-ff-text2 [&_.text-ff-muted]:text-ff-text2', k.box, className)}
+      className={cx(
+        'flex items-start gap-2.5 text-[12.5px] leading-[1.45] text-ff-text2 [&_.text-ff-muted]:text-ff-text2',
+        compact ? cx('border-l-2 px-3 py-2.5 sm:px-4', k.rule) : 'border px-3 py-2',
+        k.edge,
+        k.wash,
+        className,
+      )}
     >
       {/* The icon sits on the first line: 18px of line, 14px of icon. */}
       <k.Icon className={cx('mt-0.5', k.icon)} />

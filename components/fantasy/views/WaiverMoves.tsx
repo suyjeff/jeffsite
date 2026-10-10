@@ -6,8 +6,9 @@ import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
-import { Badge, Empty, N, Panel, Reasons, Stat, StatGrid, Table, fmt, fmtSigned, usePhone, type Reason } from '../ui'
+import { Badge, Empty, N, Panel, Reasons, Stat, StatGrid, Table, cx, fmt, fmtSigned, usePhone, type Reason } from '../ui'
 import { Callout } from '../Callout'
+import { INSIGHT_ITEM, InsightMark } from '../InsightMark'
 import { Disclosure } from '../Disclosure'
 
 type Move = { target: TradeTarget; drop: string | null; bid: BidAdvice | null; why: Reason[]; rivals: number; alts: TradeTarget[] }
@@ -211,6 +212,8 @@ const WaiverMoves = ({
         .sort((a, b) => b[1] - a[1])[0]
     : null
   const best = moves[0]?.target.add ?? 0
+  // The note below is about the best add and what to bid on him, so that move carries the mark.
+  const lowValue = !!faab && best < 0.75 && moves.length > 0
 
   return (
     <div className="space-y-3">
@@ -247,7 +250,7 @@ const WaiverMoves = ({
         ) : (
           <ol className="divide-y divide-ff-line">
             {moves.map((m, i) => (
-              <li key={m.target.id} className="px-3 py-3">
+              <li key={m.target.id} className={cx('px-3 py-3', lowValue && i === 0 && INSIGHT_ITEM)}>
                 <div className="grid grid-cols-[20px_minmax(0,1fr)] gap-x-2 gap-y-2 sm:grid-cols-[20px_minmax(0,1fr)_auto]">
                   <span className="num pt-1 text-[11px] text-ff-muted">{String(i + 1).padStart(2, '0')}</span>
                   <div className="min-w-0 space-y-1.5">
@@ -256,6 +259,7 @@ const WaiverMoves = ({
                         ADD
                       </Badge>
                       <PlayerName player={players[m.target.id]} id={m.target.id} size={26} />
+                      {lowValue && i === 0 && <InsightMark label="best add" title="The note below is about this add" />}
                     </div>
                     {m.drop && (
                       <div className="flex min-w-0 items-center gap-2">
@@ -266,7 +270,7 @@ const WaiverMoves = ({
                       </div>
                     )}
                   </div>
-                  <div className="col-span-2 flex items-end gap-4 sm:col-span-1 sm:flex-col sm:items-end sm:gap-1.5">
+                  <div className="col-span-2 flex items-start gap-4 sm:col-span-1 sm:justify-end">
                     <div className="text-right leading-none">
                       <div className="ff-label">gain</div>
                       <div className="num mt-1 text-[20px] font-medium text-ff-pos">{fmtSigned(m.target.add, 1)}</div>
@@ -306,7 +310,7 @@ const WaiverMoves = ({
       </Panel>
       {!phone && <TrendingFree data={data} analysis={analysis} adds={adds} />}
 
-      {faab && best < 0.75 && moves.length > 0 && (
+      {lowValue && (
         <Callout kind="insight">
           The best add is worth under <N>0.75</N> pts/wk to you: bid the minimum or hold. FAAB buys the most right after injuries.
         </Callout>

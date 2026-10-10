@@ -29,6 +29,8 @@ export type ScoutFact = {
   detail: string
   /** Points-per-week equivalent, for ranking facts of different units together. */
   weight: number
+  /** The players the fact is about, to mark where a roster is shown. Luck, schedule and lineup calls have none. */
+  players?: string[]
 }
 
 export type Scouting = { strengths: ScoutFact[]; weaknesses: ScoutFact[]; summary: string | null }
@@ -76,12 +78,13 @@ export const scoutTeam = (data: LeagueData, analysis: Analysis, models: Models, 
   // Position groups, from the lineup ahead.
   const need = analysis.needs[rosterId]
   if (need) {
-    const groups = new Map<string, { gap: number; starters: string[] }>()
+    const groups = new Map<string, { gap: number; starters: string[]; ids: string[] }>()
     for (const s of need.slots) {
       const g = GROUP[s.slot] ?? s.slot
-      const cur = groups.get(g) ?? { gap: 0, starters: [] }
+      const cur = groups.get(g) ?? { gap: 0, starters: [], ids: [] }
       cur.gap += s.gap
       cur.starters.push(name(s.starter))
+      if (s.starter) cur.ids.push(s.starter)
       groups.set(g, cur)
     }
     for (const [g, v] of groups) {
@@ -93,6 +96,7 @@ export const scoutTeam = (data: LeagueData, analysis: Analysis, models: Models, 
         unit: '/wk',
         detail: v.starters.join(', '),
         weight: Math.abs(v.gap),
+        players: v.ids,
       })
     }
   }
@@ -131,6 +135,7 @@ export const scoutTeam = (data: LeagueData, analysis: Analysis, models: Models, 
         unit: '/wk',
         detail: `${who.length ? who.map(name).join(', ') : drag < 0 ? 'expected absences' : 'teammates out'} · already in the rooms`,
         weight: Math.abs(drag),
+        players: who,
       })
     }
   }

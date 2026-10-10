@@ -133,11 +133,20 @@ const TradesView = ({
   }, [search.ideas])
 
   // What the grades changed, in a sentence: whose odds moved, and what is off the table.
+  // The teams that sentence names, so their cards can carry the mark.
+  const movedOdds = useMemo(() => {
+    const out = new Map<number, 'up' | 'down'>()
+    for (const [id, p] of Object.entries(grades.lessons.partner)) {
+      if (p.offset >= 0.2 && !p.dormant) out.set(Number(id), 'up')
+      else if (p.offset <= -0.2 || p.dormant) out.set(Number(id), 'down')
+    }
+    return out
+  }, [grades.lessons])
   const gradeSummary = useMemo(() => {
     const L = grades.lessons
     const name = (id: number) => teamById[id]?.name ?? 'a team'
-    const up = Object.entries(L.partner).filter(([, p]) => p.offset >= 0.2 && !p.dormant).map(([id]) => name(Number(id)))
-    const down = Object.entries(L.partner).filter(([, p]) => p.offset <= -0.2 || p.dormant).map(([id]) => name(Number(id)))
+    const up = [...movedOdds].filter(([, d]) => d === 'up').map(([id]) => name(id))
+    const down = [...movedOdds].filter(([, d]) => d === 'down').map(([id]) => name(id))
     const kept = Object.values(L.untouchable).reduce((a, xs) => a + xs.length, 0)
     const parts = [
       up.length ? `raise the odds for ${up.join(', ')}` : '',
@@ -149,7 +158,7 @@ const TradesView = ({
     const one = L.n === 1
     const fixed = parts.map((x) => (one ? x.replace(/^raise /, 'raises ').replace(/^lower /, 'lowers ').replace(/^take /, 'takes ').replace(/^nudge /, 'nudges ') : x))
     return fixed.length ? `${fixed.join('; ')}.` : one ? 'is saved; a few more and grades start to move the odds.' : 'are saved; a few more and they start to move the odds.'
-  }, [grades.lessons, teamById])
+  }, [grades.lessons, movedOdds, teamById])
 
   const shapeCounts = useMemo(() => {
     const c: Record<string, number> = { any: search.ideas.length }
@@ -445,6 +454,7 @@ const TradesView = ({
                       data={data}
                       analysis={analysis}
                       tag={versions.map((x) => tags.get(x)).find(Boolean)}
+                      gradeMoved={movedOdds.get(versions[0].partnerId)}
                       onBuild={openInBuilder}
                     />
                   ))}
