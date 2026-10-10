@@ -270,7 +270,7 @@ const WaiverMoves = ({
                       </div>
                     )}
                   </div>
-                  <div className="col-span-2 flex items-end gap-4 sm:col-span-1 sm:flex-col sm:items-end sm:gap-1.5">
+                  <div className="col-span-2 flex items-start gap-4 sm:col-span-1 sm:justify-end">
                     <div className="text-right leading-none">
                       <div className="ff-label">gain</div>
                       <div className="num mt-1 text-[20px] font-medium text-ff-pos">{fmtSigned(m.target.add, 1)}</div>

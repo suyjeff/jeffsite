@@ -79,7 +79,7 @@ const SidebarToggle = ({ open, onClick, className }: { open: boolean; onClick: (
     aria-label={open ? 'Hide sidebar' : 'Show sidebar'}
     aria-keyshortcuts="["
     title={`${open ? 'Hide' : 'Show'} sidebar ([)`}
-    className={cx('flex h-7 w-7 items-center justify-center rounded text-ff-muted/60 transition-colors hover:bg-ff-raised hover:text-ff-text2', className)}
+    className={cx('flex h-7 w-7 items-center justify-center text-ff-muted/60 transition-colors hover:bg-ff-raised hover:text-ff-text2', className)}
   >
     <PanelIcon open={open} />
   </button>
@@ -187,12 +187,12 @@ const SidebarBody = ({
             ›
           </span>
           <span className="flex-1">Jump to…</span>
-          <kbd className="font-mono text-[10px]">{shortcutLabel()}</kbd>
+          <kbd className="font-mono text-[10px] max-md:hidden">{shortcutLabel()}</kbd>
         </button>
       </div>
     )}
 
-    <nav className="ff-scroll py-1.5 md:flex-1 md:overflow-y-auto" aria-label="Sections">
+    <nav className="ff-scroll py-1.5 md:flex-1 md:overflow-y-auto md:overscroll-contain" aria-label="Sections">
       {GROUPS.map((g) => (
         <div key={g} className="pb-1.5">
           <div className="ff-label px-3 pb-1 pt-3 md:pt-2">{g}</div>

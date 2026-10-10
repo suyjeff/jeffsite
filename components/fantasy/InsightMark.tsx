@@ -20,7 +20,7 @@ export const InsightMark = ({ label, title, className }: { label?: string; title
     className={cx('inline-flex shrink-0 items-center gap-1 align-middle', label && 'font-mono text-[10.5px] text-ff-text2', className)}
   >
     {/* The hue is for the glyph (about 3.6:1 on the light tint, past the 3:1 a graphic needs); words stay in the body ink. */}
-    <BulbIcon size={13} className="text-[rgb(var(--ff-c4))]" />
+    <BulbIcon size={14} className="text-[rgb(var(--ff-c4))]" />
     <span className={label ? undefined : 'sr-only'}>{label ?? 'Referenced by the insight'}</span>
   </span>
 )

@@ -20,7 +20,7 @@ const Who = ({ id }: { id: string | null | undefined }) => {
   const p = data.players[id]
   return (
     <button type="button" onClick={() => openPlayer(id)} className="inline-flex max-w-full items-baseline gap-1 align-baseline font-medium text-ff-text hover:underline">
-      {p && <PlayerAvatar player={p} id={id} size={16} className="translate-y-[3px] self-start" />}
+      {p && <PlayerAvatar player={p} id={id} size={16} className="translate-y-[2px] self-start" />}
       <span className="truncate">{p?.name ?? id}</span>
     </button>
   )
