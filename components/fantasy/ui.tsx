@@ -824,11 +824,26 @@ const PTS_TITLE: Record<PtsKind, string> = { proj: 'Projected', live: 'Live: gam
  * small square that pulses; a projection lighter, with a dotted underline (an estimate, not a result). Screen
  * readers hear the kind as a word.
  */
-export const Pts = ({ value, kind, digits = 1, className }: { value: number | null | undefined; kind: PtsKind; digits?: number; className?: string }) => (
+export const Pts = ({
+  value,
+  kind,
+  digits = 1,
+  quiet,
+  className,
+}: {
+  value: number | null | undefined
+  kind: PtsKind
+  digits?: number
+  /** A ScoreState beside it already says final or live: leave the word to it, so it is heard once. */
+  quiet?: boolean
+  className?: string
+}) => (
   <span className={cx('num whitespace-nowrap', kind === 'proj' ? 'ff-proj' : 'text-ff-text', className)} title={PTS_TITLE[kind]}>
     {kind === 'live' && <span aria-hidden className="ff-live-dot" />}
     {fmt(value, digits)}
-    <span className="sr-only">{kind === 'proj' ? ' projected' : kind === 'live' || kind === 'banked' ? ' so far' : ' final'}</span>
+    {!(quiet && (kind === 'live' || kind === 'final')) && (
+      <span className="sr-only">{kind === 'proj' ? ' projected' : kind === 'live' || kind === 'banked' ? ' so far' : ' final'}</span>
+    )}
   </span>
 )
 
@@ -853,6 +868,8 @@ export const ScoreState = ({ kind, clock, className }: { kind: PtsKind; clock?: 
         className,
       )}
     >
+      {/* A clock alone does not say live to a screen reader. */}
+      {kind === 'live' && clock && <span className="sr-only">live, </span>}
       {kind === 'live' ? clock || 'live' : 'final'}
     </span>
   )
@@ -877,7 +894,7 @@ export const WeekScore = ({ s, pre, align = 'right', short, className }: { s: We
   const d = s.value - s.proj
   return (
     <span className={cx('inline-flex flex-col leading-tight', align === 'right' ? 'items-end' : 'items-start', className)}>
-      <Pts value={s.value} kind={s.kind} className={s.kind === 'proj' ? undefined : 'font-medium'} />
+      <Pts value={s.value} kind={s.kind} quiet className={s.kind === 'proj' ? undefined : 'font-medium'} />
       {s.kind === 'proj' ? (
         pre != null ? <span className="mt-0.5 font-mono text-[10px] text-ff-muted">{pre}</span> : null
       ) : (

@@ -38,7 +38,7 @@ const ThisWeek = ({ week, w, pos, loaded }: { week: number; w: PlayerWeek; pos: 
         )}
       </div>
       <div className="mt-2 flex items-end gap-3">
-        <Pts value={w.value} kind={w.kind} className="text-[30px] font-medium leading-none tracking-[-0.03em]" />
+        <Pts value={w.value} kind={w.kind} quiet className="text-[30px] font-medium leading-none tracking-[-0.03em]" />
         <span className="flex flex-col items-start gap-1 pb-px">
           <ScoreState kind={w.kind} clock={w.clock} />
           <span className="font-mono text-[11px] text-ff-muted">

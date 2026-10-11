@@ -1,11 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
 import { weekStakes, type Forecast, type ForecastInput, type Stakes } from '../../lib/fantasy/forecast'
-import { buildSlate, positionCV } from '../../lib/fantasy/slate'
+import { buildSlate, positionCV, type Slate } from '../../lib/fantasy/slate'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
-import { impliedTotals } from '../../lib/fantasy/waivers'
+import { impliedTotals, type TeamTotal } from '../../lib/fantasy/waivers'
+import type { Broadcast } from '../../lib/fantasy/nfl'
 import { useFantasy } from './FantasyContext'
+import { useBroadcasts, useLiveTick } from './useBroadcasts'
 import { useStatLines } from './useStatLines'
+
+// Most views ask for the slate (the dashboard alone, several times over): it is built once per load and set of
+// inputs, and every caller reads the same one. Keyed by the league data, so a reload starts fresh.
+type Built = { deps: unknown[]; slate: Slate; totals: Record<string, TeamTotal> }
+const built = new WeakMap<LeagueData, Built>()
+const sameDeps = (a: unknown[], b: unknown[]) => a.length === b.length && a.every((x, i) => Object.is(x, b[i]))
+
+/** Share of regulation played in each game under way, from ESPN's clock, with a key that changes only when it does. */
+const clockOf = (casts: Record<string, Broadcast>) => {
+  const elapsed: Record<string, number> = {}
+  for (const [k, c] of Object.entries(casts)) if (c.state === 'in' && c.elapsed != null) elapsed[k] = c.elapsed
+  return { elapsed, sig: Object.entries(elapsed).map(([k, v]) => `${k}:${v.toFixed(3)}`).join('|') }
+}
 
 // The stakes simulation runs once per forecast, whichever view asks first: one shared run, a game at a time,
 // yielding to the page between games so a dozen matchups never lock the main thread in one long task.
@@ -42,12 +57,13 @@ export const useSlate = (data: LeagueData, analysis: Analysis) => {
     if (data.projections && data.projectionWeek === week) return data.projections
     return data.horizon.find((h) => h.week === week)?.pts ?? {}
   }, [data.projections, data.projectionWeek, data.horizon, week])
-  const cv = useMemo(() => positionCV(data.weekPoints, data.valueWeeks, players), [data.weekPoints, data.valueWeeks, players])
   const lines = useStatLines(data.league.season, live ? [week] : [])
-  const totals = useMemo(
-    () => impliedTotals({ week, schedule: data.schedule, statLines: lines[week] ?? null, market: data.market, players }),
-    [week, data.schedule, lines, data.market, players],
-  )
+  const statLines = lines[week] ?? null
+  // The clock of any game under way, so a player's expected finish counts the time actually left; read again each
+  // minute while a game is on.
+  const playing = live && (data.schedule?.games ?? []).some((g) => g.week === week && (g.status === 'in_game' || g.status === 'in_progress'))
+  const tick = useLiveTick(playing)
+  const clock = clockOf(useBroadcasts(data.league.season, playing ? week : null, tick))
 
   // What a win is worth, simulated after the page has drawn.
   const [stakes, setStakes] = useState<Record<number, Stakes> | null>(() => (models.forecast ? (stakesCache.get(models.forecast) ?? null) : null))
@@ -64,29 +80,31 @@ export const useSlate = (data: LeagueData, analysis: Analysis) => {
     }
   }, [models, week])
 
-  const lineups = useMemo(() => {
-    const out: Record<number, string[]> = {}
-    if (data.horizon[0]?.week !== week) return out
-    for (const t of analysis.teams) out[t.rosterId] = (analysis.needs[t.rosterId]?.slots.map((s) => s.starter).filter(Boolean) as string[]) ?? []
+  const { slate, totals } = useMemo(() => {
+    const deps = [analysis, models, stakes, statLines, proj, clock.sig]
+    const hit = built.get(data)
+    if (hit && sameDeps(hit.deps, deps)) return hit
+    const lineups: Record<number, string[]> = {}
+    if (data.horizon[0]?.week === week)
+      for (const t of analysis.teams) lineups[t.rosterId] = (analysis.needs[t.rosterId]?.slots.map((s) => s.starter).filter(Boolean) as string[]) ?? []
+    const totals = impliedTotals({ week, schedule: data.schedule, statLines, market: data.market, players })
+    const slate = buildSlate({
+      week,
+      games: data.schedule?.games ?? [],
+      players,
+      matchups: data.matchupsByWeek[week] ?? [],
+      lineups,
+      proj,
+      cv: positionCV(data.weekPoints, data.valueWeeks, players),
+      sigma: models.forecast?.sigma ?? models.forecastInput.sigmaFallback,
+      totals,
+      stakes,
+      elapsed: clock.elapsed,
+    })
+    const out = { deps, slate, totals }
+    built.set(data, out)
     return out
-  }, [analysis, data.horizon, week])
-
-  const slate = useMemo(
-    () =>
-      buildSlate({
-        week,
-        games: data.schedule?.games ?? [],
-        players,
-        matchups: data.matchupsByWeek[week] ?? [],
-        lineups,
-        proj,
-        cv,
-        sigma: models.forecast?.sigma ?? models.forecastInput.sigmaFallback,
-        totals,
-        stakes,
-      }),
-    [week, data.schedule, players, data.matchupsByWeek, lineups, proj, cv, models, totals, stakes],
-  )
+  }, [data, analysis, models, stakes, statLines, proj, week, players, clock.sig]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { slate, live, week, proj, totals }
 }

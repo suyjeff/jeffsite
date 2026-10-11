@@ -3,7 +3,7 @@ import type { Slate } from '../../lib/fantasy/slate'
 import { getWeekActuals, type WeekActuals } from '../../lib/fantasy/sleeper'
 import type { StatLine } from '../../lib/fantasy/types'
 import { useFantasy } from './FantasyContext'
-import { useBroadcasts } from './useBroadcasts'
+import { useBroadcasts, useLiveTick } from './useBroadcasts'
 import type { WeekState } from './ui'
 
 // The week as it is being played, beside the week as it was expected: each player's game state, what he has
@@ -83,16 +83,19 @@ export const useWeekNow = (slate: Slate, proj: Record<string, number>) => {
   const started = slate.games.some((g) => g.final || g.live)
   const isPast = slate.games.length > 0 && slate.games.every((g) => g.final)
   const week = started ? slate.week : null
+  // While a game is on, the box scores and clock are read again each minute the page is in view (the cache keeps it
+  // to one request a minute however many views ask), and again on Reload, which brings new league data.
+  const tick = useLiveTick(slate.games.some((g) => g.live))
   const [actuals, setActuals] = useState<WeekActuals | null>(null)
   useEffect(() => {
     if (week == null) return setActuals(null)
     let live = true
-    load(league.league_id, league.season, week, league.scoring_settings ?? {}, isPast).then((x) => live && setActuals(x))
+    load(league.league_id, league.season, week, league.scoring_settings ?? {}, isPast).then((x) => live && x && setActuals(x))
     return () => {
       live = false
     }
-  }, [league.league_id, league.season, league.scoring_settings, week, isPast])
-  const casts = useBroadcasts(league.season, week)
+  }, [data, league.league_id, league.season, league.scoring_settings, week, isPast, tick])
+  const casts = useBroadcasts(league.season, week, tick)
 
   return useMemo(() => {
     const gameOf: Record<string, Slate['games'][number]> = {}
@@ -126,8 +129,11 @@ export const useWeekNow = (slate: Slate, proj: Record<string, number>) => {
       const line = actuals?.lines[id] ?? null
       const value = sp?.actual ?? sp?.live ?? actuals?.pts[id] ?? 0
       if (state === 'final') return { kind: 'final', value, proj: expected, line, game }
-      const elapsed = casts[`${g.away}@${g.home}`]?.elapsed
-      return { kind: 'live', value, proj: expected, clock: clockOf(g), heading: elapsed != null ? value + expected * (1 - elapsed) : null, line, game }
+      // Where he is heading is the slate's own expectation (the same the win odds use), shown once the clock is known;
+      // without it the slate assumes halftime, which is no reading worth showing.
+      const timed = casts[`${g.away}@${g.home}`]?.elapsed != null
+      const heading = timed ? (sp?.live != null ? sp.expect : value + expected * (1 - casts[`${g.away}@${g.home}`]!.elapsed!)) : null
+      return { kind: 'live', value, proj: expected, clock: clockOf(g), heading, line, game }
     }
     return { started, of, clockOf, scoreFor: scoreOf, hasLines: !!actuals }
   }, [slate, proj, players, casts, actuals, started])

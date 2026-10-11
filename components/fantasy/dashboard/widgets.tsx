@@ -110,15 +110,17 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
   const weekGames = (data.schedule?.games ?? []).filter((x) => x.week === week && x.status !== 'canceled')
   const done = weekGames.length > 0 && weekGames.every((x) => x.status === 'complete' || (!!x.date && x.date < today))
   const kind = !started ? 'proj' : done ? 'final' : 'live'
-  // Each side as the slate reads it, once the week is on: points banked, and starters still to play under them.
-  const sideOf = (a: number, b: number, k: 'a' | 'b') => {
-    const r = started && slateWeek === week ? read(a, b) : null
+  // Each side as the slate reads it, once the week is on: points banked, and starters still to play under them. The
+  // slate itself is shared with every other view (useSlate); each pairing is read once.
+  const reads = new Map(f.nextWeek.map((g) => [g, started && slateWeek === week ? read(g.a, g.b) : null]))
+  const sideOf = (g: (typeof f.nextWeek)[number], k: 'a' | 'b') => {
+    const r = reads.get(g)
     if (!r) return null
     const c = k === 'a' ? r.countA : r.countB
     return { value: k === 'a' ? r.a.banked : r.b.banked, kind: k === 'a' ? r.kindA : r.kindB, toGo: c.left + c.live }
   }
   const score = (g: (typeof f.nextWeek)[number], k: 'a' | 'b') => {
-    const sd = sideOf(g.a, g.b, k)
+    const sd = sideOf(g, k)
     if (!sd) return <Pts value={started ? pts(k === 'a' ? g.a : g.b) : k === 'a' ? g.muA : g.muB} kind={kind} />
     return (
       <span className={cx('flex flex-col leading-none', k === 'a' ? 'items-end' : 'items-start')} title={`${sd.toGo} starter${sd.toGo === 1 ? '' : 's'} still to play or playing`}>

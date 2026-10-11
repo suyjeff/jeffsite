@@ -16,10 +16,10 @@ export const scoreOf = (p: SlatePlayer | undefined, proj: number): { value: numb
     : p.actual != null
       ? { value: p.actual, kind: 'final', expect: p.actual, proj: p.proj }
       : p.live != null
-        ? { value: p.live, kind: 'live', expect: p.live + 0.5 * p.proj, proj: p.proj }
+        ? { value: p.live, kind: 'live', expect: p.expect, proj: p.proj }
         : { value: p.proj, kind: 'proj', expect: p.proj, proj: p.proj }
 
-/** A side's starters by where their games stand: over, under way, still to come. Starters on a bye count in none. */
+/** A side's starters by where their games stand: over, under way, still to come. Starters on a bye or ruled out count in none. */
 export type SideCount = { final: number; live: number; left: number }
 
 /**
@@ -79,7 +79,8 @@ export const useMatchups = () => {
         const st = id && id !== '0' ? slate.teamState[data.players[id]?.team ?? ''] : undefined
         if (st === 'final') c.final++
         else if (st === 'live') c.live++
-        else if (st === 'pre') c.left++
+        // Still to play only if he is expected to: a starter ruled out (projected at nothing) has no game coming.
+        else if (st === 'pre' && (slate.byId[id]?.proj ?? proj[id] ?? 0) > 0) c.left++
       }
       return c
     }
@@ -242,9 +243,9 @@ export const SlotTable = ({ m, compact, inset }: { m: MatchupRead; compact?: boo
           <span className="flex min-w-0 items-stretch">{name(r.a, 'left')}</span>
           <span className="flex w-[104px] flex-col items-center justify-center gap-0.5" title={`Edge ${fmtSigned(r.edge)}: expected points, left minus right`}>
             <span className="flex w-full items-baseline justify-between text-[12.5px]">
-              <span>{r.sa ? <Pts value={r.sa.value} kind={r.sa.kind} className={r.sa.kind !== 'proj' ? 'font-medium' : undefined} /> : '–'}</span>
+              <span>{r.sa ? <Pts value={r.sa.value} kind={r.sa.kind} quiet className={r.sa.kind !== 'proj' ? 'font-medium' : undefined} /> : '–'}</span>
               <span className="font-mono text-[9.5px] text-ff-muted">{r.slot}</span>
-              <span>{r.sb ? <Pts value={r.sb.value} kind={r.sb.kind} className={r.sb.kind !== 'proj' ? 'font-medium' : undefined} /> : '–'}</span>
+              <span>{r.sb ? <Pts value={r.sb.value} kind={r.sb.kind} quiet className={r.sb.kind !== 'proj' ? 'font-medium' : undefined} /> : '–'}</span>
             </span>
             <span className="relative block h-1 w-full bg-ff-sunken" aria-hidden>
               <span className="absolute inset-y-0 left-1/2 w-px bg-ff-line2" />
