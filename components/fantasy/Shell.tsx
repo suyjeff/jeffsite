@@ -20,7 +20,7 @@ export const SECTIONS: Section[] = [
   { key: 'me', label: 'My team', short: 'Team', group: 'Your team' },
   { key: 'waivers', label: 'Waivers', short: 'Waivers', group: 'Your team' },
   { key: 'matchups', label: 'Matchups', short: 'Matchups', group: 'League' },
-  { key: 'power', label: 'Power', short: 'Power', group: 'League' },
+  { key: 'power', label: 'Power Rank', short: 'Power Rank', group: 'League' },
   { key: 'playoffs', label: 'Playoffs', short: 'Playoffs', group: 'League' },
   { key: 'teams', label: 'Teams', short: 'Teams', group: 'League' },
   { key: 'players', label: 'Players', short: 'Players', group: 'League' },

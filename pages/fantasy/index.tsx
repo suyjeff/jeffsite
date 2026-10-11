@@ -436,7 +436,7 @@ const FantasyPage = () => {
       leagueId={data?.league.league_id ?? null}
       onLeague={(id) => update({ leagueId: id })}
       leagueMeta={data ? `${data.league.season} · ${data.league.total_rosters} teams${data.state.season_type === 'regular' && data.league.season === data.state.season ? ` · wk ${data.state.week}` : ''}` : undefined}
-      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${mySim ? ` · ${simOdds(mySim, 'playoffs')} playoffs` : myPower ? ` · power #${myPower.rank} of ${analysis!.teams.length}` : ''}` } : null}
+      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${mySim ? ` · ${simOdds(mySim, 'playoffs')} playoffs` : myPower ? ` · power rank #${myPower.rank} of ${analysis!.teams.length}` : ''}` } : null}
       controls={controls}
       controlsOpen={prefs.settingsOpen}
       onControls={(open) => update({ settingsOpen: open })}

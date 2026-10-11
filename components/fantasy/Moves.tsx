@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { findMoves, type Move, type MoveKind } from '../../lib/fantasy/moves'
 import { useFantasy } from './FantasyContext'
 import { providerName } from '../../lib/fantasy/useLeagueData'
+import { useNews } from './useNews'
 import { Badge, Empty, Panel, PlayerAvatar, ago, cx, fmt, fmtSigned } from './ui'
 
 const KIND: Record<MoveKind, { label: string; tone: 'pos' | 'warn' | 'neg' | 'accent' | 'neutral' }> = {
@@ -31,6 +32,29 @@ const Who = ({ id }: { id: string | null | undefined }) => {
 const Platform = () => <>{providerName(useFantasy().data.provider)}</>
 
 const Pts = ({ v }: { v: number | undefined }) => (v != null ? <span className="num text-ff-muted"> {fmt(v)}</span> : null)
+
+/** News on a starter: ESPN's headline when it has a recent one, else only that Sleeper flagged it. */
+const NewsSentence = ({ m }: { m: Move }) => {
+  const { data } = useFantasy()
+  const ids = useMemo(() => (m.outId ? [m.outId] : []), [m.outId])
+  const latest = useNews(ids, data.players)[m.outId ?? '']?.[0]
+  // The same day the news panel counts as fresh; an older story is not what Sleeper just flagged.
+  const story = latest && latest.at > Date.now() - 24 * 3600_000 ? latest : null
+  if (story)
+    return (
+      <>
+        <Who id={m.outId} />: {story.headline}{' '}
+        <span className="text-ff-muted">
+          ({ago(story.at)} ago, ESPN). Sleeper has no status change on him yet, so check <Platform /> before kickoff.
+        </span>
+      </>
+    )
+  return (
+    <>
+      News on <Who id={m.outId} /> {m.at ? `${ago(m.at)} ago` : 'today'}, with nothing on his status yet. Read it in <Platform /> before kickoff.
+    </>
+  )
+}
 
 /** One sentence per move: what to do, then the fact that makes it worth doing. */
 const Sentence = ({ m }: { m: Move }) => {
@@ -139,11 +163,7 @@ const Sentence = ({ m }: { m: Move }) => {
         </>
       )
     case 'news':
-      return (
-        <>
-          News on <Who id={m.outId} /> {m.at ? `${ago(m.at)} ago` : 'today'}, with nothing on his status yet. Read it in <Platform /> before kickoff.
-        </>
-      )
+      return <NewsSentence m={m} />
   }
 }
 

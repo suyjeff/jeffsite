@@ -349,6 +349,52 @@ export const getWeekStatLines = (season: string, week: number) =>
     },
   })
 
+/** The stat keys a box-score line is written from; the rest of Sleeper's ~150 per player stay behind. */
+const BOX_KEYS = [
+  'gp', 'off_snp', 'tm_off_snp',
+  'pass_cmp', 'pass_att', 'pass_yd', 'pass_td', 'pass_int', 'pass_sack',
+  'rush_att', 'rush_yd', 'rush_td', 'rec_tgt', 'rec', 'rec_yd', 'rec_td', 'fum_lost',
+  'fgm', 'fga', 'fgm_lng', 'xpm', 'xpa',
+  'pts_allow', 'yds_allow', 'sack', 'int', 'fum_rec', 'def_td', 'def_st_td', 'safe',
+  'idp_tkl', 'idp_sack', 'idp_int',
+]
+
+/** Keys whose zero is a fact worth keeping: a shutout is a defense's best line, not a missing one. */
+const ZERO_KEYS = new Set(['pts_allow'])
+
+/** One week as played: each player's points in this league's scoring, and his box score. */
+export type WeekActuals = { pts: Record<string, number>; lines: WeekStats }
+
+/**
+ * What each player actually did in a week, from the same stats feed the value model reads, which Sleeper fills in
+ * as games are played. Scored here with the league's settings (so bench players and free agents have a number too),
+ * then cut to the box-score keys: a whole week's raw payload is ~600KB, this is a small fraction of it. Team
+ * defenses are kept whatever they did, since their points allowed are the game's score.
+ *
+ * A week still being played is a snapshot: it lives a minute, in memory only. Once every game is final the week is
+ * read again under its own key and kept for a day, so a mid-game copy can never stand in for the result.
+ */
+export const getWeekActuals = (leagueId: string, season: string, week: number, scoring: Record<string, number>, isPast: boolean) =>
+  cachedGet<WeekStats, WeekActuals>(`/stats/nfl/regular/${season}/${week}`, isPast ? 24 * HOUR : MINUTE, {
+    key: `actuals:${leagueId}:${season}:${week}${isPast ? ':final' : ':live'}`,
+    persist: isPast,
+    transform: (raw) => {
+      const out: WeekActuals = { pts: {}, lines: {} }
+      for (const id of Object.keys(raw ?? {})) {
+        const s = raw[id]
+        if (!s || id.startsWith('TEAM_')) continue
+        const line: Record<string, number> = {}
+        for (const k of BOX_KEYS) if (s[k] || (s[k] === 0 && ZERO_KEYS.has(k))) line[k] = s[k]
+        const def = /^[A-Z]{2,3}$/.test(id)
+        if (!def && !line.gp && Object.keys(line).length === 0) continue
+        out.lines[id] = line
+        const pts = scoreStatLine(s, scoring)
+        if (pts) out.pts[id] = pts
+      }
+      return out
+    },
+  })
+
 // ---------- Market lines ----------
 
 /**

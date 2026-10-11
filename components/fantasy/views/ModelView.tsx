@@ -42,12 +42,12 @@ const TUNABLE: Sub[] = ['value', 'power']
  */
 const INTRO: Partial<Record<Sub, { what: string; you: string | null; how?: string }>> = {
   system: { what: 'Every input and model, and what feeds what.', how: 'Hover a box to trace it; click to open it.', you: null },
-  forecast: { what: 'The team ratings and simulated seasons behind playoff odds and Power.', you: null },
+  forecast: { what: 'The team ratings and simulated seasons behind playoff odds and Power Rank.', you: null },
   backtest: { what: 'Each model graded on games it had not seen. Lower Brier is better; a coin flip scores 0.250.', you: null },
   behavior: { what: 'How each manager trades, read from the league’s transactions. Feeds the yes-odds on trade cards.', you: null },
   data: { what: 'What was loaded, from where, and when.', you: null },
   value: { what: 'What a player is worth: points per week over the starter you could replace him with.', you: 'the three sliders. They move values, trades and rankings everywhere.' },
-  power: { what: 'How the Composite ranking weighs each signal.', you: 'the weights. They only change the Composite view on Power.' },
+  power: { what: 'How the Composite ranking weighs each signal.', you: 'the weights. They only change the Composite view on Power Rank.' },
   availability: { what: 'How injuries and absences are priced, and where the lost points go.', you: null },
   engine: { what: 'How trades are searched and scored.', you: null },
 }

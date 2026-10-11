@@ -58,7 +58,7 @@ export const TOUR: TourStep[] = [
   },
   {
     key: 'power',
-    title: 'Power',
+    title: 'Power Rank',
     what: 'Rankings and standings.',
     can: ['Rank teams three ways', 'Check who has the easier schedule'],
     why: 'Where you really stand, not just your record.',

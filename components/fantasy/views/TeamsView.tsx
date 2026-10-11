@@ -289,7 +289,7 @@ const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<Teams
         {(!stacked || tab === 'overview') && (
           <>
         <StatGrid>
-          <Stat label="Power" value={`#${power.rank}`} badge={{ text: `${fmt(power.score, 0)}% vs avg team`, tone: power.score >= 55 ? 'pos' : power.score <= 45 ? 'neg' : 'neutral' }} sub="chance to beat an average team" />
+          <Stat label="Power Rank" value={`#${power.rank}`} badge={{ text: `${fmt(power.score, 0)}% vs avg team`, tone: power.score >= 55 ? 'pos' : power.score <= 45 ? 'neg' : 'neutral' }} sub="chance to beat an average team" />
           <Stat label="Record" value={`${season.wins}-${season.losses}${season.ties ? `-${season.ties}` : ''}`} sub={`all-play ${fmt(season.allPlayWins, 0)}-${fmt(season.allPlayLosses, 0)}`} />
           <Stat label="Points per game" value={fmt(season.ppg)} delta={league.ppg ? <DeltaChip value={season.ppg - league.ppg} title="Against the league average" /> : undefined} sub={`last 3: ${fmt(season.recentPpg)}`} />
           <Stat label="Luck" value={fmtSigned(season.luck, 1)} tone={season.luck >= 0.5 ? 'warn' : undefined} sub="wins vs all-play" />

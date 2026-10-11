@@ -82,6 +82,11 @@ describe('slate', () => {
     expect(live.matchups[0].a.mu).toBeCloseTo(22 + 10 + 12, 6)
     expect(live.matchups[0].a.banked).toBe(22)
     expect(live.games.find((g) => g.home === 'ARI')!.live).toBe(true)
+    // With the clock known, a quarter left is a quarter of his projection, and his expected finish says so too.
+    const timed = buildSlate({ ...base, today: '2026-10-11', elapsed: { 'DET@ARI': 0.75 }, matchups: [m(1, ['a1', 'a2'], { a1: 22 }), m(2, ['b1', 'b2'])] })
+    expect(timed.byId.a1.expect).toBeCloseTo(22 + 5, 6)
+    expect(timed.matchups[0].a.mu).toBeCloseTo(22 + 5 + 12, 6)
+    expect(timed.byId.a1.sd).toBeLessThan(live.byId.a1.sd)
     const stale = buildSlate({ ...base, today: '2026-10-13', matchups: [m(1, ['a1', 'a2'], { a1: 22, a2: 9 }), m(2, ['b1', 'b2'], { b1: 15, b2: 7 })] })
     expect(stale.games.every((g) => g.final)).toBe(true)
     expect(stale.matchups[0].a.mu).toBe(31)

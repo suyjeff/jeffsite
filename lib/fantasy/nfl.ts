@@ -42,7 +42,23 @@ export const teamLogo = (abbr: string) => `https://sleepercdn.com/images/team_lo
 /** ESPN abbreviations that differ from Sleeper's. */
 const ESPN_TO_SLEEPER: Record<string, string> = { WSH: 'WAS', LA: 'LAR' }
 
-export type Broadcast = { networks: string[]; away?: number; home?: number; /** ESPN's game state: before, during or after. */ state?: 'pre' | 'in' | 'post' }
+export type Broadcast = {
+  networks: string[]
+  away?: number
+  home?: number
+  /** ESPN's game state: before, during or after. */
+  state?: 'pre' | 'in' | 'post'
+  /** A game under way: the quarter and its clock ("Q3 4:12", "Half", "OT 2:00"). */
+  clock?: string
+  /** Share of regulation played, 0–1, for a game under way. */
+  elapsed?: number
+}
+
+/** "4:12" to seconds. */
+const clockSecs = (c?: string) => {
+  const m = /^(\d+):(\d+)/.exec(c ?? '')
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null
+}
 
 /** Networks (and, once played, scores) by "AWAY@HOME", from ESPN's scoreboard payload. Anything unexpected is skipped. */
 export const parseScoreboard = (json: unknown): Record<string, Broadcast> => {
@@ -55,7 +71,7 @@ export const parseScoreboard = (json: unknown): Record<string, Broadcast> => {
         competitions?: {
           competitors?: { homeAway?: string; score?: string; team?: { abbreviation?: string } }[]
           broadcasts?: { names?: string[] }[]
-          status?: { type?: { state?: string } }
+          status?: { period?: number; displayClock?: string; type?: { state?: string; name?: string } }
         }[]
       }
     )?.competitions?.[0]
@@ -69,11 +85,20 @@ export const parseScoreboard = (json: unknown): Record<string, Broadcast> => {
     const away = side('away')
     if (!home || !away) continue
     const num = (s?: string) => (s != null && s !== '' && !Number.isNaN(Number(s)) ? Number(s) : undefined)
+    const state = c.status?.type?.state === 'in' ? 'in' : c.status?.type?.state === 'post' ? 'post' : 'pre'
+    // The clock, for a game under way: quarters are 15 minutes, so the share played is what a projection has left.
+    const period = c.status?.period ?? 0
+    const left = clockSecs(c.status?.displayClock)
+    const half = c.status?.type?.name === 'STATUS_HALFTIME'
+    const clock =
+      state !== 'in' || !period ? undefined : half ? 'Half' : `${period > 4 ? 'OT' : `Q${period}`}${left != null ? ` ${c.status!.displayClock}` : ''}`
+    const elapsed = state !== 'in' || !period ? undefined : half ? 0.5 : period > 4 ? 1 : Math.min(1, Math.max(0, ((period - 1) * 900 + (900 - (left ?? 450))) / 3600))
     out[`${abbr(away)}@${abbr(home)}`] = {
       networks: [...new Set((c.broadcasts ?? []).flatMap((b) => b.names ?? []))],
       away: num(away.score),
       home: num(home.score),
-      state: c.status?.type?.state === 'in' ? 'in' : c.status?.type?.state === 'post' ? 'post' : 'pre',
+      state,
+      ...(clock ? { clock, elapsed } : {}),
     }
   }
   return out

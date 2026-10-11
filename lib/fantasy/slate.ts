@@ -68,6 +68,8 @@ export type SlatePlayer = {
   actual: number | null
   /** Points so far in a game under way. */
   live: number | null
+  /** Where he is expected to finish: his points once final; under way, what he has plus his projection for the time left. */
+  expect: number
   /** His manager's win odds, a bad game against a good one (0–1). */
   swing: number
   /** Final games: his manager's win odds now, minus with him at projection. */
@@ -149,6 +151,8 @@ export type SlateInput = {
   sigma: number
   totals: Record<string, TeamTotal>
   stakes: Record<number, Stakes> | null
+  /** Share of regulation played in each game under way, by "AWAY@HOME", where a live clock answers; halftime is assumed otherwise. */
+  elapsed?: Record<string, number>
   /** YYYY-MM-DD, for tests; defaults to today (UTC). */
   today?: string
 }
@@ -182,10 +186,13 @@ export const buildSlate = (input: SlateInput): Slate => {
       const posted = m.players_points?.[id]
       const actual = final ? (posted ?? 0) : null
       const p = g ? (proj[id] ?? 0) : 0
-      // A game under way: what he has plus half his projection still to come (the clock is not in the data, so
-      // halftime is the assumption), and the spread of half a game.
+      // A game under way: what he has plus his projection for the time left, and the spread of that much of a game.
+      // The time left comes from the game clock where it is known; without one, halftime is the assumption.
       const live = !final && (isLive(g) || (posted != null && posted !== 0)) ? (posted ?? 0) : null
-      if (live != null) return { id, final, actual, live, proj: p, mu: live + 0.5 * p, sd: raw[i] * k * Math.SQRT1_2, sd0: raw[i] * k }
+      if (live != null) {
+        const left = 1 - Math.min(1, Math.max(0, (g && input.elapsed?.[`${g.away}@${g.home}`]) ?? 0.5))
+        return { id, final, actual, live, proj: p, mu: live + left * p, sd: raw[i] * k * Math.sqrt(left), sd0: raw[i] * k }
+      }
       return { id, final, actual, live, proj: p, mu: final ? (posted ?? 0) : p, sd: final || !g ? 0 : raw[i] * k, sd0: raw[i] * k }
     })
     const mu = parts.reduce((a, p) => a + p.mu, 0)
@@ -240,6 +247,7 @@ export const buildSlate = (input: SlateInput): Slate => {
           low: Math.max(p.live ?? 0, p.mu - Z80 * p.sd),
           high: p.mu + Z80 * p.sd,
           live: p.live,
+          expect: p.mu,
           actual: p.actual,
           swing,
           realized,

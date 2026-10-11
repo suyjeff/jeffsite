@@ -14,7 +14,7 @@ type Item = {
   id: string
   group: 'Go to' | 'Players' | 'Teams' | 'Actions'
   label: string
-  /** Extra words that should find it ("odds" finds Power › Playoff odds). */
+  /** Extra words that should find it ("odds" finds Power Rank › Playoff odds). */
   keywords?: string
   hint?: ReactNode
   icon?: ReactNode

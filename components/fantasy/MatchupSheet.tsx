@@ -34,8 +34,10 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
           {m &&
             (m.kindA === 'final' && m.kindB === 'final' ? (
               <span className="text-ff-text2">final</span>
-            ) : m.started ? (
+            ) : m.kindA === 'live' || m.kindB === 'live' ? (
               <span className="text-ff-pos">live</span>
+            ) : m.started ? (
+              <span className="text-ff-text2">under way</span>
             ) : (
               <span>projected</span>
             ))}
@@ -78,7 +80,7 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
         <dl className="grid grid-cols-3 gap-px border-b border-ff-line bg-ff-line text-center">
           {[
             { k: 'Margin', v: fmtSigned(m.a.mu - m.b.mu), s: 'expected, left side' },
-            { k: 'To play', v: `${m.a.left}–${m.b.left}`, s: 'starters left' },
+            { k: 'To play', v: `${m.countA.left + m.countA.live}–${m.countB.left + m.countB.live}`, s: m.started ? `starters left · ${m.countA.final}–${m.countB.final} final` : 'starters left' },
             { k: 'On the line', v: worth(stA) != null && worth(stB) != null ? `${worth(stA)} / ${worth(stB)}` : '…', s: 'playoff points at stake' },
           ].map((c) => (
             <div key={c.k} className="bg-ff-panel px-2 py-2.5">
