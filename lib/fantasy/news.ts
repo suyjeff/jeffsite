@@ -110,19 +110,28 @@ export const mapNews = (raw: RawNews[], players: PlayerMap, now = Date.now()): R
   const byEspn = new Map<string, string>()
   for (const p of Object.values(players)) if (p.espnId) byEspn.set(p.espnId, p.id)
   const out: Record<string, NewsItem[]> = {}
-  const seen = new Set<string>()
+  // One slot per player and story, found by headline or id (the two feeds name a story differently).
+  const slot = new Map<string, NewsItem>()
   for (const r of raw) {
     if (now - r.at > NEWS_MAX_AGE) continue
     const { espnIds, ...item } = r
     for (const e of espnIds) {
       const sid = byEspn.get(e)
       if (!sid) continue
-      // The same story can come from both feeds under different ids, so the headline counts too.
-      const k = `${sid}:${item.headline.toLowerCase()}`
-      if (seen.has(k) || seen.has(`${sid}:#${item.id}`)) continue
-      seen.add(k)
-      seen.add(`${sid}:#${item.id}`)
-      ;(out[sid] ??= []).push(item)
+      const kh = `${sid}:${item.headline.toLowerCase()}`
+      const ki = `${sid}:#${item.id}`
+      const have = slot.get(kh) ?? slot.get(ki)
+      if (have) {
+        // A repeat adds nothing unless it carries the fuller write-up (the site feed has only a summary).
+        if (item.body.length > have.body.length) Object.assign(have, item)
+      } else {
+        const copy = { ...item }
+        slot.set(kh, copy)
+        slot.set(ki, copy)
+        ;(out[sid] ??= []).push(copy)
+      }
+      slot.set(kh, slot.get(kh) ?? slot.get(ki)!)
+      slot.set(ki, slot.get(ki) ?? slot.get(kh)!)
     }
   }
   for (const list of Object.values(out)) list.sort((a, b) => b.at - a.at)
@@ -140,6 +149,16 @@ const getJson = async (url: string): Promise<unknown> => {
 // Three views can ask for the same feed at once (Overview, Moves, a player's sheet), so they share one request.
 // It is not abortable for the same reason: one view leaving must not cancel another's.
 const inflight = new Map<string, Promise<RawNews[]>>()
+/** What is kept per feed: recent, newest first, a few items, and no essays. These are written to localStorage. */
+const KEEP = 5
+const BODY_MAX = 600
+export const trimFeed = (items: RawNews[], now = Date.now(), keep = KEEP): RawNews[] =>
+  items
+    .filter((r) => now - r.at <= NEWS_MAX_AGE)
+    .sort((a, b) => b.at - a.at)
+    .slice(0, keep)
+    .map((r) => (r.body.length > BODY_MAX ? { ...r, body: r.body.slice(0, BODY_MAX).replace(/\s+\S*$/, '') + '…' } : r))
+
 const once = (key: string, load: () => Promise<RawNews[]>) => {
   let p = inflight.get(key)
   if (!p) {
@@ -153,12 +172,13 @@ const once = (key: string, load: () => Promise<RawNews[]>) => {
 const loadPlayerFeed = (espnId: string) =>
   once(
     `news:p:${espnId}`,
-    async () => parsePlayerNews(await getJson(`${BASE}/fantasy/v2/games/ffl/news/players?limit=50&playerId=${encodeURIComponent(espnId)}`)),
+    async () => trimFeed(parsePlayerNews(await getJson(`${BASE}/fantasy/v2/games/ffl/news/players?limit=10&playerId=${encodeURIComponent(espnId)}`))),
   )
 
 /** The league-wide feed, which also catches players the per-player feed lags on. */
 const loadSiteFeed = () =>
-  once(`news:site`, async () => parseSiteNews(await getJson(`${BASE}/site/v2/sports/football/nfl/news?limit=50`)))
+  // Only articles that name a player can reach one, so the rest are not kept.
+  once(`news:site`, async () => trimFeed(parseSiteNews(await getJson(`${BASE}/site/v2/sports/football/nfl/news?limit=50`)).filter((r) => r.espnIds.length), Date.now(), 25))
 
 /** Run `fn` over `xs`, at most `limit` at a time. Each result is its own (a failure becomes null). */
 const pool = async <T, R>(xs: T[], limit: number, fn: (x: T) => Promise<R>): Promise<(R | null)[]> => {
@@ -192,5 +212,6 @@ export const loadNews = async (ids: string[], players: PlayerMap): Promise<Recor
   ])
   const wanted: PlayerMap = {}
   for (const id of asked) wanted[id] = players[id]
-  return mapNews([...site, ...feeds.flatMap((f) => f ?? [])], wanted)
+  // The player feeds go first: where both name a story, their write-up is the full one.
+  return mapNews([...feeds.flatMap((f) => f ?? []), ...site], wanted)
 }
