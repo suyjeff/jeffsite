@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearFantasyCache } from '../sleeper'
-import { loadNews, mapNews, parsePlayerNews, parseSiteNews, stripHtml } from '../news'
+import { loadNews, mapNews, trimFeed, parsePlayerNews, parseSiteNews, stripHtml } from '../news'
 import type { PlayerMap, TrimmedPlayer } from '../types'
 
 // Written to the documented shapes of ESPN's fantasy player-news feed and its site news feed, not captured live.
@@ -100,12 +100,23 @@ describe('parseSiteNews', () => {
 })
 
 describe('mapNews', () => {
+  // Production order: the player feeds first, then the general feed.
   const raw = [...parsePlayerNews(fantasyFeed), ...parseSiteNews(siteFeed)]
   const out = mapNews(raw, players, NOW)
   it('maps by ESPN id to Sleeper id, newest first, one item per story', () => {
     expect(out.s1.map((i) => i.headline)).toEqual(['Burrow practices in full', 'Chase (hip) misses practice'])
-    expect(out.s1[1].id).toBe('1001') // the first copy of a repeated headline wins
+    expect(out.s1[1].id).toBe('1001')
     expect(out.s2.map((i) => i.headline)).toEqual(['Burrow practices in full'])
+  })
+  it('keeps the fuller write-up of a repeated story, whichever feed comes first', () => {
+    const player = parsePlayerNews(fantasyFeed)
+    const site = parseSiteNews(siteFeed)
+    for (const order of [[...player, ...site], [...site, ...player]]) {
+      const chase = mapNews(order, players, NOW).s1.filter((i) => i.headline.startsWith('Chase'))
+      expect(chase).toHaveLength(1)
+      expect(chase[0].body).toMatch(/did not practice Wednesday/)
+      expect(chase[0].id).toBe('1001')
+    }
   })
   it('drops stale items, untagged items and players with no ESPN id', () => {
     expect(out.s1.some((i) => i.id === '1002')).toBe(false)
@@ -152,5 +163,16 @@ describe('loadNews', () => {
     expect(await loadNews(['s2'], players)).toEqual({})
     stubFetch(() => ({ ok: false }))
     expect(await loadNews(['s2'], players)).toEqual({})
+  })
+})
+
+describe('trimFeed', () => {
+  const mk = (n: number, hours: number, body = 'b') => ({ id: String(n), headline: `H${n}`, body, at: NOW - hours * 3600_000, url: null, source: 'ESPN', espnIds: [] as string[] })
+  it('drops old items, keeps the newest few, and caps long write-ups', () => {
+    const items = [mk(1, 24 * 9), ...Array.from({ length: 8 }, (_, i) => mk(10 + i, i + 1)), mk(99, 0.5, 'word '.repeat(400))]
+    const out = trimFeed(items, NOW)
+    expect(out.map((i) => i.id)).toEqual(['99', '10', '11', '12', '13'])
+    expect(out[0].body.length).toBeLessThanOrEqual(601)
+    expect(out[0].body.endsWith('…')).toBe(true)
   })
 })

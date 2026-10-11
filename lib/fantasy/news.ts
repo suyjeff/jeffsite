@@ -120,18 +120,12 @@ export const mapNews = (raw: RawNews[], players: PlayerMap, now = Date.now()): R
       if (!sid) continue
       const kh = `${sid}:${item.headline.toLowerCase()}`
       const ki = `${sid}:#${item.id}`
-      const have = slot.get(kh) ?? slot.get(ki)
-      if (have) {
-        // A repeat adds nothing unless it carries the fuller write-up (the site feed has only a summary).
-        if (item.body.length > have.body.length) Object.assign(have, item)
-      } else {
-        const copy = { ...item }
-        slot.set(kh, copy)
-        slot.set(ki, copy)
-        ;(out[sid] ??= []).push(copy)
-      }
-      slot.set(kh, slot.get(kh) ?? slot.get(ki)!)
-      slot.set(ki, slot.get(ki) ?? slot.get(kh)!)
+      let have = slot.get(kh) ?? slot.get(ki)
+      if (!have) (out[sid] ??= []).push((have = { ...item }))
+      // A repeat adds nothing unless it carries the fuller write-up (the site feed has only a summary).
+      else if (item.body.length > have.body.length) Object.assign(have, item)
+      slot.set(kh, have)
+      slot.set(ki, have)
     }
   }
   for (const list of Object.values(out)) list.sort((a, b) => b.at - a.at)
@@ -146,9 +140,6 @@ const getJson = async (url: string): Promise<unknown> => {
   return res.json()
 }
 
-// Three views can ask for the same feed at once (Overview, Moves, a player's sheet), so they share one request.
-// It is not abortable for the same reason: one view leaving must not cancel another's.
-const inflight = new Map<string, Promise<RawNews[]>>()
 /** What is kept per feed: recent, newest first, a few items, and no essays. These are written to localStorage. */
 const KEEP = 5
 const BODY_MAX = 600
@@ -159,6 +150,9 @@ export const trimFeed = (items: RawNews[], now = Date.now(), keep = KEEP): RawNe
     .slice(0, keep)
     .map((r) => (r.body.length > BODY_MAX ? { ...r, body: r.body.slice(0, BODY_MAX).replace(/\s+\S*$/, '') + '…' } : r))
 
+// Three views can ask for the same feed at once (Overview, Moves, a player's sheet), so they share one request.
+// It is not abortable for the same reason: one view leaving must not cancel another's.
+const inflight = new Map<string, Promise<RawNews[]>>()
 const once = (key: string, load: () => Promise<RawNews[]>) => {
   let p = inflight.get(key)
   if (!p) {
