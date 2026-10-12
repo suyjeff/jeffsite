@@ -6,6 +6,7 @@ import { useFantasy } from './FantasyContext'
 import PowerRecap, { Phrase, RowBody, TeamLabel } from './PowerRecap'
 import { Crown } from './RevealBanner'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
+import { lockScroll } from './scrollLock'
 import { cx, fmt, usePhone } from './ui'
 import { useSlate } from './useSlate'
 import { recapSource, type RevealApi, type RevealSource } from './useReveal'
@@ -130,7 +131,7 @@ const Simulate = ({ recap, odds, pending, phone }: { recap: Recap; odds: Record<
               <TeamLabel id={r.id} />
             </span>
             <span className="relative h-1.5 w-[42%] shrink-0 bg-ff-sunken">
-              <span className={cx('ff-rv-x absolute inset-y-0 left-0', i === 0 ? 'bg-[var(--ff-gold)]' : 'bg-ff-accent')} style={{ width: `${r.v * 100}%`, ...d(t0 + 160 + i * 40) }} />
+              <span className={cx('ff-rv-x absolute inset-y-0 left-0', i === 0 ? 'bg-[rgb(var(--ff-gold))]' : 'bg-ff-accent')} style={{ width: `${r.v * 100}%`, ...d(t0 + 160 + i * 40) }} />
               {r.was != null && <span className="ff-rv-in absolute -inset-y-[3px] w-px bg-ff-text" style={{ left: `${r.was * 100}%`, ...d(t0 + 400 + i * 40) }} />}
             </span>
             <span className="num w-9 shrink-0 text-right text-ff-text2">
@@ -271,7 +272,7 @@ const Feed = ({ recap, odds, hasModel, phone, leaving }: { recap: Recap; odds: R
           {/* Every team's score, highest first, rising off a baseline. */}
           <div className="relative flex h-20 items-end gap-[3px] border-b border-ff-text2/60">
             {sorted.map((s, i) => (
-              <span key={i} className={cx('ff-rv-y flex-1', i === 0 ? 'bg-[var(--ff-gold)]' : 'bg-ff-accent/70')} style={{ height: `${(s / max) * 100}%`, ...d(900 + i * 45) }} />
+              <span key={i} className={cx('ff-rv-y flex-1', i === 0 ? 'bg-[rgb(var(--ff-gold))]' : 'bg-ff-accent/70')} style={{ height: `${(s / max) * 100}%`, ...d(900 + i * 45) }} />
             ))}
             <span aria-hidden className="ff-rv-x absolute inset-x-0 border-t border-dashed border-ff-text2/60" style={{ bottom: `${(mean / max) * 100}%`, ...d(1500) }} />
           </div>
@@ -449,7 +450,7 @@ const Hero = ({ recap, stage, pass, passes, swapsDone, phone }: { recap: Recap; 
         <span aria-hidden className="ff-rv-in absolute inset-0 border border-ff-line2" style={d(0)} />
         {/* Reticle ticks at the middle of each side, pointing in at the crown. */}
         {['left-1/2 top-0 h-2 w-px', 'left-1/2 bottom-0 h-2 w-px', 'top-1/2 left-0 h-px w-2', 'top-1/2 right-0 h-px w-2'].map((c) => (
-          <span key={c} aria-hidden className={cx('ff-rv-in absolute bg-[var(--ff-gold)]', c)} style={d(300)} />
+          <span key={c} aria-hidden className={cx('ff-rv-in absolute bg-[rgb(var(--ff-gold))]', c)} style={d(300)} />
         ))}
         <Crown size={phone ? 48 : 84} drawing delay={60} title="Crowned No. 1" />
       </div>
@@ -691,11 +692,10 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
       }
     }
     window.addEventListener('keydown', onKey, true)
-    const overflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlock = lockScroll()
     return () => {
       window.removeEventListener('keydown', onKey, true)
-      document.body.style.overflow = overflow
+      unlock()
       back?.focus?.({ preventScroll: true })
     }
   }, [close])

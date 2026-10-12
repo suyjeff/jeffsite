@@ -989,15 +989,22 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 /* ---------- Power-rank reveal (weekly) ----------
  * The Tuesday reveal (components/fantasy/PowerReveal.tsx) and its banners (RevealBanner.tsx). The reveal is an
  * event, so it is allowed more colour than the rest of the app: the accent's deep step running into the purple series
- * colour for the banners, and gold for the No. 1 crown. Gold is set per mode with light-dark(), which follows the
- * theme's own color-scheme, so a dark theme on a light system still gets the bright gold. Every motion here is a
- * transform, an opacity or a clip, and each one is switched off under reduced motion. */
+ * colour for the banners, and gold for the No. 1 crown. Gold is an RGB triplet like every token, set per mode here
+ * for before a theme loads; a chosen theme sets its own (lib/fantasy/themes.ts). Every motion here is a transform, an
+ * opacity or a clip, and each one is switched off under reduced motion. */
 .ff {
-  --ff-gold: light-dark(rgb(182 128 4), rgb(242 193 78));
+  --ff-gold: 182 128 4;
   /* Gold as text: deeper in light mode so it reads at 4.5:1 on the panel. */
-  --ff-gold-ink: light-dark(rgb(140 98 0), rgb(246 205 110));
+  --ff-gold-ink: 140 98 0;
   --ff-rv-a: rgb(var(--ff-accent-deep));
   --ff-rv-b: color-mix(in oklab, rgb(var(--ff-c4)) 72%, black);
+}
+
+@media (prefers-color-scheme: dark) {
+  .ff {
+    --ff-gold: 242 193 78;
+    --ff-gold-ink: 246 205 110;
+  }
 }
 
 /* The engineering-sheet ground: a dot grid, faint enough to sit under numbers. */
@@ -1172,14 +1179,14 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 /* The crown. Its outline draws, then fills gold; the small one drops onto the No. 1 avatar like a hat. */
 .ff .ff-rv-crown path.ff-rv-crown-line {
   fill: none;
-  stroke: var(--ff-gold);
+  stroke: rgb(var(--ff-gold));
   stroke-linejoin: miter;
 }
 .ff .ff-rv-crown .ff-rv-crown-body {
-  fill: var(--ff-gold);
+  fill: rgb(var(--ff-gold));
 }
 .ff .ff-rv-crown .ff-rv-crown-node {
-  fill: var(--ff-gold);
+  fill: rgb(var(--ff-gold));
 }
 .ff .ff-rv-crown.is-drawing .ff-rv-crown-line {
   stroke-dasharray: 1;
@@ -1230,7 +1237,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 /* Expanding squares from the crown: a radar ping, square like everything else. */
 .ff .ff-rv-ping {
-  border: 1px solid var(--ff-gold);
+  border: 1px solid rgb(var(--ff-gold));
   opacity: 0;
   animation: ff-rv-ping 1.4s var(--ff-ease-out) var(--d, 0ms) both;
 }
@@ -1246,14 +1253,14 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 /* The No. 1 row: gold rule, gold wash, and corner brackets that close in on it. */
 .ff .ff-rv-gold-row {
-  box-shadow: inset 2px 0 0 var(--ff-gold);
-  background-color: color-mix(in oklab, var(--ff-gold) 9%, transparent);
+  box-shadow: inset 2px 0 0 rgb(var(--ff-gold));
+  background-color: rgb(var(--ff-gold) / 0.09);
 }
 .ff .ff-rv-corner {
   position: absolute;
   width: 8px;
   height: 8px;
-  border-color: var(--ff-gold);
+  border-color: rgb(var(--ff-gold));
   border-style: solid;
   border-width: 0;
   animation: ff-rv-corner 460ms var(--ff-ease-out) var(--d, 0ms) both;
@@ -1266,7 +1273,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 /* Gold text. */
 .ff .ff-rv-gold {
-  color: var(--ff-gold-ink);
+  color: rgb(var(--ff-gold-ink));
 }
 
 /* ---- Banners ----
@@ -1278,6 +1285,8 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   isolation: isolate;
   overflow: hidden;
   color: white;
+  /* Plain deep accent where color-mix() is not supported (Safari before 16.2): the gradient below then drops out. */
+  background: rgb(var(--ff-accent-deep));
   background:
     radial-gradient(rgb(255 255 255 / 0.16) 1px, transparent 1.3px) -6px -6px / 12px 12px,
     linear-gradient(100deg, var(--ff-rv-a) 0%, color-mix(in oklab, var(--ff-rv-a) 45%, var(--ff-rv-b)) 55%, var(--ff-rv-b) 100%);

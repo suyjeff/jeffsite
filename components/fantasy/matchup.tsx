@@ -216,9 +216,10 @@ export type SlotSource = Pick<MatchupRead, 'rows'> & Partial<Pick<MatchupRead, '
 /**
  * Every slot against its opposite, QB against QB: each starter with his game (opponent and day, then the score as
  * it stands or his projection), the two scores meeting at the centre over a bar that grows toward the side ahead in
- * that slot. A starter in a live game is lit; box lines show wide, and fold away on a phone, where a name opens him.
+ * that slot. A starter in a live game is lit; box lines show wide, and fold away on a phone, where a name wraps to
+ * a second line rather than cut short. A tap opens him, or hands him to `onPlayer` (a dashboard channel) when given.
  */
-export const SlotTable = ({ m, variant = 'full', empty }: { m: SlotSource; variant?: DuelVariant; empty?: (i: number, side: 'a' | 'b') => React.ReactNode }) => {
+export const SlotTable = ({ m, variant = 'full', empty, onPlayer }: { m: SlotSource; variant?: DuelVariant; empty?: (i: number, side: 'a' | 'b') => React.ReactNode; onPlayer?: (id: string) => void }) => {
   const { data, openPlayer } = useFantasy()
   const phone = usePhone()
   // Wide: each score carries its game line (state, delta or heading) and the name its box score. Narrow: the score
@@ -260,13 +261,25 @@ export const SlotTable = ({ m, variant = 'full', empty }: { m: SlotSource; varia
           w?.kind === 'live' && 'bg-ff-pos/[0.06]',
         )}
       >
-        <button type="button" tabIndex={-1} aria-hidden onClick={() => openPlayer(id)} className="absolute inset-0 cursor-pointer" />
+        {onPlayer ? (
+          <button type="button" aria-label={`Follow ${p?.name ?? 'player'}`} onClick={() => onPlayer(id)} className="absolute inset-0 cursor-pointer" />
+        ) : (
+          <button type="button" tabIndex={-1} aria-hidden onClick={() => openPlayer(id)} className="absolute inset-0 cursor-pointer" />
+        )}
         <PlayerName
           player={p}
           id={id}
           size={variant === 'full' ? 32 : 22}
           sub={sub || undefined}
-          className={cx('max-w-full', !portrait && '[&_.ff-pn-av]:!hidden', align === 'right' && 'flex-row-reverse text-right')}
+          className={cx(
+            'max-w-full',
+            // Under md two names share a few hundred pixels: let each take a second line before it is cut.
+            'max-md:[&_.ff-pn-name]:overflow-visible max-md:[&_.ff-pn-name]:whitespace-normal max-md:[&_.ff-pn-name]:[text-overflow:clip]',
+            !portrait && '[&_.ff-pn-av]:!hidden',
+            // The cell's own button takes the tap, so the name does not open the sheet over it.
+            onPlayer && '[&_.ff-pn-hit]:pointer-events-none',
+            align === 'right' && 'flex-row-reverse text-right',
+          )}
         />
         {played(id, align)}
       </span>
@@ -362,12 +375,15 @@ export const LineupDuel = ({
   variant = 'full',
   empty,
   between,
+  onPlayer,
 }: {
   m: MatchupHead & SlotSource
   variant?: DuelVariant
   empty?: (i: number, side: 'a' | 'b') => React.ReactNode
   /** Notes between the totals and the slots. */
   between?: React.ReactNode
+  /** Where a tap on a player goes instead of his sheet. */
+  onPlayer?: (id: string) => void
 }) => (
   <div>
     <div className={variant === 'full' ? 'px-3 py-4 sm:px-5' : variant === 'sheet' ? 'px-4 py-4' : 'px-3 pb-3 pt-3'}>
@@ -375,7 +391,7 @@ export const LineupDuel = ({
     </div>
     {between}
     <div className="border-t border-ff-line">
-      <SlotTable m={m} variant={variant} empty={empty} />
+      <SlotTable m={m} variant={variant} empty={empty} onPlayer={onPlayer} />
     </div>
   </div>
 )

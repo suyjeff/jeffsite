@@ -48,6 +48,21 @@ const strengthGoingInto = (data: LeagueData, analysis: Analysis, model: ModelCon
   return out
 }
 
+// Strength going into a week reads only the league, the rosters and the player model, never the power weights, and
+// it is the costly part (every player valued again). Kept per league load, so a weight slider's every tick re-ranks
+// without revaluing anyone.
+const strengthCache = new WeakMap<LeagueData, Map<string, { teams: Analysis['teams']; value: Record<number, number> | null }>>()
+const strengthBefore = (data: LeagueData, analysis: Analysis, model: ModelConfig, week: number) => {
+  const byKey = strengthCache.get(data) ?? new Map()
+  strengthCache.set(data, byKey)
+  const key = `${week}:${model.benchFactor}:${model.halfLife}:${model.riskAversion}`
+  const hit = byKey.get(key)
+  if (hit && hit.teams === analysis.teams) return hit.value
+  const value = strengthGoingInto(data, analysis, model, week)
+  byKey.set(key, { teams: analysis.teams, value })
+  return value
+}
+
 /** The recap for a week, from the league's matchups (or a stand-in set of them, for the preview). */
 export const recapSource = (
   data: LeagueData,
@@ -73,7 +88,7 @@ export const recapSource = (
     players: data.players,
     rosterIds: analysis.teams.map((t) => t.rosterId),
     strength: analysis.strength,
-    strengthBefore: strengthGoingInto(data, analysis, prefs.model, week),
+    strengthBefore: strengthBefore(data, analysis, prefs.model, week),
     weights,
     sigma: analysis.sigma,
     proj: weekProjections(data, week),

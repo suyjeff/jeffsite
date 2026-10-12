@@ -233,7 +233,7 @@ const useWeekLineup = (rosterId: number | null, week: number | null) => {
  * Your matchup: the same head-to-head as the Matchups page, denser. Once the week is on, Sleeper's lineups as set with
  * banked points and live odds; before, next week's best lineups from the adjusted projections.
  */
-const Matchup = () => {
+const Matchup = ({ select }: WidgetProps) => {
   const { models, analysis, data, openMatchup } = useFantasy()
   const f = models.forecast
   const me = analysis.myRosterId
@@ -278,6 +278,7 @@ const Matchup = () => {
         m={m}
         variant="dense"
         empty={empty}
+        onPlayer={(id) => select({ player: id })}
         between={[mine, opp].map((rid) =>
           unset[rid] && !m.started ? (
             <div key={rid} className="border-t border-ff-line px-3 py-1.5 text-[11.5px] leading-snug text-ff-text2">

@@ -1545,23 +1545,28 @@ export function Table<T>({
   useEffect(() => {
     const el = scroller.current
     if (!el) return
-    const check = () => {
+    // Sizes: on mount and whenever the scroller or the table resizes, never per scroll.
+    const measure = () => {
       setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
       setViewW(el.clientWidth)
-      const cell = !expand ? null : el.querySelector('tbody td[data-pin]') ?? el.querySelector('tbody tr:not([id]) > td:nth-child(2)')
+      // From the table's own left edge, so sideways scrolling moves both ends together and changes nothing.
+      const table = el.firstElementChild
+      const cell = !expand ? null : (el.querySelector('tbody td[data-pin]') ?? el.querySelector('tbody tr:not([id]) > td:nth-child(2)'))
       const anchor = cell?.querySelector('.ff-pn-name') ?? cell?.firstElementChild
-      setTextX(anchor ? Math.round(anchor.getBoundingClientRect().left - el.getBoundingClientRect().left) : null)
+      setTextX(anchor && table ? Math.round(anchor.getBoundingClientRect().left - table.getBoundingClientRect().left) : null)
       setScrolls(el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
     }
-    check()
-    const ro = new ResizeObserver(check)
+    // Scrolling only moves the fade at the right edge; setting the same value again renders nothing.
+    const onScroll = () => setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
+    measure()
+    const ro = new ResizeObserver(measure)
     ro.observe(el)
     // The table can widen without the scroller resizing (new numbers, late fonts); watch it too.
     if (el.firstElementChild) ro.observe(el.firstElementChild)
-    el.addEventListener('scroll', check, { passive: true })
+    el.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       ro.disconnect()
-      el.removeEventListener('scroll', check)
+      el.removeEventListener('scroll', onScroll)
     }
   }, [rows.length, columns.length])
   const sorted = useMemo(() => {

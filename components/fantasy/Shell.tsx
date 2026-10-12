@@ -4,6 +4,7 @@ import { MONKE } from './brand'
 import Tour, { TOUR } from './Tour'
 import { PanelIcon } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
+import { lockScroll } from './scrollLock'
 import { Avatar, Dropdown, PhoneBarContext, cx, shortcutLabel, usePhone, type PhoneBarSlot } from './ui'
 
 export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model'] as const
@@ -322,10 +323,10 @@ const Shell = (props: ShellProps) => {
     if (!drawer) return
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && drawerSheet.current?.dismiss()
     window.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
+    const unlock = lockScroll()
     return () => {
       window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
+      unlock()
     }
   }, [drawer])
 
