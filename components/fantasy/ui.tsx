@@ -1678,11 +1678,12 @@ export function Table<T>({
                     : undefined
                 }
                 className={cx(
-                  'group border-b border-ff-line/60 last:border-0',
+                  // The rule is an inset shadow on the cells, not a border on the row: a collapsed border disappears under pinned cells.
+                  'group',
+                  !isOpen && '[&>td]:shadow-[inset_0_-1px_0_rgb(var(--ff-line)/0.6)] last:[&>td]:shadow-none',
                   onRowClick && 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent',
                   'hover:bg-ff-raised',
                   // An open row keeps the panel's surface and drops its rule, so the band beneath it reads as part of it.
-                  isOpen && 'border-b-0',
                   rowClass?.(row),
                 )}
               >
@@ -1711,7 +1712,8 @@ export function Table<T>({
                     key={c.key}
                     data-pin={c.sticky ? '' : undefined}
                     className={cx(
-                      dense ? 'h-8' : 'h-[38px]',
+                      // 33 and 39 keep the row pitch the 1px border used to add.
+                      dense ? 'h-[33px]' : 'h-[39px]',
                       // Padding only shows when a cell wraps (stacked badges), so it never touches the rules.
                       'whitespace-nowrap px-1.5 py-1 align-middle first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
                       align(c),
@@ -1726,13 +1728,13 @@ export function Table<T>({
                 ))}
               </tr>
               {isOpen && (
-                // Same surface as the row above (rowClass carries the tint of rows like yours), set off from the next row by the usual rule.
-                <tr id={`${id}-${k}`} className={cx('border-b border-ff-line/60 last:border-0', rowClass?.(row))}>
+                // Same surface as the row above (rowClass carries the tint of rows like yours), set off from the next row by the usual rule. The rule is drawn here, not on the row: a pinned cell below would paint over a collapsed border.
+                <tr id={`${id}-${k}`} className={rowClass?.(row)}>
                   <td colSpan={span} className="p-0">
                     {/* Pinned to the visible width so it wraps there instead of running under the right edge. The left
                         padding puts the 18px mark and its 12px gap just ahead of the name's text, and never closer than 12px to the edge. */}
                     <div
-                      className="sticky left-0 min-w-0 max-w-[100vw] pb-1.5 [overflow-wrap:anywhere]"
+                      className="sticky left-0 min-w-0 max-w-[100vw] border-b border-ff-line/60 pb-1.5 [overflow-wrap:anywhere] [tr:last-child_&]:border-b-0"
                       style={{ width: viewW ?? undefined, ['--ff-reason-pl' as string]: textX != null ? `max(12px, ${textX - 30}px)` : undefined }}
                     >
                       {detail}
