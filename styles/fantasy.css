@@ -985,3 +985,427 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     min-height: 2.75rem;
   }
 }
+
+/* ---------- Power-rank reveal (weekly) ----------
+ * The Tuesday reveal (components/fantasy/PowerReveal.tsx) and its banners (RevealBanner.tsx). The reveal is an
+ * event, so it is allowed more colour than the rest of the app: the accent's deep step running into the purple series
+ * colour for the banners, and gold for the No. 1 crown. Gold is set per mode with light-dark(), which follows the
+ * theme's own color-scheme, so a dark theme on a light system still gets the bright gold. Every motion here is a
+ * transform, an opacity or a clip, and each one is switched off under reduced motion. */
+.ff {
+  --ff-gold: light-dark(rgb(196 140 10), rgb(242 193 78));
+  /* Gold as text: deeper in light mode so it reads at 4.5:1 on the panel. */
+  --ff-gold-ink: light-dark(rgb(140 98 0), rgb(246 205 110));
+  --ff-rv-a: rgb(var(--ff-accent-deep));
+  --ff-rv-b: color-mix(in oklab, rgb(var(--ff-c4)) 72%, black);
+}
+
+/* The engineering-sheet ground: a dot grid, faint enough to sit under numbers. */
+.ff .ff-rv-grid {
+  background-image: radial-gradient(rgb(var(--ff-text) / 0.13) 1px, transparent 1.3px);
+  background-size: 16px 16px;
+  background-position: -8px -8px;
+}
+
+/* The overlay on wide screens: the page shaded and blurred, the frame rising into place. */
+.ff .ff-rv-shade {
+  animation: ff-rv-fade 320ms ease-out both;
+}
+.ff .ff-rv-frame {
+  animation: ff-rv-frame 420ms var(--ff-ease-out) both;
+}
+.ff .ff-rv-root[data-closing] .ff-rv-shade {
+  animation: ff-rv-fade-out 200ms ease-in both;
+}
+.ff .ff-rv-root[data-closing] .ff-rv-frame {
+  animation: ff-rv-frame-out 200ms ease-in both;
+}
+@keyframes ff-rv-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ff-rv-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes ff-rv-frame {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}
+@keyframes ff-rv-frame-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+/* Choreography. Each piece waits for its own --d. */
+.ff .ff-rv-in {
+  animation: ff-rv-fade 360ms ease-out var(--d, 0ms) both;
+}
+.ff .ff-rv-rise {
+  animation: ff-rv-rise 420ms var(--ff-ease-out) var(--d, 0ms) both;
+}
+.ff .ff-rv-x {
+  transform-origin: left center;
+  animation: ff-rv-x 700ms var(--ff-ease-out) var(--d, 0ms) both;
+}
+.ff .ff-rv-x-r {
+  transform-origin: right center;
+  animation: ff-rv-x 700ms var(--ff-ease-out) var(--d, 0ms) both;
+}
+.ff .ff-rv-x-c {
+  transform-origin: center;
+  animation: ff-rv-x 520ms var(--ff-ease-out) var(--d, 0ms) both;
+}
+.ff .ff-rv-y {
+  transform-origin: center bottom;
+  animation: ff-rv-y 640ms var(--ff-ease-out) var(--d, 0ms) both;
+}
+.ff .ff-rv-wipe {
+  animation: ff-rv-wipe 620ms var(--ff-ease-out) var(--d, 0ms) both;
+}
+.ff .ff-rv-out {
+  animation: ff-rv-out 240ms ease-in both;
+}
+/* A scan line that sweeps its box top to bottom, over and over, while the numbers come in. */
+.ff .ff-rv-scan {
+  animation: ff-rv-scan 1.5s cubic-bezier(0.45, 0, 0.55, 1) var(--d, 0ms) infinite;
+}
+/* A cursor block: blinks in hard steps, like a terminal. */
+.ff .ff-rv-blink {
+  animation: ff-rv-blink 1s steps(1) infinite;
+}
+@keyframes ff-rv-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes ff-rv-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes ff-rv-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes ff-rv-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes ff-rv-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@keyframes ff-rv-scan {
+  from {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  12%,
+  88% {
+    opacity: 1;
+  }
+  to {
+    transform: translateY(var(--h, 200px));
+    opacity: 0;
+  }
+}
+@keyframes ff-rv-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* The ranking while it sorts: rows sit at their slot by transform and travel between slots on the on-screen
+   ease-in-out, a little longer than a pass so a row is still settling as the next pass begins. */
+.ff .ff-rv-slot {
+  transition: transform 300ms var(--ff-ease-in-out);
+  will-change: transform;
+}
+/* A row that just swapped flashes the way it went. */
+.ff .ff-rv-slot[data-dir='up'] .ff-rv-row {
+  box-shadow: inset 2px 0 0 rgb(var(--ff-pos));
+  background-color: rgb(var(--ff-pos) / 0.07);
+}
+.ff .ff-rv-slot[data-dir='down'] .ff-rv-row {
+  box-shadow: inset 2px 0 0 rgb(var(--ff-neg) / 0.8);
+  background-color: rgb(var(--ff-neg) / 0.05);
+}
+.ff .ff-rv-row {
+  transition:
+    background-color 220ms ease,
+    box-shadow 220ms ease,
+    opacity 300ms ease;
+}
+/* The comparator: a bracket joining the two rows a pass is swapping. */
+.ff .ff-rv-cmp {
+  animation: ff-rv-cmp 300ms var(--ff-ease-out) both;
+}
+@keyframes ff-rv-cmp {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  70% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.85;
+  }
+}
+
+/* The crown. Its outline draws, then fills gold; the small one drops onto the No. 1 avatar like a hat. */
+.ff .ff-rv-crown path.ff-rv-crown-line {
+  fill: none;
+  stroke: var(--ff-gold);
+  stroke-linejoin: miter;
+}
+.ff .ff-rv-crown .ff-rv-crown-body {
+  fill: var(--ff-gold);
+}
+.ff .ff-rv-crown .ff-rv-crown-node {
+  fill: var(--ff-gold);
+}
+.ff .ff-rv-crown.is-drawing .ff-rv-crown-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ff-rv-draw 760ms var(--ff-ease-out) var(--d, 0ms) forwards;
+}
+.ff .ff-rv-crown.is-drawing .ff-rv-crown-body {
+  opacity: 0;
+  animation: ff-rv-fill 420ms ease-out calc(var(--d, 0ms) + 560ms) forwards;
+}
+.ff .ff-rv-crown.is-drawing .ff-rv-crown-node {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: ff-rv-node 360ms var(--ff-ease-out) calc(var(--d, 0ms) + 640ms) forwards;
+}
+@keyframes ff-rv-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes ff-rv-fill {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.92;
+  }
+}
+@keyframes ff-rv-node {
+  from {
+    opacity: 0;
+    transform: scale(0.4) rotate(45deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.ff .ff-rv-hat {
+  animation: ff-rv-hat 520ms cubic-bezier(0.34, 1.4, 0.64, 1) var(--d, 0ms) both;
+}
+@keyframes ff-rv-hat {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) rotate(-24deg) scale(0.7);
+  }
+}
+/* Expanding squares from the crown: a radar ping, square like everything else. */
+.ff .ff-rv-ping {
+  border: 1px solid var(--ff-gold);
+  opacity: 0;
+  animation: ff-rv-ping 1.4s var(--ff-ease-out) var(--d, 0ms) both;
+}
+@keyframes ff-rv-ping {
+  from {
+    opacity: 0.7;
+    transform: scale(0.6) rotate(45deg);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9) rotate(45deg);
+  }
+}
+/* The No. 1 row: gold rule, gold wash, and corner brackets that close in on it. */
+.ff .ff-rv-gold-row {
+  box-shadow: inset 2px 0 0 var(--ff-gold);
+  background-color: color-mix(in oklab, var(--ff-gold) 9%, transparent);
+}
+.ff .ff-rv-corner {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: var(--ff-gold);
+  border-style: solid;
+  border-width: 0;
+  animation: ff-rv-corner 460ms var(--ff-ease-out) var(--d, 0ms) both;
+}
+@keyframes ff-rv-corner {
+  from {
+    opacity: 0;
+    transform: translate(var(--cx, 0px), var(--cy, 0px));
+  }
+}
+/* Gold text, and a glint that crosses it once. */
+.ff .ff-rv-gold {
+  color: var(--ff-gold-ink);
+}
+.ff .ff-rv-glint {
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.55) 50%, transparent 70%) no-repeat;
+  background-size: 250% 100%;
+  background-position: 160% 0;
+  animation: ff-rv-glint 1.2s ease-in-out var(--d, 0ms) both;
+}
+@keyframes ff-rv-glint {
+  to {
+    background-position: -60% 0;
+  }
+}
+
+/* ---- Banners ----
+ * The Power page's banner and the sidebar's: the accent's deep step into purple, a dot grid and hairline drafting
+ * shapes in white. On a pointer that hovers, the shapes come alive: a scan crosses, the squares turn a quarter,
+ * the ticks slide, and the crown lifts. A press gives a little on any device. */
+.ff .ff-rv-banner {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: white;
+  background:
+    radial-gradient(rgb(255 255 255 / 0.16) 1px, transparent 1.3px) -6px -6px / 12px 12px,
+    linear-gradient(100deg, var(--ff-rv-a) 0%, color-mix(in oklab, var(--ff-rv-a) 45%, var(--ff-rv-b)) 55%, var(--ff-rv-b) 100%);
+  transition: scale 200ms var(--ff-ease-out);
+}
+.ff .ff-rv-banner:focus-visible {
+  outline: 2px solid var(--ff-gold);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ff .ff-rv-banner:active {
+    scale: 0.985;
+    transition-duration: 100ms;
+  }
+}
+.ff .ff-rv-banner .ff-rv-ink {
+  stroke: rgb(255 255 255 / 0.42);
+  fill: none;
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.ff .ff-rv-banner .ff-rv-ink-fill {
+  fill: rgb(255 255 255 / 0.55);
+}
+.ff .ff-rv-banner .ff-rv-sq,
+.ff .ff-rv-banner .ff-rv-tick,
+.ff .ff-rv-banner .ff-rv-lift,
+.ff .ff-rv-banner .ff-rv-nudge {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 520ms var(--ff-ease-out);
+}
+.ff .ff-rv-banner .ff-rv-sweep {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.16) 45%, rgb(255 255 255 / 0.34) 50%, transparent 52%);
+  transform: translateX(-110%);
+  z-index: -1;
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .ff .ff-rv-banner:hover .ff-rv-sweep {
+    animation: ff-rv-sweep 900ms var(--ff-ease-in-out) both;
+  }
+  .ff .ff-rv-banner:hover .ff-rv-sq {
+    transform: rotate(90deg);
+  }
+  .ff .ff-rv-banner:hover .ff-rv-sq.ff-rv-ccw {
+    transform: rotate(-90deg) scale(1.15);
+  }
+  .ff .ff-rv-banner:hover .ff-rv-tick {
+    transform: translateX(var(--tx, 8px));
+  }
+  .ff .ff-rv-banner:hover .ff-rv-lift {
+    transform: translateY(-3px) rotate(-8deg);
+  }
+  .ff .ff-rv-banner:hover .ff-rv-nudge {
+    transform: translateX(3px);
+  }
+  .ff .ff-rv-banner:hover .ff-rv-crown-node {
+    animation: ff-rv-twinkle 700ms ease-in-out both;
+  }
+}
+@keyframes ff-rv-sweep {
+  to {
+    transform: translateX(300%);
+  }
+}
+@keyframes ff-rv-twinkle {
+  50% {
+    opacity: 0.3;
+  }
+}
+/* A new week waiting: a gold square breathing beside the label. */
+.ff .ff-rv-new {
+  background: var(--ff-gold);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ff .ff-rv-new {
+    animation: ff-live 1.6s ease-in-out infinite alternate;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff
+    :is(
+      .ff-rv-shade,
+      .ff-rv-frame,
+      .ff-rv-in,
+      .ff-rv-rise,
+      .ff-rv-x,
+      .ff-rv-x-r,
+      .ff-rv-x-c,
+      .ff-rv-y,
+      .ff-rv-wipe,
+      .ff-rv-scan,
+      .ff-rv-cmp,
+      .ff-rv-hat,
+      .ff-rv-ping,
+      .ff-rv-corner,
+      .ff-rv-glint
+    ) {
+    animation: ff-rv-fade 200ms ease-out both;
+  }
+  .ff .ff-rv-root[data-closing] :is(.ff-rv-shade, .ff-rv-frame) {
+    animation: ff-rv-fade-out 160ms ease-out both;
+  }
+  .ff .ff-rv-ping,
+  .ff .ff-rv-scan {
+    display: none;
+  }
+  .ff .ff-rv-slot {
+    transition: none;
+  }
+  .ff .ff-rv-crown.is-drawing :is(.ff-rv-crown-line, .ff-rv-crown-body, .ff-rv-crown-node) {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
