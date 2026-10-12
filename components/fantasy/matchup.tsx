@@ -226,7 +226,7 @@ export const SlotTable = ({ m, variant = 'full', empty }: { m: SlotSource; varia
   const rich = !phone && variant !== 'dense'
   const box = !phone && variant === 'full'
   const portrait = !phone && variant !== 'dense'
-  const scoreW = rich ? (variant === 'full' ? 'w-[100px]' : 'w-[84px]') : 'w-[44px]'
+  const scoreW = rich ? (variant === 'full' ? 'w-[100px]' : 'w-[76px]') : 'w-[44px]'
   const pad = variant === 'sheet' ? 'px-4' : variant === 'dense' ? 'px-2' : 'px-3'
   const maxEdge = Math.max(4, ...m.rows.map((r) => Math.abs(r.edge)))
 
@@ -253,7 +253,7 @@ export const SlotTable = ({ m, variant = 'full', empty }: { m: SlotSource; varia
     return (
       <span
         className={cx(
-          'ff-pn-host relative -mx-1.5 flex min-w-0 flex-col justify-center self-stretch px-1.5 transition-colors',
+          'ff-pn-host relative -mx-1.5 flex min-w-0 flex-1 flex-col justify-center self-stretch px-1.5 transition-colors',
           variant === 'dense' ? 'py-1' : 'py-1.5',
           'hover:bg-ff-raised/60',
           align === 'right' && 'items-end text-right',
@@ -294,7 +294,7 @@ export const SlotTable = ({ m, variant = 'full', empty }: { m: SlotSource; varia
             <span className="flex flex-col items-center justify-center py-1.5" title={`${r.slot}: edge ${fmtSigned(r.edge)}, expected points, left minus right`}>
               <span className="flex w-full items-center">
                 <span className={cx('flex shrink-0 justify-end', scoreW)}>{score(r.a, r.sa, 'right')}</span>
-                <span className={cx('shrink-0 text-center font-mono text-[9.5px] text-ff-muted', rich ? 'w-10' : 'w-8')}>{r.slot}</span>
+                <span className={cx('shrink-0 text-center font-mono text-[9.5px] text-ff-muted', rich && variant === 'full' ? 'w-10' : 'w-8')}>{r.slot}</span>
                 <span className={cx('flex shrink-0 justify-start', scoreW)}>{score(r.b, r.sb, 'left')}</span>
               </span>
               <span className="relative mt-1 block h-1 w-full bg-ff-sunken" aria-hidden>
