@@ -1,8 +1,8 @@
 // The pure part of the grades worker: what one browser's grades add up to, and what a league's
 // browsers add up to once yours is left out. No Worker APIs here, so the app's tests can import it.
 //
-// Every browser's grades reduce to a Contribution. A league keeps one per browser, and a global
-// running total keeps the sum of residuals, so a read never has to walk the raw grades.
+// Every browser's grades reduce to a Contribution. Nothing is kept as a running total: each browser
+// owns one key, and a read adds the keys up (and caches the result), so no two writes can ever collide.
 
 export type Grade = 'yes' | 'maybe' | 'no'
 export type Why = 'untouchable' | 'lopsided' | 'dormant' | 'fit'
@@ -59,7 +59,7 @@ const logit = (p: number) => Math.log(p / (1 - p))
 export const GRADES: readonly string[] = ['yes', 'maybe', 'no']
 export const WHYS: readonly string[] = ['untouchable', 'lopsided', 'dormant', 'fit']
 
-export const LIMITS = { x: 12, ask: 500, partnerId: 99, perClient: 400, clientsPerLeague: 200 }
+export const LIMITS = { x: 12, ask: 500, partnerId: 99, perClient: 400, clientsPerLeague: 30 }
 
 /** A grade the worker will store, or null. Anything unexpected is dropped rather than repaired. */
 export const cleanGrade = (raw: unknown): StoredGrade | null => {
@@ -103,16 +103,26 @@ export const contribute = (grades: StoredGrade[], at = 0): Contribution => {
   return out
 }
 
-/** The global running total after one browser's contribution changes from `before` to `after`. */
-export const moveGlobal = (g: Sum, before: Contribution | undefined, after: Contribution): Sum => ({
-  sum: g.sum - (before?.all.sum ?? 0) + after.all.sum,
-  n: Math.max(0, g.n - (before?.all.n ?? 0) + after.all.n),
-})
+/** One browser's key in KV, and the parts of one back out. */
+export const clientKey = (league: string, client: string) => `c:${league}:${client}`
+/** The client id in a key under this league's prefix, or null when the key belongs to another league whose id starts the same way. */
+export const clientOf = (key: string, league: string) => {
+  const prefix = `c:${league}:`
+  if (!key.startsWith(prefix)) return null
+  const rest = key.slice(prefix.length)
+  return rest && !rest.includes(':') ? rest : null
+}
 
-/** The prior for one browser: the league's other browsers, and every league's total less its own part. */
-export const priorFor = (clients: Record<string, Contribution>, global: Sum, me: string | undefined, v: number | undefined): Prior => {
-  const own = me ? clients[me] : undefined
-  const out: Prior = { global: { sum: global.sum - (own?.all.sum ?? 0), n: Math.max(0, global.n - (own?.all.n ?? 0)) }, partners: {}, clients: 0 }
+/** The prior for one browser: the league's other browsers, and every league's residuals less its own part.
+ *  `sums` is each browser's residual total by its KV key, as the key listing gives it. */
+export const priorFor = (clients: Record<string, Contribution>, sums: Record<string, Sum>, me: string | undefined, league: string, v: number | undefined): Prior => {
+  const ownKey = me ? clientKey(league, me) : undefined
+  const out: Prior = { global: { sum: 0, n: 0 }, partners: {}, clients: 0 }
+  for (const [key, t] of Object.entries(sums)) {
+    if (key === ownKey) continue
+    out.global.sum += t.sum
+    out.global.n += t.n
+  }
   for (const [id, c] of Object.entries(clients)) {
     if (id === me) continue
     out.clients++

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanGrade, contribute, moveGlobal, priorFor, TARGET, type Contribution, type StoredGrade } from '../../../workers/grades/src/aggregate'
+import { cleanGrade, clientKey, clientOf, contribute, priorFor, TARGET, type Contribution, type StoredGrade } from '../../../workers/grades/src/aggregate'
 
 const g = (over: Partial<StoredGrade> = {}): StoredGrade => ({ key: 'abcd1234', partnerId: 3, grade: 'no', x: 0.5, ask: null, at: 1, ...over })
 const logit = (p: number) => Math.log(p / (1 - p))
@@ -33,35 +33,33 @@ describe('grades worker aggregation', () => {
     expect(cleanGrade({ ...g(), why: 'untouchable', player: '4034' })?.player).toBe('4034')
   })
 
-  it('keeps a running global total as one browser regrades', () => {
-    const one = contribute([g()])
-    let total = moveGlobal({ sum: 0, n: 0 }, undefined, one)
-    expect(total).toEqual(one.all)
-    const regraded = contribute([g({ grade: 'yes' })])
-    total = moveGlobal(total, one, regraded)
-    expect(total.sum).toBeCloseTo(regraded.all.sum, 12)
-    expect(total.n).toBe(1)
-    total = moveGlobal(total, regraded, { all: { sum: 0, n: 0 }, partners: {}, at: 0 })
-    expect(total).toEqual({ sum: 0, n: 0 })
+  it('names a browser by its key, and does not mistake another league for this one', () => {
+    expect(clientKey('123', 'abc-1234')).toBe('c:123:abc-1234')
+    expect(clientOf('c:123:abc-1234', '123')).toBe('abc-1234')
+    expect(clientOf('c:espn:123:abc-1234', 'espn')).toBeNull()
+    expect(clientOf('c:espn:123:abc-1234', 'espn:123')).toBe('abc-1234')
+    expect(clientOf('c:124:abc-1234', '123')).toBeNull()
   })
 
   it('builds a prior from the others, never counting your own grades', () => {
     const mine = contribute([g({ key: 'aaaa1' })])
     const theirs = contribute([g({ key: 'bbbb2', grade: 'yes', x: 0 }), g({ key: 'cccc3', partnerId: 4, why: 'dormant' }), g({ key: 'dddd4', why: 'lopsided', ask: 2, v: 2 })])
     const clients: Record<string, Contribution> = { me: mine, them: theirs }
-    const global = { sum: mine.all.sum + theirs.all.sum + 10, n: mine.all.n + theirs.all.n + 5 }
-    const p = priorFor(clients, global, 'me', 2)
+    // Every browser's total by key, this league's two and another league's one.
+    const sums = { 'c:9:me': mine.all, 'c:9:them': theirs.all, 'c:8:other': { sum: 10, n: 5 } }
+    const p = priorFor(clients, sums, 'me', '9', 2)
     expect(p.clients).toBe(1)
     expect(p.partners[3].n).toBe(theirs.partners[3].n)
     expect(p.partners[3].sum).toBeCloseTo(theirs.partners[3].sum, 12)
     expect(p.partners[3].askCap).toBe(2)
     expect(p.partners[4].dormant).toBe(1)
-    // Other leagues' 5 grades stay, ours are taken out of the total.
+    // Other browsers' totals stay, yours is taken out.
     expect(p.global.n).toBe(theirs.all.n + 5)
     expect(p.global.sum).toBeCloseTo(theirs.all.sum + 10, 12)
     // A stranger asking sees everyone.
-    expect(priorFor(clients, global, undefined, 2).clients).toBe(2)
+    expect(priorFor(clients, sums, undefined, '9', 2).clients).toBe(2)
+    expect(priorFor(clients, sums, undefined, '9', 2).global.n).toBe(mine.all.n + theirs.all.n + 5)
     // A premium on another price scale is not offered.
-    expect(priorFor(clients, global, 'me', 1).partners[3].askCap).toBeNull()
+    expect(priorFor(clients, sums, 'me', '9', 1).partners[3].askCap).toBeNull()
   })
 })

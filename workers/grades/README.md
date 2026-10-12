@@ -6,8 +6,11 @@ exactly as before, with grades kept in the browser.
 
 What it stores: roster ids, the grade, the reason, the model's log-odds, the ask, a price-scale
 number, a timestamp and a random per-browser id. No names, usernames or accounts. It runs on
-Cloudflare's free tier (KV free tier allows 1,000 writes a day, about 330 grades a day, since each
-grade writes three keys; reads are 100,000 a day).
+Cloudflare's free tier.
+
+How it keeps count: each browser writes only its own KV key (`c:<league>:<client>`), so there is no
+shared counter to corrupt when two people grade at once. A read adds the keys up, and the sums are
+cached in KV (`snap:l:<league>` for 10 minutes, `snap:g` for 30), so most reads cost two KV gets.
 
 ## Setup
 
@@ -49,7 +52,20 @@ CORS allows only https://sujeff.com and http://localhost (any port). The per-IP 
 the isolate's memory, so it is a speed bump and not a hard cap. To get a hard cap, add a Cloudflare
 rate limiting rule on the worker's route in the dashboard.
 
+## Free-tier limits
+
+KV's free tier allows 1,000 writes, 1,000 list operations, and 100,000 reads a day.
+
+- A grade post costs one write (plus one read of the browser's own key), so about 1,000 posts a day
+  (the app batches changes, so that is more grades than it sounds).
+- A cold read rebuilds a snapshot: one list operation per 1,000 browsers for the league and for
+  everyone, one get per browser in the league, and one write per snapshot. With the caching that is
+  at most about 144 league rebuilds and 48 global rebuilds a day per active league, so list
+  operations are the limit to watch: roughly 5 busy leagues a day fits. Idle leagues cost nothing.
+- Per request the worker reads at most 30 browsers per league and the first 5,000 browsers overall,
+  to stay inside the free plan's 50 subrequests.
+
 ## Resetting
 
 Delete the KV namespace in the dashboard (Storage & Databases > KV) and make a new one, or delete
-single keys: `c:<league>:<client>`, `l:<league>`, `g`.
+single keys: `c:<league>:<client>`, `snap:l:<league>`, `snap:g`.
