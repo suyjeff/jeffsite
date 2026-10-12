@@ -21,6 +21,8 @@ export type RecapTeam = {
   move: number
   scoreBefore: number
   scoreAfter: number
+  /** Each part of the composite after the week, as the regressed z-score the ranking weighs. */
+  components: Record<keyof PowerWeights, number>
   points: number
   opponent: number | null
   oppPoints: number | null
@@ -103,6 +105,8 @@ export type Recap = {
     faller: RecapTeam | null
   }
   stars: Star[]
+  /** The composite's weights, summing to one over the parts in use. */
+  weights: Record<keyof PowerWeights, number>
   calls: { good: Call | null; bad: Call | null }
 }
 
@@ -156,6 +160,12 @@ export const lineupCalls = (tw: TeamWeek, slots: Slot[], players: PlayerMap, pro
   const b = bad as Call | null
   if (b && tw.result === 'L' && tw.opponentPoints != null && b.diff > tw.opponentPoints - tw.points) b.decisive = true
   return { good: g, bad: b }
+}
+
+const normalWeights = (w: PowerWeights): Record<keyof PowerWeights, number> => {
+  const keys = Object.keys(w) as (keyof PowerWeights)[]
+  const sum = keys.reduce((a, k) => a + Math.max(0, w[k]), 0) || 1
+  return Object.fromEntries(keys.map((k) => [k, Math.max(0, w[k]) / sum])) as Record<keyof PowerWeights, number>
 }
 
 export const buildRecap = (input: RecapInput): Recap => {
@@ -226,6 +236,7 @@ export const buildRecap = (input: RecapInput): Recap => {
       move: (b?.rank ?? 0) - (a?.rank ?? 0),
       scoreBefore: b?.score ?? 50,
       scoreAfter: a?.score ?? 50,
+      components: a?.components ?? { allPlay: 0, points: 0, recent: 0, roster: 0, efficiency: 0 },
       points: round2(t?.points ?? 0),
       opponent: t?.opponentId ?? null,
       oppPoints: t?.opponentPoints ?? null,
@@ -336,6 +347,7 @@ export const buildRecap = (input: RecapInput): Recap => {
       faller,
     },
     stars,
+    weights: normalWeights(weights),
     calls: { good, bad },
   }
 }

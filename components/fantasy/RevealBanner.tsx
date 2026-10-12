@@ -7,7 +7,10 @@ import { cx } from './ui'
 // foot of the sidebar. Both are buttons that replay it. Drawn in the reveal's own language: hairline drafting shapes,
 // a dot grid, the gold crown. Styles and hover motion live in fantasy.css (.ff-rv-banner).
 
-/** The No. 1 crown: three points on a band, square nodes at the tips. `drawing` traces it in, then fills it. */
+/**
+ * The No. 1 crown: a gold band with three points, a diamond at each tip and one hairline across the band. `drawing`
+ * traces the outline in, then fills it. Kept geometric and crisp so it reads at 15px on a row and at 96px on stage.
+ */
 export const Crown = ({ size = 24, drawing, delay = 0, className, title }: { size?: number; drawing?: boolean; delay?: number; className?: string; title?: string }) => (
   <svg
     width={size}
@@ -18,15 +21,17 @@ export const Crown = ({ size = 24, drawing, delay = 0, className, title }: { siz
     role={title ? 'img' : undefined}
     aria-label={title}
     aria-hidden={title ? undefined : true}
+    shapeRendering="geometricPrecision"
   >
-    <path className="ff-rv-crown-body" d="M4 20V8.5l6.5 5.5L16 5l5.5 9 6.5-5.5V20Z" />
-    <path className="ff-rv-crown-line" pathLength={1} strokeWidth={1.5} d="M4 20V8.5l6.5 5.5L16 5l5.5 9 6.5-5.5V20Z M4 17H28" />
+    <path className="ff-rv-crown-body" d="M5 20V9.5l5.75 4.75L16 6l5.25 8.25L27 9.5V20Z" />
+    <path className="ff-rv-crown-band" d="M6.5 17H25.5" strokeWidth={1} />
+    <path className="ff-rv-crown-line" pathLength={1} strokeWidth={1.25} d="M5 20V9.5l5.75 4.75L16 6l5.25 8.25L27 9.5V20Z" />
     {[
-      [4, 8.5],
-      [16, 5],
-      [28, 8.5],
+      [5, 8.5],
+      [16, 4.75],
+      [27, 8.5],
     ].map(([x, y]) => (
-      <rect key={x} className="ff-rv-crown-node" x={x - 1.75} y={y - 1.75} width={3.5} height={3.5} />
+      <path key={x} className="ff-rv-crown-node" d={`M${x} ${y - 1.9}L${x + 1.9} ${y}L${x} ${y + 1.9}L${x - 1.9} ${y}Z`} />
     ))}
   </svg>
 )

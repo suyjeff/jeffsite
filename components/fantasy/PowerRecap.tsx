@@ -89,8 +89,8 @@ export const RowBody = ({
       <span className="relative shrink-0">
         <Avatar src={t?.avatar ?? null} name={t?.name ?? '?'} size={24} />
         {crowned && (
-          <span className="ff-rv-hat absolute -left-[6px] -top-[9px] -rotate-[14deg]" style={d(hatDelay)}>
-            <Crown size={15} />
+          <span className="ff-rv-hat absolute -left-[5px] -top-[7px] -rotate-[14deg]" style={d(hatDelay)}>
+            <Crown size={14} />
           </span>
         )}
       </span>
@@ -267,10 +267,10 @@ const GameRow = ({ g, recap }: { g: RecapGame; recap: Recap }) => {
       </div>
       <div className="mt-1.5 flex items-center gap-[3px]" aria-hidden>
         <span className="flex h-1 flex-1 justify-end bg-ff-sunken">
-          <span className={cx('h-full', g.winner === g.a ? 'bg-ff-accent' : 'bg-ff-line2')} style={{ width: `${(g.pa / max) * 100}%` }} />
+          <span className={cx('h-full', g.winner === g.a ? 'bg-ff-accent' : 'bg-ff-neg/70')} style={{ width: `${(g.pa / max) * 100}%` }} />
         </span>
         <span className="flex h-1 flex-1 bg-ff-sunken">
-          <span className={cx('h-full', g.winner === g.b ? 'bg-ff-accent' : 'bg-ff-line2')} style={{ width: `${(g.pb / max) * 100}%` }} />
+          <span className={cx('h-full', g.winner === g.b ? 'bg-ff-accent' : 'bg-ff-neg/70')} style={{ width: `${(g.pb / max) * 100}%` }} />
         </span>
       </div>
       {upset && (
