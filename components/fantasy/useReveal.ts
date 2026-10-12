@@ -5,6 +5,7 @@ import type { PowerWeights } from '../../lib/fantasy/power'
 import { buildRecap, revealGate, revealSeenKey, revealStale, revealWeek, weekFinal, weeksBefore, type Recap } from '../../lib/fantasy/recap'
 import type { SleeperMatchup } from '../../lib/fantasy/types'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
+import { revealOdds } from './revealOdds'
 import { playerValues, replacementLevels, rosterStrength, type ModelConfig } from '../../lib/fantasy/war'
 
 /**
@@ -145,6 +146,13 @@ export const useReveal = ({
   }, [data])
 
   const source = useMemo(() => (data && analysis && models && prefs && week != null ? recapSource(data, analysis, models, prefs, week) : null), [data, analysis, models, prefs, week])
+
+  // Start the reveal's playoff simulation in idle time once the page has settled, so it is ready before it opens.
+  useEffect(() => {
+    if (!source || !data || !analysis || !models) return
+    const id = window.setTimeout(() => revealOdds(source, data, analysis, models), 1500)
+    return () => window.clearTimeout(id)
+  }, [source, data, analysis, models])
 
   // The week under way, for the dev preview: the current week while its games are being played.
   const previewWeek = useMemo(() => {

@@ -364,7 +364,11 @@ export type RecapOddsInput = {
   sims?: number
 }
 
-/** The two simulations behind recapOdds, as separate steps, so a caller can run them a frame apart. */
+/**
+ * The two simulations behind recapOdds, before and after the week, each runnable in slices: `slice(k, sims)` plays
+ * `sims` seasons from its own seed, the same seed on both sides, so the pair still shares its draws. Equal slices
+ * averaged together (mergeSims) are one larger simulation, so a caller can spread the work over idle moments.
+ */
 export const recapOddsRuns = (opts: RecapOddsInput) => {
   const { recap, rosterIds, forecast } = opts
   const weeks = [...opts.priorWeeks, recap.week]
@@ -383,12 +387,36 @@ export const recapOddsRuns = (opts: RecapOddsInput) => {
     mean: persistMean(forecast.mean, rosterIds),
     sigma: forecast.sigma,
     tau: forecast.tau,
-    sims: opts.sims ?? RECAP_SIMS,
   }
+  const recordBefore = rec(opts.priorWeeks)
+  const recordAfter = rec(weeks)
+  const seed = (k: number) => (20240917 + k * 7919) >>> 0
   return {
-    before: () => simulateSeason({ ...base, record: rec(opts.priorWeeks), schedule: [...thisWeek, ...ahead], weeksLeft: opts.weeksLeft + 1 }),
-    after: () => simulateSeason({ ...base, record: rec(weeks), schedule: ahead, weeksLeft: opts.weeksLeft }),
+    before: (k: number, sims: number) => simulateSeason({ ...base, sims, seed: seed(k), record: recordBefore, schedule: [...thisWeek, ...ahead], weeksLeft: opts.weeksLeft + 1 }),
+    after: (k: number, sims: number) => simulateSeason({ ...base, sims, seed: seed(k), record: recordAfter, schedule: ahead, weeksLeft: opts.weeksLeft }),
   }
+}
+
+/** Equal-sized simulation slices averaged into one. Clinches are settled by arithmetic, so every slice agrees on them. */
+export const mergeSims = (parts: Record<number, SimTeam>[]): Record<number, SimTeam> => {
+  const out: Record<number, SimTeam> = {}
+  const n = parts.length
+  if (!n) return out
+  for (const id of Object.keys(parts[0]).map(Number)) {
+    const first = parts[0][id]
+    const avg = (f: (s: SimTeam) => number) => parts.reduce((a, p) => a + f(p[id]), 0) / n
+    out[id] = {
+      rosterId: id,
+      wins: avg((s) => s.wins),
+      playoffs: avg((s) => s.playoffs),
+      bye: avg((s) => s.bye),
+      final: avg((s) => s.final),
+      title: avg((s) => s.title),
+      seeds: first.seeds.map((_, i) => avg((s) => s.seeds[i] ?? 0)),
+      clinch: first.clinch,
+    }
+  }
+  return out
 }
 
 export const joinOdds = (rosterIds: number[], before: Record<number, SimTeam>, after: Record<number, SimTeam>): Record<number, Odds> =>
@@ -396,8 +424,12 @@ export const joinOdds = (rosterIds: number[], before: Record<number, SimTeam>, a
 
 export const recapOdds = (opts: RecapOddsInput): Record<number, Odds> => {
   const runs = recapOddsRuns(opts)
-  return joinOdds(opts.rosterIds, runs.before(), runs.after())
+  const sims = opts.sims ?? RECAP_SIMS
+  return joinOdds(opts.rosterIds, runs.before(0, sims), runs.after(0, sims))
 }
+
+/** Seasons per slice when the simulation is spread over idle time. */
+export const RECAP_SLICE = 125
 
 /**
  * The week as it stands, finished: final games at their points, games under way at what is on the board plus the

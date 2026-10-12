@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { PowerWeights } from '../../lib/fantasy/power'
 import type { ModelConfig } from '../../lib/fantasy/war'
-import { estimateWeek, joinOdds, recapOddsRuns, RECAP_SIMS, sortPasses, type Odds, type Recap } from '../../lib/fantasy/recap'
+import { estimateWeek, RECAP_SIMS, sortPasses, type Odds, type Recap } from '../../lib/fantasy/recap'
+import { useRevealOdds } from './revealOdds'
 import { useFantasy } from './FantasyContext'
 import PowerRecap, { Phrase, RowBody, TeamLabel } from './PowerRecap'
 import { Crown } from './RevealBanner'
@@ -80,6 +81,50 @@ const Clock = ({ running, run }: { running: boolean; run: number }) => {
   return <span ref={ref} className="num text-[10.5px] text-ff-muted" />
 }
 
+/**
+ * An act fitted to the stage. The stage is measured on every resize (rotation, the browser's toolbar, a PWA's safe
+ * areas), the act is laid out at its full size and, when that is taller or wider than the stage, scaled down to fit,
+ * so nothing is ever cut off. `children` gets the stage's size, to set rows from and to drop optional parts when room
+ * is short.
+ */
+const Fit = ({ children, center }: { children: (box: { w: number; h: number }) => ReactNode; center?: boolean }) => {
+  const outer = useRef<HTMLDivElement>(null)
+  const inner = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null)
+  const [fit, setFit] = useState({ s: 1, y: 0 })
+  useLayoutEffect(() => {
+    const o = outer.current
+    const i = inner.current
+    if (!o || !i) return
+    const measure = () => {
+      const w = o.clientWidth
+      const h = o.clientHeight
+      setBox((b) => (b && b.w === w && b.h === h ? b : { w, h }))
+      const nh = i.offsetHeight
+      const nw = i.scrollWidth
+      const sc = Math.min(1, h / Math.max(1, nh), w / Math.max(1, nw))
+      const y = center ? Math.max(0, (h - nh * sc) / 2) : 0
+      setFit((f) => (Math.abs(f.s - sc) < 0.002 && Math.abs(f.y - y) < 0.5 ? f : { s: sc, y }))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(o)
+    ro.observe(i)
+    window.visualViewport?.addEventListener('resize', measure)
+    return () => {
+      ro.disconnect()
+      window.visualViewport?.removeEventListener('resize', measure)
+    }
+  }, [center])
+  return (
+    <div ref={outer} className="relative min-h-0 flex-1">
+      <div ref={inner} className="absolute inset-x-0 top-0 origin-top" style={{ transform: fit.s < 1 || fit.y ? `translateY(${fit.y}px) scale(${fit.s})` : undefined }}>
+        {box && children(box)}
+      </div>
+    </div>
+  )
+}
+
 /** Registration crosshairs at the corners of the stage, like a plotted sheet. */
 const Registration = () => (
   <>
@@ -97,7 +142,7 @@ const Registration = () => (
  * playoff odds filling to where the week left them, a tick where they stood before it. Without a season model it
  * shows the week's all-play instead: how many teams each score would have beaten.
  */
-const Simulate = ({ recap, odds, pending, phone }: { recap: Recap; odds: Record<number, Odds> | null; pending: boolean; phone: boolean }) => {
+const Simulate = ({ recap, odds, pending, phone, cols }: { recap: Recap; odds: Record<number, Odds> | null; pending: boolean; phone: boolean; cols: number }) => {
   const n = recap.teams.length
   const sim = odds || pending
   const rows = pending
@@ -124,14 +169,15 @@ const Simulate = ({ recap, odds, pending, phone }: { recap: Recap; odds: Record<
           ))}
         </div>
       )}
-      <ul className={cx('grid gap-x-6', !phone && 'grid-cols-2')}>
+      <ul className={cx('grid', cols === 2 && (phone ? 'grid-cols-2 gap-x-4' : 'grid-cols-2 gap-x-6'))}>
         {rows.map((r, i) => (
           <li key={r.id} className="ff-rv-in flex items-center gap-2 text-[11px]" style={{ height: phone ? 15 : 19, ...d(t0 + 80 + i * 40) }}>
             <span className="min-w-0 flex-1 truncate">
               <TeamLabel id={r.id} />
             </span>
             <span className="relative h-1.5 w-[42%] shrink-0 bg-ff-sunken">
-              <span className={cx('ff-rv-x absolute inset-y-0 left-0', i === 0 ? 'bg-[rgb(var(--ff-gold))]' : 'bg-ff-accent')} style={{ width: `${r.v * 100}%`, ...d(t0 + 160 + i * 40) }} />
+              {/* Keyed on the odds landing, so a bar that was waiting on them grows when they do. */}
+              <span key={pending ? 'wait' : 'set'} className={cx('ff-rv-x absolute inset-y-0 left-0', i === 0 ? 'bg-[rgb(var(--ff-gold))]' : 'bg-ff-accent')} style={{ width: `${r.v * 100}%`, ...d(t0 + 160 + i * 40) }} />
               {r.was != null && <span className="ff-rv-in absolute -inset-y-[3px] w-px bg-ff-text" style={{ left: `${r.was * 100}%`, ...d(t0 + 400 + i * 40) }} />}
             </span>
             <span className="num w-9 shrink-0 text-right text-ff-text2">
@@ -145,8 +191,15 @@ const Simulate = ({ recap, odds, pending, phone }: { recap: Recap; odds: Record<
   )
 }
 
-const Feed = ({ recap, odds, hasModel, phone, leaving }: { recap: Recap; odds: Record<number, Odds> | null; hasModel: boolean; phone: boolean; leaving: boolean }) => {
+const Feed = ({ recap, odds, hasModel, phone, room, leaving }: { recap: Recap; odds: Record<number, Odds> | null; hasModel: boolean; phone: boolean; room: number; leaving: boolean }) => {
   const games = recap.games
+  // A short stage (a small phone, landscape, a big league) drops the readings first, then sets the odds in two
+  // columns; whatever still does not fit, Fit scales down.
+  const simRows = (cols: number) => 52 + Math.ceil(recap.teams.length / cols) * 15
+  const feedH = 30 + games.length * 46
+  const readingsH = phone ? 108 : 0
+  const dropReadings = phone && readingsH + feedH + simRows(1) > room
+  const simCols = phone && feedH + simRows(1) > room ? 2 : 1
   const scores = recap.teams.map((t) => t.points).filter((x) => x > 0)
   const max = Math.max(...scores, 1)
   const mean = scores.reduce((a, b) => a + b, 0) / (scores.length || 1)
@@ -165,8 +218,8 @@ const Feed = ({ recap, odds, hasModel, phone, leaving }: { recap: Recap; odds: R
   const rowAt = (i: number) => 250 + i * (phone ? 90 : 110)
   const sorted = [...scores].sort((a, b) => b - a)
   return (
-    <div className={cx('flex min-h-0 flex-1 flex-col justify-center gap-4 md:flex-row md:items-center md:gap-8', leaving && 'ff-rv-out')}>
-      {phone && (
+    <div className={cx('flex', phone ? 'flex-col gap-4' : 'flex-row items-center gap-8', leaving && 'ff-rv-out')}>
+      {phone && !dropReadings && (
         <dl className="grid shrink-0 grid-cols-4 gap-px border border-ff-line bg-ff-line">
           {readings.map(([k, v, digits], i) => (
             <div key={k} className="ff-rv-in bg-ff-panel px-2 py-1.5" style={d(150 + i * 60)}>
@@ -178,7 +231,7 @@ const Feed = ({ recap, odds, hasModel, phone, leaving }: { recap: Recap; odds: R
           ))}
         </dl>
       )}
-      <div className="relative min-h-0 md:flex-1">
+      <div className={cx('relative min-w-0', !phone && 'flex-1')}>
         <div className="mb-2 flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.1em] text-ff-muted">
           <span className="ff-rv-in" style={d(100)}>
             Feed · wk {pad2(recap.week)} {recap.estimated ? 'estimated' : 'final'}
@@ -248,7 +301,7 @@ const Feed = ({ recap, odds, hasModel, phone, leaving }: { recap: Recap; odds: R
           })}
         </ol>
         {/* Drawn from the start, empty until the odds land, so nothing shifts when they do. */}
-        <Simulate recap={recap} odds={odds} pending={hasModel && !odds} phone={phone} />
+        <Simulate recap={recap} odds={odds} pending={hasModel && !odds} phone={phone} cols={phone ? simCols : 2} />
       </div>
       {!phone && (
         <aside className="w-[220px] shrink-0">
@@ -534,37 +587,8 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
   const reduced = useMemo(reducedMotion, [])
   const n = recap.teams.length
 
-  // Playoff odds before and after the week, simulated once the reveal is under way.
-  const [odds, setOdds] = useState<Record<number, Odds> | null>(null)
-  useEffect(() => {
-    const f = models.forecast
-    if (!f) return
-    let live = true
-    // Two simulations, one task each, while the frame's entrance (a compositor animation) plays.
-    const runs = recapOddsRuns({
-      recap,
-      priorWeeks: source.priorWeeks,
-      matchupsByWeek: source.matchupsByWeek,
-      slots: analysis.slots,
-      players: data.players,
-      rosterIds: analysis.teams.map((t) => t.rosterId),
-      forecast: f,
-      schedule: models.forecastInput.schedule,
-      playoffWeeks: models.forecastInput.playoffWeeks,
-      playoffTeams: models.forecastInput.playoffTeams,
-      weeksLeft: data.futureWeeks.filter((w) => w > recap.week).length,
-    })
-    let before: ReturnType<typeof runs.before> | null = null
-    const a = window.setTimeout(() => (before = runs.before()), 30)
-    const b = window.setTimeout(() => {
-      if (live && before) setOdds(joinOdds(analysis.teams.map((t) => t.rosterId), before, runs.after()))
-    }, 120)
-    return () => {
-      live = false
-      window.clearTimeout(a)
-      window.clearTimeout(b)
-    }
-  }, [source, recap, models, analysis, data])
+  // Playoff odds before and after the week, simulated in idle slices (usually already done by the time it opens).
+  const odds = useRevealOdds(source, data, analysis, models)
 
   // The sort starts from the week's scoreboard, highest score first, and ends at the new power ranking.
   const start = useMemo(() => [...recap.teams].sort((a, b) => b.points - a.points || a.rankAfter - b.rankAfter).map((t) => t.rosterId), [recap])
@@ -574,13 +598,14 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
   const passMs = passes.length > 10 ? Math.max(120, Math.round(1800 / passes.length)) : 180
   const sortMs = Math.max(700, passes.length * passMs)
 
-  // Rows as tall as fit: 40px on wide screens, up to 44px on a phone, so every team shows without scrolling.
-  const rowH = useMemo(() => {
-    if (typeof window === 'undefined') return 40
-    const h = window.innerHeight
-    if (phone) return Math.max(32, Math.min(44, Math.floor((h - 300) / Math.max(1, n))))
-    return Math.max(30, Math.min(40, Math.floor((Math.min(820, h - 48) - 200) / Math.max(1, n))))
-  }, [phone, n])
+  // The recap's rows: a full 44px touch target wherever the layout is the phone's, 40px on wide screens.
+  const recapRowH = stack ? 44 : 40
+  // The sort's rows, set from the stage's measured height (see Fit): as tall as the recap's when they fit, so the
+  // list hands over without a jump, and never under 30px; past that the act scales down instead.
+  const sortRowH = (box: { h: number }, side: boolean) => {
+    const room = side ? box.h - 24 : box.h - 92 - 32 - 24
+    return Math.max(30, Math.min(recapRowH, Math.floor(room / Math.max(1, n))))
+  }
 
   const [stage, setStage] = useState<Stage>(reduced ? 'done' : 'calc')
   const [step, setStep] = useState(0)
@@ -593,9 +618,11 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
   const finish = useCallback((handOver: boolean) => {
     timers.current.forEach(window.clearTimeout)
     timers.current = []
-    from.current = handOver ? (listRef.current?.getBoundingClientRect() ?? null) : null
+    // The list slides into the recap only when it is drawn at the recap's size (not scaled, same row height).
+    const r = handOver ? (listRef.current?.getBoundingClientRect() ?? null) : null
+    from.current = r && Math.abs(r.height - n * recapRowH) <= 3 ? r : null
     setStage('done')
-  }, [])
+  }, [n, recapRowH])
 
   // The script. Restarted by Replay, or by `run` changing.
   useEffect(() => {
@@ -766,28 +793,37 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
           </span>
         </div>
         {stage === 'calc' || stage === 'calc-out' ? (
-          <Feed recap={recap} odds={odds} hasModel={!!models.forecast} phone={stack} leaving={stage === 'calc-out'} />
+          <Fit center>{(box) => <Feed recap={recap} odds={odds} hasModel={!!models.forecast} phone={stack} room={box.h} leaving={stage === 'calc-out'} />}</Fit>
         ) : (
-          <div className={cx('flex min-h-0 flex-1', stack ? 'flex-col gap-8' : 'items-center justify-center gap-16 xl:gap-20')}>
-            <div className={cx(stack ? 'h-[92px] shrink-0' : 'order-2 w-[320px] xl:w-[340px]')}>
-              <Hero recap={recap} stage={stage} pass={pass} passes={passes.length} swapsDone={swapsDone} phone={stack} />
-            </div>
-            <div className={cx(stack ? (phone ? 'w-full' : 'mx-auto w-[400px] max-w-full') : 'order-1 w-[400px]')}>
-              <Ranking
-                recap={recap}
-                order={order}
-                prev={prev}
-                pass={pass}
-                passes={passes}
-                sortMs={sortMs}
-                sorted={pass >= passes.length}
-                crowned={stage === 'crown'}
-                rowH={rowH}
-                listRef={listRef}
-                phone={stack}
-              />
-            </div>
-          </div>
+          <Fit center={!stack}>
+            {(box) => {
+              // Side by side wherever the stage is wide enough (a laptop, a phone on its side), stacked otherwise.
+              const side = !phone && box.w >= 760
+              return (
+                <div className={cx('flex', side ? 'items-center justify-center gap-10 xl:gap-20' : 'flex-col gap-8')}>
+                  <div className={cx(side ? 'order-2 w-[320px] xl:w-[340px]' : 'h-[92px] shrink-0')}>
+                    <Hero recap={recap} stage={stage} pass={pass} passes={passes.length} swapsDone={swapsDone} phone={!side} />
+                  </div>
+                  {/* Room above the list for its column heads. */}
+                  <div className={cx('pt-6', side ? 'order-1 w-[400px]' : phone ? 'w-full' : 'mx-auto w-[400px] max-w-full')}>
+                    <Ranking
+                      recap={recap}
+                      order={order}
+                      prev={prev}
+                      pass={pass}
+                      passes={passes}
+                      sortMs={sortMs}
+                      sorted={pass >= passes.length}
+                      crowned={stage === 'crown'}
+                      rowH={sortRowH(box, side)}
+                      listRef={listRef}
+                      phone={!side}
+                    />
+                  </div>
+                </div>
+              )
+            }}
+          </Fit>
         )}
       </div>
     </div>
@@ -806,7 +842,7 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
           <Pipeline step={step} phone={phone} running={intro} run={play + run} />
         </>
       ) : (
-        <PowerRecap key={`${play}-${run}`} recap={recap} odds={odds} phone={stack} rowH={rowH} from={phone || !narrow ? from.current : null} entering />
+        <PowerRecap key={`${play}-${run}`} recap={recap} odds={odds} phone={stack} rowH={recapRowH} from={phone || !narrow ? from.current : null} entering />
       )}
     </>
   )
@@ -831,13 +867,18 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
     )
 
   return (
-    <div ref={root} className="ff-rv-root fixed inset-0 z-[70] flex items-center justify-center p-6" role="presentation">
+    // A short window (a phone on its side) gives the frame the whole screen, safe areas aside.
+    <div
+      ref={root}
+      className="ff-rv-root fixed inset-0 z-[70] flex items-center justify-center p-6 [@media(max-height:560px)]:pb-[env(safe-area-inset-bottom)] [@media(max-height:560px)]:pl-[env(safe-area-inset-left)] [@media(max-height:560px)]:pr-[env(safe-area-inset-right)] [@media(max-height:560px)]:pt-[env(safe-area-inset-top)]"
+      role="presentation"
+    >
       {/* Shade only, no backdrop blur: blurring the page under a moving frame costs every frame on a weak GPU. */}
       <div className="ff-rv-shade absolute inset-0 bg-black/60" onClick={close} />
       <div
         ref={panel}
         {...dialog}
-        className="ff-rv-frame relative flex h-[min(820px,calc(100dvh-48px))] w-[min(1140px,100%)] flex-col border border-ff-line2 bg-ff-panel shadow-[0_32px_80px_-24px_rgb(0_0_0/0.6)] outline-none"
+        className="ff-rv-frame relative flex h-[min(820px,calc(100dvh-48px))] w-[min(1140px,100%)] flex-col border border-ff-line2 bg-ff-panel shadow-[0_32px_80px_-24px_rgb(0_0_0/0.6)] outline-none [@media(max-height:560px)]:h-full"
       >
         {body}
       </div>

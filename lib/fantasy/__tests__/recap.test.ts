@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRecap, estimateWeek, lineupCalls, recapOdds, revealGate, revealStale, revealWeek, sortPasses, weeksBefore } from '../recap'
+import { buildRecap, estimateWeek, lineupCalls, mergeSims, recapOdds, recapOddsRuns, revealGate, revealStale, revealWeek, sortPasses, weeksBefore } from '../recap'
 import type { Forecast } from '../forecast'
 import { DEFAULT_POWER_WEIGHTS } from '../power'
 import { startingSlots } from '../lineup'
@@ -138,5 +138,22 @@ describe('recapOdds', () => {
     // Team 4 won week 2, team 1 lost it.
     expect(odds[4].after.playoffs).toBeGreaterThan(odds[4].before.playoffs)
     expect(odds[1].after.playoffs).toBeLessThan(odds[1].before.playoffs)
+  })
+})
+
+describe('mergeSims', () => {
+  it('averages equal slices into one simulation', () => {
+    const recap = buildRecap(base)
+    const forecast = { mean: () => 100, sigma: 20, tau: 8 } as unknown as Forecast
+    const schedule = [3, 4].flatMap((week) => [
+      { week, a: 1, b: 2 },
+      { week, a: 3, b: 4 },
+    ])
+    const runs = recapOddsRuns({ ...base, recap, forecast, schedule, playoffWeeks: [5], playoffTeams: 2, weeksLeft: 2 })
+    const merged = mergeSims([runs.after(0, 200), runs.after(1, 200)])
+    const p = Object.values(merged).reduce((a, t) => a + t.playoffs, 0)
+    // Two of four teams make it in every season, so the odds sum to two.
+    expect(p).toBeCloseTo(2, 6)
+    expect(merged[1].seeds.reduce((a, x) => a + x, 0)).toBeCloseTo(1, 6)
   })
 })
