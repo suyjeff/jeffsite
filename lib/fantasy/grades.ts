@@ -15,10 +15,13 @@
 //                that team; "asks too much" caps the premium you can ask of
 //                them; "checked out" marks the manager dormant.
 //
-// Grades live in this browser, per league.
+// Grades live in this browser, per league. When a shared-grades worker is configured (sharedGrades.ts)
+// they are also sent, anonymously, and the league's other grades arrive as a prior: your own grades
+// dominate, and the shared ones count for less as they thin out.
 
 import type { AcceptRead } from './behavior'
 import { PRICING_VERSION } from './currency'
+import { blendGlobal, blendOffset, shareGrades, SHARED_DORMANT_MIN, type SharedPrior } from './sharedGrades'
 import type { TradeIdea } from './trades'
 
 export type Grade = 'yes' | 'maybe' | 'no'
@@ -46,13 +49,20 @@ export type Grades = Record<string, GradeRecord>
 export type Lessons = {
   n: number
   global: number
-  partner: Record<number, { offset: number; n: number; dormant: boolean }>
+  /** `n` counts your grades of the team; `shared` counts other people's, from the shared prior. */
+  partner: Record<number, { offset: number; n: number; dormant: boolean; shared: number }>
   /** Players a manager will not move, by your grade. */
   untouchable: Record<number, string[]>
   /** The smallest consensus premium a manager balked at. */
   askCap: Record<number, number>
   /** Positions a manager has no use for, from "doesn't need it". */
   noUse: Record<number, string[]>
+  /** What other people's grades say where yours say nothing; empty without a shared prior. */
+  sharedDormant: Record<number, boolean>
+  sharedUntouchable: Record<number, string[]>
+  sharedAskCap: Record<number, number>
+  /** Whether a shared prior fed these lessons, so a read changes even before you have graded. */
+  shared: boolean
   grades: Grades
 }
 
@@ -90,10 +100,12 @@ export const saveGrades = (leagueId: string, g: Grades) => {
   } catch {
     // Private mode or full storage: the grades last for this visit.
   }
+  // After the local save; a no-op unless a shared-grades worker is configured.
+  shareGrades(leagueId, g)
 }
 
-/** What a set of grades teaches. Positions of players come from `posOf`. */
-export const learn = (grades: Grades, posOf: (id: string) => string | undefined): Lessons => {
+/** What a set of grades teaches. Positions of players come from `posOf`; `prior` is what others' grades taught, if known. */
+export const learn = (grades: Grades, posOf: (id: string) => string | undefined, prior?: SharedPrior | null): Lessons => {
   const recs = Object.values(grades)
   const partner: Lessons['partner'] = {}
   const sums: Record<number, number> = {}
@@ -106,7 +118,7 @@ export const learn = (grades: Grades, posOf: (id: string) => string | undefined)
     // A reason explains the grade with a rule of its own, so it does not also drag the manager's whole curve.
     // Those grades count toward neither the residual nor its sample, so they never dilute the real ones.
     const rule = r.why === 'untouchable' || r.why === 'fit'
-    const p = (partner[r.partnerId] ??= { offset: 0, n: 0, dormant: false })
+    const p = (partner[r.partnerId] ??= { offset: 0, n: 0, dormant: false, shared: 0 })
     if (!rule) {
       const residual = logit(TARGET[r.grade]) - r.x
       sums[r.partnerId] = (sums[r.partnerId] ?? 0) + residual
@@ -122,8 +134,34 @@ export const learn = (grades: Grades, posOf: (id: string) => string | undefined)
       noUse[r.partnerId] = [...new Set([...(noUse[r.partnerId] ?? []), ...pos])]
     }
   }
-  for (const [id, p] of Object.entries(partner)) p.offset = (sums[Number(id)] ?? 0) / (p.n + 2)
-  return { n: recs.length, global: nAll ? all / (nAll + 6) : 0, partner, untouchable, askCap, noUse, grades }
+  // Others' lessons fill in where yours are silent. Where you have a lesson of the same kind, yours stands.
+  const sharedDormant: Lessons['sharedDormant'] = {}
+  const sharedUntouchable: Lessons['sharedUntouchable'] = {}
+  const sharedAskCap: Lessons['sharedAskCap'] = {}
+  for (const [key, sp] of Object.entries(prior?.partners ?? {})) {
+    const id = Number(key)
+    if (!Number.isInteger(id)) continue
+    const p = (partner[id] ??= { offset: 0, n: 0, dormant: false, shared: 0 })
+    p.shared = sp.n
+    if (!p.dormant && sp.dormant >= SHARED_DORMANT_MIN) sharedDormant[id] = true
+    const keeps = (sp.untouchable ?? []).filter((x) => !(untouchable[id] ?? []).includes(x))
+    if (keeps.length) sharedUntouchable[id] = keeps
+    if (askCap[id] === undefined && sp.askCap != null) sharedAskCap[id] = sp.askCap
+  }
+  for (const [id, p] of Object.entries(partner)) p.offset = blendOffset(sums[Number(id)] ?? 0, p.n, prior?.partners[id])
+  return {
+    n: recs.length,
+    global: blendGlobal(all, nAll, prior?.global),
+    partner,
+    untouchable,
+    askCap,
+    noUse,
+    sharedDormant,
+    sharedUntouchable,
+    sharedAskCap,
+    shared: !!prior,
+    grades,
+  }
 }
 
 /** Whether your grades rule a deal out, without scoring it: your own "no way", or a player you said they keep. */
@@ -140,7 +178,7 @@ export const applyLessons = (
   names: (id: string) => string,
   posOf: (id: string) => string | undefined,
 ): AcceptRead => {
-  if (!lessons || !lessons.n) return read
+  if (!lessons || (!lessons.n && !lessons.shared)) return read
   const signals = [...read.signals]
   let x = read.logit
   const p = lessons.partner[idea.partnerId]
@@ -151,8 +189,28 @@ export const applyLessons = (
     if (p.dormant) {
       x -= 1.5
       signals.unshift({ text: 'you marked this manager as checked out', tone: 'neg' })
-    } else if (Math.abs(p.offset) >= 0.2)
-      signals.unshift({ text: `${p.offset > 0 ? 'raised' : 'lowered'} by your ${p.n} grade${p.n === 1 ? '' : 's'} of this team`, tone: p.offset > 0 ? 'pos' : 'neg' })
+    } else if (Math.abs(p.offset) >= 0.2) {
+      const up = p.offset > 0
+      signals.unshift(
+        p.n
+          ? { text: `${up ? 'raised' : 'lowered'} by your ${p.n} grade${p.n === 1 ? '' : 's'} of this team`, tone: up ? 'pos' : 'neg' }
+          : { text: `${up ? 'raised' : 'lowered'} by ${p.shared} grade${p.shared === 1 ? '' : 's'} of this team from your league`, tone: up ? 'pos' : 'neg' },
+      )
+    }
+  }
+  if (lessons.sharedDormant[idea.partnerId]) {
+    x -= 1
+    signals.unshift({ text: 'others in your league say this manager has checked out', tone: 'neg' })
+  }
+  const sharedKept = (lessons.sharedUntouchable[idea.partnerId] ?? []).filter((id) => idea.get.includes(id))
+  if (sharedKept.length) {
+    x -= 2.5
+    signals.unshift({ text: `others in your league say they won't move ${sharedKept.map(names).join(' or ')}`, tone: 'neg' })
+  }
+  const sharedCap = lessons.sharedAskCap[idea.partnerId]
+  if (sharedCap != null && read.perceivedAsk != null && read.perceivedAsk >= sharedCap * 0.9) {
+    x -= 0.8
+    signals.unshift({ text: 'as big an ask as one others in your league saw refused', tone: 'neg' })
   }
   const kept = (lessons.untouchable[idea.partnerId] ?? []).filter((id) => idea.get.includes(id))
   if (kept.length) {

@@ -17,6 +17,7 @@ import WaiversView from '../../components/fantasy/views/WaiversView'
 import TradesView from '../../components/fantasy/views/TradesView'
 import type { AcceptRead } from '../../lib/fantasy/behavior'
 import { applyLessons, ideaKey, learn, loadGrades, saveGrades, type GradeRecord, type Grades } from '../../lib/fantasy/grades'
+import { useSharedPrior } from '../../lib/fantasy/sharedGrades'
 import type { TradeIdea } from '../../lib/fantasy/trades'
 import { applyAdjustments, liveAdjustments, loadAdjustments, saveAdjustments, type Adjustment, type Adjustments } from '../../lib/fantasy/adjust'
 import { analyze, withWeights } from '../../lib/fantasy/analysis'
@@ -186,11 +187,13 @@ const FantasyPage = () => {
   const storedGrades = useMemo(() => (leagueKey ? loadGrades(leagueKey) : {}), [leagueKey])
   const [editedGrades, setEditedGrades] = useState<{ key: string | null; g: Grades } | null>(null)
   const gradeMap = editedGrades && editedGrades.key === leagueKey ? editedGrades.g : storedGrades
+  // Everyone else's grades in this league, when sharing is set up; null otherwise.
+  const sharedPrior = useSharedPrior(leagueKey)
   const grades = useMemo(() => {
     const players = loaded?.players ?? {}
     const posOf = (id: string) => players[id]?.pos
     const name = (id: string) => players[id]?.name ?? id
-    const lessons = learn(gradeMap, posOf)
+    const lessons = learn(gradeMap, posOf, sharedPrior)
     return {
       all: gradeMap,
       lessons,
@@ -204,7 +207,7 @@ const FantasyPage = () => {
       },
       apply: (read: AcceptRead, idea: TradeIdea) => applyLessons(read, idea, lessons, name, posOf),
     }
-  }, [gradeMap, leagueKey, loaded?.players])
+  }, [gradeMap, leagueKey, loaded?.players, sharedPrior])
   // Everything but the composite ranking depends on the data and the value model;
   // weights only re-rank. Models and the trade search key on the core, so moving
   // a weight slider never reruns the season simulation or the backtest.

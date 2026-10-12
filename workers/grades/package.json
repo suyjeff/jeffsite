@@ -1,0 +1,14 @@
+{
+  "name": "ff-grades",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Shared trade grades for the fantasy app",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "wrangler": "^4.0.0"
+  }
+}

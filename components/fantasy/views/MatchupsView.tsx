@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { useFantasy } from '../FantasyContext'
 import { providerName } from '../../../lib/fantasy/useLeagueData'
-import { Deciders, MatchupScore, OddsBar, decidedBy, useMatchups, type MatchupRead } from '../matchup'
+import { Disclosure } from '../Disclosure'
+import { Benches, LineupDuel, OddsBar, decidedBy, useMatchups, type MatchupRead } from '../matchup'
 import TeamName from '../TeamName'
-import { Badge, Button, Empty, PageHeader, Panel, Pts, PtsKey, RowCover, Segmented, cx, pct, usePhone } from '../ui'
+import { Badge, Button, Empty, PageHeader, Panel, Pts, PtsKey, RowCover, Segmented, cx, pct } from '../ui'
 
 type View = 'list' | 'grid'
 
@@ -112,9 +113,8 @@ const Card = ({ m, mine, surname, open }: { m: MatchupRead; mine: boolean; surna
  * the detail. Close ones are flagged with the players still to decide them.
  */
 const MatchupsView = () => {
-  const { analysis, data, go, openMatchup } = useFantasy()
+  const { analysis, data, openMatchup } = useFantasy()
   const { slate, live, week, read, started } = useMatchups()
-  const phone = usePhone()
   const [view, setView] = useState<View>('list')
   useEffect(() => {
     try {
@@ -153,8 +153,6 @@ const MatchupsView = () => {
     })
     .filter((x): x is MatchupRead => !!x)
   const mine = all.find((m) => m.a.rosterId === me) ?? null
-  // Gameday lists Lineups as a page only when you have a matchup to read there.
-  const slotsHere = me != null && slate.managers[me]?.opponent != null
   // Closest first among the rest, so the games still in doubt lead.
   const rest = all.filter((m) => m !== mine).sort((x, y) => Math.abs(x.p - 0.5) - Math.abs(y.p - 0.5))
   const close = all.filter((m) => m.close).length
@@ -168,27 +166,16 @@ const MatchupsView = () => {
           <section aria-label="Your matchup" className="border border-ff-accent/40 bg-ff-panel">
             <header className="flex h-9 items-center justify-between gap-3 border-b border-ff-line px-3">
               <span className="ff-label text-ff-text2">Your matchup</span>
-              <span className="flex items-center gap-1">
-                <Button size="sm" variant="ghost" onClick={() => open(mine)}>
-                  Open matchup
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => go('slate', phone && slotsHere ? 'lineups' : 'week')}>
-                  Slot by slot on Gameday →
-                </Button>
-              </span>
+              <Button size="sm" variant="ghost" onClick={() => open(mine)}>
+                Open matchup
+              </Button>
             </header>
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-              <div className="px-3 py-4 sm:px-5">
-                <MatchupScore m={mine} />
+            <LineupDuel m={mine} />
+            <Disclosure summary="Benches" inset>
+              <div className="-mx-3 -my-2.5">
+                <Benches m={mine} a={mine.a.rosterId} b={mine.b.rosterId} />
               </div>
-              <div className="border-t border-ff-line lg:border-l lg:border-t-0">
-                <div className="ff-label flex justify-between px-3 pb-1 pt-2.5">
-                  <span>Who decides it</span>
-                  <span>± win odds</span>
-                </div>
-                <Deciders m={mine} limit={4} />
-              </div>
-            </div>
+            </Disclosure>
           </section>
         )}
 

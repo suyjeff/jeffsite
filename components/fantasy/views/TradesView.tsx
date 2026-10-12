@@ -14,6 +14,7 @@ import { Callout } from '../Callout'
 import { ShowMore } from './ShowMore'
 import { Disclosure } from '../Disclosure'
 import { emptyDeal, type Deal } from '../../../lib/fantasy/deal'
+import { sharingOn } from '../../../lib/fantasy/sharedGrades'
 import { useFantasy, useTradeRead } from '../FantasyContext'
 import {
   Avatar,
@@ -137,6 +138,8 @@ const TradesView = ({
   const movedOdds = useMemo(() => {
     const out = new Map<number, 'up' | 'down'>()
     for (const [id, p] of Object.entries(grades.lessons.partner)) {
+      // Only teams you graded: a nudge that comes from other people's grades is not "your grade".
+      if (!p.n && !p.dormant) continue
       if (p.offset >= 0.2 && !p.dormant) out.set(Number(id), 'up')
       else if (p.offset <= -0.2 || p.dormant) out.set(Number(id), 'down')
     }
@@ -343,6 +346,7 @@ const TradesView = ({
     grades.lessons.n === 0 ? (
       <Callout kind="instruction">
         Answer <span className="text-ff-text">Would they?</span> on any card and the odds learn what this league accepts.
+        {sharingOn() && ' Grades are shared anonymously with others using this site in your league.'}
       </Callout>
     ) : (
       <Callout
