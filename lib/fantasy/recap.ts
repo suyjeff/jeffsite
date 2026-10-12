@@ -500,4 +500,15 @@ export const revealGate = (games: ScheduleGame[] | undefined, week: number): Dat
   return gate
 }
 
+/**
+ * When a week's reveal goes stale: the first game day of the week after it. Past that the next week is under way, so the
+ * reveal no longer opens by itself (it can still be replayed). Null without a schedule for that week.
+ */
+export const revealStale = (games: ScheduleGame[] | undefined, week: number): Date | null => {
+  const dates = (games ?? []).filter((g) => g.week === week + 1 && g.date).map((g) => g.date!)
+  if (!dates.length) return null
+  const [y, m, d] = dates.sort()[0].split('-').map(Number)
+  return new Date(y, m - 1, d, 0, 0, 0, 0)
+}
+
 export const revealSeenKey = (leagueId: string, season: string, week: number) => `ff:reveal:${leagueId}:${season}:${week}`

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRecap, estimateWeek, lineupCalls, recapOdds, revealGate, revealWeek, sortPasses, weeksBefore } from '../recap'
+import { buildRecap, estimateWeek, lineupCalls, recapOdds, revealGate, revealStale, revealWeek, sortPasses, weeksBefore } from '../recap'
 import type { Forecast } from '../forecast'
 import { DEFAULT_POWER_WEIGHTS } from '../power'
 import { startingSlots } from '../lineup'
@@ -109,6 +109,12 @@ describe('reveal timing', () => {
   it('opens at 6am the Tuesday after Monday night', () => {
     const g = revealGate(games, 5)!
     expect([g.getFullYear(), g.getMonth() + 1, g.getDate(), g.getHours(), g.getDay()]).toEqual([2026, 10, 13, 6, 2])
+  })
+  it('goes stale once the next week has kicked off', () => {
+    const next = [...games, { week: 6, home: 'A', away: 'C', status: 'pre_game', date: '2026-10-15' }, { week: 6, home: 'B', away: 'D', status: 'pre_game', date: '2026-10-18' }]
+    const s = revealStale(next, 5)!
+    expect([s.getMonth() + 1, s.getDate(), s.getHours()]).toEqual([10, 15, 0])
+    expect(revealStale(games, 5)).toBeNull()
   })
   it('picks a week once every game is final, before it is settled', () => {
     const mbw = { 4: matchupsByWeek[1], 5: matchupsByWeek[2] }

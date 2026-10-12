@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
 import type { Models } from '../../lib/fantasy/models'
 import type { PowerWeights } from '../../lib/fantasy/power'
-import { buildRecap, revealGate, revealSeenKey, revealWeek, weekFinal, weeksBefore, type Recap } from '../../lib/fantasy/recap'
+import { buildRecap, revealGate, revealSeenKey, revealStale, revealWeek, weekFinal, weeksBefore, type Recap } from '../../lib/fantasy/recap'
 import type { SleeperMatchup } from '../../lib/fantasy/types'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { playerValues, replacementLevels, rosterStrength, type ModelConfig } from '../../lib/fantasy/war'
@@ -167,6 +167,9 @@ export const useReveal = ({
     if (readSeen(key)) return
     const gate = revealGate(data.schedule?.games, week)
     if (gate && Date.now() < gate.getTime()) return
+    // A week whose successor has already kicked off is old news: no surprise for it, only the replay.
+    const stale = revealStale(data.schedule?.games, week)
+    if (stale && Date.now() >= stale.getTime()) return
     writeSeen(key)
     if (!quiet) setOpen((o) => o ?? { preview: false, run: 1 })
   }, [source, blocked, quiet, leagueId, season, week, data])
