@@ -41,7 +41,7 @@ const headline = (recap: Recap, analysis: Analysis) => {
 
 const Move = ({ move, className }: { move: number; className?: string }) =>
   move === 0 ? (
-    <span className={cx('num text-white/70', className)}>–</span>
+    <span className={cx('num text-white/90', className)}>–</span>
   ) : (
     <span className={cx('num', className)} aria-label={move > 0 ? `up ${move}` : `down ${-move}`}>
       {move > 0 ? '▲' : '▼'}
@@ -58,28 +58,32 @@ const Drafting = ({ compact }: { compact?: boolean }) => (
         <path key={i} className="ff-rv-ink" d={`M${20 + i * 10} ${i % 5 === 0 ? 66 : 70}V74`} />
       ))}
     </g>
-    <rect className="ff-rv-ink ff-rv-sq" x={150.5} y={14.5} width={28} height={28} />
-    <rect className="ff-rv-ink ff-rv-sq ff-rv-ccw" x={158.5} y={22.5} width={12} height={12} />
-    <path className="ff-rv-ink" d="M110 28.5H150M164.5 42V60" strokeDasharray="2 3" />
-    <rect className="ff-rv-ink-fill" x={162.5} y={26.5} width={4} height={4} />
+    {/* Kept left of the trailing control, so nothing is drawn under its label; phones, with no room beside the
+        words, keep only the ruler. */}
+    <g className={compact ? undefined : 'max-sm:hidden'}>
+    <rect className="ff-rv-ink ff-rv-sq" x={compact ? 150.5 : 40.5} y={14.5} width={28} height={28} />
+    <rect className="ff-rv-ink ff-rv-sq ff-rv-ccw" x={compact ? 158.5 : 48.5} y={22.5} width={12} height={12} />
+    <path className="ff-rv-ink" d={compact ? 'M110 28.5H150M164.5 42V60' : 'M0 28.5H40M54.5 42V60'} strokeDasharray="2 3" />
+    <rect className="ff-rv-ink-fill" x={compact ? 162.5 : 52.5} y={26.5} width={4} height={4} />
     {!compact && (
       <>
         {/* A small rank trace: up, up, down, up to the top. */}
-        <path className="ff-rv-ink" d="M196 54L206 46L216 50L226 30L236 22" />
+        <path className="ff-rv-ink" d="M84 54L94 46L104 50L114 30L124 22" />
         {[
-          [196, 54],
-          [206, 46],
-          [216, 50],
-          [226, 30],
-          [236, 22],
+          [84, 54],
+          [94, 46],
+          [104, 50],
+          [114, 30],
+          [124, 22],
         ].map(([x, y]) => (
           <rect key={x} className="ff-rv-ink-fill" x={x - 1.5} y={y - 1.5} width={3} height={3} />
         ))}
-        <text x={196} y={12} className="font-mono" fontSize={8} letterSpacing="0.08em" fill="rgb(255 255 255 / 0.55)">
+        <text x={84} y={12} className="font-mono" fontSize={8} letterSpacing="0.08em" fill="rgb(255 255 255 / 0.55)">
           RK·Δ
         </text>
       </>
     )}
+    </g>
   </svg>
 )
 
@@ -99,19 +103,21 @@ export const PowerBanner = ({ recap, analysis, onOpen }: { recap: Recap; analysi
         </span>
       </span>
       <span className="relative min-w-0 flex-1 leading-tight">
-        <span className="block font-mono text-[10.5px] uppercase tracking-[0.1em] text-white/80">
+        <span className="block font-mono text-[10.5px] uppercase tracking-[0.1em] text-white/90">
           Week {recap.week} · power rank reveal{recap.estimated ? ' · estimated' : ''}
+          <span className="normal-case tracking-normal max-sm:hidden"> · composite ranking</span>
         </span>
         <span className="mt-1 block truncate text-[15px] font-medium sm:text-[16px]">
           {mine ? (
             <>
               You&apos;re No. {mine.rankAfter} <Move move={mine.move} className="ml-0.5 text-[13px]" />
-              {top && top.rosterId !== mine.rosterId && topName && <span className="font-normal text-white/80"> · {topName} took No. 1</span>}
+              {top && top.rosterId !== mine.rosterId && topName && <span className="font-normal text-white/90 max-sm:hidden"> · {topName} is No. 1</span>}
             </>
           ) : (
             <>{topName} is No. 1</>
           )}
         </span>
+        {mine && top && top.rosterId !== mine.rosterId && topName && <span className="mt-0.5 block truncate text-[12px] text-white/90 sm:hidden">{topName} is No. 1</span>}
       </span>
       <span className="relative flex h-8 shrink-0 items-center gap-1.5 border border-white/50 bg-white/10 px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] max-sm:hidden">
         Replay
@@ -148,7 +154,7 @@ export const NavBanner = ({
           <Crown size={22} />
         </span>
         <span className="relative min-w-0 flex-1 leading-tight">
-          <span className="block font-mono text-[9.5px] uppercase tracking-[0.1em] text-white/80">Wk {recap.week} power rank</span>
+          <span className="block font-mono text-[9.5px] uppercase tracking-[0.1em] text-white/90">Wk {recap.week} power rank</span>
           <span className="mt-0.5 block truncate text-[13px] font-medium md:text-[12.5px]">
             {mine ? (
               <>
@@ -167,14 +173,12 @@ export const NavBanner = ({
         <button
           type="button"
           onClick={preview.onOpen}
+          title={`Play week ${preview.week}'s reveal now${preview.estimated ? ', estimated from live and projected points' : ''}. Not saved as seen.`}
           className="flex h-10 w-full items-center gap-2 border border-dashed border-ff-line2 px-2.5 text-left font-mono text-[10.5px] text-ff-muted hover:border-ff-muted hover:text-ff-text2 md:h-7"
         >
           <span className="bg-ff-warn/15 px-1 text-[9.5px] tracking-[0.08em] text-ff-warn">DEV</span>
-          <span className="flex-1 truncate">Preview reveal (dev)</span>
-          <span className="text-ff-muted/80">
-            wk {preview.week}
-            {preview.estimated ? ' · est.' : ''}
-          </span>
+          <span className="min-w-0 flex-1 truncate">Preview reveal (dev)</span>
+          <span className="shrink-0 text-ff-muted/80">wk {preview.week}</span>
         </button>
       )}
     </div>

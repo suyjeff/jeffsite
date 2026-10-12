@@ -5,6 +5,7 @@ import type { PowerWeights } from '../../lib/fantasy/power'
 import { buildRecap, revealGate, revealSeenKey, revealWeek, weekFinal, weeksBefore, type Recap } from '../../lib/fantasy/recap'
 import type { SleeperMatchup } from '../../lib/fantasy/types'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
+import { playerValues, replacementLevels, rosterStrength, type ModelConfig } from '../../lib/fantasy/war'
 
 /**
  * A "Preview reveal (dev)" button beside the reveal banner that plays the current week now, estimated where it is
@@ -28,15 +29,35 @@ const playoffStartOf = (data: LeagueData) => Number(data.league.settings?.playof
 export const weekProjections = (data: LeagueData, week: number) =>
   data.pastProjections[week] ?? (data.projectionWeek === week ? data.projections : null) ?? data.horizon.find((h) => h.week === week)?.pts ?? null
 
+/**
+ * Roster strength going into a week: each roster as it was set for that week, its players valued on the weeks
+ * before it, the same way the analysis values them today. Null when the player model reads another season.
+ */
+const strengthGoingInto = (data: LeagueData, analysis: Analysis, model: ModelConfig, week: number) => {
+  if (data.valueSeason !== data.league.season) return null
+  const weeks = data.valueWeeks.filter((w) => w < week)
+  if (!weeks.length) return null
+  const positions = data.league.roster_positions ?? []
+  const levels = replacementLevels(data.weekPoints, weeks, data.players, positions, data.league.total_rosters || analysis.teams.length, model.benchFactor)
+  const values = playerValues(data.weekPoints, weeks, data.players, levels, analysis.sigma, model)
+  const out: Record<number, number> = {}
+  for (const t of analysis.teams) {
+    const set = data.matchupsByWeek[week]?.find((m) => m.roster_id === t.rosterId)?.players
+    out[t.rosterId] = rosterStrength(analysis.slots, set?.length ? set : t.players, data.players, values)
+  }
+  return out
+}
+
 /** The recap for a week, from the league's matchups (or a stand-in set of them, for the preview). */
 export const recapSource = (
   data: LeagueData,
   analysis: Analysis,
   models: Models,
-  weights: PowerWeights,
+  prefs: { weights: PowerWeights; model: ModelConfig },
   week: number,
   opts: { matchups?: SleeperMatchup[]; estimated?: boolean } = {},
 ): RevealSource => {
+  const { weights } = prefs
   const matchupsByWeek = opts.matchups ? { ...data.matchupsByWeek, [week]: opts.matchups } : data.matchupsByWeek
   const priorWeeks = weeksBefore(matchupsByWeek, week, playoffStartOf(data))
   const expected: Record<number, number> = {}
@@ -52,6 +73,7 @@ export const recapSource = (
     players: data.players,
     rosterIds: analysis.teams.map((t) => t.rosterId),
     strength: analysis.strength,
+    strengthBefore: strengthGoingInto(data, analysis, prefs.model, week),
     weights,
     sigma: analysis.sigma,
     proj: weekProjections(data, week),
@@ -87,14 +109,17 @@ export const useReveal = ({
   data,
   analysis,
   models,
-  weights,
+  prefs,
   blocked,
+  quiet,
 }: {
   data: LeagueData | null
   analysis: Analysis | null
   models: Models | null
-  weights: PowerWeights | null
+  prefs: { weights: PowerWeights; model: ModelConfig } | null
   blocked: boolean
+  /** Count this week's reveal seen without showing it (a first visit, which has had the tour instead). */
+  quiet?: boolean
 }) => {
   const week = useMemo(() => {
     if (!data || data.league.season !== data.state.season || data.state.season_type !== 'regular') {
@@ -104,7 +129,7 @@ export const useReveal = ({
     return revealWeek({ regularWeeks: data.regularWeeks, matchupsByWeek: data.matchupsByWeek, games: data.schedule?.games, week: data.state.week, playoffStart: playoffStartOf(data) })
   }, [data])
 
-  const source = useMemo(() => (data && analysis && models && weights && week != null ? recapSource(data, analysis, models, weights, week) : null), [data, analysis, models, weights, week])
+  const source = useMemo(() => (data && analysis && models && prefs && week != null ? recapSource(data, analysis, models, prefs, week) : null), [data, analysis, models, prefs, week])
 
   // The week under way, for the dev preview: the current week while its games are being played.
   const previewWeek = useMemo(() => {
@@ -143,8 +168,8 @@ export const useReveal = ({
     const gate = revealGate(data.schedule?.games, week)
     if (gate && Date.now() < gate.getTime()) return
     writeSeen(key)
-    setOpen((o) => o ?? { preview: false, run: 1 })
-  }, [source, blocked, leagueId, season, week, data])
+    if (!quiet) setOpen((o) => o ?? { preview: false, run: 1 })
+  }, [source, blocked, quiet, leagueId, season, week, data])
 
   return { week, source, open, show, close, preview: REVEAL_DEV_PREVIEW && previewWeek != null ? { week: previewWeek, estimated: previewEstimated } : null }
 }

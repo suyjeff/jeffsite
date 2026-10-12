@@ -68,6 +68,8 @@ export type ShellProps = {
   /** The desktop sidebar shown (the default) or folded away; folding needs `onSidebar`. */
   sidebar?: boolean
   onSidebar?: (open: boolean) => void
+  /** A banner at the foot of the sections, above the settings (the weekly power-rank reveal). Given the drawer's close on phones. */
+  navFooter?: (close?: () => void) => ReactNode
 }
 
 /** The wordmark. Shared by the shell and onboarding. */
@@ -124,6 +126,7 @@ const SidebarBody = ({
   controlsOpen,
   onControls,
   controlsSummary,
+  navFooter,
 }: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void; tourKey?: string | null; /** Leave room at the left of the header for the fixed sidebar toggle. */ clearToggle?: boolean }) => (
   <div className="flex h-full flex-col">
     <div className={cx('flex h-11 shrink-0 items-center justify-between border-b border-ff-line pr-2', clearToggle ? 'pl-11' : 'pl-3')}>
@@ -235,6 +238,8 @@ const SidebarBody = ({
       ))}
     </nav>
     </div>
+
+    {navFooter?.(onClose)}
 
     {controls && (
       <div className="shrink-0 border-t border-ff-line">

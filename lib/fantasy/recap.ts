@@ -1,7 +1,7 @@
 // The weekly power-rank reveal: what a finished week did to the rankings, and why. Everything here reads the
 // league's own matchups, so every figure on the recap is one the week actually produced. The rankings before and
-// after are the same composite the Power page shows, run on the weeks through last week and then through this one,
-// with roster strength held at today's, so a move is the week's results and nothing else.
+// after are the same composite the Power page shows: before on the weeks through last week, with each roster as it
+// went into the week and its players valued on those weeks; after on the weeks through this one, as it stands now.
 
 import { persistMean, simulateSeason, winProb, type Forecast, type SimTeam } from './forecast'
 import { optimalLineup, type LineupPlayer, type Slot } from './lineup'
@@ -118,8 +118,10 @@ export type RecapInput = {
   slots: Slot[]
   players: PlayerMap
   rosterIds: number[]
-  /** Roster strength today, held fixed on both sides of the week. */
+  /** Roster strength now, for the ranking after the week. */
   strength: Record<number, number>
+  /** Roster strength going into the week, for the ranking before it; today's when missing. */
+  strengthBefore?: Record<number, number> | null
   weights: PowerWeights
   sigma: number
   /** Each player's pre-game projection for the week, for upsets and start/sit calls. */
@@ -162,7 +164,7 @@ export const buildRecap = (input: RecapInput): Recap => {
   const teamWeeks = buildTeamWeeks(input.matchupsByWeek, weeks, slots, players)
   const seasonsBefore = buildTeamSeasons(rosterIds, teamWeeks, priorWeeks, {})
   const seasonsAfter = buildTeamSeasons(rosterIds, teamWeeks, weeks, {})
-  const before = computePower(seasonsBefore, strength, weights, sigma)
+  const before = computePower(seasonsBefore, input.strengthBefore ?? strength, weights, sigma)
   const after = computePower(seasonsAfter, strength, weights, sigma)
   const bBy = Object.fromEntries(before.map((p) => [p.rosterId, p]))
   const aBy = Object.fromEntries(after.map((p) => [p.rosterId, p]))
@@ -338,11 +340,14 @@ export const buildRecap = (input: RecapInput): Recap => {
   }
 }
 
+/** Seasons simulated on each side of the week. */
+export const RECAP_SIMS = 2000
+
 /**
  * Playoff odds just before the week and just after it, on the same model and the same random draws, so the gap is
  * the week's results. Records come from the recap's own weeks; the weeks ahead are the model's.
  */
-export const recapOdds = (opts: {
+export type RecapOddsInput = {
   recap: Recap
   priorWeeks: number[]
   matchupsByWeek: Record<number, SleeperMatchup[]>
@@ -357,7 +362,10 @@ export const recapOdds = (opts: {
   /** Regular-season weeks left after the recap week. */
   weeksLeft: number
   sims?: number
-}): Record<number, Odds> => {
+}
+
+/** The two simulations behind recapOdds, as separate steps, so a caller can run them a frame apart. */
+export const recapOddsRuns = (opts: RecapOddsInput) => {
   const { recap, rosterIds, forecast } = opts
   const weeks = [...opts.priorWeeks, recap.week]
   const teamWeeks = buildTeamWeeks(opts.matchupsByWeek, weeks, opts.slots, opts.players)
@@ -375,11 +383,20 @@ export const recapOdds = (opts: {
     mean: persistMean(forecast.mean, rosterIds),
     sigma: forecast.sigma,
     tau: forecast.tau,
-    sims: opts.sims ?? 2000,
+    sims: opts.sims ?? RECAP_SIMS,
   }
-  const before = simulateSeason({ ...base, record: rec(opts.priorWeeks), schedule: [...thisWeek, ...ahead], weeksLeft: opts.weeksLeft + 1 })
-  const after = simulateSeason({ ...base, record: rec(weeks), schedule: ahead, weeksLeft: opts.weeksLeft })
-  return Object.fromEntries(rosterIds.map((id) => [id, { before: before[id], after: after[id] }]))
+  return {
+    before: () => simulateSeason({ ...base, record: rec(opts.priorWeeks), schedule: [...thisWeek, ...ahead], weeksLeft: opts.weeksLeft + 1 }),
+    after: () => simulateSeason({ ...base, record: rec(weeks), schedule: ahead, weeksLeft: opts.weeksLeft }),
+  }
+}
+
+export const joinOdds = (rosterIds: number[], before: Record<number, SimTeam>, after: Record<number, SimTeam>): Record<number, Odds> =>
+  Object.fromEntries(rosterIds.map((id) => [id, { before: before[id], after: after[id] }]))
+
+export const recapOdds = (opts: RecapOddsInput): Record<number, Odds> => {
+  const runs = recapOddsRuns(opts)
+  return joinOdds(opts.rosterIds, runs.before(), runs.after())
 }
 
 /**

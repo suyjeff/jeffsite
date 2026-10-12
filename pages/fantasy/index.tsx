@@ -40,6 +40,9 @@ import UserMenu from '../../components/fantasy/UserMenu'
 import DisplayMenu, { type Density } from '../../components/fantasy/ThemePicker'
 import CommandPalette from '../../components/fantasy/CommandPalette'
 import { useTheme } from '../../lib/fantasy/useTheme'
+import { RevealHost } from '../../components/fantasy/PowerReveal'
+import { NavBanner } from '../../components/fantasy/RevealBanner'
+import { useReveal } from '../../components/fantasy/useReveal'
 
 const PREFS_KEY = 'ff:prefs'
 
@@ -261,6 +264,21 @@ const FantasyPage = () => {
       // Storage blocked: skip it rather than show it on every visit.
     }
   }, [appUp])
+  // The weekly power-rank reveal. It waits while the tour has the screen, and a first visit (which gets the tour)
+  // does not also get last week's reveal on top of it.
+  const [toured, setToured] = useState(false)
+  useEffect(() => {
+    if (tour) setToured(true)
+  }, [tour])
+  // The tour is about to start on this render's commit when it has never been seen: hold the reveal for it too.
+  let tourDue = false
+  try {
+    tourDue = appUp && !window.localStorage.getItem(TOUR_KEY)
+  } catch {
+    // Storage blocked: the tour never starts by itself either.
+  }
+  const revealPrefs = useMemo(() => (prefs ? { weights: prefs.weights, model: prefs.model } : null), [prefs?.weights, prefs?.model]) // eslint-disable-line react-hooks/exhaustive-deps
+  const reveal = useReveal({ data, analysis, models, prefs: revealPrefs, blocked: !appUp || tour || tourDue, quiet: toured })
   const endTour = useCallback(() => {
     setTour(false)
     try {
@@ -455,6 +473,31 @@ const FantasyPage = () => {
       onSidebar={(open) => update({ sidebar: open })}
       tour={tour && appUp}
       onTourEnd={endTour}
+      navFooter={
+        reveal.source && analysis
+          ? (closeDrawer) => (
+              <NavBanner
+                recap={reveal.source!.recap}
+                analysis={analysis}
+                onOpen={() => {
+                  closeDrawer?.()
+                  reveal.show(false)
+                }}
+                preview={
+                  reveal.preview
+                    ? {
+                        ...reveal.preview,
+                        onOpen: () => {
+                          closeDrawer?.()
+                          reveal.show(true)
+                        },
+                      }
+                    : null
+                }
+              />
+            )
+          : undefined
+      }
     >
       {error && (
         <div className="mt-4 border border-ff-neg/40 bg-ff-neg/10 px-3 py-2.5 font-mono text-[12px] text-ff-neg">ERR · {error}</div>
@@ -477,7 +520,7 @@ const FantasyPage = () => {
           {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'me' && <MeView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'power' && (
-            <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={sheetApi.openTeam} weights={prefs.weights} />
+            <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={sheetApi.openTeam} weights={prefs.weights} recap={reveal.source?.recap ?? null} onReveal={() => reveal.show(false)} />
           )}
           {section === 'teams' && (
             // Moving to another team keeps the page, so rosters can be compared.
@@ -504,6 +547,7 @@ const FantasyPage = () => {
           )}
         </div>
         {sheets.length > 0 && <SheetHost stack={sheets} onBack={backSheet} onClose={closeSheet} />}
+        <RevealHost api={reveal} prefs={revealPrefs!} />
         <CommandPalette
           open={palette}
           onClose={closePalette}

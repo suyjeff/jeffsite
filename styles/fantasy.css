@@ -993,7 +993,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
  * theme's own color-scheme, so a dark theme on a light system still gets the bright gold. Every motion here is a
  * transform, an opacity or a clip, and each one is switched off under reduced motion. */
 .ff {
-  --ff-gold: light-dark(rgb(196 140 10), rgb(242 193 78));
+  --ff-gold: light-dark(rgb(182 128 4), rgb(242 193 78));
   /* Gold as text: deeper in light mode so it reads at 4.5:1 on the panel. */
   --ff-gold-ink: light-dark(rgb(140 98 0), rgb(246 205 110));
   --ff-rv-a: rgb(var(--ff-accent-deep));
@@ -1015,10 +1015,10 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   animation: ff-rv-frame 420ms var(--ff-ease-out) both;
 }
 .ff .ff-rv-root[data-closing] .ff-rv-shade {
-  animation: ff-rv-fade-out 200ms ease-in both;
+  animation: ff-rv-fade-out 180ms var(--ff-ease-out) both;
 }
 .ff .ff-rv-root[data-closing] .ff-rv-frame {
-  animation: ff-rv-frame-out 200ms ease-in both;
+  animation: ff-rv-frame-out 180ms var(--ff-ease-out) both;
 }
 @keyframes ff-rv-fade {
   from {
@@ -1070,7 +1070,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   animation: ff-rv-wipe 620ms var(--ff-ease-out) var(--d, 0ms) both;
 }
 .ff .ff-rv-out {
-  animation: ff-rv-out 240ms ease-in both;
+  animation: ff-rv-out 200ms var(--ff-ease-out) both;
 }
 /* A scan line that sweeps its box top to bottom, over and over, while the numbers come in. */
 .ff .ff-rv-scan {
@@ -1133,7 +1133,9 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 /* The ranking while it sorts: rows sit at their slot by transform and travel between slots on the on-screen
    ease-in-out, a little longer than a pass so a row is still settling as the next pass begins. */
 .ff .ff-rv-slot {
-  transition: transform 300ms var(--ff-ease-in-out);
+  transition:
+    transform 300ms var(--ff-ease-in-out),
+    opacity 400ms ease;
   will-change: transform;
 }
 /* A row that just swapped flashes the way it went. */
@@ -1147,9 +1149,8 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 .ff .ff-rv-row {
   transition:
-    background-color 220ms ease,
-    box-shadow 220ms ease,
-    opacity 300ms ease;
+    background-color 150ms ease,
+    box-shadow 150ms ease;
 }
 /* The comparator: a bracket joining the two rows a pass is swapping. */
 .ff .ff-rv-cmp {
@@ -1235,12 +1236,12 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 @keyframes ff-rv-ping {
   from {
-    opacity: 0.7;
-    transform: scale(0.6) rotate(45deg);
+    opacity: 0.8;
+    transform: scale(0.7);
   }
   to {
     opacity: 0;
-    transform: scale(1.9) rotate(45deg);
+    transform: scale(1.75);
   }
 }
 /* The No. 1 row: gold rule, gold wash, and corner brackets that close in on it. */
@@ -1263,20 +1264,9 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     transform: translate(var(--cx, 0px), var(--cy, 0px));
   }
 }
-/* Gold text, and a glint that crosses it once. */
+/* Gold text. */
 .ff .ff-rv-gold {
   color: var(--ff-gold-ink);
-}
-.ff .ff-rv-glint {
-  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.55) 50%, transparent 70%) no-repeat;
-  background-size: 250% 100%;
-  background-position: 160% 0;
-  animation: ff-rv-glint 1.2s ease-in-out var(--d, 0ms) both;
-}
-@keyframes ff-rv-glint {
-  to {
-    background-position: -60% 0;
-  }
 }
 
 /* ---- Banners ----
@@ -1294,7 +1284,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   transition: scale 200ms var(--ff-ease-out);
 }
 .ff .ff-rv-banner:focus-visible {
-  outline: 2px solid var(--ff-gold);
+  outline: 2px solid rgb(var(--ff-text));
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -1362,16 +1352,6 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     opacity: 0.3;
   }
 }
-/* A new week waiting: a gold square breathing beside the label. */
-.ff .ff-rv-new {
-  background: var(--ff-gold);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .ff .ff-rv-new {
-    animation: ff-live 1.6s ease-in-out infinite alternate;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .ff
     :is(
@@ -1389,9 +1369,12 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
       .ff-rv-hat,
       .ff-rv-ping,
       .ff-rv-corner,
-      .ff-rv-glint
+      .ff-rv-undim
     ) {
     animation: ff-rv-fade 200ms ease-out both;
+  }
+  .ff .ff-rv-out {
+    animation: ff-rv-fade-out 160ms ease-out both;
   }
   .ff .ff-rv-root[data-closing] :is(.ff-rv-shade, .ff-rv-frame) {
     animation: ff-rv-fade-out 160ms ease-out both;
@@ -1407,5 +1390,14 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     animation: none;
     opacity: 1;
     stroke-dashoffset: 0;
+  }
+}
+/* The rest of the ranking coming back up from the dimmed reveal. */
+.ff .ff-rv-undim {
+  animation: ff-rv-undim 420ms ease-out 120ms both;
+}
+@keyframes ff-rv-undim {
+  from {
+    opacity: 0.4;
   }
 }

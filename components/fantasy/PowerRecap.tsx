@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Odds, Part, Reason, Recap, RecapGame, RecapTeam } from '../../lib/fantasy/recap'
+import { RECAP_SIMS, type Odds, type Part, type Reason, type Recap, type RecapGame, type RecapTeam } from '../../lib/fantasy/recap'
 import { useFantasy } from './FantasyContext'
 import { Crown } from './RevealBanner'
 import { Avatar, PlayerAvatar, PosTag, Segmented, cx, fmt, pct } from './ui'
@@ -19,7 +19,9 @@ export const TeamLabel = ({ id, avatar = 0, className }: { id: number; avatar?: 
   return (
     <span className={cx('inline-flex min-w-0 max-w-full items-center gap-1.5 align-bottom', className)}>
       {avatar > 0 && <Avatar src={t.avatar} name={t.name} size={avatar} />}
-      <span className={cx('truncate', id === analysis.myRosterId ? 'text-ff-accent' : 'text-ff-text')}>{t.name}</span>
+      <span className={cx('truncate', id === analysis.myRosterId ? 'text-ff-accent' : 'text-ff-text')} title={t.name}>
+        {t.name}
+      </span>
     </span>
   )
 }
@@ -59,6 +61,8 @@ export const RowBody = ({
   showRank = true,
   showMove = true,
   score,
+  moveIn,
+  moveStandIn,
   crowned,
   hatDelay = 0,
   trailing,
@@ -67,6 +71,10 @@ export const RowBody = ({
   rank: number
   showRank?: boolean
   showMove?: boolean
+  /** Fade the move in after this many ms, as it first appears. */
+  moveIn?: number
+  /** Something else in the move's place while it is not shown (the week's points, during the sort). */
+  moveStandIn?: ReactNode
   score?: ReactNode
   crowned?: boolean
   hatDelay?: number
@@ -81,13 +89,15 @@ export const RowBody = ({
       <span className="relative shrink-0">
         <Avatar src={t?.avatar ?? null} name={t?.name ?? '?'} size={24} />
         {crowned && (
-          <span className="ff-rv-hat absolute -left-[7px] -top-[11px] -rotate-[14deg]" style={d(hatDelay)}>
-            <Crown size={17} />
+          <span className="ff-rv-hat absolute -left-[6px] -top-[9px] -rotate-[14deg]" style={d(hatDelay)}>
+            <Crown size={15} />
           </span>
         )}
       </span>
       <span className="min-w-0 flex-1 leading-tight">
-        <span className={cx('block truncate text-[13.5px]', mine ? 'font-medium text-ff-accent' : 'text-ff-text')}>{t?.name ?? `#${team.rosterId}`}</span>
+        <span className={cx('block truncate text-[13.5px]', mine ? 'font-medium text-ff-accent' : 'text-ff-text')} title={t?.name}>
+          {t?.name ?? `#${team.rosterId}`}
+        </span>
         <span className="block truncate font-mono text-[10.5px] text-ff-muted">
           {team.wins}-{team.losses}
           {team.ties ? `-${team.ties}` : ''}
@@ -99,9 +109,13 @@ export const RowBody = ({
           )}
         </span>
       </span>
-      <span className={cx('w-9 shrink-0 text-right', !showMove && 'invisible')}>
-        <MoveChip move={team.move} />
-      </span>
+      {!showMove && moveStandIn != null ? (
+        <span className="w-11 shrink-0 text-right">{moveStandIn}</span>
+      ) : (
+        <span className={cx('w-11 shrink-0 text-right', !showMove && 'invisible', showMove && moveIn != null && 'ff-rv-rise')} style={moveIn != null ? d(moveIn) : undefined}>
+          <MoveChip move={team.move} />
+        </span>
+      )}
       <span className="num w-10 shrink-0 text-right text-[13px] text-ff-text">{score ?? fmt(team.scoreAfter, 1)}</span>
       {trailing}
     </>
@@ -121,11 +135,11 @@ const Section = ({ title, aside, children, className, style }: { title: string; 
 
 /** One award: a label, a big figure, and whose it is. */
 const Award = ({ label, value, unit, who, note, tone }: { label: string; value: ReactNode; unit?: string; who: ReactNode; note?: ReactNode; tone?: 'gold' | 'pos' | 'neg' }) => (
-  <div className="min-w-0 bg-ff-panel px-3 py-2.5">
+  <div className="min-w-0 border-b border-r border-ff-line bg-ff-panel px-3 py-2.5 max-sm:px-2.5">
     <div className="ff-label truncate">{label}</div>
     <div className={cx('num mt-1 text-[20px] leading-none', tone === 'gold' ? 'ff-rv-gold' : tone === 'pos' ? 'text-ff-pos' : tone === 'neg' ? 'text-ff-neg' : 'text-ff-text')}>
       {value}
-      {unit && <span className="ml-0.5 text-[11px] text-ff-muted">{unit}</span>}
+      {unit && <span className="ml-1 text-[11px] text-ff-muted">{unit}</span>}
     </div>
     <div className="mt-1.5 truncate text-[12px]">{who}</div>
     {note && <div className="mt-0.5 truncate font-mono text-[10.5px] text-ff-muted">{note}</div>}
@@ -182,7 +196,7 @@ const Focus = ({ recap, team, odds }: { recap: Recap; team: RecapTeam; odds: Rec
           </div>
         </div>
         <span className={cx('num text-[26px] leading-none', team.rankAfter === 1 ? 'ff-rv-gold' : 'text-ff-text')}>#{team.rankAfter}</span>
-        <MoveChip move={team.move} className="mt-1 w-8 text-[13px]" />
+        {team.move !== 0 && <MoveChip move={team.move} className="mt-1 text-[13px]" />}
       </div>
       <Reasons reasons={team.reasons} />
       <dl className="grid grid-cols-2 gap-px border border-ff-line bg-ff-line sm:grid-cols-4">
@@ -268,6 +282,45 @@ const GameRow = ({ g, recap }: { g: RecapGame; recap: Recap }) => {
   )
 }
 
+/** The week's three headlines, from the first that apply: the climb, the drop, the upset, the closest game, the top score. */
+const headlines = (recap: Recap): ReactNode[] => {
+  const a = recap.awards
+  const over = (g: RecapGame) => <TeamLabel id={g.winner === g.a ? g.b : g.a} />
+  const out: ReactNode[] = []
+  if (a.riser) out.push(<Award key="up" label="Biggest climb" value={`▲${a.riser.move}`} tone="pos" who={<TeamLabel id={a.riser.rosterId} avatar={18} />} note={`No. ${a.riser.rankBefore} → No. ${a.riser.rankAfter}`} />)
+  if (a.faller) out.push(<Award key="down" label="Biggest drop" value={`▼${-a.faller.move}`} tone="neg" who={<TeamLabel id={a.faller.rosterId} avatar={18} />} note={`No. ${a.faller.rankBefore} → No. ${a.faller.rankAfter}`} />)
+  if (a.upset)
+    out.push(
+      <Award
+        key="upset"
+        label="Upset of the week"
+        value={pct(a.upset.pWinner)}
+        unit="to win"
+        tone="gold"
+        who={<TeamLabel id={a.upset.winner!} avatar={18} />}
+        note={
+          <>
+            beat {over(a.upset)} by {fmt(a.upset.margin)}
+          </>
+        }
+      />,
+    )
+  if (a.closest && a.closest !== a.upset)
+    out.push(
+      <Award
+        key="close"
+        label="Closest game"
+        value={fmt(a.closest.margin)}
+        unit="pts"
+        who={<TeamLabel id={a.closest.winner ?? a.closest.a} avatar={18} />}
+        note={<>over {over(a.closest)}</>}
+      />,
+    )
+  if (a.high) out.push(<Award key="high" label="Top score" value={fmt(a.high.pts)} tone="gold" who={<TeamLabel id={a.high.rosterId} avatar={18} />} />)
+  if (!a.riser && !a.faller) out.unshift(<Award key="held" label="The order" value="held" who="No team changed places" />)
+  return out
+}
+
 /** The week: headline moves, every result, the awards, the best players, and the calls. */
 const WeekPanels = ({ recap, at }: { recap: Recap; at: (i: number) => CSSProperties }) => {
   const { data } = useFantasy()
@@ -276,20 +329,7 @@ const WeekPanels = ({ recap, at }: { recap: Recap; at: (i: number) => CSSPropert
   return (
     <>
       <Section title="The week in three" style={at(0)} className="ff-rv-rise">
-        <div className="grid gap-px border border-ff-line bg-ff-line sm:grid-cols-3">
-          {a.riser && (
-            <Award label="Biggest climb" value={`▲${a.riser.move}`} tone="pos" who={<TeamLabel id={a.riser.rosterId} avatar={18} />} note={`No. ${a.riser.rankBefore} → No. ${a.riser.rankAfter}`} />
-          )}
-          {a.faller && (
-            <Award label="Biggest drop" value={`▼${-a.faller.move}`} tone="neg" who={<TeamLabel id={a.faller.rosterId} avatar={18} />} note={`No. ${a.faller.rankBefore} → No. ${a.faller.rankAfter}`} />
-          )}
-          {a.upset ? (
-            <Award label="Upset of the week" value={pct(a.upset.pWinner)} unit="to win" who={<TeamLabel id={a.upset.winner!} avatar={18} />} note={`won by ${fmt(a.upset.margin)}`} tone="gold" />
-          ) : a.closest ? (
-            <Award label="Closest game" value={fmt(a.closest.margin)} unit="pts" who={<TeamLabel id={a.closest.winner!} avatar={18} />} note={`over ${data.league ? '' : ''}${'the other side'}`} />
-          ) : null}
-          {!a.riser && !a.faller && <Award label="The order" value="held" who="No team changed places" />}
-        </div>
+        <div className="grid grid-cols-3 border-l border-t border-ff-line">{headlines(recap).slice(0, 3)}</div>
       </Section>
 
       <Section title="Results" aside={`avg ${fmt(recap.leagueAvg)}`} style={at(1)} className="ff-rv-rise">
@@ -301,7 +341,7 @@ const WeekPanels = ({ recap, at }: { recap: Recap; at: (i: number) => CSSPropert
       </Section>
 
       <Section title="Awards" style={at(2)} className="ff-rv-rise">
-        <div className="grid grid-cols-2 gap-px border border-ff-line bg-ff-line lg:grid-cols-3">
+        <div className="grid grid-cols-2 border-l border-t border-ff-line lg:grid-cols-3">
           {a.high && <Award label="Top score" value={fmt(a.high.pts)} who={<TeamLabel id={a.high.rosterId} avatar={18} />} tone="gold" />}
           {a.sharpest && <Award label="Sharpest lineup" value={pct(a.sharpest.accuracy)} unit="of best" who={<TeamLabel id={a.sharpest.rosterId} avatar={18} />} note="points played of points possible" />}
           {a.ceiling && <Award label="Best possible lineup" value={fmt(a.ceiling.pts)} who={<TeamLabel id={a.ceiling.rosterId} avatar={18} />} note="most in the roster" />}
@@ -381,7 +421,7 @@ const WeekPanels = ({ recap, at }: { recap: Recap; at: (i: number) => CSSPropert
                     <TeamLabel id={recap.calls.bad.rosterId} />
                   </span>{' '}
                   benched {name(recap.calls.bad.sat)} ({fmt(recap.calls.bad.satPts)}) for {name(recap.calls.bad.started)} ({fmt(recap.calls.bad.startedPts)})
-                  {recap.calls.bad.decisive ? ', and lost by less.' : '.'}
+                  {recap.calls.bad.decisive ? `, then lost by ${fmt((recap.byId[recap.calls.bad.rosterId]?.oppPoints ?? 0) - (recap.byId[recap.calls.bad.rosterId]?.points ?? 0))}.` : '.'}
                 </span>
               </li>
             )}
@@ -408,7 +448,7 @@ const PlayoffPanel = ({ recap, odds, at }: { recap: Recap; odds: Record<number, 
   const swing = [...rows].sort((x, y) => Math.abs(y.o.after.playoffs - y.o.before.playoffs) - Math.abs(x.o.after.playoffs - x.o.before.playoffs))[0]
   const news = rows.filter((r) => r.o.after.clinch && r.o.after.clinch !== r.o.before.clinch)
   return (
-    <Section title="Playoff picture" aside={`top ${cut} · ${models.forecast.sims ? '2,000 sims each side' : ''}`} style={at(5)} className="ff-rv-rise">
+    <Section title="Playoff picture" aside={`top ${cut} · ${RECAP_SIMS.toLocaleString()} sims each side`} style={at(5)} className="ff-rv-rise">
       {(swing || news.length > 0) && (
         <div className="mb-3 space-y-1 text-[12.5px] leading-snug text-ff-text2">
           {news.map((r) => (
@@ -485,12 +525,19 @@ const PowerRecap = ({
     const dx = from.left - to.left
     const dy = from.top - to.top
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return
-    el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 620, easing: 'cubic-bezier(0.77, 0, 0.175, 1)' })
+    // The list's own scroller would clip it on the way in: let it out for the trip.
+    const scroller = el.closest<HTMLElement>('.ff-scroll')
+    if (scroller) scroller.style.overflow = 'visible'
+    const a = el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 560, easing: 'cubic-bezier(0.77, 0, 0.175, 1)' })
+    const restore = () => scroller && (scroller.style.overflow = '')
+    a.onfinish = restore
+    a.oncancel = restore
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const focusTeam = recap.byId[focus] ?? recap.teams[0]
   const ranking = (
-    <ol ref={list} className="relative" aria-label={`Power rank after week ${recap.week}`}>
+    // Opaque, so the column rule never shows through the list as it slides in over it.
+    <ol ref={list} className="relative bg-ff-panel" aria-label={`Power rank after week ${recap.week}`}>
       {recap.teams.map((t, i) => {
         const selected = phone ? open === t.rosterId : focus === t.rosterId
         return (
@@ -502,7 +549,7 @@ const PowerRecap = ({
               onClick={() => (phone ? setOpen(selected ? null : t.rosterId) : setFocus(t.rosterId))}
               style={{ height: rowH, ...(entering && !from ? d(60 + i * 30) : {}) }}
               className={cx(
-                'ff-rv-row relative flex w-full items-center gap-2.5 px-3 text-left',
+                'ff-rv-row relative flex w-full items-center gap-2.5 border-b border-ff-line/60 px-3 text-left',
                 entering && !from && 'ff-rv-rise',
                 i === 0 ? 'ff-rv-gold-row' : selected ? 'bg-ff-raised shadow-[inset_2px_0_0_rgb(var(--ff-accent))]' : 'hover:bg-ff-raised/60',
               )}
@@ -526,7 +573,8 @@ const PowerRecap = ({
   )
   const footnote = (
     <p className={cx('px-3 py-3 font-mono text-[10.5px] leading-relaxed text-ff-muted', entering && 'ff-rv-in')} style={at(0)}>
-      Power is the chance to beat an average team in a week. Moves are week {recap.week}&apos;s results alone: roster strength is held at today&apos;s on both sides.
+      The composite power ranking (Power → Composite). Power is the chance to beat an average team in a week. Last week&apos;s rank reads results through week {recap.week - 1} and each roster as set for week {recap.week}; this
+      week&apos;s adds week {recap.week}&apos;s results and rosters as they stand now.
       {recap.estimated && <span className="text-ff-warn"> Estimated: games still being played are counted at their projections.</span>}
     </p>
   )
@@ -535,7 +583,7 @@ const PowerRecap = ({
       <span className="ff-label w-6">Rk</span>
       <span className="ff-label w-6" />
       <span className="ff-label flex-1">Team</span>
-      <span className="ff-label w-9 text-right">Move</span>
+      <span className="ff-label w-11 text-right">Move</span>
       <span className="ff-label w-10 text-right" title="Chance to beat an average team in a week">Pwr</span>
       {phone && <span className="w-3" />}
     </div>
@@ -584,7 +632,7 @@ const PowerRecap = ({
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[400px_minmax(0,1fr)]">
-      <div className="flex min-h-0 flex-col border-r border-ff-line">
+      <div className="relative z-10 flex min-h-0 flex-col border-r border-ff-line">
         {listHead}
         <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {ranking}

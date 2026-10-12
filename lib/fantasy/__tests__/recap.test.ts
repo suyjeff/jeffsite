@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildRecap, estimateWeek, lineupCalls, revealGate, revealWeek, sortPasses, weeksBefore } from '../recap'
+import { buildRecap, estimateWeek, lineupCalls, recapOdds, revealGate, revealWeek, sortPasses, weeksBefore } from '../recap'
+import type { Forecast } from '../forecast'
 import { DEFAULT_POWER_WEIGHTS } from '../power'
 import { startingSlots } from '../lineup'
 import type { PlayerMap, SleeperMatchup } from '../types'
@@ -115,5 +116,21 @@ describe('reveal timing', () => {
     const live = games.map((g, i) => (i ? { ...g, status: 'in_game' } : g))
     expect(revealWeek({ regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games: live, week: 5, playoffStart: 15 })).toBe(4)
     expect(weeksBefore(mbw, 5, 15)).toEqual([4])
+  })
+})
+
+describe('recapOdds', () => {
+  it('moves playoff odds toward the week\'s winners, on the same draws', () => {
+    const recap = buildRecap(base)
+    const forecast = { mean: () => 100, sigma: 20, tau: 8 } as unknown as Forecast
+    const schedule = [3, 4, 5].flatMap((week) => [
+      { week, a: 1, b: 2 },
+      { week, a: 3, b: 4 },
+    ])
+    const odds = recapOdds({ ...base, recap, forecast, schedule, playoffWeeks: [6], playoffTeams: 2, weeksLeft: 3, sims: 800 })
+    expect(Object.keys(odds)).toHaveLength(4)
+    // Team 4 won week 2, team 1 lost it.
+    expect(odds[4].after.playoffs).toBeGreaterThan(odds[4].before.playoffs)
+    expect(odds[1].after.playoffs).toBeLessThan(odds[1].before.playoffs)
   })
 })
