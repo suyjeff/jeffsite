@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
+import { lockScroll } from './scrollLock'
 import { cx, usePhone } from './ui'
 
 /**
@@ -102,11 +103,10 @@ const Sheet = ({
     }
     // Captured first, so Escape here never also closes a menu or drawer behind.
     window.addEventListener('keydown', onKey, true)
-    const overflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlock = lockScroll()
     return () => {
       window.removeEventListener('keydown', onKey, true)
-      document.body.style.overflow = overflow
+      unlock()
       // Back to where it was, unless focus has since gone somewhere else on purpose (the command palette, opened
       // while this one was sliding away).
       const at = document.activeElement

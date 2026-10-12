@@ -1,9 +1,11 @@
 import React, { useMemo } from 'react'
-import type { Slate, SlateMatchup, SlatePlayer, SlateSide } from '../../lib/fantasy/slate'
+import type { Slate, SlateGame, SlateMatchup, SlatePlayer, SlateSide } from '../../lib/fantasy/slate'
+import { benchIds } from '../../lib/fantasy/roster'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
-import { BOX_LINE, Pts, ScoreState, WeekScore, WinBar, cx, fmt, fmtSigned, pct, type PtsKind } from './ui'
+import { dayOf } from './slateBits'
+import { BOX_LINE, Pts, ScoreState, WeekScore, WinBar, cx, fmt, fmtSigned, pct, usePhone, type PtsKind } from './ui'
 import { useSlate } from './useSlate'
 import { boxScore, useWeekNow, type WeekNow } from './useWeekNow'
 
@@ -52,6 +54,8 @@ export type MatchupRead = {
   countB: SideCount
   /** The week as played: game clocks and box scores. */
   now: WeekNow
+  /** A team's game this week, for its opponent and kickoff day (none on a bye). */
+  gameOf: (team: string) => SlateGame | undefined
   rows: SlotRow[]
   deciders: SlatePlayer[]
   /** How far apart, in points expected at the end: under a game's spread, it is close. */
@@ -73,6 +77,7 @@ export const useMatchups = () => {
   const started = slate.games.some((g) => g.final || g.live)
   const now = useWeekNow(slate, proj)
   const read = useMemo(() => {
+    const gameOf = (team: string) => slate.games.find((g) => g.home === team || g.away === team)
     const count = (rid: number): SideCount => {
       const c = { final: 0, live: 0, left: 0 }
       for (const id of lineupOf(rid)) {
@@ -118,6 +123,7 @@ export const useMatchups = () => {
         countA,
         countB,
         now,
+        gameOf,
         rows,
         deciders,
         close: Math.abs(a.mu - b.mu) < Math.max(8, Math.sqrt(a.sd ** 2 + b.sd ** 2) * 0.5),
@@ -130,8 +136,11 @@ export const useMatchups = () => {
 /** The win-odds bar between two sides (ui WinBar). */
 export const OddsBar = WinBar
 
+/** What a matchup's headline reads: a full MatchupRead has it, and so can a forecast for a week not yet on the slate. */
+export type MatchupHead = Pick<MatchupRead, 'a' | 'b' | 'p' | 'started' | 'kindA' | 'kindB' | 'countA' | 'countB' | 'close'>
+
 /** A matchup's headline: both managers, their scores as they stand, where each is heading, and the odds. */
-export const MatchupScore = ({ m, size = 'lg' }: { m: MatchupRead; size?: 'lg' | 'md' }) => {
+export const MatchupScore = ({ m, size = 'lg' }: { m: MatchupHead; size?: 'lg' | 'md' }) => {
   const { analysis } = useFantasy()
   const record = (id: number) => {
     const s = analysis.seasonById[id]
@@ -198,70 +207,194 @@ export const MatchupScore = ({ m, size = 'lg' }: { m: MatchupRead; size?: 'lg' |
   )
 }
 
-// Each side of a slot gets under a third of a phone's width: drop the portrait and let the name take two lines rather than cut it to a few letters.
-const phoneName = 'max-md:[&_.ff-pn-av]:!hidden max-md:[&_.ff-pn-name]:overflow-visible max-md:[&_.ff-pn-name]:whitespace-normal max-md:[&_.ff-pn-name]:[text-overflow:clip]'
+/** How a lineup is drawn: `full` on the Matchups page, `sheet` in the matchup sheet, `dense` in the dashboard widget. Phones always take the narrow form. */
+export type DuelVariant = 'full' | 'sheet' | 'dense'
 
-/** Every slot against its opposite, with the edge between them. */
-export const SlotTable = ({ m, compact, inset }: { m: MatchupRead; compact?: boolean; inset?: 'sheet' }) => {
+/** What the slot rows need; `now` and `gameOf` are missing for a week that is not on the slate yet, which is all projections. */
+export type SlotSource = Pick<MatchupRead, 'rows'> & Partial<Pick<MatchupRead, 'now' | 'gameOf'>>
+
+/**
+ * Every slot against its opposite, QB against QB: each starter with his game (opponent and day, then the score as
+ * it stands or his projection), the two scores meeting at the centre over a bar that grows toward the side ahead in
+ * that slot. A starter in a live game is lit; box lines show wide, and fold away on a phone, where a name wraps to
+ * a second line rather than cut short. A tap opens him, or hands him to `onPlayer` (a dashboard channel) when given.
+ */
+export const SlotTable = ({ m, variant = 'full', empty, onPlayer }: { m: SlotSource; variant?: DuelVariant; empty?: (i: number, side: 'a' | 'b') => React.ReactNode; onPlayer?: (id: string) => void }) => {
   const { data, openPlayer } = useFantasy()
+  const phone = usePhone()
+  // Wide: each score carries its game line (state, delta or heading) and the name its box score. Narrow: the score
+  // with a state tag under it, no portrait where two names must share a few hundred pixels.
+  const rich = !phone && variant !== 'dense'
+  const box = !phone && variant === 'full'
+  const portrait = !phone && variant !== 'dense'
+  const scoreW = rich ? (variant === 'full' ? 'w-[100px]' : 'w-[76px]') : 'w-[44px]'
+  const pad = variant === 'sheet' ? 'px-4' : variant === 'dense' ? 'px-2' : 'px-3'
   const maxEdge = Math.max(4, ...m.rows.map((r) => Math.abs(r.edge)))
-  // Once his game has started, his line under his name: its state, then his box score.
+
+  // His box score under his name once his game has started.
   const played = (id: string, align: 'left' | 'right') => {
-    const w = m.now.of(id)
-    if (!w || w.kind === 'proj') return null
-    const box = boxScore(w.line, data.players[id]?.pos ?? '').join(' · ')
-    // Under the name, on its edge past the portrait; a phone drops the portrait and lets the line wrap.
+    const w = m.now?.of(id)
+    if (!box || !m.now || !w || w.kind === 'proj') return null
+    const line = boxScore(w.line, data.players[id]?.pos ?? '').join(' · ') || (m.now.hasLines && w.kind === 'final' ? 'no stats' : '')
+    if (!line) return null
     return (
-      <span
-        title={box || undefined}
-        className={cx(
-          'mt-0.5 block md:truncate',
-          BOX_LINE,
-          align === 'right' ? (compact ? 'md:pr-[28px]' : 'md:pr-[32px]') : compact ? 'md:pl-[28px]' : 'md:pl-[32px]',
-        )}
-      >
-        <ScoreState kind={w.kind} clock={w.clock} className="mr-1 align-[1px]" />
-        {box || (m.now.hasLines && w.kind === 'final' ? 'no stats' : '')}
+      <span title={line} className={cx('mt-0.5 block truncate', BOX_LINE, align === 'right' ? 'pr-[40px]' : 'pl-[40px]')}>
+        {line}
       </span>
     )
   }
   // Each player is a cell of his own: it lights on hover, wherever the pointer is on it, and a click anywhere on it opens him.
-  const name = (id: string | null, align: 'left' | 'right') =>
-    id ? (
-      <span className={cx('ff-pn-host relative -mx-1.5 flex min-w-0 flex-col justify-center self-stretch px-1.5 py-1.5 transition-colors hover:bg-ff-raised/60', align === 'right' && 'items-end text-right')}>
-        <button type="button" tabIndex={-1} aria-hidden onClick={() => openPlayer(id)} className="absolute inset-0 cursor-pointer" />
-        <PlayerName player={data.players[id]} id={id} size={compact ? 20 : 24} className={cx(phoneName, 'max-w-full', align === 'right' && 'flex-row-reverse text-right')} />
+  const name = (id: string | null, i: number, align: 'left' | 'right') => {
+    if (!id) return <span className="flex items-center py-2 text-[12px] text-ff-neg">{empty?.(i, align === 'left' ? 'a' : 'b') ?? 'empty'}</span>
+    const p = data.players[id]
+    const w = m.now?.of(id)
+    const g = p?.team ? m.gameOf?.(p.team) : undefined
+    // His game: against whom, and which day while it is still to come.
+    const sub = [w?.game ? `${w.game.home ? 'vs' : '@'} ${w.game.opp}` : m.now ? 'bye' : null, g && !g.final && !g.live ? dayOf(g.date).split(',')[0] : null].filter(Boolean).join(' · ')
+    return (
+      <span
+        className={cx(
+          'ff-pn-host relative -mx-1.5 flex min-w-0 flex-1 flex-col justify-center self-stretch px-1.5 transition-colors',
+          variant === 'dense' ? 'py-1' : 'py-1.5',
+          'hover:bg-ff-raised/60',
+          align === 'right' && 'items-end text-right',
+          w?.kind === 'live' && 'bg-ff-pos/[0.06]',
+        )}
+      >
+        {onPlayer ? (
+          <button type="button" aria-label={`Follow ${p?.name ?? 'player'}`} onClick={() => onPlayer(id)} className="absolute inset-0 cursor-pointer" />
+        ) : (
+          <button type="button" tabIndex={-1} aria-hidden onClick={() => openPlayer(id)} className="absolute inset-0 cursor-pointer" />
+        )}
+        <PlayerName
+          player={p}
+          id={id}
+          size={variant === 'full' ? 32 : 22}
+          sub={sub || undefined}
+          className={cx(
+            'max-w-full',
+            // Under md two names share a few hundred pixels: let each take a second line before it is cut.
+            'max-md:[&_.ff-pn-name]:overflow-visible max-md:[&_.ff-pn-name]:whitespace-normal max-md:[&_.ff-pn-name]:[text-overflow:clip]',
+            !portrait && '[&_.ff-pn-av]:!hidden',
+            // The cell's own button takes the tap, so the name does not open the sheet over it.
+            onPlayer && '[&_.ff-pn-hit]:pointer-events-none',
+            align === 'right' && 'flex-row-reverse text-right',
+          )}
+        />
         {played(id, align)}
       </span>
-    ) : (
-      <span className="py-1.5 text-[12px] text-ff-neg">empty</span>
     )
+  }
+  const score = (id: string | null, sc: SlotRow['sa'], align: 'left' | 'right') => {
+    if (!id || !sc) return <span className="num text-[12.5px] text-ff-muted">–</span>
+    const w = m.now?.of(id)
+    if (m.now && !w) return <span className="font-mono text-[10px] text-ff-muted">bye</span>
+    if (rich && w) return <WeekScore s={w} short={variant !== 'full'} align={align} className="text-[14px]" />
+    return (
+      <span className={cx('inline-flex flex-col leading-tight', align === 'right' ? 'items-end' : 'items-start')}>
+        <Pts value={sc.value} kind={sc.kind} quiet className={cx('text-[13px]', sc.kind !== 'proj' && 'font-medium')} />
+        {/* The dashboard folds FINAL away: solid ink says it, and only a game on keeps its tag. */}
+        {w && (variant !== 'dense' || sc.kind === 'live') && <ScoreState kind={sc.kind} clock={w.clock} className="mt-0.5" />}
+      </span>
+    )
+  }
   return (
     <ul>
       {m.rows.map((r, i) => (
-        <li key={i} className={cx('grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 border-b border-ff-line/60 last:border-0', inset === 'sheet' ? 'px-4' : 'px-3')}>
-          <span className="flex min-w-0 items-stretch">{name(r.a, 'left')}</span>
-          <span className="flex w-[104px] flex-col items-center justify-center gap-0.5" title={`Edge ${fmtSigned(r.edge)}: expected points, left minus right`}>
-            <span className="flex w-full items-baseline justify-between text-[12.5px]">
-              <span>{r.sa ? <Pts value={r.sa.value} kind={r.sa.kind} quiet className={r.sa.kind !== 'proj' ? 'font-medium' : undefined} /> : '–'}</span>
-              <span className="font-mono text-[9.5px] text-ff-muted">{r.slot}</span>
-              <span>{r.sb ? <Pts value={r.sb.value} kind={r.sb.kind} quiet className={r.sb.kind !== 'proj' ? 'font-medium' : undefined} /> : '–'}</span>
+        <li key={i} className={cx('border-b border-ff-line/60 last:border-0', pad)}>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-x-2">
+            <span className="flex min-w-0 items-stretch">{name(r.a, i, 'left')}</span>
+            <span className="flex flex-col items-center justify-center py-1.5" title={`${r.slot}: edge ${fmtSigned(r.edge)}, expected points, left minus right`}>
+              <span className="flex w-full items-center">
+                <span className={cx('flex shrink-0 justify-end', scoreW)}>{score(r.a, r.sa, 'right')}</span>
+                <span className={cx('shrink-0 text-center font-mono text-[9.5px] text-ff-muted', rich && variant === 'full' ? 'w-10' : 'w-8')}>{r.slot}</span>
+                <span className={cx('flex shrink-0 justify-start', scoreW)}>{score(r.b, r.sb, 'left')}</span>
+              </span>
+              <span className="relative mt-1 block h-1 w-full bg-ff-sunken" aria-hidden>
+                <span className="absolute inset-y-0 left-1/2 w-px bg-ff-line2" />
+                {/* The bar grows toward the side that is ahead, as a tug of war: green pulls toward the left side, red away from it. */}
+                <span
+                  className={cx('absolute inset-y-0', r.edge >= 0 ? 'right-1/2 bg-ff-pos' : 'left-1/2 bg-ff-neg')}
+                  style={{ width: `${(Math.min(Math.abs(r.edge), maxEdge) / maxEdge) * 50}%` }}
+                />
+              </span>
             </span>
-            <span className="relative block h-1 w-full bg-ff-sunken" aria-hidden>
-              <span className="absolute inset-y-0 left-1/2 w-px bg-ff-line2" />
-              {/* The bar grows toward the side that is ahead, as a tug of war: green pulls toward the left side, red away from it. */}
-              <span
-                className={cx('absolute inset-y-0', r.edge >= 0 ? 'right-1/2 bg-ff-pos' : 'left-1/2 bg-ff-neg')}
-                style={{ width: `${(Math.min(Math.abs(r.edge), maxEdge) / maxEdge) * 50}%` }}
-              />
-            </span>
-          </span>
-          <span className="flex min-w-0 items-stretch justify-end">{name(r.b, 'right')}</span>
+            <span className="flex min-w-0 items-stretch justify-end">{name(r.b, i, 'right')}</span>
+          </div>
         </li>
       ))}
     </ul>
   )
 }
+
+/** Each side's bench, with what the week has made of him: his score once his game is on, his projection before. */
+export const Benches = ({ m, a, b, inset }: { m: Pick<MatchupRead, 'now'>; a: number; b: number; inset?: boolean }) => {
+  const { data, analysis } = useFantasy()
+  const per = analysis.horizon.perWeek
+  const sides = [a, b].map((id) => {
+    const team = analysis.teamById[id]
+    const ids = team ? benchIds(team) : []
+    const at = (x: string) => m.now.of(x)?.value ?? per[x] ?? 0
+    return { id, name: team?.name ?? '', ids: ids.sort((x, y) => at(y) - at(x)) }
+  })
+  if (!sides.some((s) => s.ids.length)) return <p className={cx('py-2 text-[12px] text-ff-muted', inset ? 'px-4' : 'px-3')}>Nobody on either bench.</p>
+  return (
+    <div className={cx('grid grid-cols-2 gap-x-4 py-2', inset ? 'px-4' : 'px-3')}>
+      {sides.map((s) => (
+        <div key={s.id} className="min-w-0">
+          <div className="mb-1 truncate font-mono text-[10.5px] text-ff-muted">{s.name}</div>
+          {s.ids.length ? (
+            <ul className="divide-y divide-ff-line/60">
+              {s.ids.map((id) => {
+                const w = m.now.of(id)
+                return (
+                  <li key={id} className="flex h-8 items-center gap-2 text-[12.5px]">
+                    <span className="min-w-0 flex-1">
+                      <PlayerName player={data.players[id]} id={id} size={18} className="max-sm:[&_.ff-pn-av]:!hidden" />
+                    </span>
+                    {w ? <Pts value={w.value} kind={w.kind} quiet={false} className="shrink-0 text-[12.5px]" /> : <span className="shrink-0 font-mono text-[10px] text-ff-muted">bye</span>}
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="text-[12px] text-ff-muted">Nobody on the bench.</p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The head-to-head, the one view of a matchup on the Matchups page, in its sheet and on the dashboard: both
+ * managers' totals and odds on top, every slot against its opposite below.
+ */
+export const LineupDuel = ({
+  m,
+  variant = 'full',
+  empty,
+  between,
+  onPlayer,
+}: {
+  m: MatchupHead & SlotSource
+  variant?: DuelVariant
+  empty?: (i: number, side: 'a' | 'b') => React.ReactNode
+  /** Notes between the totals and the slots. */
+  between?: React.ReactNode
+  /** Where a tap on a player goes instead of his sheet. */
+  onPlayer?: (id: string) => void
+}) => (
+  <div>
+    <div className={variant === 'full' ? 'px-3 py-4 sm:px-5' : variant === 'sheet' ? 'px-4 py-4' : 'px-3 pb-3 pt-3'}>
+      <MatchupScore m={m} size={variant === 'full' ? 'lg' : 'md'} />
+    </div>
+    {between}
+    <div className="border-t border-ff-line">
+      <SlotTable m={m} variant={variant} empty={empty} onPlayer={onPlayer} />
+    </div>
+  </div>
+)
 
 /** The players still to play who move the odds most, each with whose he is and his range. */
 export const Deciders = ({ m, limit = 6, inset }: { m: MatchupRead; limit?: number; inset?: 'sheet' }) => {

@@ -1,20 +1,20 @@
 import React, { useMemo, useState } from 'react'
 import { pastProjection } from '../../../lib/fantasy/analysis'
 import { deadStarters } from '../../../lib/fantasy/lineup'
-import { surname } from '../../../lib/fantasy/scout'
+import type { SlateSide } from '../../../lib/fantasy/slate'
 import { isWaiverFill, makeLineupEval } from '../../../lib/fantasy/trades'
 import { searchTrades, waiverTargets } from '../../../lib/fantasy/search'
 import AdjustControl from '../AdjustControl'
 import LinesBlock from '../LinesBlock'
 import { describeNote } from '../ContextNotes'
 import { useFantasy, useTradeRead } from '../FantasyContext'
-import { countLine, useMatchups } from '../matchup'
-import FreeAgentPick, { bestFreeAgent, FreeAgentName } from '../FreeAgentPick'
+import { LineupDuel, useMatchups, type MatchupHead, type SlotSource } from '../matchup'
+import FreeAgentPick, { FreeAgentName } from '../FreeAgentPick'
 import TeamName from '../TeamName'
 import { MoveList, useMoves } from '../Moves'
 import { ruledOutBy } from '../../../lib/fantasy/grades'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, ScoreState, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, isOut, ownerLabel, simOdds, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, ScoreState, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, ownerLabel, simOdds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -229,8 +229,12 @@ const useWeekLineup = (rosterId: number | null, week: number | null) => {
   }, [rosterId, week, data, analysis])
 }
 
+/**
+ * Your matchup: the same head-to-head as the Matchups page, denser. Once the week is on, Sleeper's lineups as set with
+ * banked points and live odds; before, next week's best lineups from the adjusted projections.
+ */
 const Matchup = ({ select }: WidgetProps) => {
-  const { models, analysis, data } = useFantasy()
+  const { models, analysis, data, openMatchup } = useFantasy()
   const f = models.forecast
   const me = analysis.myRosterId
   const game = f?.nextWeek.find((g) => g.a === me || g.b === me)
@@ -242,126 +246,54 @@ const Matchup = ({ select }: WidgetProps) => {
   const unset = useUnsetLineups(game?.week ?? null)
   const { read, week: slateWeek } = useMatchups()
   if (!f || !game || mine == null || opp == null) return <NoForecast />
-  // Once the week is on, the matchup as it stands: Sleeper's lineups as set, banked points, live odds.
   const now = slateWeek === game.week ? read(mine, opp) : null
-  const on = !!now?.started
-  const p = on ? now!.p : flip ? 1 - game.pA : game.pA
-  const muMe = on ? now!.a.mu : flip ? game.muB : game.muA
-  const muOpp = on ? now!.b.mu : flip ? game.muA : game.muB
-  const gap = muMe - muOpp
-  const winPct = Math.round(p * 100)
-  const favored = Math.abs(p - 0.5) < 0.03 ? null : p > 0.5 ? mine : opp
-  // Why the number is what it is: the slot edges each way, and who on either side might sit.
-  const edges = (left ?? []).map((s, i) => ({ slot: s.slot, me: s, them: right?.[i], d: s.pts - (right?.[i]?.pts ?? 0) }))
-  const best = edges.reduce<(typeof edges)[number] | null>((a, e) => (e.d > (a?.d ?? 0) ? e : a), null)
-  const worst = edges.reduce<(typeof edges)[number] | null>((a, e) => (e.d < (a?.d ?? 0) ? e : a), null)
-  const doubtful = [...(left ?? []), ...(right ?? [])].filter((s) => s.id && data.players[s.id]?.injury && !isOut(data.players[s.id]?.injury)).map((s) => surname(data.players[s.id!].name))
-  const last = (s?: { id: string | null; eligible: string[] }) => {
-    const id = s ? (s.id ?? bestFreeAgent(data, analysis.rosteredBy, s.eligible, game.week)) : null
-    return id ? surname(data.players[id]?.name ?? id) : 'a pickup'
+  // Before the week is on there is no slate to read: the forecast stands in, side by side as projections.
+  const p = flip ? 1 - game.pA : game.pA
+  const side = (rosterId: number, mu: number): SlateSide => ({ rosterId, mu, sd: f.sigma, banked: 0, left: 0, starters: [] })
+  const forecast: MatchupHead & SlotSource = {
+    a: side(mine, flip ? game.muB : game.muA),
+    b: side(opp, flip ? game.muA : game.muB),
+    p,
+    started: false,
+    kindA: 'proj',
+    kindB: 'proj',
+    countA: { final: 0, live: 0, left: 0 },
+    countB: { final: 0, live: 0, left: 0 },
+    close: Math.abs(game.muA - game.muB) < Math.max(8, f.sigma * 0.5),
+    rows: (left ?? []).map((s, i) => {
+      const them = right?.[i]
+      const proj = (pts: number) => ({ value: pts, kind: 'proj' as const, expect: pts, proj: pts })
+      return { slot: s.slot, a: s.id, b: them?.id ?? null, sa: proj(s.pts), sb: proj(them?.pts ?? 0), edge: s.pts - (them?.pts ?? 0) }
+    }),
+  }
+  const m = now?.started ? now : forecast
+  // A slot nobody holds shows the best pickup for it, before the week is set.
+  const empty = (i: number, k: 'a' | 'b') => {
+    const s = (k === 'a' ? left : right)?.[i]
+    return now?.started || !s ? 'empty' : <FreeAgentName eligible={s.eligible} week={game.week} />
   }
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-ff-line px-3 pb-2.5 pt-3">
-        <div className="grid grid-cols-2 gap-3 text-[13px]">
-          <TeamTag id={mine} />
-          <span className="flex min-w-0 justify-end">
-            <TeamTag id={opp} />
-          </span>
-        </div>
-        <div className="mt-1.5 flex items-baseline justify-between gap-3">
-          <Pts value={on ? now!.a.banked : muMe} kind={on ? now!.kindA : 'proj'} className="text-[26px] font-medium leading-none tracking-[-0.03em]" />
-          <span className="font-mono text-[10.5px] text-ff-muted">wk {game.week} · {on ? 'as it stands' : 'projected'}</span>
-          <Pts value={on ? now!.b.banked : muOpp} kind={on ? now!.kindB : 'proj'} className="text-[26px] font-medium leading-none tracking-[-0.03em]" />
-        </div>
-        {on && (
-          // Banked against still to come: how much of each side is already in, and where it is heading.
-          <div className="mt-1 flex items-baseline justify-between gap-3 font-mono text-[10px] text-ff-muted">
-            <span className="truncate" title={countLine(now!.countA)}>
-              {now!.countA.left + now!.countA.live} to go · → <Pts value={muMe} kind="proj" />
-            </span>
-            <span className="truncate text-right" title={countLine(now!.countB)}>
-              → <Pts value={muOpp} kind="proj" /> · {now!.countB.left + now!.countB.live} to go
-            </span>
-          </div>
+      <LineupDuel
+        m={m}
+        variant="dense"
+        empty={empty}
+        onPlayer={(id) => select({ player: id })}
+        between={[mine, opp].map((rid) =>
+          unset[rid] && !m.started ? (
+            <div key={rid} className="border-t border-ff-line px-3 py-1.5 text-[11.5px] leading-snug text-ff-text2">
+              <span className="text-ff-warn">{rid === mine ? 'Your' : `${analysis.teamById[rid].name}'s`} lineup isn&apos;t set</span>: {unset[rid].names.join(', ')} can&apos;t score. As set it projects{' '}
+              <span className="num">{fmt(unset[rid].asSet)}</span>; the {fmt(rid === mine ? m.a.mu : m.b.mu)} assumes {rid === mine ? 'you swap' : 'they swap'}.
+            </div>
+          ) : null,
         )}
-        <div className="mt-2.5 flex items-center gap-2" title={`Win odds: you ${winPct}%, them ${100 - winPct}%`}>
-          <span className={cx('num w-9 text-[13px] font-medium', favored === mine ? 'text-ff-text' : 'text-ff-muted')}>{winPct}%</span>
-          <WinBar p={p} />
-          <span className={cx('num w-9 text-right text-[13px] font-medium', favored === opp ? 'text-ff-text' : 'text-ff-muted')}>{100 - winPct}%</span>
-        </div>
-        <div className="mt-1 text-center text-[11px] text-ff-text2">
-          {favored == null ? 'Even' : favored === mine ? 'You’re favored' : `${analysis.teamById[opp]?.name ?? 'They'} favored`}
-          <span className="text-ff-muted"> by </span>
-          <span className="num">{fmt(Math.abs(gap))}</span>
-          <span className="text-ff-muted"> pts</span>
-        </div>
+      />
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-ff-line px-3 py-1.5 font-mono text-[10.5px] text-ff-muted">
+        <span>wk {game.week}</span>
+        <button type="button" onClick={() => openMatchup(game.week, mine, opp)} className="text-ff-text2 hover:text-ff-text">
+          Open matchup →
+        </button>
       </div>
-      {[mine, opp].map((rid) =>
-        unset[rid] && !on ? (
-          <div key={rid} className="border-b border-ff-line px-3 py-1.5 text-[11.5px] leading-snug text-ff-text2">
-            <span className="text-ff-warn">{rid === mine ? 'Your' : `${analysis.teamById[rid].name}'s`} lineup isn&apos;t set</span>: {unset[rid].names.join(', ')} can&apos;t score. As set it projects{' '}
-            <span className="num">{fmt(unset[rid].asSet)}</span>; the {fmt(rid === mine ? muMe : muOpp)} assumes {rid === mine ? 'you swap' : 'they swap'}.
-          </div>
-        ) : null,
-      )}
-      <div className="grid flex-1 grid-cols-2 divide-x divide-ff-line">
-        {(on
-          ? [0, 1].map((k) => now!.rows.map((r) => ({ slot: r.slot, eligible: [] as string[], id: k === 0 ? r.a : r.b, pts: (k === 0 ? r.sa : r.sb)?.value ?? 0, kind: (k === 0 ? r.sa : r.sb)?.kind ?? 'proj' })))
-          : [left, right].map((side) => (side ?? []).map((s) => ({ ...s, kind: 'proj' as const })))
-        ).map((side, k) => (
-          <div key={k}>
-            {side.map((s, i) => (
-              // A starter whose game is over or on wears a rule on his left edge: ink for final, green for live.
-              <div
-                key={i}
-                className={cx(
-                  'flex h-6 items-center gap-2 border-b border-ff-line/60 px-3 text-[12px]',
-                  s.kind === 'final' && 'shadow-[inset_2px_0_0_rgb(var(--ff-text2))]',
-                  s.kind === 'live' && 'shadow-[inset_2px_0_0_rgb(var(--ff-pos))]',
-                )}
-              >
-                <span className="w-8 shrink-0 font-mono text-[10px] text-ff-muted">{s.slot}</span>
-                {s.id ? (
-                  <button onClick={() => select({ player: s.id! })} className="min-w-0 flex-1 truncate text-left text-ff-text hover:underline">
-                    {data.players[s.id]?.name}
-                  </button>
-                ) : (
-                  <span className="min-w-0 flex-1 truncate text-ff-text2">
-                    {on ? <span className="text-ff-neg">empty</span> : <FreeAgentName eligible={s.eligible} week={game.week} />}
-                  </span>
-                )}
-                <Pts value={s.pts} kind={s.kind} className={cx('shrink-0', s.kind !== 'proj' && 'font-medium')} />
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-      <ul className="divide-y divide-ff-line border-t border-ff-line bg-ff-sunken/60 text-[11.5px] leading-snug text-ff-text2 [&>li]:px-3 [&>li]:py-1">
-        <li>
-          <span className="text-ff-muted">Spread </span>
-          <span className="num">σ {fmt(f.sigma)}</span>
-          <span className="text-ff-muted"> a team-week, so a </span>
-          <span className="num">{fmt(Math.abs(gap))}</span>
-          <span className="text-ff-muted"> pt gap is </span>
-          <span className="num">{winPct}–{100 - winPct}</span>
-        </li>
-        {best && best.d >= 1 && (
-          <li>
-            <span className="text-ff-pos">Your edge</span> <span className="font-mono text-[10.5px] text-ff-muted">{best.slot}</span> {last(best.me)} over {last(best.them)} <span className="num text-ff-pos">+{fmt(best.d)}</span>
-          </li>
-        )}
-        {worst && worst.d <= -1 && (
-          <li>
-            <span className="text-ff-neg">Their edge</span> <span className="font-mono text-[10.5px] text-ff-muted">{worst.slot}</span> {last(worst.them)} over {last(worst.me)} <span className="num text-ff-neg">{fmtSigned(worst.d, 1)}</span>
-          </li>
-        )}
-        {doubtful.length > 0 && (
-          <li>
-            <span className="text-ff-warn">Swing</span> {doubtful.slice(0, 4).join(', ')} <span className="text-ff-muted">questionable</span>
-          </li>
-        )}
-      </ul>
     </div>
   )
 }
@@ -980,7 +912,7 @@ const Moves = () => {
 
 export const WIDGETS: Record<WidgetKind, Meta> = {
   moves: { title: 'Moves to make', blurb: 'Lineup fixes, cover for starters who may sit, bye holes and the best adds.', w: 4, h: 9, Body: Moves },
-  matchup: { title: 'My matchup', blurb: 'Next week, both lineups, and your win odds.', w: 4, h: 12, Body: Matchup },
+  matchup: { title: 'My matchup', blurb: 'Both lineups slot by slot, scores as they stand, and your win odds.', w: 4, h: 15, Body: Matchup },
   odds: { title: 'Playoff odds', blurb: 'Simulated seasons: wins, playoff, bye and title odds.', w: 5, h: 11, Body: Odds },
   scoreboard: { title: 'Scoreboard', blurb: "This week's games with expected scores and win odds.", w: 6, h: 7, Body: Scoreboard },
   trades: { title: 'Trade ideas', blurb: 'Best deal from each partner, and how likely each lands.', w: 7, h: 9, Body: TradeIdeas },

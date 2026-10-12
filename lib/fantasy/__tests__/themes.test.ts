@@ -29,6 +29,6 @@ describe('themes', () => {
   })
   it('emits every token the stylesheet uses', () => {
     const v = themeVars(THEMES[0], 'light')
-    for (const k of ['--ff-bg', '--ff-panel', '--ff-text', '--ff-accent', '--ff-accent-deep', '--ff-on-accent', '--ff-s5', '--ff-c4']) expect(v[k]).toMatch(/^\d+ \d+ \d+$/)
+    for (const k of ['--ff-bg', '--ff-panel', '--ff-text', '--ff-accent', '--ff-accent-deep', '--ff-on-accent', '--ff-s5', '--ff-c4', '--ff-gold', '--ff-gold-ink']) expect(v[k]).toMatch(/^\d+ \d+ \d+$/)
   })
 })

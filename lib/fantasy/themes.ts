@@ -381,6 +381,9 @@ const rgb = (h: string) => hex(h).join(' ')
 /** A theme's colours in a mode: that mode's, or its only one. */
 export const tokensFor = (theme: Theme, mode: Mode): Tokens => ((mode === 'dark' ? theme.dark : theme.light) ?? theme.dark ?? theme.light)!
 
+/** The crown's gold as RGB triplets: a fill, and a deeper ink for gold text that holds 4.5:1 on the panel. */
+const GOLD = { light: '182 128 4', lightInk: '140 98 0', dark: '242 193 78', darkInk: '246 205 110' }
+
 /** CSS custom properties for a theme in a mode, ready for a style attribute. */
 export const themeVars = (theme: Theme, mode: Mode): Record<string, string> => {
   const t = tokensFor(theme, mode)
@@ -404,6 +407,9 @@ export const themeVars = (theme: Theme, mode: Mode): Record<string, string> => {
     '--ff-warn': rgb(t.warn),
     ...Object.fromEntries(t.s.map((c, i) => [`--ff-s${i + 1}`, rgb(c)])),
     ...Object.fromEntries(t.c.map((c, i) => [`--ff-c${i + 1}`, rgb(c)])),
+    // The power-rank crown: one gold for every theme, per mode (fantasy.css has the same pair for before a theme loads).
+    '--ff-gold': mode === 'dark' ? GOLD.dark : GOLD.light,
+    '--ff-gold-ink': mode === 'dark' ? GOLD.darkInk : GOLD.lightInk,
   }
 }
 

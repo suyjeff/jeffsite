@@ -31,7 +31,7 @@ const heightLabel = (h: number) => HEIGHTS.find(([, x]) => x === h)?.[0] ?? Stri
 
 const DEFAULT_LAYOUT: Widget[] = [
   // Each run of widgets adds up to the 12 columns, so the board starts with no gaps.
-  { id: 'w1', kind: 'matchup', w: 4, h: 12, ch: 2 },
+  { id: 'w1', kind: 'matchup', w: 4, h: 15, ch: 2 },
   { id: 'w2', kind: 'odds', w: 5, h: 12, ch: 1 },
   { id: 'w3', kind: 'player', w: 3, h: 12, ch: 2 },
   { id: 'w4', kind: 'trades', w: 7, h: 9, ch: 0 },
@@ -52,7 +52,9 @@ const load = (): Widget[] => {
     if (!raw) return DEFAULT_LAYOUT
     const xs = JSON.parse(raw) as Widget[]
     const ok = Array.isArray(xs) && xs.every((x) => x && typeof x.id === 'string' && x.kind in WIDGETS && Number.isInteger(x.w) && Number.isInteger(x.h))
-    return ok ? xs : DEFAULT_LAYOUT
+    // The matchup widget's old default height (12) predates the lineup head-to-head, which needs XL; a board still
+    // at that default grows to fit, and a height someone picked themselves stays.
+    return ok ? xs.map((x) => (x.kind === 'matchup' && x.h === 12 ? { ...x, h: 15 } : x)) : DEFAULT_LAYOUT
   } catch {
     return DEFAULT_LAYOUT
   }

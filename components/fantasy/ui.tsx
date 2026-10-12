@@ -1536,26 +1536,37 @@ export function Table<T>({
   }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
   // The band under an open row spans the visible width, not the table's, so it reads without scrolling sideways.
   const [viewW, setViewW] = useState<number | null>(null)
+  // Where the first column's text starts, from the scroller's left edge. The open band's text lines up under it, so the
+  // note reads as belonging to the name above it, not to the arrow or the rank.
+  const [textX, setTextX] = useState<number | null>(null)
   // A table wider (or taller) than its box must scroll from the keyboard too, so it joins the tab order (2.1.1).
   const [scrolls, setScrolls] = useState(false)
   const id = useId()
   useEffect(() => {
     const el = scroller.current
     if (!el) return
-    const check = () => {
+    // Sizes: on mount and whenever the scroller or the table resizes, never per scroll.
+    const measure = () => {
       setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
       setViewW(el.clientWidth)
+      // From the table's own left edge, so sideways scrolling moves both ends together and changes nothing.
+      const table = el.firstElementChild
+      const cell = !expand ? null : (el.querySelector('tbody td[data-pin]') ?? el.querySelector('tbody tr:not([id]) > td:nth-child(2)'))
+      const anchor = cell?.querySelector('.ff-pn-name') ?? cell?.firstElementChild
+      setTextX(anchor && table ? Math.round(anchor.getBoundingClientRect().left - table.getBoundingClientRect().left) : null)
       setScrolls(el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
     }
-    check()
-    const ro = new ResizeObserver(check)
+    // Scrolling only moves the fade at the right edge; setting the same value again renders nothing.
+    const onScroll = () => setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
+    measure()
+    const ro = new ResizeObserver(measure)
     ro.observe(el)
     // The table can widen without the scroller resizing (new numbers, late fonts); watch it too.
     if (el.firstElementChild) ro.observe(el.firstElementChild)
-    el.addEventListener('scroll', check, { passive: true })
+    el.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       ro.disconnect()
-      el.removeEventListener('scroll', check)
+      el.removeEventListener('scroll', onScroll)
     }
   }, [rows.length, columns.length])
   const sorted = useMemo(() => {
@@ -1672,15 +1683,17 @@ export function Table<T>({
                     : undefined
                 }
                 className={cx(
-                  'group border-b border-ff-line/60 last:border-0',
+                  // The rule is an inset shadow on the cells, not a border on the row: a collapsed border disappears under pinned cells.
+                  'group',
+                  !isOpen && '[&>td]:shadow-[inset_0_-1px_0_rgb(var(--ff-line)/0.6)] last:[&>td]:shadow-none',
                   onRowClick && 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent',
                   'hover:bg-ff-raised',
-                  isOpen && 'border-b-0 bg-ff-raised',
+                  // An open row keeps the panel's surface and drops its rule, so the band beneath it reads as part of it.
                   rowClass?.(row),
                 )}
               >
                 {details && (
-                  <td className={cx('sticky left-0 z-[1] w-7 p-0 align-middle max-md:w-10 group-hover:bg-ff-raised', isOpen ? 'bg-ff-raised' : 'bg-ff-panel')}>
+                  <td className="sticky left-0 z-[1] w-7 bg-ff-panel p-0 align-middle max-md:w-10 group-hover:bg-ff-raised">
                     {hasDetail.has(k) && (
                       <button
                         type="button"
@@ -1702,13 +1715,15 @@ export function Table<T>({
                 {columns.map((c) => (
                   <td
                     key={c.key}
+                    data-pin={c.sticky ? '' : undefined}
                     className={cx(
-                      dense ? 'h-8' : 'h-[38px]',
+                      // 33 and 39 keep the row pitch the 1px border used to add.
+                      dense ? 'h-[33px]' : 'h-[39px]',
                       // Padding only shows when a cell wraps (stacked badges), so it never touches the rules.
                       'whitespace-nowrap px-1.5 py-1 align-middle first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
                       align(c),
                       c.align === 'right' && 'num',
-                      c.sticky && cx('sticky z-[1] max-w-[170px] overflow-hidden group-hover:bg-ff-raised sm:max-w-[300px]', isOpen ? 'bg-ff-raised' : 'bg-ff-panel', pin),
+                      c.sticky && cx('sticky z-[1] max-w-[170px] overflow-hidden bg-ff-panel group-hover:bg-ff-raised sm:max-w-[300px]', pin),
                         c.hideBelow && HIDE[c.hideBelow],
                       c.className,
                     )}
@@ -1718,9 +1733,15 @@ export function Table<T>({
                 ))}
               </tr>
               {isOpen && (
-                <tr id={`${id}-${k}`} className="border-b border-ff-line/60 bg-ff-raised">
+                // Same surface as the row above (rowClass carries the tint of rows like yours), set off from the next row by the usual rule. The rule is drawn here, not on the row: a pinned cell below would paint over a collapsed border.
+                <tr id={`${id}-${k}`} className={rowClass?.(row)}>
                   <td colSpan={span} className="p-0">
-                    <div className="sticky left-0 px-3 pb-3 pt-0.5 sm:pl-9" style={viewW ? { width: viewW } : undefined}>
+                    {/* Pinned to the visible width so it wraps there instead of running under the right edge. The left
+                        padding puts the 18px mark and its 12px gap just ahead of the name's text, and never closer than 12px to the edge. */}
+                    <div
+                      className="sticky left-0 min-w-0 max-w-[100vw] border-b border-ff-line/60 pb-1.5 [overflow-wrap:anywhere] [tr:last-child_&]:border-b-0"
+                      style={{ width: viewW ?? undefined, ['--ff-reason-pl' as string]: textX != null ? `max(12px, ${textX - 30}px)` : undefined }}
+                    >
                       {detail}
                     </div>
                   </td>
@@ -1746,60 +1767,57 @@ export type Reason = {
   label?: ReactNode
 }
 
-// Solid in the tone, the glyph in the panel's colour. Every tone ink clears 4.5:1 against the panel (the accent does,
-// though white on it does not in dark mode, so it too takes the panel colour), so the glyph clears it against the ink.
-// A faint tint read as pink, not red. The news cards on My team use the same squares.
+// A tint of the tone with the glyph in its ink and a hairline in the tone, so the square marks a line without outweighing
+// the words beside it. The glyph carries the meaning as well as the colour (1.4.1). The tone inks clear 4.5:1 on the
+// panel, and the glyph needs only 3:1 on its tint. The news cards on My team use the same squares.
 export const REASON_MARK: Record<NonNullable<Reason['tone']>, { glyph: string; sr: string; cls: string }> = {
-  pos: { glyph: '+', sr: 'Helps: ', cls: 'bg-ff-pos text-ff-panel' },
-  neg: { glyph: '−', sr: 'Hurts: ', cls: 'bg-ff-neg text-ff-panel' },
-  warn: { glyph: '!', sr: 'Caution: ', cls: 'bg-ff-warn text-ff-panel' },
-  accent: { glyph: '›', sr: '', cls: 'bg-ff-accent text-ff-panel' },
-  neutral: { glyph: 'i', sr: '', cls: 'bg-ff-sunken text-ff-muted' },
+  pos: { glyph: '+', sr: 'Helps: ', cls: 'bg-ff-pos/12 text-ff-pos ring-1 ring-inset ring-ff-pos/30' },
+  neg: { glyph: '−', sr: 'Hurts: ', cls: 'bg-ff-neg/12 text-ff-neg ring-1 ring-inset ring-ff-neg/30' },
+  warn: { glyph: '!', sr: 'Caution: ', cls: 'bg-ff-warn/15 text-ff-warn ring-1 ring-inset ring-ff-warn/35' },
+  accent: { glyph: '›', sr: '', cls: 'bg-ff-accent/12 text-ff-accent ring-1 ring-inset ring-ff-accent/30' },
+  neutral: { glyph: 'i', sr: '', cls: 'bg-ff-sunken text-ff-muted ring-1 ring-inset ring-ff-line' },
 }
 
 /**
  * The case for something, one line per reason, each led by a square in its tone: green helps,
  * red hurts, amber is a caution. Sits in a table's expanded row or anywhere a justification goes.
+ * It has no fill of its own: it takes its surface from where it sits, and hairlines between the lines
+ * start at the mark, so they never reach past the text they divide. Inside a table, `--ff-reason-pl`
+ * (set by the open band) lines the mark up under the name's portrait and the words under his name.
  */
-export const Reasons = ({ items, title, columns = 2 }: { items: Reason[]; title?: ReactNode; columns?: 1 | 2 }) => (
-  <div className="bg-ff-sunken/40">
-    {title && <div className="ff-label px-3 pt-2.5">{title}</div>}
-    <ul className={cx('grid text-[12.5px] leading-[1.45]', columns === 2 && 'md:grid-cols-2')}>
-      {items.map((r, i) => {
-        const m = REASON_MARK[r.tone ?? 'neutral']
-        return (
-          // In two columns the first row has no rule above either item and the two halves of each later rule meet; an
-          // odd last item spans both columns so its rule still reaches across.
-          <li
-            key={i}
-            className={cx(
-              'flex min-w-0 items-start gap-2.5 px-3 py-2',
-              i > 0 && 'border-t border-ff-line',
-              columns === 2 && i === 1 && 'md:border-t-0',
-              columns === 2 && i === items.length - 1 && i % 2 === 0 && 'md:col-span-2',
-            )}
-          >
-            {/* A square per tone, in its colour, with a glyph so the shape carries it too, not colour alone (1.4.1). */}
-            <span className={cx('mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center font-mono text-[12px] font-semibold leading-none', m.cls)}>
-              <span aria-hidden>{m.glyph}</span>
-              {m.sr && <span className="sr-only">{m.sr}</span>}
-            </span>
-            <span className="min-w-0">
-              {r.label != null ? (
-                <>
-                  <span className="block font-medium text-ff-text">{r.label}</span>
-                  <span className="mt-0.5 block text-[12px] text-ff-text2">{r.text}</span>
-                </>
-              ) : (
-                <span className="text-ff-text2">{r.text}</span>
-              )}
-            </span>
-          </li>
-        )
-      })}
-    </ul>
-  </div>
-)
+export const Reasons = ({ items, title, columns = 2 }: { items: Reason[]; title?: ReactNode; columns?: 1 | 2 }) => {
+  // Two columns only when there are enough lines to need them; a short list reads down one edge.
+  const two = columns === 2 && items.length > 3
+  return (
+    <div className="min-w-0">
+      {title && <div className="ff-label pb-1 pl-[var(--ff-reason-pl,0.75rem)] pr-3 pt-2.5">{title}</div>}
+      <ul className={cx('grid min-w-0 pl-[var(--ff-reason-pl,0.75rem)] pr-3 text-[12.5px] leading-[1.45]', two && 'md:grid-cols-2 md:gap-x-6')}>
+        {items.map((r, i) => {
+          const m = REASON_MARK[r.tone ?? 'neutral']
+          return (
+            <li key={i} className={cx('flex min-w-0 items-start gap-3 py-2', i > (two ? 1 : 0) && 'border-t border-ff-line/60')}>
+              {/* A square per tone with a glyph, so the shape carries it too, not colour alone. */}
+              <span className={cx('flex h-[18px] w-[18px] shrink-0 items-center justify-center font-mono text-[12px] font-semibold leading-none', m.cls)}>
+                <span aria-hidden>{m.glyph}</span>
+                {m.sr && <span className="sr-only">{m.sr}</span>}
+              </span>
+              <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                {r.label != null ? (
+                  <>
+                    <span className="block font-medium leading-[18px] text-ff-text">{r.label}</span>
+                    <span className="mt-0.5 block text-[12px] text-ff-text2">{r.text}</span>
+                  </>
+                ) : (
+                  <span className="text-ff-text2">{r.text}</span>
+                )}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
 
 /**
  * A plain list of sentences, one per item, in a panel with no padding. Like Reasons, a hairline runs the full width
