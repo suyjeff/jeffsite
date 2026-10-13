@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { SIM } from '../../../lib/fantasy/forecast'
 import { opponentsByWeek, RESULTS_PRIOR_GAMES, type PowerWeights } from '../../../lib/fantasy/power'
@@ -66,6 +66,9 @@ const PowerView = ({
   const spoiled = !!pending && data.regularWeeks.includes(pending.week)
   const [peek, setPeek] = useState(false)
   const held = spoiled && !peek
+  // A different week coming up is a fresh reveal to hold back.
+  const pendingWeek = pending?.week
+  useEffect(() => setPeek(false), [pendingWeek])
   const { models } = useFantasy()
   const forecast = models.forecast
   const [rankModel, setRankModel] = useState<RankModel>(forecast ? 'forecast' : 'composite')
@@ -264,9 +267,9 @@ const PowerView = ({
             {forecast && here('rankings') && (
               <Stat
                 label="Playoff odds"
-                value={simOdds(forecast.sim[myRosterId!], 'playoffs')}
-                meter={forecast.sim[myRosterId!].playoffs}
-                sub={`title ${simOdds(forecast.sim[myRosterId!], 'title', 1)} · bye ${simOdds(forecast.sim[myRosterId!], 'bye')}`}
+                value={held ? '–' : simOdds(forecast.sim[myRosterId!], 'playoffs')}
+                meter={held ? undefined : forecast.sim[myRosterId!].playoffs}
+                sub={held ? 'held until the reveal' : `title ${simOdds(forecast.sim[myRosterId!], 'title', 1)} · bye ${simOdds(forecast.sim[myRosterId!], 'bye')}`}
               />
             )}
             {here('standings') && (
@@ -348,7 +351,9 @@ const PowerView = ({
                   </button>
                 </div>
               )}
-              <div inert={held} aria-hidden={held || undefined} className={cx('motion-safe:transition-[filter] motion-safe:duration-200', held && 'pointer-events-none select-none blur-[7px]')}>
+              {/* Not drawn at all while held: a blurred table still shows which row is yours and the moves' colours. */}
+              {!held && (
+              <div>
                 <Swap k={`${rankModel}-${view}`}>
                   {rankModel === 'forecast' && forecast ? (
                     <Table rows={forecastOrder.map((rosterId) => ({ rosterId }))} columns={forecastColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
@@ -388,6 +393,7 @@ const PowerView = ({
                   )}
                 </Swap>
               </div>
+              )}
             </Panel>
             <ModelExplainer model={rankModel === 'forecast' && !forecast ? 'composite' : rankModel} />
           </div>
@@ -423,7 +429,8 @@ const PowerView = ({
                 { key: 'xw', label: 'xW', align: 'right', hideBelow: 'md', title: 'Expected wins from all-play', render: (r) => fmt(seasonById[r.rosterId].expectedWins, 1) },
                 { key: 'luck', label: 'Luck', align: 'right', hideBelow: 'md', render: (r) => <Num value={seasonById[r.rosterId].luck} signed /> },
                 { key: 'streak', label: 'Strk', align: 'right', hideBelow: 'md', render: (r) => seasonById[r.rosterId].streak || '–' },
-                { key: 'power', label: 'Power', align: 'right', hideBelow: 'sm', render: (r) => <span className="text-ff-muted">#{powerById[r.rosterId].rank}</span> },
+                // The power rank is the reveal's own news, so it waits with it.
+                ...(held ? [] : [{ key: 'power', label: 'Power', align: 'right' as const, hideBelow: 'sm' as const, render: (r: { rosterId: number; seed: number }) => <span className="text-ff-muted">#{powerById[r.rosterId].rank}</span> }]),
               ]}
             />
           </Panel>

@@ -298,7 +298,7 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
           {/* On a single-column layout the share sits here; on a wide screen it heads the ranking column. */}
           {stack && <ShareButton recap={recap} icon />}
           <button type="button" onClick={replay} className="h-8 shrink-0 whitespace-nowrap px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-10" title="Play the reveal again" aria-label="Replay">
-            ↺ <span className="max-[359px]:sr-only">Replay</span>
+            ↺ <span className="max-[399px]:sr-only">Replay</span>
           </button>
         </>
       )}

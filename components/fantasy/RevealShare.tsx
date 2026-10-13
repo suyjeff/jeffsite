@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Recap } from '../../lib/fantasy/recap'
 import { useFantasy } from './FantasyContext'
+import { CROWN_BAND, CROWN_NODES, CROWN_NODE_R, CROWN_PATH } from './RevealBanner'
 import { cx, fmt } from './ui'
 
 // Sharing the ranking as a picture: a clean card drawn straight onto a canvas (rank, team, power, move and nothing
@@ -51,8 +52,9 @@ const readPalette = (): Palette => {
 }
 const rgb = (t: string, a = 1) => (a === 1 ? `rgb(${t})` : `rgba(${t},${a})`)
 
+// The app's own faces: Plex Sans for words, and Chivo Mono for numbers and labels (the `.num` and `.ff-label` classes).
 const SANS = '"IBM Plex Sans", system-ui, sans-serif'
-const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace'
+const MONO = '"Chivo Mono", ui-monospace, Menlo, monospace'
 
 /** A team's picture, or null if it cannot be had for the canvas (blocked, missing, or no cross-origin permission). */
 const loadImage = (src: string | null) =>
@@ -81,25 +83,21 @@ const fit = (ctx: CanvasRenderingContext2D, text: string, max: number) => {
   return `${s.trimEnd()}…`
 }
 
-const CROWN = 'M5 20V9.5l5.75 4.75L16 6l5.25 8.25L27 9.5V20Z'
 /** The reveal's crown (RevealBanner.tsx), drawn at `size` px wide with its top-left corner at 0,0 of the current transform. */
 const crown = (ctx: CanvasRenderingContext2D, size: number, p: Palette) => {
   ctx.save()
   ctx.scale(size / 32, size / 32)
   ctx.fillStyle = rgb(p.gold)
-  ctx.fill(new Path2D(CROWN))
+  ctx.fill(new Path2D(CROWN_PATH))
   ctx.strokeStyle = rgb(p.panel, 0.7)
   ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(6.5, 17)
-  ctx.lineTo(25.5, 17)
-  ctx.stroke()
-  for (const [x, y] of [[5, 8.5], [16, 4.75], [27, 8.5]]) {
+  ctx.stroke(new Path2D(CROWN_BAND))
+  for (const [x, y] of CROWN_NODES) {
     ctx.beginPath()
-    ctx.moveTo(x, y - 1.9)
-    ctx.lineTo(x + 1.9, y)
-    ctx.lineTo(x, y + 1.9)
-    ctx.lineTo(x - 1.9, y)
+    ctx.moveTo(x, y - CROWN_NODE_R)
+    ctx.lineTo(x + CROWN_NODE_R, y)
+    ctx.lineTo(x, y + CROWN_NODE_R)
+    ctx.lineTo(x - CROWN_NODE_R, y)
     ctx.closePath()
     ctx.fill()
   }
@@ -116,7 +114,13 @@ export const renderRankCard = async ({ league, week, teams }: CardInput): Promis
 
   // Fonts load on first use, so ask for each cut that will be drawn, then wait for the page's own loading to finish.
   try {
-    await Promise.all(['600 64px "IBM Plex Sans"', '500 36px "IBM Plex Sans"', '400 28px "IBM Plex Mono"', '500 40px "IBM Plex Mono"'].map((f) => document.fonts.load(f)))
+    // Each cut with the text it will draw, so the right slice of the font is fetched.
+    const words = `Power Rank Week 0123456789 ${league} ${teams.map((t) => t.name).join(' ')}`
+    const digits = '0123456789.–· PWRKMOVETA sujeff.com/fantasy chance to beat an average team'
+    await Promise.all([
+      ...['500', '600'].map((w) => document.fonts.load(`${w} 40px "IBM Plex Sans"`, words)),
+      ...['400', '500'].map((w) => document.fonts.load(`${w} 40px "Chivo Mono"`, digits + league.toUpperCase())),
+    ])
     await document.fonts.ready
   } catch {
     // draw with whatever is there
@@ -292,43 +296,65 @@ export const renderRankCard = async ({ league, week, teams }: CardInput): Promis
 const toBlob = (canvas: HTMLCanvasElement) =>
   new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('could not encode the image'))), 'image/png'))
 
-/** Saves a file by a link the page clicks itself, where there is no share sheet. */
-const download = (file: File) => {
+/** Whether a clicked `download` link is honoured: not in an iOS home-screen app or an in-app browser, which ignore it. */
+const canDownload = () => {
+  const ua = navigator.userAgent
+  const ios = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+  const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true || window.matchMedia('(display-mode: standalone)').matches
+  const inApp = /FBAN|FBAV|Instagram|Line\/|MicroMessenger|Snapchat|; wv\)/.test(ua)
+  return !inApp && !(ios && standalone)
+}
+
+/** Saves the file by a link the page clicks itself, or opens it in a tab to be pressed and held where that cannot be. */
+const save = (file: File): 'downloaded' | 'opened' => {
   const url = URL.createObjectURL(file)
   const a = document.createElement('a')
   a.href = url
-  a.download = file.name
+  const down = canDownload()
+  if (down) a.download = file.name
+  else {
+    a.target = '_blank'
+    a.rel = 'noopener'
+  }
   document.body.appendChild(a)
   a.click()
   a.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 10000)
+  // A tab that was opened still needs the file after the click, so give it a minute.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+  return down ? 'downloaded' : 'opened'
 }
 
-export type ShareResult = 'shared' | 'saved' | 'cancelled'
+export type ShareResult = 'shared' | 'downloaded' | 'opened' | 'cancelled'
 
-/** Opens the share sheet with the picture when the device can take it, else saves it. A cancelled sheet is not an error. */
-export const shareFile = async (file: File, title: string): Promise<ShareResult> => {
+/**
+ * Opens the share sheet with the picture when the device can take it, else saves it. A cancelled sheet is not an error.
+ * Not async before the share call: browsers open the sheet only from a live tap, so the file must already be made.
+ */
+export const shareFile = (file: File, title: string): Promise<ShareResult> => {
   if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title })
-      return 'shared'
-    } catch (e) {
-      if ((e as DOMException)?.name === 'AbortError') return 'cancelled'
-      // The sheet refused (a gesture too old, say): the file is still worth having.
-      if ((e as DOMException)?.name !== 'NotAllowedError') throw e
-    }
+    return navigator.share({ files: [file], title }).then(
+      () => 'shared' as const,
+      (e) => {
+        if ((e as DOMException)?.name === 'AbortError') return 'cancelled' as const
+        // The sheet refused: the file is still worth having.
+        if ((e as DOMException)?.name !== 'NotAllowedError') throw e
+        return save(file)
+      },
+    )
   }
-  download(file)
-  return 'saved'
+  return Promise.resolve(save(file))
 }
 
-// One finished picture per recap, drawn in the background once the recap is on screen so a tap has the file ready:
-// browsers only open a share sheet from a fresh tap, and drawing it first (pictures to fetch) could outlast that.
-const made = new WeakMap<Recap, { key: string; file: Promise<File> }>()
+// One finished picture per recap, drawn in idle time once the recap has settled, so a tap finds the file ready.
+// The key says what it was drawn from, so a theme, a rename or a new avatar draws it again.
+type Made = { key: string; file: Promise<File> }
+const made = new WeakMap<Recap, Made>()
 
-const useCard = (recap: Recap) => {
+type Card = { file: File | null; failed: boolean; retry: () => void }
+
+const useCard = (recap: Recap): Card => {
   const { data, analysis } = useFantasy()
-  const input = useCallback((): CardInput => {
+  const input = useMemo((): CardInput => {
     return {
       league: data.league.name || 'Power rank',
       week: recap.week,
@@ -338,25 +364,51 @@ const useCard = (recap: Recap) => {
       }),
     }
   }, [data.league.name, analysis, recap])
-  return useCallback(() => {
-    // A theme change redraws it in the new colours.
-    const key = JSON.stringify(readPalette())
-    const hit = made.get(recap)
-    if (hit && hit.key === key) return hit.file
-    const file = renderRankCard(input())
-      .then(toBlob)
-      .then((b) => new File([b], `power-rank-week-${recap.week}.png`, { type: 'image/png' }))
-    file.catch(() => made.delete(recap))
-    made.set(recap, { key, file })
-    return file
-  }, [recap, input])
+  const [state, setState] = useState<{ file: File | null; failed: boolean }>({ file: null, failed: false })
+  const [tries, setTries] = useState(0)
+
+  useEffect(() => {
+    let live = true
+    const key = JSON.stringify([readPalette(), input.league, input.teams.map((t) => [t.name, t.avatar, t.rank, t.move, t.score])])
+    setState({ file: null, failed: false })
+    const start = () => {
+      let entry = made.get(recap)
+      if (!entry || entry.key !== key || tries > 0) {
+        const mine: Made = { key, file: renderRankCard(input).then(toBlob).then((b) => new File([b], `power-rank-week-${recap.week}.png`, { type: 'image/png' })) }
+        // A failed draw clears only its own entry, never a newer one.
+        mine.file.catch(() => made.get(recap) === mine && made.delete(recap))
+        made.set(recap, mine)
+        entry = mine
+      }
+      entry.file.then(
+        (file) => live && setState({ file, failed: false }),
+        () => live && setState({ file: null, failed: true }),
+      )
+    }
+    // After the recap's entrance (about a second), and then only when the page is idle.
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (h: number) => void }
+    let idle = 0
+    const wait = made.get(recap)?.key === key && tries === 0 ? 0 : 1500
+    const id = window.setTimeout(() => {
+      if (w.requestIdleCallback) idle = w.requestIdleCallback(start, { timeout: 4000 })
+      else start()
+    }, wait)
+    return () => {
+      live = false
+      window.clearTimeout(id)
+      if (idle) w.cancelIdleCallback?.(idle)
+    }
+  }, [recap, input, tries])
+
+  return { ...state, retry: () => setTries((n) => n + 1) }
 }
 
 type Status = null | { tone: 'ok' | 'bad'; text: string }
 
 /**
  * The Share control: an icon on its own for the reveal's header on a phone, a labelled button above the ranking
- * on a wide screen. Says so, briefly, when it saved a file or could not make one.
+ * on a wide screen. Disabled, saying so, until the picture is made, so a tap always has a file to hand over.
+ * Says so, briefly, when it saved or opened a file or could not share.
  */
 export const ShareButton = ({ recap, icon, className }: { recap: Recap; icon?: boolean; className?: string }) => {
   const { data } = useFantasy()
@@ -367,14 +419,11 @@ export const ShareButton = ({ recap, icon, className }: { recap: Recap; icon?: b
   const alive = useRef(true)
   useEffect(() => {
     alive.current = true
-    // Draw it while the recap settles in, off the first frames.
-    const id = window.setTimeout(() => card().catch(() => {}), 900)
     return () => {
       alive.current = false
-      window.clearTimeout(id)
       window.clearTimeout(timer.current)
     }
-  }, [card])
+  }, [])
   const say = (s: Status) => {
     if (!alive.current) return
     setStatus(s)
@@ -382,19 +431,22 @@ export const ShareButton = ({ recap, icon, className }: { recap: Recap; icon?: b
     if (s) timer.current = window.setTimeout(() => setStatus(null), s.tone === 'bad' ? 5000 : 2600)
   }
 
-  const run = async () => {
-    if (busy) return
-    setBusy(true)
+  const preparing = !card.file && !card.failed
+  const run = () => {
+    if (busy || preparing) return
     say(null)
-    try {
-      const r = await shareFile(await card(), `${data.league.name || 'Power rank'} power rank, week ${recap.week}`)
-      if (r === 'saved') say({ tone: 'ok', text: 'Saved the image' })
-    } catch {
-      say({ tone: 'bad', text: 'Could not share. Try again.' })
-    } finally {
-      if (alive.current) setBusy(false)
-    }
+    if (!card.file) return card.retry()
+    setBusy(true)
+    // Called straight from the tap, with the file already in hand.
+    shareFile(card.file, `${data.league.name || 'Power rank'} power rank, week ${recap.week}`)
+      .then((r) => {
+        if (r === 'downloaded') say({ tone: 'ok', text: 'Downloaded the image' })
+        else if (r === 'opened') say({ tone: 'ok', text: 'Opened the image' })
+      })
+      .catch(() => say({ tone: 'bad', text: 'Could not share. Try again.' }))
+      .finally(() => alive.current && setBusy(false))
   }
+  const label = preparing ? 'Preparing…' : card.failed ? 'Retry' : busy ? 'Sharing…' : 'Share'
 
   return (
     <span className={cx('relative inline-flex items-center gap-2', className)}>
@@ -410,19 +462,20 @@ export const ShareButton = ({ recap, icon, className }: { recap: Recap; icon?: b
       <button
         type="button"
         onClick={run}
-        aria-busy={busy || undefined}
-        aria-label={icon ? 'Share the ranking as an image' : undefined}
-        title="Share the ranking as an image"
+        disabled={preparing}
+        aria-busy={busy || preparing || undefined}
+        aria-label={icon ? (preparing ? 'Preparing the image to share' : card.failed ? 'Retry making the image to share' : 'Share the ranking as an image') : undefined}
+        title={preparing ? 'Preparing the image' : 'Share the ranking as an image'}
         className={cx(
-          'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text active:bg-ff-raised',
+          'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text active:bg-ff-raised disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-ff-text2',
           icon ? 'h-10 w-10 md:h-8 md:w-8' : 'h-8 border border-ff-line2 px-2.5 max-md:h-10',
           busy && 'opacity-60',
         )}
       >
-        <svg aria-hidden width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.25">
+        <svg aria-hidden width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.25" className={cx(preparing && 'motion-safe:animate-pulse')}>
           <path d="M7 9V1.5M4 4.25 7 1.25l3 3M2.5 7v5.5h9V7" />
         </svg>
-        {!icon && (busy ? 'Making…' : 'Share')}
+        {!icon && label}
       </button>
       {/* In the reveal's header there is no room beside the icon: the note drops below it. */}
       {status && icon && (

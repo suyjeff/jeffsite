@@ -10,6 +10,17 @@ import { useNow } from './useReveal'
 // reveal's own language: hairline drafting shapes, a dot grid, the gold crown. Styles and hover motion live in
 // fantasy.css (.ff-rv-banner).
 
+/** The crown's geometry in a 32×24 box, shared with the share card (RevealShare.tsx), which draws it on a canvas. */
+export const CROWN_PATH = 'M5 20V9.5l5.75 4.75L16 6l5.25 8.25L27 9.5V20Z'
+export const CROWN_BAND = 'M6.5 17H25.5'
+/** Centres of the diamonds at the three tips. */
+export const CROWN_NODES: [number, number][] = [
+  [5, 8.5],
+  [16, 4.75],
+  [27, 8.5],
+]
+export const CROWN_NODE_R = 1.9
+
 /**
  * The No. 1 crown: a gold band with three points, a diamond at each tip and one hairline across the band. `drawing`
  * traces the outline in, then fills it. Kept geometric and crisp so it reads at 15px on a row and at 96px on stage.
@@ -41,15 +52,11 @@ export const Crown = ({
     aria-hidden={title ? undefined : true}
     shapeRendering="geometricPrecision"
   >
-    <path className="ff-rv-crown-body" d="M5 20V9.5l5.75 4.75L16 6l5.25 8.25L27 9.5V20Z" />
-    <path className="ff-rv-crown-band" d="M6.5 17H25.5" strokeWidth={1} />
-    <path className="ff-rv-crown-line" pathLength={1} strokeWidth={1.25} d="M5 20V9.5l5.75 4.75L16 6l5.25 8.25L27 9.5V20Z" />
-    {[
-      [5, 8.5],
-      [16, 4.75],
-      [27, 8.5],
-    ].map(([x, y]) => (
-      <path key={x} className="ff-rv-crown-node" d={`M${x} ${y - 1.9}L${x + 1.9} ${y}L${x} ${y + 1.9}L${x - 1.9} ${y}Z`} />
+    <path className="ff-rv-crown-body" d={CROWN_PATH} />
+    <path className="ff-rv-crown-band" d={CROWN_BAND} strokeWidth={1} />
+    <path className="ff-rv-crown-line" pathLength={1} strokeWidth={1.25} d={CROWN_PATH} />
+    {CROWN_NODES.map(([x, y]) => (
+      <path key={x} className="ff-rv-crown-node" d={`M${x} ${y - CROWN_NODE_R}L${x + CROWN_NODE_R} ${y}L${x} ${y + CROWN_NODE_R}L${x - CROWN_NODE_R} ${y}Z`} />
     ))}
   </svg>
 )
