@@ -224,6 +224,17 @@ export const NavBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap |
           </span>
           {left && <span className="num relative shrink-0 font-mono text-[10.5px] text-white/90">{left.replace(/^in /, '')}</span>}
         </div>
+        {/* The last unlocked week stays a tap away; the teaser above is not a control. */}
+        {recap && (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="mt-1 flex h-9 w-full items-center justify-center gap-1.5 border border-ff-line bg-ff-panel font-mono text-[10.5px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text md:h-7"
+            aria-label={`Replay the week ${recap.week} power rank reveal`}
+          >
+            <span aria-hidden>↺</span> Replay wk {recap.week}
+          </button>
+        )}
       </div>
     )
   }

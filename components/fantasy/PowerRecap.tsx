@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useRef, useState, type CSSProperties, type Reac
 import { RECAP_SIMS, type Odds, type Part, type Reason, type Recap, type RecapGame, type RecapTeam } from '../../lib/fantasy/recap'
 import { useFantasy } from './FantasyContext'
 import { Crown } from './RevealBanner'
+import { ShareButton } from './RevealShare'
 import { Avatar, PlayerAvatar, PosTag, Segmented, cx, fmt, pct } from './ui'
 
 // What the reveal settles into: the new ranking with each team's move, and the week that made it. On wide screens
@@ -634,6 +635,10 @@ const PowerRecap = ({
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[400px_minmax(0,1fr)]">
       <div className="relative z-10 flex min-h-0 flex-col border-r border-ff-line">
+        <div className={cx('flex h-11 shrink-0 items-center justify-between gap-2 border-b border-ff-line pl-3 pr-2', entering && 'ff-rv-in')} style={at(0)}>
+          <span className="ff-label">Week {recap.week} ranking</span>
+          <ShareButton recap={recap} />
+        </div>
         {listHead}
         <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {ranking}

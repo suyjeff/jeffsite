@@ -255,11 +255,12 @@ export const SlotTable = ({ m, variant = 'full', empty, onPlayer }: { m: SlotSou
     return (
       <span
         className={cx(
-          'ff-pn-host relative flex min-w-0 flex-1 flex-col justify-center self-stretch transition-colors',
+          'ff-pn-host relative flex min-w-0 flex-1 flex-col justify-center self-stretch',
+          // Hover is an overlay, so the live tint under it stays visible.
+          'before:pointer-events-none before:absolute before:inset-0 before:transition-colors hover:before:bg-ff-accent/[0.07]',
           align === 'left' ? 'pr-2' : 'pl-2',
           edge(align),
           variant === 'dense' ? 'py-1' : 'py-1.5',
-          'hover:bg-ff-accent/[0.07]',
           align === 'right' && 'items-end text-right',
           w?.kind === 'live' && 'bg-ff-pos/[0.06]',
         )}
