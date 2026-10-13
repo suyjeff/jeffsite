@@ -1,22 +1,39 @@
 import React, { type CSSProperties } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
-import type { Recap } from '../../lib/fantasy/recap'
+import { countdown, dropsLabel, type Recap } from '../../lib/fantasy/recap'
 import { cx } from './ui'
 
 // The way back into the weekly power-rank reveal: a coloured banner on the Power page and a smaller one at the
-// foot of the sidebar. Both are buttons that replay it. Drawn in the reveal's own language: hairline drafting shapes,
-// a dot grid, the gold crown. Styles and hover motion live in fantasy.css (.ff-rv-banner).
+// foot of the sidebar. Once a week has unlocked both are buttons that replay it. Before then, from the week's first
+// kickoff to 6 AM Eastern on the Tuesday, they only say when it drops: no ranks, nothing to open. Drawn in the
+// reveal's own language: hairline drafting shapes, a dot grid, the gold crown. Styles and hover motion live in
+// fantasy.css (.ff-rv-banner).
 
 /**
  * The No. 1 crown: a gold band with three points, a diamond at each tip and one hairline across the band. `drawing`
  * traces the outline in, then fills it. Kept geometric and crisp so it reads at 15px on a row and at 96px on stage.
  */
-export const Crown = ({ size = 24, drawing, delay = 0, className, title }: { size?: number; drawing?: boolean; delay?: number; className?: string; title?: string }) => (
+export const Crown = ({
+  size = 24,
+  drawing,
+  outline,
+  delay = 0,
+  className,
+  title,
+}: {
+  size?: number
+  drawing?: boolean
+  /** Dashed and unfilled: a crown not yet awarded (the week's reveal is on its way). */
+  outline?: boolean
+  delay?: number
+  className?: string
+  title?: string
+}) => (
   <svg
     width={size}
     height={(size * 24) / 32}
     viewBox="0 0 32 24"
-    className={cx('ff-rv-crown shrink-0 overflow-visible', drawing && 'is-drawing', className)}
+    className={cx('ff-rv-crown shrink-0 overflow-visible', drawing && 'is-drawing', outline && 'is-outline', className)}
     style={{ '--d': `${delay}ms` } as CSSProperties}
     role={title ? 'img' : undefined}
     aria-label={title}
@@ -58,7 +75,7 @@ const Move = ({ move, className }: { move: number; className?: string }) =>
 const Drafting = ({ compact }: { compact?: boolean }) => (
   <svg aria-hidden className="pointer-events-none absolute inset-y-0 right-0 h-full w-[240px] max-w-[60%] overflow-visible" viewBox="0 0 240 76" preserveAspectRatio="xMaxYMid slice">
     {/* A ruler along the bottom, its ticks sliding on hover. */}
-    <g className="ff-rv-tick" style={{ '--tx': '-12px' } as CSSProperties}>
+    <g className="ff-rv-ruler" style={{ '--tx': '-12px' } as CSSProperties}>
       {Array.from({ length: 22 }, (_, i) => (
         <path key={i} className="ff-rv-ink" d={`M${20 + i * 10} ${i % 5 === 0 ? 66 : 70}V74`} />
       ))}
@@ -92,24 +109,69 @@ const Drafting = ({ compact }: { compact?: boolean }) => (
   </svg>
 )
 
-/** The Power page's banner, under the tabs. */
-export const PowerBanner = ({ recap, analysis, onOpen }: { recap: Recap; analysis: Analysis; onOpen: () => void }) => {
+/** A week on its way: which, and when it unlocks (6 AM Eastern on the Tuesday). */
+export type RevealPending = { week: number; gate: Date }
+
+/** "Drops Tue 6 AM ET", and the time left while there is any. */
+const dropText = (pending: RevealPending, now: number) => ({ when: dropsLabel(pending.gate), left: countdown(pending.gate, now) })
+
+/** The crown's box on the Power page's banner, with registration ticks at two corners. */
+const CrownBox = ({ outline }: { outline?: boolean }) => (
+  <span className="relative flex h-11 w-11 shrink-0 items-center justify-center border border-white/35 bg-black/10">
+    <span aria-hidden className="absolute -left-px -top-px h-1.5 w-1.5 border-l border-t border-white" />
+    <span aria-hidden className="absolute -bottom-px -right-px h-1.5 w-1.5 border-b border-r border-white" />
+    <span className="ff-rv-lift">
+      <Crown size={26} outline={outline} />
+    </span>
+  </span>
+)
+
+/**
+ * The Power page's banner, under the tabs: the latest week's reveal to replay, or, while the next one is on its way,
+ * when it drops (with the last one still a tap away).
+ */
+export const PowerBanner = ({ recap, pending, now, analysis, onOpen }: { recap: Recap | null; pending: RevealPending | null; now: number; analysis: Analysis; onOpen: () => void }) => {
+  if (pending) {
+    const { when, left } = dropText(pending, now)
+    return (
+      <div className="ff-rv-banner is-pending flex min-h-[72px] w-full items-center gap-3 px-3 py-2.5 sm:gap-4 sm:px-4" title="Unlocks for everyone in the league at once">
+        <Drafting />
+        <CrownBox outline />
+        <span className="relative min-w-0 flex-1 leading-tight">
+          <span className="flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-white/90">
+            <span aria-hidden className="ff-rv-blink inline-block h-1.5 w-1.5 bg-white" />
+            Week {pending.week} power rank
+            <span className="normal-case tracking-normal max-sm:hidden"> · compiling</span>
+          </span>
+          <span className="mt-1 block truncate text-[15px] font-medium sm:text-[16px]">Drops {when}</span>
+          {left && <span className="num mt-0.5 block font-mono text-[11.5px] text-white/90">{left}</span>}
+        </span>
+        {recap && (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="ff-rv-replay relative flex h-11 shrink-0 items-center gap-1.5 border border-white/50 bg-white/10 px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] sm:h-8"
+            aria-label={`Replay the week ${recap.week} power rank reveal`}
+          >
+            <span className="max-sm:hidden">Replay</span> wk {recap.week}
+            <span aria-hidden className="ff-rv-nudge inline-block">
+              ▸
+            </span>
+          </button>
+        )}
+      </div>
+    )
+  }
+  if (!recap) return null
   const { top, topName, mine } = headline(recap, analysis)
   return (
     <button type="button" onClick={onOpen} className="ff-rv-banner group flex min-h-[72px] w-full items-center gap-3 px-3 py-2.5 text-left sm:gap-4 sm:px-4">
       <span className="ff-rv-sweep" aria-hidden />
       <Drafting />
-      <span className="relative flex h-11 w-11 shrink-0 items-center justify-center border border-white/35 bg-black/10">
-        {/* Registration ticks at the corners of the crown's box. */}
-        <span aria-hidden className="absolute -left-px -top-px h-1.5 w-1.5 border-l border-t border-white" />
-        <span aria-hidden className="absolute -bottom-px -right-px h-1.5 w-1.5 border-b border-r border-white" />
-        <span className="ff-rv-lift">
-          <Crown size={26} />
-        </span>
-      </span>
+      <CrownBox />
       <span className="relative min-w-0 flex-1 leading-tight">
         <span className="block font-mono text-[10.5px] uppercase tracking-[0.1em] text-white/90">
-          Week {recap.week} · power rank reveal{recap.estimated ? ' · estimated' : ''}
+          Week {recap.week} · power rank reveal
           <span className="normal-case tracking-normal max-sm:hidden"> · composite ranking</span>
         </span>
         <span className="mt-1 block truncate text-[15px] font-medium sm:text-[16px]">
@@ -137,21 +199,33 @@ export const PowerBanner = ({ recap, analysis, onOpen }: { recap: Recap; analysi
   )
 }
 
-/** The sidebar's banner, above the settings, with the dev preview button under it while that is switched on. */
-export const NavBanner = ({
-  recap,
-  analysis,
-  onOpen,
-  preview,
-}: {
-  recap: Recap
-  analysis: Analysis
-  onOpen: () => void
-  preview?: { week: number; estimated: boolean; onOpen: () => void } | null
-}) => {
+/** The sidebar's banner, above the settings: the latest reveal to replay, or when the next one drops. */
+export const NavBanner = ({ recap, pending, now, analysis, onOpen }: { recap: Recap | null; pending: RevealPending | null; now: number; analysis: Analysis; onOpen: () => void }) => {
+  if (pending) {
+    const { when, left } = dropText(pending, now)
+    return (
+      <div className="shrink-0 border-t border-ff-line px-2 py-2">
+        <div className="ff-rv-banner is-pending flex h-14 w-full items-center gap-2.5 px-2.5 md:h-12" title="Unlocks for everyone in the league at once">
+          <Drafting compact />
+          <span className="relative">
+            <Crown size={22} outline />
+          </span>
+          <span className="relative min-w-0 flex-1 leading-tight">
+            <span className="flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.1em] text-white/90">
+              <span aria-hidden className="ff-rv-blink inline-block h-1 w-1 bg-white" />
+              Wk {pending.week} power rank
+            </span>
+            <span className="mt-0.5 block truncate text-[13px] font-medium md:text-[12.5px]">Drops {when}</span>
+          </span>
+          {left && <span className="num relative shrink-0 font-mono text-[10.5px] text-white/90">{left.replace(/^in /, '')}</span>}
+        </div>
+      </div>
+    )
+  }
+  if (!recap) return null
   const { topName, mine } = headline(recap, analysis)
   return (
-    <div className="shrink-0 space-y-1.5 border-t border-ff-line px-2 py-2">
+    <div className="shrink-0 border-t border-ff-line px-2 py-2">
       <button type="button" onClick={onOpen} className="ff-rv-banner flex h-14 w-full items-center gap-2.5 px-2.5 text-left md:h-12" aria-label={`Replay the week ${recap.week} power rank reveal`}>
         <span className="ff-rv-sweep" aria-hidden />
         <Drafting compact />
@@ -174,18 +248,6 @@ export const NavBanner = ({
           ▸
         </span>
       </button>
-      {preview && (
-        <button
-          type="button"
-          onClick={preview.onOpen}
-          title={`Play week ${preview.week}'s reveal now${preview.estimated ? ', estimated from live and projected points' : ''}. Not saved as seen.`}
-          className="flex h-10 w-full items-center gap-2 border border-dashed border-ff-line2 px-2.5 text-left font-mono text-[10.5px] text-ff-muted hover:border-ff-muted hover:text-ff-text2 md:h-7"
-        >
-          <span className="bg-ff-warn/15 px-1 text-[9.5px] tracking-[0.08em] text-ff-warn">DEV</span>
-          <span className="min-w-0 flex-1 truncate">Preview reveal (dev)</span>
-          <span className="shrink-0 text-ff-muted/80">wk {preview.week}</span>
-        </button>
-      )}
     </div>
   )
 }

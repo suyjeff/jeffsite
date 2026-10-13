@@ -79,8 +79,6 @@ export type Odds = { before: SimTeam; after: SimTeam }
 
 export type Recap = {
   week: number
-  /** Built from a week still being played, with projections standing in for games not yet final. */
-  estimated: boolean
   teams: RecapTeam[]
   byId: Record<number, RecapTeam>
   games: RecapGame[]
@@ -117,7 +115,7 @@ export type RecapInput = {
   week: number
   /** Regular-season weeks played before it. */
   priorWeeks: number[]
-  /** Matchups by week; the recap week's may be estimated (see estimateWeek). */
+  /** Matchups by week. */
   matchupsByWeek: Record<number, SleeperMatchup[]>
   slots: Slot[]
   players: PlayerMap
@@ -132,7 +130,6 @@ export type RecapInput = {
   proj?: Record<string, number> | null
   /** Each team's pre-game expected score, when the model kept one; else the projected starters are summed. */
   expected?: Record<number, number> | null
-  estimated?: boolean
 }
 
 const record = (s: TeamSeason | undefined) => ({ wins: s?.wins ?? 0, losses: s?.losses ?? 0, ties: s?.ties ?? 0 })
@@ -328,7 +325,6 @@ export const buildRecap = (input: RecapInput): Recap => {
 
   return {
     week,
-    estimated: !!input.estimated,
     teams,
     byId,
     games: games.sort((x, y) => Math.min(byId[x.a]?.rankAfter ?? 99, byId[x.b]?.rankAfter ?? 99) - Math.min(byId[y.a]?.rankAfter ?? 99, byId[y.b]?.rankAfter ?? 99)),
@@ -445,32 +441,6 @@ export const recapOdds = (opts: RecapOddsInput): Record<number, Odds> => {
 export const RECAP_SLICE = 125
 
 /**
- * The week as it stands, finished: final games at their points, games under way at what is on the board plus the
- * rest of the projection, games not started at the projection. For previewing a reveal before the week is done.
- */
-export const estimateWeek = (
-  matchups: SleeperMatchup[],
-  proj: Record<string, number>,
-  /**
-   * Each player's game: final, under way (with the share played, when known, or a finish already estimated),
-   * not started, or none (a bye).
-   */
-  stateOf: (id: string) => { state: 'final' | 'live' | 'pre'; elapsed?: number; expect?: number } | null,
-): SleeperMatchup[] =>
-  matchups.map((m) => {
-    const posted = m.players_points ?? {}
-    const pp: Record<string, number> = {}
-    for (const id of m.players ?? []) {
-      const s = stateOf(id)
-      const have = posted[id] ?? 0
-      const p = proj[id] ?? 0
-      pp[id] = round2(!s ? have : s.state === 'final' ? have : s.state === 'live' ? (s.expect ?? have + p * (1 - Math.min(1, Math.max(0, s.elapsed ?? 0.5)))) : p)
-    }
-    const starters = (m.starters ?? []).filter((id) => id && id !== '0')
-    return { ...m, players_points: pp, points: round2(starters.reduce((a, id) => a + (pp[id] ?? 0), 0)) }
-  })
-
-/**
  * The passes of an odd-even transposition sort from one order to another: each pass swaps neighbours that are out
  * of place. The reveal plays them back as the ranking sorting itself. Passes that swap nothing are left out.
  */
@@ -530,19 +500,100 @@ export const weeksBefore = (matchupsByWeek: Record<number, SleeperMatchup[]>, we
     .filter((w) => w < week && w < playoffStart && hasScores(matchupsByWeek[w]))
     .sort((a, b) => a - b)
 
+/** The reveal's clock: every gate is read in US Eastern time, wherever the viewer is. */
+export const REVEAL_TZ = 'America/New_York'
+
+/** The UTC offset of a time zone at an instant, in ms (Eastern daylight time is −4h). */
+const zoneOffset = (at: number, timeZone: string) => {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(new Date(at))
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0)
+  return Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second')) - Math.floor(at / 1000) * 1000
+}
+
+/** The instant a wall-clock time happens in a time zone (DST-safe: the offset is read at the instant itself). */
+export const zonedInstant = (y: number, m: number, d: number, hour: number, timeZone = REVEAL_TZ): Date => {
+  const wall = Date.UTC(y, m - 1, d, hour)
+  let at = wall - zoneOffset(wall, timeZone)
+  // Across a DST change the first guess can be an hour out; once more settles it.
+  at = wall - zoneOffset(at, timeZone)
+  return new Date(at)
+}
+
 /**
- * When a week's reveal opens on its own: Tuesday 6am local after its last game. A week whose games ran past Monday
- * opens at 6am the day after its last one. Null when the schedule has no dates (then it opens straight away).
+ * When a week's reveal unlocks: 6:00 AM Eastern on the Tuesday after the week's last game (the Monday night game), the
+ * same instant for everyone. A week whose games ran past Monday unlocks at 6 AM Eastern the day after its last one.
+ * Null when the schedule has no dates (then it is open straight away).
  */
 export const revealGate = (games: ScheduleGame[] | undefined, week: number): Date | null => {
-  const dates = (games ?? []).filter((g) => g.week === week && g.date).map((g) => g.date!) // YYYY-MM-DD
+  const dates = (games ?? []).filter((g) => g.week === week && g.date).map((g) => g.date!) // YYYY-MM-DD, the game's own day
   if (!dates.length) return null
-  const last = dates.sort()[dates.length - 1]
-  const [y, m, d] = last.split('-').map(Number)
-  const gate = new Date(y, m - 1, d + 1, 6, 0, 0, 0)
-  // Sunday or Monday: wait for Tuesday, after the Monday night game.
-  while (gate.getDay() === 0 || gate.getDay() === 1) gate.setDate(gate.getDate() + 1)
-  return gate
+  const [y, m, d] = dates.sort()[dates.length - 1].split('-').map(Number)
+  // Calendar arithmetic on the date alone: the day after the last game, moved on to Tuesday if that is a Sunday or Monday.
+  const day = new Date(Date.UTC(y, m - 1, d + 1))
+  while (day.getUTCDay() === 0 || day.getUTCDay() === 1) day.setUTCDate(day.getUTCDate() + 1)
+  return zonedInstant(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), 6)
+}
+
+/** When a gate falls, as people in the league read it: "Tue 6 AM ET". */
+export const dropsLabel = (gate: Date) => {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: REVEAL_TZ, weekday: 'short', hour: 'numeric', minute: '2-digit' }).formatToParts(gate)
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
+  const min = get('minute')
+  return `${get('weekday')} ${get('hour')}${min && min !== '00' ? `:${min}` : ''} ${get('dayPeriod')} ET`
+}
+
+/** Time left to a gate, coarse: "in 2d 5h", "in 7h 29m", "in 12m", or null once it has passed. */
+export const countdown = (gate: Date, now: number) => {
+  const ms = gate.getTime() - now
+  if (ms <= 0) return null
+  const m = Math.ceil(ms / 60000)
+  const d = Math.floor(m / 1440)
+  const h = Math.floor((m % 1440) / 60)
+  if (d > 0) return `in ${d}d ${h}h`
+  if (h > 0) return `in ${h}h ${m % 60}m`
+  return `in ${m}m`
+}
+
+/** A week has kicked off once any of its NFL games has started or finished, or points are on the board. */
+const kickedOff = (matchups: SleeperMatchup[] | undefined, games: ScheduleGame[] | undefined, week: number) =>
+  hasScores(matchups) || (games ?? []).some((g) => g.week === week && g.status != null && g.status !== 'pre_game' && g.status !== 'canceled')
+
+/**
+ * Which week the reveal shows and which is on its way. `revealed` is the latest finished week whose gate has passed:
+ * the only week whose ranking may be shown. `pending` is a week that is over or under way but not yet unlocked, with
+ * its gate, for the banners' "drops Tuesday" state; nothing about it is computed or shown before then.
+ */
+export const revealState = (opts: {
+  regularWeeks: number[]
+  matchupsByWeek: Record<number, SleeperMatchup[]>
+  games?: ScheduleGame[]
+  /** Sleeper's current week. */
+  week: number
+  playoffStart: number
+  /** The league is this season's, in its regular season. */
+  current: boolean
+  now: number
+}): { revealed: number | null; pending: { week: number; gate: Date } | null } => {
+  const { games, matchupsByWeek, playoffStart, now } = opts
+  if (!opts.current) return { revealed: opts.regularWeeks.length ? Math.max(...opts.regularWeeks) : null, pending: null }
+  const latest = revealWeek(opts)
+  const open = (w: number) => {
+    const g = revealGate(games, w)
+    return !g || now >= g.getTime()
+  }
+  if (latest == null) return { revealed: null, pending: null }
+  let revealed: number | null = latest
+  let pending: { week: number; gate: Date } | null = null
+  if (!open(latest)) {
+    pending = { week: latest, gate: revealGate(games, latest)! }
+    const before = weeksBefore(matchupsByWeek, latest, playoffStart)
+    revealed = before.length ? before[before.length - 1] : null
+  } else if (opts.week > latest && opts.week < playoffStart && kickedOff(matchupsByWeek[opts.week], games, opts.week)) {
+    // The next week is under way: its reveal is the one coming.
+    const g = revealGate(games, opts.week)
+    if (g && now < g.getTime()) pending = { week: opts.week, gate: g }
+  }
+  return { revealed, pending }
 }
 
 /**

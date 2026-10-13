@@ -577,7 +577,6 @@ const PowerRecap = ({
     <p className={cx('px-3 py-3 font-mono text-[10.5px] leading-relaxed text-ff-muted', entering && 'ff-rv-in')} style={at(0)}>
       The composite power ranking (Power → Composite). Power is the chance to beat an average team in a week. Last week&apos;s rank reads results through week {recap.week - 1} and each roster as set for week {recap.week}; this
       week&apos;s adds week {recap.week}&apos;s results and rosters as they stand now.
-      {recap.estimated && <span className="text-ff-warn"> Estimated: games still being played are counted at their projections.</span>}
     </p>
   )
   const listHead = (

@@ -75,14 +75,24 @@ export const GorillaFace = ({ size = 200, start = 0, className }: { size?: numbe
   )
 }
 
-/** A football in line art: the hull, a seam near each tip, the laces. Filled with the panel so lines behind stop at it. */
+/**
+ * A football in line art, side on: a prolate spheroid (about 1.7 to 1 across, its tips just pointed), the long seam
+ * over the top with the laces stitched across it, the panel seam below, and the long axis as a construction line.
+ * The hull is filled with the panel so lines behind it stop at its edge. Centred on (28, 18).
+ */
 export const Football = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 64 36" width={64} height={36} className={cx('ff-rv-art block overflow-visible', className)} aria-hidden>
-    <path d="M4 18C14 4 50 4 60 18C50 32 14 32 4 18Z" className="ff-rv-ink ff-rv-hull" />
-    <path d="M14.5 9.5C12.5 13 12.5 23 14.5 26.5M49.5 9.5C51.5 13 51.5 23 49.5 26.5" className="ff-rv-ink" />
-    <path d="M24 18H40M27.5 15V21M31 15V21M34.5 15V21M38 15V21" className="ff-rv-hot" />
-    <rect x={3} y={17} width={2} height={2} className="ff-rv-node-hot" />
-    <rect x={59} y={17} width={2} height={2} className="ff-rv-node-hot" />
+  <svg viewBox="0 0 56 36" width={56} height={36} className={cx('ff-rv-art block overflow-visible', className)} aria-hidden>
+    <path d="M2 18C7 7.5 17 2.5 28 2.5C39 2.5 49 7.5 54 18C49 28.5 39 33.5 28 33.5C17 33.5 7 28.5 2 18Z" className="ff-rv-ink ff-rv-hull" />
+    {/* The long axis, dashed, out past each tip. */}
+    <path d="M-3 18H59" className="ff-rv-cons" strokeDasharray="1.5 2.5" />
+    {/* The panel seams: the laced one over the top, the plain one below. */}
+    <path d="M4.5 15C12 9 20 7.2 28 7.2C36 7.2 44 9 51.5 15" className="ff-rv-ink" />
+    <path d="M4.5 21C12 27 20 28.8 28 28.8C36 28.8 44 27 51.5 21" className="ff-rv-cons" />
+    {/* Laces: eight stitches across the top seam, square to it. */}
+    <path d="M19 6.4V10.6M21.6 6V10.2M24.2 5.7V9.9M26.8 5.5V9.7M29.4 5.5V9.7M32 5.7V9.9M34.6 6V10.2M37.2 6.4V10.6" className="ff-rv-hot" />
+    <rect x={1} y={17} width={2} height={2} className="ff-rv-node-hot" />
+    <rect x={53} y={17} width={2} height={2} className="ff-rv-node-hot" />
+    <rect x={27} y={17} width={2} height={2} className="ff-rv-node" />
   </svg>
 )
 

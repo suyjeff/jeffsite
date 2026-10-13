@@ -2,17 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
 import type { Models } from '../../lib/fantasy/models'
 import type { PowerWeights } from '../../lib/fantasy/power'
-import { buildRecap, revealGate, revealSeenKey, revealStale, revealWeek, weekFinal, weeksBefore, type Recap } from '../../lib/fantasy/recap'
+import { buildRecap, revealSeenKey, revealStale, revealState, weeksBefore, type Recap } from '../../lib/fantasy/recap'
 import type { SleeperMatchup } from '../../lib/fantasy/types'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { revealOdds } from './revealOdds'
 import { playerValues, replacementLevels, rosterStrength, type ModelConfig } from '../../lib/fantasy/war'
-
-/**
- * A "Preview reveal (dev)" button beside the reveal banner that plays the current week now, estimated where it is
- * still being played. Temporary: set false (or delete the button) once the real Tuesday reveal has been seen live.
- */
-export const REVEAL_DEV_PREVIEW = true
 
 /** What the reveal reads: the recap, and the weeks it was built from (the playoff odds rerun on them). */
 export type RevealSource = {
@@ -21,8 +15,8 @@ export type RevealSource = {
   matchupsByWeek: Record<number, SleeperMatchup[]>
 }
 
-/** What a reveal is showing: a week's real recap, or the dev preview of the week under way. */
-export type RevealOpen = { preview: boolean; /** Bumped to play it again from the start. */ run: number }
+/** A reveal on screen. `run` is bumped to play it again from the start. */
+export type RevealOpen = { run: number }
 
 const playoffStartOf = (data: LeagueData) => Number(data.league.settings?.playoff_week_start ?? 15)
 
@@ -64,17 +58,10 @@ const strengthBefore = (data: LeagueData, analysis: Analysis, model: ModelConfig
   return value
 }
 
-/** The recap for a week, from the league's matchups (or a stand-in set of them, for the preview). */
-export const recapSource = (
-  data: LeagueData,
-  analysis: Analysis,
-  models: Models,
-  prefs: { weights: PowerWeights; model: ModelConfig },
-  week: number,
-  opts: { matchups?: SleeperMatchup[]; estimated?: boolean } = {},
-): RevealSource => {
+/** The recap for a week, from the league's matchups. */
+export const recapSource = (data: LeagueData, analysis: Analysis, models: Models, prefs: { weights: PowerWeights; model: ModelConfig }, week: number): RevealSource => {
   const { weights } = prefs
-  const matchupsByWeek = opts.matchups ? { ...data.matchupsByWeek, [week]: opts.matchups } : data.matchupsByWeek
+  const matchupsByWeek = data.matchupsByWeek
   const priorWeeks = weeksBefore(matchupsByWeek, week, playoffStartOf(data))
   const expected: Record<number, number> = {}
   for (const t of analysis.teams) {
@@ -94,7 +81,6 @@ export const recapSource = (
     sigma: analysis.sigma,
     proj: weekProjections(data, week),
     expected,
-    estimated: opts.estimated,
   })
   return { recap, priorWeeks, matchupsByWeek }
 }
@@ -115,11 +101,22 @@ const writeSeen = (key: string) => {
   }
 }
 
+/** The time, read again every half minute: the gate can pass while the page is open, and the countdown runs. */
+const useNow = (ms = 30000) => {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), ms)
+    return () => window.clearInterval(id)
+  }, [ms])
+  return now
+}
+
 /**
- * The weekly reveal: which week it is for, whether it is due, and opening it. It opens by itself once per league per
- * week, on the first load at or after Tuesday 6am following the week's last game, whatever page is open, unless
- * something else (onboarding, the tour) has the screen. `?reveal=1` in the address forces the real one; `?reveal=preview`
- * forces the dev preview.
+ * The weekly reveal: which week it shows, which is on its way, and opening it. A week unlocks at 6:00 AM Eastern on
+ * the Tuesday after its last game (lib/fantasy/recap revealGate), for everyone at once. From then it opens by itself
+ * once per league per week, on the first load, whatever page is open, unless something else (onboarding, the tour) has
+ * the screen or the next week has already kicked off. Before then nothing about that week is built: the banners only
+ * say when it drops. `?reveal=1` in the address replays the latest unlocked week.
  */
 export const useReveal = ({
   data,
@@ -137,13 +134,23 @@ export const useReveal = ({
   /** Count this week's reveal seen without showing it (a first visit, which has had the tour instead). */
   quiet?: boolean
 }) => {
-  const week = useMemo(() => {
-    if (!data || data.league.season !== data.state.season || data.state.season_type !== 'regular') {
-      // A finished or past season still has its last week to replay.
-      return data?.regularWeeks.length ? Math.max(...data.regularWeeks) : null
-    }
-    return revealWeek({ regularWeeks: data.regularWeeks, matchupsByWeek: data.matchupsByWeek, games: data.schedule?.games, week: data.state.week, playoffStart: playoffStartOf(data) })
-  }, [data])
+  const now = useNow()
+  const state = useMemo(() => {
+    if (!data) return { revealed: null, pending: null }
+    return revealState({
+      regularWeeks: data.regularWeeks,
+      matchupsByWeek: data.matchupsByWeek,
+      games: data.schedule?.games,
+      week: data.state.week,
+      playoffStart: playoffStartOf(data),
+      current: data.league.season === data.state.season && data.state.season_type === 'regular',
+      now,
+    })
+  }, [data, now])
+  const week = state.revealed
+  const pendingWeek = state.pending?.week ?? null
+  const pendingGate = state.pending?.gate.getTime() ?? null
+  const pending = useMemo(() => (pendingWeek != null && pendingGate != null ? { week: pendingWeek, gate: new Date(pendingGate) } : null), [pendingWeek, pendingGate])
 
   const source = useMemo(() => (data && analysis && models && prefs && week != null ? recapSource(data, analysis, models, prefs, week) : null), [data, analysis, models, prefs, week])
 
@@ -154,31 +161,22 @@ export const useReveal = ({
     return () => window.clearTimeout(id)
   }, [source, data, analysis, models])
 
-  // The week under way, for the dev preview: the current week while its games are being played.
-  const previewWeek = useMemo(() => {
-    if (!data || data.state.season_type !== 'regular' || data.league.season !== data.state.season) return null
-    const w = data.state.week
-    return w < playoffStartOf(data) && (data.matchupsByWeek[w] ?? []).length ? w : null
-  }, [data])
-  const previewEstimated = !!data && previewWeek != null && !weekFinal(data.schedule?.games, previewWeek)
-
   const [open, setOpen] = useState<RevealOpen | null>(null)
-  const show = useCallback((preview = false) => setOpen((o) => ({ preview, run: (o?.run ?? 0) + 1 })), [])
+  const show = useCallback(() => setOpen((o) => ({ run: (o?.run ?? 0) + 1 })), [])
   const close = useCallback(() => setOpen(null), [])
 
   const leagueId = data?.league.league_id
   const season = data?.league.season
 
-  // Forced from the address, for testing: once, then the parameter is cleared so a reload does not repeat it.
+  // `?reveal=1`: replay the latest unlocked week, once, then clear the parameter so a reload does not repeat it.
   useEffect(() => {
     if (!source || blocked) return
     const q = new URLSearchParams(window.location.search)
-    const v = q.get('reveal')
-    if (v == null) return
+    if (q.get('reveal') == null) return
     q.delete('reveal')
     const rest = q.toString()
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`)
-    show(v === 'preview' && REVEAL_DEV_PREVIEW)
+    show()
   }, [source, blocked, show])
 
   // On its own: the first load after the gate, once per league and week. Marked seen as it opens, so a reload
@@ -188,16 +186,14 @@ export const useReveal = ({
     if (data.league.season !== data.state.season) return
     const key = revealSeenKey(leagueId, season, week)
     if (readSeen(key)) return
-    const gate = revealGate(data.schedule?.games, week)
-    if (gate && Date.now() < gate.getTime()) return
     // A week whose successor has already kicked off is old news: no surprise for it, only the replay.
     const stale = revealStale(data.schedule?.games, week)
     if (stale && Date.now() >= stale.getTime()) return
     writeSeen(key)
-    if (!quiet) setOpen((o) => o ?? { preview: false, run: 1 })
+    if (!quiet) setOpen((o) => o ?? { run: 1 })
   }, [source, blocked, quiet, leagueId, season, week, data])
 
-  return { week, source, open, show, close, preview: REVEAL_DEV_PREVIEW && previewWeek != null ? { week: previewWeek, estimated: previewEstimated } : null }
+  return { week, source, pending, now, open, show, close }
 }
 
 export type RevealApi = ReturnType<typeof useReveal>
