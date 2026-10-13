@@ -479,7 +479,6 @@ const FantasyPage = () => {
               <NavBanner
                 recap={reveal.source?.recap ?? null}
                 pending={reveal.pending}
-                now={reveal.now}
                 analysis={analysis}
                 onOpen={() => {
                   closeDrawer?.()
@@ -511,7 +510,7 @@ const FantasyPage = () => {
           {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'me' && <MeView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'power' && (
-            <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={sheetApi.openTeam} weights={prefs.weights} recap={reveal.source?.recap ?? null} pending={reveal.pending} now={reveal.now} onReveal={reveal.show} />
+            <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={sheetApi.openTeam} weights={prefs.weights} recap={reveal.source?.recap ?? null} pending={reveal.pending} onReveal={reveal.show} />
           )}
           {section === 'teams' && (
             // Moving to another team keeps the page, so rosters can be compared.

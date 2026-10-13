@@ -101,13 +101,15 @@ const writeSeen = (key: string) => {
   }
 }
 
-/** The time, read again every half minute: the gate can pass while the page is open, and the countdown runs. */
-const useNow = (ms = 30000) => {
+/** The time, read again every `ms` while `on`: for a banner's countdown, so only the banner re-renders. */
+export const useNow = (ms = 30000, on = true) => {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
+    if (!on) return
+    setNow(Date.now())
     const id = window.setInterval(() => setNow(Date.now()), ms)
     return () => window.clearInterval(id)
-  }, [ms])
+  }, [ms, on])
   return now
 }
 
@@ -134,7 +136,10 @@ export const useReveal = ({
   /** Count this week's reveal seen without showing it (a first visit, which has had the tour instead). */
   quiet?: boolean
 }) => {
-  const now = useNow()
+  // The page's own clock moves rarely: every five minutes (a week can start between reloads) and once at the gate
+  // (below), so the whole page does not re-render on a countdown's beat.
+  const now = useNow(5 * 60_000)
+  const [gateTick, setGateTick] = useState(0)
   const state = useMemo(() => {
     if (!data) return { revealed: null, pending: null }
     return revealState({
@@ -144,13 +149,22 @@ export const useReveal = ({
       week: data.state.week,
       playoffStart: playoffStartOf(data),
       current: data.league.season === data.state.season && data.state.season_type === 'regular',
-      now,
+      now: Math.max(now, gateTick),
     })
-  }, [data, now])
+  }, [data, now, gateTick])
   const week = state.revealed
   const pendingWeek = state.pending?.week ?? null
   const pendingGate = state.pending?.gate.getTime() ?? null
   const pending = useMemo(() => (pendingWeek != null && pendingGate != null ? { week: pendingWeek, gate: new Date(pendingGate) } : null), [pendingWeek, pendingGate])
+
+  // Wake exactly when the pending week unlocks, so it opens at 6 AM ET without waiting for the next five-minute read.
+  useEffect(() => {
+    if (pendingGate == null) return
+    const wait = pendingGate - Date.now() + 500
+    if (wait <= 0 || wait > 2 ** 31 - 1) return
+    const id = window.setTimeout(() => setGateTick(Date.now()), wait)
+    return () => window.clearTimeout(id)
+  }, [pendingGate])
 
   const source = useMemo(() => (data && analysis && models && prefs && week != null ? recapSource(data, analysis, models, prefs, week) : null), [data, analysis, models, prefs, week])
 
@@ -193,7 +207,7 @@ export const useReveal = ({
     if (!quiet) setOpen((o) => o ?? { run: 1 })
   }, [source, blocked, quiet, leagueId, season, week, data])
 
-  return { week, source, pending, now, open, show, close }
+  return { week, source, pending, open, show, close }
 }
 
 export type RevealApi = ReturnType<typeof useReveal>

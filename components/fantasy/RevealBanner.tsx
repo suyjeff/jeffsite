@@ -2,6 +2,7 @@ import React, { type CSSProperties } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
 import { countdown, dropsLabel, type Recap } from '../../lib/fantasy/recap'
 import { cx } from './ui'
+import { useNow } from './useReveal'
 
 // The way back into the weekly power-rank reveal: a coloured banner on the Power page and a smaller one at the
 // foot of the sidebar. Once a week has unlocked both are buttons that replay it. Before then, from the week's first
@@ -130,7 +131,9 @@ const CrownBox = ({ outline }: { outline?: boolean }) => (
  * The Power page's banner, under the tabs: the latest week's reveal to replay, or, while the next one is on its way,
  * when it drops (with the last one still a tap away).
  */
-export const PowerBanner = ({ recap, pending, now, analysis, onOpen }: { recap: Recap | null; pending: RevealPending | null; now: number; analysis: Analysis; onOpen: () => void }) => {
+export const PowerBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap | null; pending: RevealPending | null; analysis: Analysis; onOpen: () => void }) => {
+  // Only a pending banner keeps time, for its countdown.
+  const now = useNow(30000, !!pending)
   if (pending) {
     const { when, left } = dropText(pending, now)
     return (
@@ -139,7 +142,7 @@ export const PowerBanner = ({ recap, pending, now, analysis, onOpen }: { recap: 
         <CrownBox outline />
         <span className="relative min-w-0 flex-1 leading-tight">
           <span className="flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-white/90">
-            <span aria-hidden className="ff-rv-blink inline-block h-1.5 w-1.5 bg-white" />
+            <span aria-hidden className="ff-rv-pulse inline-block h-1.5 w-1.5 bg-white" />
             Week {pending.week} power rank
             <span className="normal-case tracking-normal max-sm:hidden"> · compiling</span>
           </span>
@@ -200,7 +203,9 @@ export const PowerBanner = ({ recap, pending, now, analysis, onOpen }: { recap: 
 }
 
 /** The sidebar's banner, above the settings: the latest reveal to replay, or when the next one drops. */
-export const NavBanner = ({ recap, pending, now, analysis, onOpen }: { recap: Recap | null; pending: RevealPending | null; now: number; analysis: Analysis; onOpen: () => void }) => {
+export const NavBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap | null; pending: RevealPending | null; analysis: Analysis; onOpen: () => void }) => {
+  // Only a pending banner keeps time, for its countdown.
+  const now = useNow(30000, !!pending)
   if (pending) {
     const { when, left } = dropText(pending, now)
     return (

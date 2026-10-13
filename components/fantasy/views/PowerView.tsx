@@ -42,7 +42,6 @@ const PowerView = ({
   weights,
   recap,
   pending,
-  now,
   onReveal,
 }: {
   data: LeagueData
@@ -55,7 +54,6 @@ const PowerView = ({
   recap?: Recap | null
   /** The next week's reveal while it is on its way: the banner says when it drops and shows nothing of it. */
   pending?: RevealPending | null
-  now?: number
   onReveal?: () => void
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'rankings'
@@ -254,7 +252,7 @@ const PowerView = ({
         }
       />
       <div className="mt-4 space-y-3">
-        {(recap || pending) && onReveal && here('rankings') && <PowerBanner recap={recap ?? null} pending={pending ?? null} now={now ?? Date.now()} analysis={analysis} onOpen={onReveal} />}
+        {(recap || pending) && onReveal && here('rankings') && <PowerBanner recap={recap ?? null} pending={pending ?? null} analysis={analysis} onOpen={onReveal} />}
         {me && (
           <StatGrid>
             {here('rankings') && <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.eloRated[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />}

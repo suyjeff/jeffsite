@@ -1348,16 +1348,16 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   stroke: rgb(var(--ff-gold));
   stroke-width: 1;
 }
-.ff .ff-rv-blink {
-  animation: ff-rv-blink 1.6s steps(1, end) infinite;
+.ff .ff-rv-pulse {
+  animation: ff-rv-pulse 1.6s steps(1, end) infinite;
 }
-@keyframes ff-rv-blink {
+@keyframes ff-rv-pulse {
   50% {
     opacity: 0.25;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ff .ff-rv-blink {
+  .ff .ff-rv-pulse {
     animation: none;
   }
 }
