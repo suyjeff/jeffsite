@@ -157,3 +157,16 @@ describe('mergeSims', () => {
     expect(merged[1].seeds.reduce((a, x) => a + x, 0)).toBeCloseTo(1, 6)
   })
 })
+
+describe('recap weights', () => {
+  it('shows the weights the composite used, dropping roster when no team has any strength', () => {
+    const r = buildRecap(base)
+    expect(r.weights.roster).toBe(0)
+    const sum = Object.values(r.weights).reduce((a, x) => a + x, 0)
+    expect(sum).toBeCloseTo(1, 9)
+    // Each team's power margin is the weighted sum of its parts, so the working shown adds up.
+    const withRoster = buildRecap({ ...base, strength: { 1: 3, 2: 1, 3: 0, 4: -2 } })
+    expect(withRoster.weights.roster).toBeGreaterThan(0)
+    expect(Object.values(withRoster.weights).reduce((a, x) => a + x, 0)).toBeCloseTo(1, 9)
+  })
+})

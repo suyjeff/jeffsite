@@ -89,8 +89,8 @@ export const RowBody = ({
       <span className="relative shrink-0">
         <Avatar src={t?.avatar ?? null} name={t?.name ?? '?'} size={24} />
         {crowned && (
-          <span className="ff-rv-hat absolute -left-[6px] -top-[9px] -rotate-[14deg]" style={d(hatDelay)}>
-            <Crown size={15} />
+          <span className="ff-rv-hat absolute -left-[5px] -top-[7px] -rotate-[14deg]" style={d(hatDelay)}>
+            <Crown size={14} />
           </span>
         )}
       </span>
@@ -250,6 +250,8 @@ const Focus = ({ recap, team, odds }: { recap: Recap; team: RecapTeam; odds: Rec
 const GameRow = ({ g, recap }: { g: RecapGame; recap: Recap }) => {
   const max = Math.max(...recap.games.flatMap((x) => [x.pa, x.pb]), 1)
   const upset = g.pWinner != null && g.pWinner < 0.4
+  // Winner in the accent, loser in a muted red; a tie leaves both neutral.
+  const bar = (id: number) => (g.winner == null ? 'bg-ff-muted/50' : g.winner === id ? 'bg-ff-accent' : 'bg-ff-neg/70')
   const side = (id: number, pts: number, right?: boolean) => (
     <span className={cx('flex min-w-0 flex-1 items-center gap-2', right && 'flex-row-reverse text-right')}>
       <span className={cx('min-w-0 flex-1 truncate text-[12.5px]', g.winner === id ? 'font-medium' : 'opacity-70')}>
@@ -267,10 +269,10 @@ const GameRow = ({ g, recap }: { g: RecapGame; recap: Recap }) => {
       </div>
       <div className="mt-1.5 flex items-center gap-[3px]" aria-hidden>
         <span className="flex h-1 flex-1 justify-end bg-ff-sunken">
-          <span className={cx('h-full', g.winner === g.a ? 'bg-ff-accent' : 'bg-ff-line2')} style={{ width: `${(g.pa / max) * 100}%` }} />
+          <span className={cx('h-full', bar(g.a))} style={{ width: `${(g.pa / max) * 100}%` }} />
         </span>
         <span className="flex h-1 flex-1 bg-ff-sunken">
-          <span className={cx('h-full', g.winner === g.b ? 'bg-ff-accent' : 'bg-ff-line2')} style={{ width: `${(g.pb / max) * 100}%` }} />
+          <span className={cx('h-full', bar(g.b))} style={{ width: `${(g.pb / max) * 100}%` }} />
         </span>
       </div>
       {upset && (
