@@ -1263,12 +1263,13 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     linear-gradient(100deg, var(--ff-rv-a) 0%, color-mix(in oklab, var(--ff-rv-a) 45%, var(--ff-rv-b)) 55%, var(--ff-rv-b) 100%);
   transition: scale 200ms var(--ff-ease-out);
 }
-.ff .ff-rv-banner:focus-visible {
+.ff .ff-rv-banner:focus-visible,
+.ff .ff-rv-replay:focus-visible {
   outline: 2px solid rgb(var(--ff-text));
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .ff .ff-rv-banner:active {
+  .ff button.ff-rv-banner:active, .ff .ff-rv-replay:active {
     scale: 0.985;
     transition-duration: 100ms;
   }
@@ -1283,7 +1284,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   fill: rgb(255 255 255 / 0.55);
 }
 .ff .ff-rv-banner .ff-rv-sq,
-.ff .ff-rv-banner .ff-rv-tick,
+.ff .ff-rv-banner .ff-rv-ruler,
 .ff .ff-rv-banner .ff-rv-lift,
 .ff .ff-rv-banner .ff-rv-nudge {
   transform-box: fill-box;
@@ -1300,26 +1301,64 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   z-index: -1;
 }
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  .ff .ff-rv-banner:hover .ff-rv-sweep {
+  .ff button.ff-rv-banner:hover .ff-rv-sweep {
     animation: ff-rv-sweep 900ms var(--ff-ease-in-out) both;
   }
-  .ff .ff-rv-banner:hover .ff-rv-sq {
+  .ff button.ff-rv-banner:hover .ff-rv-sq {
     transform: rotate(90deg);
   }
-  .ff .ff-rv-banner:hover .ff-rv-sq.ff-rv-ccw {
+  .ff button.ff-rv-banner:hover .ff-rv-sq.ff-rv-ccw {
     transform: rotate(-90deg) scale(1.15);
   }
-  .ff .ff-rv-banner:hover .ff-rv-tick {
+  .ff button.ff-rv-banner:hover .ff-rv-ruler {
     transform: translateX(var(--tx, 8px));
   }
-  .ff .ff-rv-banner:hover .ff-rv-lift {
+  .ff button.ff-rv-banner:hover .ff-rv-lift {
     transform: translateY(-3px) rotate(-8deg);
   }
-  .ff .ff-rv-banner:hover .ff-rv-nudge {
+  .ff .ff-rv-replay:hover {
+    background-color: rgb(255 255 255 / 0.2);
+  }
+  .ff .ff-rv-replay:hover .ff-rv-nudge,
+  .ff button.ff-rv-banner:hover .ff-rv-nudge {
     transform: translateX(3px);
   }
-  .ff .ff-rv-banner:hover .ff-rv-crown-node {
+  .ff button.ff-rv-banner:hover .ff-rv-crown-node {
     animation: ff-rv-twinkle 700ms ease-in-out both;
+  }
+}
+/* A week on its way: the banner holds still (nothing to open), its crown dashed and unfilled, a slow status blink. */
+.ff .ff-rv-banner.is-pending {
+  cursor: default;
+}
+.ff .ff-rv-replay {
+  transition: background-color 160ms ease-out, scale 160ms var(--ff-ease-out);
+}
+.ff .ff-rv-crown.is-outline .ff-rv-crown-body {
+  fill: none;
+}
+.ff .ff-rv-crown.is-outline .ff-rv-crown-band {
+  stroke: rgb(var(--ff-gold) / 0.6);
+}
+.ff .ff-rv-crown.is-outline .ff-rv-crown-line {
+  stroke-dasharray: 0.035 0.02;
+}
+.ff .ff-rv-crown.is-outline .ff-rv-crown-node {
+  fill: none;
+  stroke: rgb(var(--ff-gold));
+  stroke-width: 1;
+}
+.ff .ff-rv-pulse {
+  animation: ff-rv-pulse 1.6s steps(1, end) infinite;
+}
+@keyframes ff-rv-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-rv-pulse {
+    animation: none;
   }
 }
 @keyframes ff-rv-sweep {
@@ -1446,6 +1485,10 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 .ff .ff-rv-poop .ff-rv-ink {
   stroke: rgb(var(--ff-warn));
 }
+.ff .ff-rv-poop .ff-rv-sect-line {
+  stroke: rgb(var(--ff-warn) / 0.55);
+  stroke-width: 0.6;
+}
 .ff .ff-rv-art .ff-rv-predict {
   stroke: rgb(var(--ff-text2) / 0.45);
   stroke-width: 1;
@@ -1559,7 +1602,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   animation: ff-rv-ball-y var(--air) linear var(--lead) both;
 }
 .ff .ff-rv-ball-r {
-  transform-origin: 32px 18px;
+  transform-origin: 28px 18px;
   animation: ff-rv-ball-r var(--air) linear var(--lead) both;
 }
 @keyframes ff-rv-ball-x {

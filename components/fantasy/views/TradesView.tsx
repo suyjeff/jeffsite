@@ -346,7 +346,7 @@ const TradesView = ({
     grades.lessons.n === 0 ? (
       <Callout kind="instruction">
         Answer <span className="text-ff-text">Would they?</span> on any card and the odds learn what this league accepts.
-        {sharingOn() && ' Grades are shared anonymously with others using this site in your league.'}
+        {sharingOn() && ' It learns from every manager’s grades in this league, anonymously.'}
       </Callout>
     ) : (
       <Callout

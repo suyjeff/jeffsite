@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { sharingOn } from '../../lib/fantasy/sharedGrades'
 import { MONKE } from './brand'
 import { DIAGRAMS, type DiagramKey } from './TourDiagrams'
 import { cx, shortcutLabel } from './ui'
@@ -116,7 +117,9 @@ const fill = (s: string) => s.replace('{K}', shortcutLabel())
  * animated diagram. Esc, Skip, or the last step end it, and it never runs again unless asked for.
  */
 const Tour = ({ step, setStep, onClose, phone }: { step: number; setStep: (n: number) => void; onClose: () => void; phone: boolean }) => {
-  const s = TOUR[step]
+  const base = TOUR[step]
+  // With shared grades on, say whose grades the trade odds learn from.
+  const s = base.key === 'trades' && sharingOn() ? { ...base, can: base.can.map((c) => (c.startsWith('Grade deals') ? 'Grade deals; it learns from every manager’s grades in this league, anonymously' : c)) } : base
   const Diagram = DIAGRAMS[s.key]
   const card = useRef<HTMLDivElement>(null)
   const next = useRef<HTMLButtonElement>(null)

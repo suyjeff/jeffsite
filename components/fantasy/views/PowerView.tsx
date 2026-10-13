@@ -7,7 +7,7 @@ import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
 import TeamName from '../TeamName'
-import { PowerBanner } from '../RevealBanner'
+import { PowerBanner, type RevealPending } from '../RevealBanner'
 import type { Recap } from '../../../lib/fantasy/recap'
 import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, probShade, simOdds, type Column, type PageChange } from '../ui'
 
@@ -41,6 +41,7 @@ const PowerView = ({
   onTeam,
   weights,
   recap,
+  pending,
   onReveal,
 }: {
   data: LeagueData
@@ -51,6 +52,8 @@ const PowerView = ({
   weights: PowerWeights
   /** The latest week's power-rank reveal, replayed from the banner. */
   recap?: Recap | null
+  /** The next week's reveal while it is on its way: the banner says when it drops and shows nothing of it. */
+  pending?: RevealPending | null
   onReveal?: () => void
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'rankings'
@@ -233,7 +236,7 @@ const PowerView = ({
   return (
     <>
       <PageHeader
-        title="Power"
+        title="Power Rank"
         tabs={
           <Tabs<Sub>
             requested={sub}
@@ -249,7 +252,7 @@ const PowerView = ({
         }
       />
       <div className="mt-4 space-y-3">
-        {recap && onReveal && here('rankings') && <PowerBanner recap={recap} analysis={analysis} onOpen={onReveal} />}
+        {(recap || pending) && onReveal && here('rankings') && <PowerBanner recap={recap ?? null} pending={pending ?? null} analysis={analysis} onOpen={onReveal} />}
         {me && (
           <StatGrid>
             {here('rankings') && <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.eloRated[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />}

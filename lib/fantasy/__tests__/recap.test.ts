@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRecap, estimateWeek, lineupCalls, mergeSims, recapOdds, recapOddsRuns, revealGate, revealStale, revealWeek, sortPasses, weeksBefore } from '../recap'
+import { buildRecap, countdown, dropsLabel, lineupCalls, mergeSims, recapOdds, recapOddsRuns, revealGate, revealStale, revealState, revealWeek, sortPasses, weeksBefore, zonedInstant } from '../recap'
 import type { Forecast } from '../forecast'
 import { DEFAULT_POWER_WEIGHTS } from '../power'
 import { startingSlots } from '../lineup'
@@ -91,24 +91,34 @@ describe('sortPasses', () => {
   })
 })
 
-describe('estimateWeek', () => {
-  it('keeps final points, finishes live games on the projection, and projects the rest', () => {
-    const [x] = estimateWeek([{ roster_id: 1, matchup_id: 1, points: 0, players: ['a', 'b', 'c'], starters: ['a', 'b'], players_points: { a: 12, b: 6 } }], { a: 20, b: 10, c: 9 }, (id) =>
-      id === 'a' ? { state: 'final' } : id === 'b' ? { state: 'live', elapsed: 0.5 } : { state: 'pre' },
-    )
-    expect(x.players_points).toEqual({ a: 12, b: 11, c: 9 })
-    expect(x.points).toBe(23)
-  })
-})
-
 describe('reveal timing', () => {
   const games = [
     { week: 5, home: 'A', away: 'B', status: 'complete', date: '2026-10-11' },
     { week: 5, home: 'C', away: 'D', status: 'complete', date: '2026-10-12' },
   ]
-  it('opens at 6am the Tuesday after Monday night', () => {
+  it('opens at 6 AM Eastern the Tuesday after Monday night, wherever the viewer is', () => {
+    expect(revealGate(games, 5)!.toISOString()).toBe('2026-10-13T10:00:00.000Z')
+    // Standard time: 6 AM EST is 11:00 UTC.
+    expect(revealGate([{ week: 10, home: 'A', away: 'B', status: 'complete', date: '2026-11-09' }], 10)!.toISOString()).toBe('2026-11-10T11:00:00.000Z')
+    // A Thursday or Sunday finish still waits for Tuesday; a week that runs past Monday opens the morning after.
+    expect(revealGate([{ week: 5, home: 'A', away: 'B', status: 'complete', date: '2026-10-11' }], 5)!.toISOString()).toBe('2026-10-13T10:00:00.000Z')
+    expect(revealGate([{ week: 5, home: 'A', away: 'B', status: 'complete', date: '2026-10-14' }], 5)!.toISOString()).toBe('2026-10-15T10:00:00.000Z')
+    expect(revealGate([], 5)).toBeNull()
+  })
+  it('reads Eastern wall time across DST changes', () => {
+    expect(zonedInstant(2026, 3, 7, 6).toISOString()).toBe('2026-03-07T11:00:00.000Z')
+    expect(zonedInstant(2026, 3, 8, 6).toISOString()).toBe('2026-03-08T10:00:00.000Z')
+    expect(zonedInstant(2026, 10, 31, 6).toISOString()).toBe('2026-10-31T10:00:00.000Z')
+    expect(zonedInstant(2026, 11, 1, 6).toISOString()).toBe('2026-11-01T11:00:00.000Z')
+    expect(zonedInstant(2026, 12, 29, 6).toISOString()).toBe('2026-12-29T11:00:00.000Z')
+  })
+  it('labels the drop in Eastern time and counts down to it', () => {
     const g = revealGate(games, 5)!
-    expect([g.getFullYear(), g.getMonth() + 1, g.getDate(), g.getHours(), g.getDay()]).toEqual([2026, 10, 13, 6, 2])
+    expect(dropsLabel(g)).toBe('Tue 6 AM ET')
+    expect(countdown(g, Date.parse('2026-10-13T02:30:00Z'))).toBe('in 7h 30m')
+    expect(countdown(g, Date.parse('2026-10-11T08:00:00Z'))).toBe('in 2d 2h')
+    expect(countdown(g, Date.parse('2026-10-13T09:48:30Z'))).toBe('in 12m')
+    expect(countdown(g, g.getTime())).toBeNull()
   })
   it('goes stale once the next week has kicked off', () => {
     const next = [...games, { week: 6, home: 'A', away: 'C', status: 'pre_game', date: '2026-10-15' }, { week: 6, home: 'B', away: 'D', status: 'pre_game', date: '2026-10-18' }]
@@ -122,6 +132,46 @@ describe('reveal timing', () => {
     const live = games.map((g, i) => (i ? { ...g, status: 'in_game' } : g))
     expect(revealWeek({ regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games: live, week: 5, playoffStart: 15 })).toBe(4)
     expect(weeksBefore(mbw, 5, 15)).toEqual([4])
+  })
+})
+
+describe('revealState', () => {
+  const games = [
+    { week: 5, home: 'A', away: 'B', status: 'complete', date: '2026-10-11' },
+    { week: 5, home: 'C', away: 'D', status: 'complete', date: '2026-10-12' },
+    { week: 6, home: 'A', away: 'C', status: 'pre_game', date: '2026-10-15' },
+    { week: 6, home: 'B', away: 'D', status: 'pre_game', date: '2026-10-18' },
+  ]
+  const mbw = { 4: matchupsByWeek[1], 5: matchupsByWeek[2] }
+  const base = { regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games, week: 5, playoffStart: 15, current: true }
+  const at = (iso: string) => Date.parse(iso)
+
+  it('holds a finished week back until its gate and keeps the last one on show', () => {
+    // Monday night, 11:59 PM Eastern: week 5 is final but locked.
+    const before = revealState({ ...base, now: at('2026-10-13T03:59:00Z') })
+    expect(before.revealed).toBe(4)
+    expect(before.pending?.week).toBe(5)
+    expect(before.pending?.gate.toISOString()).toBe('2026-10-13T10:00:00.000Z')
+    // A minute before 6 AM Eastern, still locked, even when the week is already settled into the model.
+    expect(revealState({ ...base, regularWeeks: [1, 2, 3, 4, 5], now: at('2026-10-13T09:59:00Z') })).toMatchObject({ revealed: 4, pending: { week: 5 } })
+  })
+  it('unlocks it at 6 AM Eastern', () => {
+    expect(revealState({ ...base, now: at('2026-10-13T10:00:00Z') })).toEqual({ revealed: 5, pending: null })
+  })
+  it('says the week under way is coming once it kicks off, not before', () => {
+    const live = games.map((g) => (g.week === 6 && g.date === '2026-10-15' ? { ...g, status: 'complete' } : g))
+    // Wednesday: week 6 has not kicked off, so nothing is pending.
+    expect(revealState({ ...base, week: 6, now: at('2026-10-14T16:00:00Z') })).toEqual({ revealed: 5, pending: null })
+    const s = revealState({ ...base, games: live, week: 6, now: at('2026-10-16T16:00:00Z') })
+    expect(s.revealed).toBe(5)
+    expect(s.pending?.week).toBe(6)
+    expect(s.pending?.gate.toISOString()).toBe('2026-10-20T10:00:00.000Z')
+  })
+  it('shows a past season whole, with nothing pending', () => {
+    expect(revealState({ ...base, current: false, regularWeeks: [1, 2, 3], now: at('2026-10-13T03:00:00Z') })).toEqual({ revealed: 3, pending: null })
+  })
+  it('has nothing locked when the schedule has no dates', () => {
+    expect(revealState({ ...base, games: games.map(({ date: _, ...g }) => g), now: at('2026-10-13T03:00:00Z') })).toEqual({ revealed: 5, pending: null })
   })
 })
 

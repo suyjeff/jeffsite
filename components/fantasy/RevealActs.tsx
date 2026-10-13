@@ -626,7 +626,7 @@ export const DataAct = ({ recap, box, stacked, dur }: { recap: Recap; box: Box; 
       {!stacked && (
         <aside className="absolute right-0 top-0" style={{ width: railW }}>
           <div className="ff-rv-in mb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-ff-muted" style={d(150)}>
-            Sample · wk {pad2(recap.week)} {recap.estimated ? 'est.' : 'final'}
+            Sample · wk {pad2(recap.week)} final
           </div>
           <dl className="border-t border-ff-line">
             {readings.map(([k, v, digits], i) => (
@@ -676,7 +676,7 @@ export const DataAct = ({ recap, box, stacked, dur }: { recap: Recap; box: Box; 
 // Launch
 
 /** How long the ball is in the air, and when it leaves. */
-export const FLIGHT = { lead: 350, air: 1500 }
+export const FLIGHT = { lead: 250, air: 1150 }
 
 /**
  * A football on a tracked arc, the bridge into the ranking: the predicted path dashed across the plane, the flown
@@ -685,11 +685,13 @@ export const FLIGHT = { lead: 350, air: 1500 }
  */
 export const LaunchAct = ({ box, recap }: { box: Box; recap: Recap }) => {
   const { w, h } = box
-  const x0 = Math.round(w * 0.1)
-  const x1 = Math.round(w * 0.9)
-  const g = Math.round(h * 0.8)
-  // As high as the plane allows: a long, flat throw on a wide screen, a steep one on a tall phone.
-  const apex = Math.round(Math.min(h * 0.58, (x1 - x0) * 0.75))
+  // A short, tidy throw through the middle of the plane: about two thirds of its width, never more than 640px, and
+  // never higher than half its run, so a tall phone gets a lob rather than a moonshot.
+  const run = Math.min(Math.round(w * 0.66), 640)
+  const x0 = Math.round((w - run) / 2)
+  const x1 = x0 + run
+  const g = Math.round(h * 0.76)
+  const apex = Math.round(Math.min(h * 0.42, run * 0.5))
   const xm = (x0 + x1) / 2
   // A quadratic Bézier peaks at half its control point's height.
   const path = `M${x0} ${g}Q${xm} ${g - apex * 2} ${x1} ${g}`
@@ -731,13 +733,13 @@ export const LaunchAct = ({ box, recap }: { box: Box; recap: Recap }) => {
       </svg>
       <span aria-hidden className="ff-rv-ping-land absolute h-10 w-10 border border-ff-accent" style={{ left: x1 - 20, top: g - 20, ...d(FLIGHT.lead + FLIGHT.air) }} />
       {/* The ball: across at a steady speed, up and down on the arc, turned along its path. */}
-      <div className="ff-rv-ball-x absolute" style={{ left: x0 - 32, top: g - 18 }}>
+      <div className="ff-rv-ball-x absolute" style={{ left: x0 - 28, top: g - 18 }}>
         <div className="ff-rv-ball-y">
           <div className="ff-rv-ball-r relative">
             <Football />
-            <span aria-hidden className="absolute left-[60px] top-[17px] h-px w-9 bg-ff-accent" />
-            <span aria-hidden className="absolute left-[92px] top-[14px] h-[7px] w-[7px] rotate-45 border-r border-t border-ff-accent" />
-            <span className="lbl absolute left-[66px] top-[2px] font-mono text-[9px] text-ff-accent">v</span>
+            <span aria-hidden className="absolute left-[58px] top-[17px] h-px w-7 bg-ff-accent" />
+            <span aria-hidden className="absolute left-[81px] top-[14px] h-[7px] w-[7px] rotate-45 border-r border-t border-ff-accent" />
+            <span className="lbl absolute left-[64px] top-[3px] font-mono text-[9px] text-ff-accent">v</span>
           </div>
         </div>
       </div>

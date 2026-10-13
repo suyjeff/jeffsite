@@ -474,26 +474,16 @@ const FantasyPage = () => {
       tour={tour && appUp}
       onTourEnd={endTour}
       navFooter={
-        reveal.source && analysis
+        (reveal.source || reveal.pending) && analysis
           ? (closeDrawer) => (
               <NavBanner
-                recap={reveal.source!.recap}
+                recap={reveal.source?.recap ?? null}
+                pending={reveal.pending}
                 analysis={analysis}
                 onOpen={() => {
                   closeDrawer?.()
-                  reveal.show(false)
+                  reveal.show()
                 }}
-                preview={
-                  reveal.preview
-                    ? {
-                        ...reveal.preview,
-                        onOpen: () => {
-                          closeDrawer?.()
-                          reveal.show(true)
-                        },
-                      }
-                    : null
-                }
               />
             )
           : undefined
@@ -520,7 +510,7 @@ const FantasyPage = () => {
           {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'me' && <MeView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} />}
           {section === 'power' && (
-            <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={sheetApi.openTeam} weights={prefs.weights} recap={reveal.source?.recap ?? null} onReveal={() => reveal.show(false)} />
+            <PowerView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={sheetApi.openTeam} weights={prefs.weights} recap={reveal.source?.recap ?? null} pending={reveal.pending} onReveal={reveal.show} />
           )}
           {section === 'teams' && (
             // Moving to another team keeps the page, so rosters can be compared.
@@ -547,7 +537,7 @@ const FantasyPage = () => {
           )}
         </div>
         {sheets.length > 0 && <SheetHost stack={sheets} onBack={backSheet} onClose={closeSheet} />}
-        <RevealHost api={reveal} prefs={revealPrefs!} />
+        <RevealHost api={reveal} />
         <CommandPalette
           open={palette}
           onClose={closePalette}

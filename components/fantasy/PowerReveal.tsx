@@ -1,7 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PowerWeights } from '../../lib/fantasy/power'
-import type { ModelConfig } from '../../lib/fantasy/war'
-import { estimateWeek } from '../../lib/fantasy/recap'
 import { MONKE } from './brand'
 import { useRevealOdds } from './revealOdds'
 import { useFantasy } from './FantasyContext'
@@ -11,8 +8,7 @@ import { Crown } from './RevealBanner'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { lockScroll } from './scrollLock'
 import { cx, usePhone } from './ui'
-import { useSlate } from './useSlate'
-import { recapSource, type RevealApi, type RevealSource } from './useReveal'
+import type { RevealApi, RevealSource } from './useReveal'
 
 // The weekly power-rank reveal: five acts (RevealActs.tsx), then the recap.
 //   Calibrate  2.3s  an empty plane, tiles tessellating, every corner tracked
@@ -113,7 +109,7 @@ const Pipeline = ({ step, running, run }: { step: number; running: boolean; run:
  * The reveal itself, for a recap already built. `run` restarts it from the top when it changes from outside (a
  * banner pressed while it is open).
  */
-export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealSource; preview?: { estimated: boolean } | null; run: number; onClose: () => void }) => {
+export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; run: number; onClose: () => void }) => {
   const { data, analysis, models } = useFantasy()
   const { recap } = source
   const phone = usePhone()
@@ -277,7 +273,7 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
   const top = recap.teams[0]
   const mine = analysis.myRosterId != null ? recap.byId[analysis.myRosterId] : null
   // What the show says, for a screen reader: the intro is pictures of numbers.
-  const summary = `Week ${recap.week}${recap.estimated ? ', estimated' : ''}. ${top ? `${analysis.teamById[top.rosterId]?.name} is No. 1.` : ''}${
+  const summary = `Week ${recap.week}. ${top ? `${analysis.teamById[top.rosterId]?.name} is No. 1.` : ''}${
     mine ? ` You are No. ${mine.rankAfter}, ${mine.move > 0 ? `up ${mine.move}` : mine.move < 0 ? `down ${-mine.move}` : 'unchanged'} from last week.` : ''
   }`
   const header = (
@@ -291,12 +287,6 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
       <p id="ff-reveal-summary" className="sr-only">
         {summary}
       </p>
-      {/* Phones carry the preview warning in a strip under the header instead. */}
-      {preview && !(phone && preview.estimated) && (
-        <span className="min-w-0 truncate whitespace-nowrap bg-ff-warn/15 px-1.5 font-mono text-[10px] leading-[18px] text-ff-warn" title="A preview of a week still being played">
-          preview{preview.estimated ? ' · estimated' : ''}
-        </span>
-      )}
       <span className="flex-1" />
       {intro ? (
         <button type="button" onClick={skip} className="h-8 shrink-0 whitespace-nowrap px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-10">
@@ -363,10 +353,6 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
   const body = (
     <>
       {header}
-      {/* Phones have no room for the whole badge in the header: the warning gets its own strip. */}
-      {phone && preview?.estimated && (
-        <div className="shrink-0 border-b border-ff-warn/30 bg-ff-warn/10 px-3 py-1 font-mono text-[10.5px] text-ff-warn">Preview · estimated: games still being played count at their projections</div>
-      )}
       {intro ? (
         <>
           {stageEl}
@@ -417,30 +403,9 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
   )
 }
 
-/** The dev preview: the week under way, finished on projections where it is still being played. */
-const PreviewReveal = ({ run, onClose, prefs }: { run: number; onClose: () => void; prefs: { weights: PowerWeights; model: ModelConfig } }) => {
-  const { data, analysis, models } = useFantasy()
-  const { slate, proj, week } = useSlate(data, analysis)
-  const source = useMemo(() => {
-    const ms = data.matchupsByWeek[week] ?? []
-    const est = estimateWeek(ms, proj, (id) => {
-      const team = data.players[id]?.team
-      const st = team ? slate.teamState[team] : undefined
-      if (!st) return null
-      return st === 'live' ? { state: 'live', expect: slate.byId[id]?.expect } : { state: st }
-    })
-    const estimated = slate.games.some((g) => !g.final)
-    return { src: recapSource(data, analysis, models, prefs, week, { matchups: est, estimated }), estimated }
-  }, [data, analysis, models, prefs, week, slate, proj])
-  // Built once per opening: live scores ticking underneath should not restart the show.
-  const [frozen] = useState(source)
-  return <PowerReveal source={frozen.src} preview={{ estimated: frozen.estimated }} run={run} onClose={onClose} />
-}
-
 /** Mounted once inside the league: shows the reveal when the hook says so. */
-export const RevealHost = ({ api, prefs }: { api: RevealApi; prefs: { weights: PowerWeights; model: ModelConfig } }) => {
+export const RevealHost = ({ api }: { api: RevealApi }) => {
   if (!api.open) return null
-  if (api.open.preview) return <PreviewReveal run={api.open.run} onClose={api.close} prefs={prefs} />
   if (!api.source) return null
   return <PowerReveal source={api.source} run={api.open.run} onClose={api.close} />
 }

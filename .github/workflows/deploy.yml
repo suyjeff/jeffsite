@@ -27,7 +27,7 @@ jobs:
         run: npm run build
         env:
           # The shared-grades worker (workers/grades). Unset, grades stay in each browser.
-          NEXT_PUBLIC_FF_GRADES_URL: ${{ vars.FF_GRADES_URL }}
+          NEXT_PUBLIC_FF_GRADES_URL: ${{ vars.FF_GRADES_URL || secrets.FF_GRADES_URL }}
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3

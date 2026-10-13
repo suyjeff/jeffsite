@@ -4,6 +4,7 @@ import { getUser, SleeperError } from '../../lib/fantasy/sleeper'
 import type { Provider } from '../../lib/fantasy/useLeagueData'
 import { Brand, FantasyHead } from './Shell'
 import { DIAGRAMS } from './TourDiagrams'
+import { sharingOn } from '../../lib/fantasy/sharedGrades'
 import { Avatar, Button, Segmented, cx } from './ui'
 
 export type OnboardResult = { provider: 'sleeper'; username: string } | { provider: 'espn'; leagueId: string; teamId: number }
@@ -262,6 +263,7 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: Onboa
               {state.kind === 'error' && <span className="text-ff-neg">! {state.msg}</span>}
               {checking && <span className="ff-caret text-ff-muted">looking up {espn ? `league ${parseLeagueId(leagueText) ?? ''}` : name.trim()}</span>}
             </div>
+            {sharingOn() && <p className="text-[11.5px] leading-snug text-ff-muted">Trade odds learn from every manager’s grades in this league, anonymously.</p>}
             <Button type="submit" variant="primary" className="h-11 w-full text-[14px]" disabled={checking || !ready}>
               {checking ? 'Checking…' : !espn ? 'Load my leagues' : found ? 'Load my team' : 'Find my league'}
             </Button>

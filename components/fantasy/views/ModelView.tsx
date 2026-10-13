@@ -13,6 +13,7 @@ import { MONKE } from '../Shell'
 import { useFantasy } from '../FantasyContext'
 import { Avatar, Badge, Button, N, Num, PageHeader, Panel, Sentences, Stat, StatGrid, Table, TabSection, Tabs, cx, usePhone, fmt, fmtSigned, pct, type Column, type PageChange } from '../ui'
 import { Callout } from '../Callout'
+import { sharingOn } from '../../../lib/fantasy/sharedGrades'
 import { Disclosure } from '../Disclosure'
 import { BacktestTab, BehaviorTab, ForecastTab, OverviewTab, SystemTab } from './ModelSystem'
 import { COMPONENTS } from './PowerView'
@@ -236,7 +237,9 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
       />
       <div className="mt-4 space-y-3">
         {subs.map((k) => {
-          const intro = INTRO[k]
+          const base = INTRO[k]
+          // With shared grades on, the yes-odds also learn from the league's other managers.
+          const intro = base && k === 'behavior' && sharingOn() ? { ...base, what: `${base.what} They also learn from every manager’s grades in this league, anonymously.` } : base
           return (
             <TabSection key={k} id={k} active={tab === k}>
               {intro &&

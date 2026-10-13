@@ -228,7 +228,8 @@ export const SlotTable = ({ m, variant = 'full', empty, onPlayer }: { m: SlotSou
   const box = !phone && variant === 'full'
   const portrait = !phone && variant !== 'dense'
   const scoreW = rich ? (variant === 'full' ? 'w-[100px]' : 'w-[76px]') : 'w-[44px]'
-  const pad = variant === 'sheet' ? 'px-4' : variant === 'dense' ? 'px-2' : 'px-3'
+  // The row's edge padding sits inside each player's cell, so his hover reaches the edge of the row and stops at the centre.
+  const edge = (side: 'left' | 'right') => (variant === 'sheet' ? (side === 'left' ? 'pl-4' : 'pr-4') : variant === 'dense' ? (side === 'left' ? 'pl-2' : 'pr-2') : side === 'left' ? 'pl-3' : 'pr-3')
   const maxEdge = Math.max(4, ...m.rows.map((r) => Math.abs(r.edge)))
 
   // His box score under his name once his game has started.
@@ -245,7 +246,7 @@ export const SlotTable = ({ m, variant = 'full', empty, onPlayer }: { m: SlotSou
   }
   // Each player is a cell of his own: it lights on hover, wherever the pointer is on it, and a click anywhere on it opens him.
   const name = (id: string | null, i: number, align: 'left' | 'right') => {
-    if (!id) return <span className="flex items-center py-2 text-[12px] text-ff-neg">{empty?.(i, align === 'left' ? 'a' : 'b') ?? 'empty'}</span>
+    if (!id) return <span className={cx('flex flex-1 items-center py-2 text-[12px] text-ff-neg', align === 'left' ? 'pr-2' : 'justify-end pl-2', edge(align))}>{empty?.(i, align === 'left' ? 'a' : 'b') ?? 'empty'}</span>
     const p = data.players[id]
     const w = m.now?.of(id)
     const g = p?.team ? m.gameOf?.(p.team) : undefined
@@ -254,9 +255,11 @@ export const SlotTable = ({ m, variant = 'full', empty, onPlayer }: { m: SlotSou
     return (
       <span
         className={cx(
-          'ff-pn-host relative -mx-1.5 flex min-w-0 flex-1 flex-col justify-center self-stretch px-1.5 transition-colors',
+          'ff-pn-host relative flex min-w-0 flex-1 flex-col justify-center self-stretch transition-colors',
+          align === 'left' ? 'pr-2' : 'pl-2',
+          edge(align),
           variant === 'dense' ? 'py-1' : 'py-1.5',
-          'hover:bg-ff-raised/60',
+          'hover:bg-ff-accent/[0.07]',
           align === 'right' && 'items-end text-right',
           w?.kind === 'live' && 'bg-ff-pos/[0.06]',
         )}
@@ -301,10 +304,10 @@ export const SlotTable = ({ m, variant = 'full', empty, onPlayer }: { m: SlotSou
   return (
     <ul>
       {m.rows.map((r, i) => (
-        <li key={i} className={cx('border-b border-ff-line/60 last:border-0', pad)}>
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-x-2">
+        <li key={i} className="border-b border-ff-line/60 last:border-0">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch">
             <span className="flex min-w-0 items-stretch">{name(r.a, i, 'left')}</span>
-            <span className="flex flex-col items-center justify-center py-1.5" title={`${r.slot}: edge ${fmtSigned(r.edge)}, expected points, left minus right`}>
+            <span className="relative z-[1] flex flex-col items-center justify-center px-1 py-1.5" title={`${r.slot}: edge ${fmtSigned(r.edge)}, expected points, left minus right`}>
               <span className="flex w-full items-center">
                 <span className={cx('flex shrink-0 justify-end', scoreW)}>{score(r.a, r.sa, 'right')}</span>
                 <span className={cx('shrink-0 text-center font-mono text-[9.5px] text-ff-muted', rich && variant === 'full' ? 'w-10' : 'w-8')}>{r.slot}</span>
