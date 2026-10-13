@@ -272,6 +272,20 @@ const stdev = (xs: number[]) => {
  * The old version min-maxed the composite to 0–100, which pinned the best
  * team at 100 and the worst at 0 whatever the actual gaps were.
  */
+/**
+ * The parts the composite actually weighs: those with a weight, less roster strength when no team has any (no player
+ * values yet) and the results-based parts before any game is played. The rest renormalize over these.
+ */
+export const activeParts = (teams: TeamSeason[], rosterStrength: Record<number, number>, weights: PowerWeights): (keyof PowerWeights)[] => {
+  const hasGames = teams.some((t) => t.games > 0)
+  const hasRoster = Object.values(rosterStrength).some((v) => v !== 0)
+  return (Object.keys(weights) as (keyof PowerWeights)[]).filter((k) => {
+    if (weights[k] <= 0) return false
+    if (k === 'roster') return hasRoster
+    return hasGames
+  })
+}
+
 export const computePower = (
   teams: TeamSeason[],
   rosterStrength: Record<number, number>,
@@ -287,11 +301,7 @@ export const computePower = (
     roster: teams.map((t) => rosterStrength[t.rosterId] ?? 0),
     efficiency: teams.map((t) => t.efficiency),
   }
-  const active: (keyof PowerWeights)[] = (Object.keys(weights) as (keyof PowerWeights)[]).filter((k) => {
-    if (weights[k] <= 0) return false
-    if (k === 'roster') return hasRoster
-    return hasGames
-  })
+  const active = activeParts(teams, rosterStrength, weights)
   const weightSum = active.reduce((a, k) => a + weights[k], 0) || 1
   const reliability = (n: number) => n / (n + RESULTS_PRIOR_GAMES)
   const shrink = (k: keyof PowerWeights, i: number) => {

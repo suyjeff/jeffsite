@@ -5,7 +5,7 @@
 
 import { persistMean, simulateSeason, winProb, type Forecast, type SimTeam } from './forecast'
 import { optimalLineup, type LineupPlayer, type Slot } from './lineup'
-import { buildTeamSeasons, buildTeamWeeks, computePower, type PowerWeights, type TeamSeason, type TeamWeek } from './power'
+import { activeParts, buildTeamSeasons, buildTeamWeeks, computePower, type PowerWeights, type TeamSeason, type TeamWeek } from './power'
 import type { ScheduleGame } from './context'
 import type { PlayerMap, SleeperMatchup } from './types'
 
@@ -162,10 +162,11 @@ export const lineupCalls = (tw: TeamWeek, slots: Slot[], players: PlayerMap, pro
   return { good: g, bad: b }
 }
 
-const normalWeights = (w: PowerWeights): Record<keyof PowerWeights, number> => {
+/** The composite's weights as it applied them: the parts it weighed, summing to one; the rest at zero. */
+export const normalWeights = (w: PowerWeights, active: (keyof PowerWeights)[]): Record<keyof PowerWeights, number> => {
   const keys = Object.keys(w) as (keyof PowerWeights)[]
-  const sum = keys.reduce((a, k) => a + Math.max(0, w[k]), 0) || 1
-  return Object.fromEntries(keys.map((k) => [k, Math.max(0, w[k]) / sum])) as Record<keyof PowerWeights, number>
+  const sum = active.reduce((a, k) => a + w[k], 0) || 1
+  return Object.fromEntries(keys.map((k) => [k, active.includes(k) ? w[k] / sum : 0])) as Record<keyof PowerWeights, number>
 }
 
 export const buildRecap = (input: RecapInput): Recap => {
@@ -347,7 +348,7 @@ export const buildRecap = (input: RecapInput): Recap => {
       faller,
     },
     stars,
-    weights: normalWeights(weights),
+    weights: normalWeights(weights, activeParts(seasonsAfter, strength, weights)),
     calls: { good, bad },
   }
 }

@@ -1376,24 +1376,34 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 
 /* ---- Reveal acts (components/fantasy/RevealActs.tsx) ----
- * An act arrives with a short rise out of a blur and leaves the same way, a little quicker, under the next one. */
+ * An act arrives with a short rise and leaves the same way, a little quicker, under the next one: opacity and
+ * transform only, since these layers fill the stage and blurring them costs every frame on a weak phone. The
+ * presenter's small block, swapped at each step of the ranking, can afford the blur that bridges the swap. */
 .ff .ff-rv-act-in {
   animation: ff-rv-act-in 300ms var(--ff-ease-out) both;
 }
 .ff .ff-rv-act-out {
   animation: ff-rv-act-out 160ms var(--ff-ease-out) both;
 }
+.ff .ff-rv-swap-in {
+  animation: ff-rv-swap-in 300ms var(--ff-ease-out) both;
+}
 @keyframes ff-rv-act-in {
   from {
     opacity: 0;
     transform: translateY(12px);
-    filter: blur(4px);
   }
 }
 @keyframes ff-rv-act-out {
   to {
     opacity: 0;
     transform: translateY(-12px);
+  }
+}
+@keyframes ff-rv-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
     filter: blur(4px);
   }
 }
@@ -1641,7 +1651,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ff :is(.ff-rv-act-in, .ff-rv-sink, .ff-rv-present) {
+  .ff :is(.ff-rv-act-in, .ff-rv-swap-in, .ff-rv-sink, .ff-rv-present) {
     animation: ff-rv-fade 200ms ease-out both;
   }
   .ff .ff-rv-act-out {

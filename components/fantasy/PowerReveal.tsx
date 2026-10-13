@@ -67,42 +67,47 @@ const Registration = () => (
   </>
 )
 
-/** The pipeline along the bottom: which step the reveal is on, and the clock. */
-const Pipeline = ({ step, phone, running, run }: { step: number; phone: boolean; running: boolean; run: number }) => (
-  <footer className="flex h-10 shrink-0 items-center gap-3 border-t border-ff-line px-3">
-    {phone ? (
-      <>
-        <span className="flex gap-[3px]" aria-hidden>
+/** The pipeline along the bottom: which step the reveal is on, and the clock. Compact wherever the frame is narrow. */
+const Pipeline = ({ step, running, run }: { step: number; running: boolean; run: number }) => {
+  const [ref, box] = useBox<HTMLElement>()
+  const compact = !box || box.w < 860
+  const [coarse] = useState(() => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches)
+  return (
+    <footer ref={ref} className="flex h-10 shrink-0 items-center gap-3 overflow-hidden border-t border-ff-line px-3">
+      {compact ? (
+        <>
+          <span className="flex shrink-0 gap-[3px]" aria-hidden>
+            {STEPS.map((s, i) => (
+              <span key={s} className={cx('h-1.5 w-4 transition-colors duration-200', i < step ? 'bg-ff-text2/60' : i === step ? 'bg-ff-accent' : 'bg-ff-line2')} />
+            ))}
+          </span>
+          <span className="min-w-0 truncate font-mono text-[10.5px] uppercase tracking-[0.1em] text-ff-text2">
+            {pad2(step + 1)}/{pad2(STEPS.length)} {STEPS[step]}
+          </span>
+        </>
+      ) : (
+        <ol className="flex items-center">
           {STEPS.map((s, i) => (
-            <span key={s} className={cx('h-1.5 w-4 transition-colors duration-200', i < step ? 'bg-ff-text2/60' : i === step ? 'bg-ff-accent' : 'bg-ff-line2')} />
+            <li key={s} className="flex items-center">
+              {i > 0 && <span aria-hidden className={cx('h-px w-6 transition-colors duration-300', i <= step ? 'bg-ff-accent' : 'bg-ff-line2')} />}
+              <span
+                className={cx(
+                  'border px-1.5 font-mono text-[10px] uppercase leading-[18px] tracking-[0.1em] transition-colors duration-200',
+                  i === step ? 'border-ff-accent bg-ff-accent/10 text-ff-accent' : i < step ? 'border-ff-line2 text-ff-text2' : 'border-ff-line text-ff-muted/70',
+                )}
+              >
+                {pad2(i + 1)} {s}
+              </span>
+            </li>
           ))}
-        </span>
-        <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-ff-text2">
-          {pad2(step + 1)}/{pad2(STEPS.length)} {STEPS[step]}
-        </span>
-      </>
-    ) : (
-      <ol className="flex items-center">
-        {STEPS.map((s, i) => (
-          <li key={s} className="flex items-center">
-            {i > 0 && <span aria-hidden className={cx('h-px w-6 transition-colors duration-300', i <= step ? 'bg-ff-accent' : 'bg-ff-line2')} />}
-            <span
-              className={cx(
-                'border px-1.5 font-mono text-[10px] uppercase leading-[18px] tracking-[0.1em] transition-colors duration-200',
-                i === step ? 'border-ff-accent bg-ff-accent/10 text-ff-accent' : i < step ? 'border-ff-line2 text-ff-text2' : 'border-ff-line text-ff-muted/70',
-              )}
-            >
-              {pad2(i + 1)} {s}
-            </span>
-          </li>
-        ))}
-      </ol>
-    )}
-    <span className="flex-1" />
-    <span className="font-mono text-[10px] text-ff-muted max-sm:hidden">{phone ? 'tap to skip' : 'click or space to skip'}</span>
-    <Clock running={running} run={run} />
-  </footer>
-)
+        </ol>
+      )}
+      <span className="flex-1" />
+      {(!box || box.w >= 420) && <span className="shrink-0 font-mono text-[10px] text-ff-muted">{coarse ? 'tap to skip' : 'click or space to skip'}</span>}
+      <Clock running={running} run={run} />
+    </footer>
+  )
+}
 
 /**
  * The reveal itself, for a recap already built. `run` restarts it from the top when it changes from outside (a
@@ -142,15 +147,20 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
   const from = useRef<DOMRect | null>(null)
   const timers = useRef<number[]>([])
 
+  // Read through refs by the script, so turning a tablet or a new recap object never restarts the show.
+  const live = useRef({ n, recapRowH, acts })
+  live.current = { n, recapRowH, acts }
+
   const finish = useCallback((handOver: boolean) => {
     timers.current.forEach(window.clearTimeout)
     timers.current = []
     // The list slides into the recap only when it is drawn at the recap's size (not scaled, same row height).
+    const { n: count, recapRowH: rowH } = live.current
     const r = handOver ? (listRef.current?.getBoundingClientRect() ?? null) : null
-    from.current = r && Math.abs(r.height - n * recapRowH) <= 3 ? r : null
+    from.current = r && Math.abs(r.height - count * rowH) <= 3 ? r : null
     setLeaving(null)
     setAct('done')
-  }, [n, recapRowH])
+  }, [])
 
   // The script: each act in turn, the one before fading out under the next. Restarted by Replay, or by `run`.
   useEffect(() => {
@@ -166,6 +176,7 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
     setStep(0)
     setPhase('frame')
     const at = (ms: number, f: () => void) => timers.current.push(window.setTimeout(f, ms))
+    const acts = live.current.acts
     let t = 0
     acts.forEach((x, i) => {
       if (i > 0) {
@@ -181,7 +192,7 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
     })
     at(t, () => finish(true))
     return () => timers.current.forEach(window.clearTimeout)
-  }, [play, run, reduced, acts, finish])
+  }, [play, run, reduced, finish])
 
   const onPhase = useCallback((p: RankPhase) => {
     setPhase(p)
@@ -306,15 +317,16 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
   const actIndex = acts.findIndex((x) => x.key === act)
   const renderAct = (k: Act) => {
     if (!box) return null
+    // Side by side wherever the stage is wide, or wider than it is tall (a phone on its side); stacked otherwise.
+    const side = !phone && (box.w >= 760 || box.w > box.h * 1.6)
     if (k === 'calibrate') return <CalibrateAct box={box} dur={acts[0].dur} />
-    if (k === 'model') return <ModelAct recap={recap} box={box} stacked={stack} />
-    if (k === 'data') return <DataAct recap={recap} box={box} stacked={stack} dur={acts[2].dur} />
+    if (k === 'model') return <ModelAct recap={recap} box={box} stacked={!side} dur={acts[1].dur} />
+    if (k === 'data') return <DataAct recap={recap} box={box} stacked={!side} dur={acts[2].dur} />
     if (k === 'launch') return <LaunchAct box={box} recap={recap} />
     // Rows as tall as the recap's when they fit, so the list hands over without a jump, never under 30px.
-    const side = !stack && box.w >= 760
     const room = side ? box.h - 26 : box.h - 104 - 24 - 26
     const rowH = Math.max(30, Math.min(recapRowH, Math.floor(room / Math.max(1, n))))
-    return <RankAct recap={recap} box={box} stacked={stack} rowH={rowH} listRef={listRef} onPhase={onPhase} />
+    return <RankAct recap={recap} box={box} side={side} phone={phone} rowH={rowH} listRef={listRef} onPhase={onPhase} />
   }
 
   const stageEl = intro && (
@@ -339,7 +351,7 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
         <div ref={area} className="relative min-h-0 flex-1">
           {/* The act on stage, and the one before it fading out underneath for a moment. */}
           {(leaving ? [leaving, act as Act] : [act as Act]).map((k) => (
-            <div key={k} className={cx('absolute inset-0', k === leaving ? 'ff-rv-act-out pointer-events-none' : 'ff-rv-act-in')}>
+            <div key={`${k}-${play}-${run}`} className={cx('absolute inset-0', k === leaving ? 'ff-rv-act-out pointer-events-none' : 'ff-rv-act-in')}>
               {renderAct(k)}
             </div>
           ))}
@@ -358,7 +370,7 @@ export const PowerReveal = ({ source, preview, run, onClose }: { source: RevealS
       {intro ? (
         <>
           {stageEl}
-          <Pipeline step={step} phone={phone} running={intro} run={play + run} />
+          <Pipeline step={step} running={intro} run={play + run} />
         </>
       ) : (
         <PowerRecap key={`${play}-${run}`} recap={recap} odds={odds} phone={stack} rowH={recapRowH} from={phone || !narrow ? from.current : null} entering />

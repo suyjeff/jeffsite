@@ -115,23 +115,28 @@ const Resolve = ({ text, dur = 700, delay = 0, className }: { text: string; dur?
   )
 }
 
-/** The size of an element, kept current through resizes, rotation and the browser's own toolbars. */
+/**
+ * The size of an element, kept current through resizes, rotation and the browser's own toolbars. A callback ref, so
+ * a new element (the stage, mounted again on Replay) is measured afresh and the old one is let go.
+ */
 export const useBox = <T extends HTMLElement>() => {
-  const ref = useRef<T>(null)
   const [box, setBox] = useState<Box | null>(null)
-  useLayoutEffect(() => {
-    const el = ref.current
+  const stop = useRef<(() => void) | null>(null)
+  const ref = useCallback((el: T | null) => {
+    stop.current?.()
+    stop.current = null
     if (!el) return
     const measure = () => setBox((b) => (b && b.w === el.clientWidth && b.h === el.clientHeight ? b : { w: el.clientWidth, h: el.clientHeight }))
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     window.visualViewport?.addEventListener('resize', measure)
-    return () => {
+    stop.current = () => {
       ro.disconnect()
       window.visualViewport?.removeEventListener('resize', measure)
     }
   }, [])
+  useEffect(() => () => stop.current?.(), [])
   return [ref, box] as const
 }
 
@@ -305,11 +310,12 @@ const zShade = (z: number) => (z >= 0 ? `rgb(var(--ff-accent) / ${Math.min(0.5, 
  * The model at work: the gorilla drawn as a study, the model's name spelled out, and the composite worked through
  * the league row by row, from each team's real z-scores and the real weights, to its power.
  */
-export const ModelAct = ({ recap, box, stacked }: { recap: Recap; box: Box; stacked: boolean }) => {
+export const ModelAct = ({ recap, box, stacked, dur }: { recap: Recap; box: Box; stacked: boolean; dur: number }) => {
   const teams = recap.teams
   const parts = PARTS.filter((p) => recap.weights[p.key] > 0)
-  // The scan starts once the matrix has filled, then steps a row at a time.
-  const row = useTicks(teams.length - 1, 150, 1500)
+  // The scan starts once the matrix has filled, then steps a row at a time: quicker in a big league, so it always
+  // reaches the last row before the act ends.
+  const row = useTicks(teams.length - 1, Math.min(150, Math.max(40, (dur - 1700) / Math.max(1, teams.length - 1))), 1500)
   const cur = teams[Math.min(row, teams.length - 1)]
   const sum = parts.reduce((a, p) => a + recap.weights[p.key] * cur.components[p.key], 0)
   const rowH = stacked ? 15 : 17
@@ -433,12 +439,14 @@ export const DataAct = ({ recap, box, stacked, dur }: { recap: Recap; box: Box; 
   const minW = stacked ? 150 : 176
   const cols = Math.max(2, Math.floor((cw + GAP) / (minW + GAP)))
   // Rows at least 26px apart, so the plane stays open: there is always somewhere to move to.
-  const rowsN = Math.max(2, Math.floor((ch + 26) / (CARD_H + 26)))
+  // A short canvas (a phone on its side) gets one row of shorter cards rather than rows forced to overlap.
+  const cardH = Math.max(36, Math.min(CARD_H, ch))
+  const rowsN = Math.max(1, Math.floor((ch + 26) / (cardH + 26)))
   const slots = cols * rowsN
   const cardW = (cw - GAP * (cols - 1)) / cols
   // Spread the rows over the canvas height, so the plane reads as open space rather than a packed table.
-  const rowGap = rowsN > 1 ? (ch - rowsN * CARD_H) / (rowsN - 1) : 0
-  const at = (s: number) => [(s % cols) * (cardW + GAP), Math.floor(s / cols) * (CARD_H + rowGap)] as const
+  const rowGap = rowsN > 1 ? Math.max(8, (ch - rowsN * cardH) / (rowsN - 1)) : 0
+  const at = (s: number) => [(s % cols) * (cardW + GAP), Math.floor(s / cols) * (cardH + rowGap)] as const
   const ticks = Math.max(4, Math.floor((dur - 1400) / 420))
 
   // The whole shuffle, worked out up front: where every card is (or -1, off the canvas) after each tick.
@@ -568,15 +576,15 @@ export const DataAct = ({ recap, box, stacked, dur }: { recap: Recap; box: Box; 
             const [x0, y0] = at(f)
             const [x1, y1] = at(to)
             const ax0 = x0 + cardW / 2
-            const ay0 = y0 + CARD_H / 2
+            const ay0 = y0 + cardH / 2
             const ax1 = x1 + cardW / 2
-            const ay1 = y1 + CARD_H / 2
+            const ay1 = y1 + cardH / 2
             const len = Math.hypot(ax1 - ax0, ay1 - ay0) || 1
             const ux = (ax1 - ax0) / len
             const uy = (ay1 - ay0) / len
             return (
               <g key={`${k}-${c}`} className="ff-rv-fade">
-                <rect x={x0 + 0.5} y={y0 + 0.5} width={cardW - 1} height={CARD_H - 1} className="ff-rv-ghost" />
+                <rect x={x0 + 0.5} y={y0 + 0.5} width={cardW - 1} height={cardH - 1} className="ff-rv-ghost" />
                 <path d={`M${ax0} ${ay0}L${ax1} ${ay1}`} pathLength={1} className="ff-rv-qdraw ff-rv-hot" />
                 <path d={`M${ax1 - ux * 7 - uy * 3.5} ${ay1 - uy * 7 + ux * 3.5}L${ax1} ${ay1}L${ax1 - ux * 7 + uy * 3.5} ${ay1 - uy * 7 - ux * 3.5}`} className="ff-rv-hot" />
                 <rect x={ax0 - 2} y={ay0 - 2} width={4} height={4} className="ff-rv-node-hot" />
@@ -599,7 +607,7 @@ export const DataAct = ({ recap, box, stacked, dur }: { recap: Recap; box: Box; 
               data-shown={shown ? '' : undefined}
               style={{
                 width: cardW,
-                height: CARD_H,
+                height: cardH,
                 transform: `translate(${x}px, ${y}px)`,
                 transition: travel ? undefined : 'clip-path 300ms var(--ff-ease-out) 140ms, opacity 300ms ease 140ms',
               }}
@@ -636,6 +644,9 @@ export const DataAct = ({ recap, box, stacked, dur }: { recap: Recap; box: Box; 
               </dd>
             </div>
           </dl>
+          {/* The distribution only where the stage is tall enough to hold it under the readings. */}
+          {box.h >= 440 && (
+            <>
           <div className="ff-rv-in mb-2 mt-5 flex justify-between font-mono text-[10px] uppercase tracking-[0.1em] text-ff-muted" style={d(900)}>
             <span>Distribution</span>
             <span className="num normal-case">n={scores.length}</span>
@@ -653,6 +664,8 @@ export const DataAct = ({ recap, box, stacked, dur }: { recap: Recap; box: Box; 
             <span>— mean</span>
             <span>low</span>
           </div>
+            </>
+          )}
         </aside>
       )}
     </div>
@@ -773,7 +786,7 @@ export const rankSchedule = (recap: Recap) => {
 }
 
 /** The presentation: the ranking filled in from the bottom, the middle sorted fast, the top three one at a time. */
-export const RankAct = ({ recap, box, stacked, rowH, listRef, onPhase }: { recap: Recap; box: Box; stacked: boolean; rowH: number; listRef: React.Ref<HTMLDivElement>; onPhase: (p: RankPhase) => void }) => {
+export const RankAct = ({ recap, box, side, phone, rowH, listRef, onPhase }: { recap: Recap; box: Box; side: boolean; phone: boolean; rowH: number; listRef: React.Ref<HTMLDivElement>; onPhase: (p: RankPhase) => void }) => {
   const sch = useMemo(() => rankSchedule(recap), [recap])
   const [phase, setPhase] = useState<RankPhase>('frame')
   const [pass, setPass] = useState(-1)
@@ -815,7 +828,6 @@ export const RankAct = ({ recap, box, stacked, rowH, listRef, onPhase }: { recap
   const swaps = pass >= 0 && pass < sch.passes.length ? sch.passes[pass].swaps.map((i) => i + 3) : []
   const crowned = phase === 'first'
 
-  const side = !stacked && box.w >= 760
   const list = (
     <div ref={listRef} className="relative border-y border-ff-line bg-ff-panel" style={{ height: n * rowH }}>
       {/* The empty slots, waiting: a hairline and the number they will hold. */}
@@ -885,7 +897,7 @@ export const RankAct = ({ recap, box, stacked, rowH, listRef, onPhase }: { recap
         <div className={cx(side ? 'order-2 w-[340px]' : 'h-[104px] shrink-0')}>
           <Presenter key={phase} recap={recap} phase={phase} sch={sch} pass={pass} stacked={!side} />
         </div>
-        <div className={cx('pt-6', side ? 'order-1 w-[400px]' : stacked ? 'w-full' : 'mx-auto w-[400px] max-w-full')}>{list}</div>
+        <div className={cx('pt-6', side ? 'order-1 w-[400px]' : phone ? 'w-full' : 'mx-auto w-[400px] max-w-full')}>{list}</div>
       </div>
     </Fit>
   )
@@ -898,7 +910,7 @@ const Presenter = ({ recap, phase, sch, pass, stacked }: { recap: Recap; phase: 
   const big = stacked ? 'text-[20px]' : 'text-[28px]'
   if (phase === 'frame')
     return (
-      <div className="ff-rv-act-in font-mono text-[11px] uppercase tracking-[0.12em] text-ff-muted">
+      <div className="ff-rv-swap-in font-mono text-[11px] uppercase tracking-[0.12em] text-ff-muted">
         Ranking {n} teams
         <span className="ff-rv-blink ml-1 inline-block h-2.5 w-1.5 translate-y-px bg-ff-accent" />
       </div>
@@ -907,7 +919,7 @@ const Presenter = ({ recap, phase, sch, pass, stacked }: { recap: Recap; phase: 
     const lo = 4
     const hi = n - (sch.hasLast ? 1 : 0)
     return (
-      <div className="ff-rv-act-in font-mono text-[11px] uppercase tracking-[0.1em] text-ff-muted">
+      <div className="ff-rv-swap-in font-mono text-[11px] uppercase tracking-[0.1em] text-ff-muted">
         <div className="text-ff-text2">
           Nos. {pad2(lo)}–{pad2(hi)} · sorting the middle
         </div>
@@ -930,7 +942,7 @@ const Presenter = ({ recap, phase, sch, pass, stacked }: { recap: Recap; phase: 
   if (phase === 'last') {
     const t = recap.teams[n - 1]
     return (
-      <div className={cx('ff-rv-act-in flex', stacked ? 'items-center gap-4' : 'flex-col items-start')}>
+      <div className={cx('ff-rv-swap-in flex', stacked ? 'items-center gap-4' : 'flex-col items-start')}>
         <Poop size={stacked ? 64 : 104} start={250} className={stacked ? '' : 'mb-3'} />
         <div className="min-w-0">
           <div className="font-mono text-[11px] uppercase tracking-[0.14em]">
@@ -958,7 +970,7 @@ const Presenter = ({ recap, phase, sch, pass, stacked }: { recap: Recap; phase: 
   if (phase === 'third' || phase === 'second') {
     const t = recap.teams[phase === 'third' ? 2 : 1]
     return (
-      <div className={cx('ff-rv-act-in flex', stacked ? 'items-center gap-4' : 'flex-col items-start')}>
+      <div className={cx('ff-rv-swap-in flex', stacked ? 'items-center gap-4' : 'flex-col items-start')}>
         <div className={cx('num leading-none tracking-[-0.04em] text-ff-text', stacked ? 'text-[56px]' : 'mb-2 text-[96px]')}>
           <Resolve text={pad2(t.rankAfter)} dur={400} />
         </div>
@@ -984,7 +996,7 @@ const Presenter = ({ recap, phase, sch, pass, stacked }: { recap: Recap; phase: 
   const name = analysis.teamById[top.rosterId]?.name ?? ''
   if (phase === 'tension')
     return (
-      <div className={cx('ff-rv-act-in flex', stacked ? 'items-center gap-4' : 'flex-col items-start')}>
+      <div className={cx('ff-rv-swap-in flex', stacked ? 'items-center gap-4' : 'flex-col items-start')}>
         <div className={cx('relative flex shrink-0 items-center justify-center border border-dashed border-ff-line2', stacked ? 'h-[72px] w-[72px]' : 'mb-4 h-[132px] w-[132px]')}>
           <span className="ff-rv-scan-box absolute inset-x-0 top-0 h-px bg-[rgb(var(--ff-gold))]" style={{ '--h': stacked ? '71px' : '131px' } as CSSProperties} />
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ff-muted">no. 01</span>
@@ -999,7 +1011,7 @@ const Presenter = ({ recap, phase, sch, pass, stacked }: { recap: Recap; phase: 
     )
   const before = top.rankBefore
   return (
-    <div className={cx('ff-rv-act-in flex', stacked ? 'items-center gap-4' : 'flex-col items-start')}>
+    <div className={cx('ff-rv-swap-in flex', stacked ? 'items-center gap-4' : 'flex-col items-start')}>
       <div className={cx('relative flex shrink-0 items-center justify-center', stacked ? 'h-[72px] w-[72px]' : 'mb-4 h-[132px] w-[132px]')}>
         <span aria-hidden className="ff-rv-ping absolute inset-[18%]" style={d(450)} />
         <span aria-hidden className="ff-rv-ping absolute inset-[18%]" style={d(800)} />
