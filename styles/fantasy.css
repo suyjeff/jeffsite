@@ -1485,6 +1485,13 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 .ff .ff-rv-poop .ff-rv-ink {
   stroke: rgb(var(--ff-warn));
 }
+.ff .ff-rv-poop .ff-rv-sect-line {
+  stroke: rgb(var(--ff-warn) / 0.55);
+  stroke-width: 0.6;
+}
+.ff .ff-rv-poop .lbl {
+  font-family: var(--ff-mono, ui-monospace, monospace);
+}
 .ff .ff-rv-art .ff-rv-predict {
   stroke: rgb(var(--ff-text2) / 0.45);
   stroke-width: 1;

@@ -96,25 +96,59 @@ export const Football = ({ className }: { className?: string }) => (
   </svg>
 )
 
+/** A dashed line that fades in (a dashed stroke cannot also trace itself in). */
+const Dash = ({ p, at, tone = 'cons', dash = '1.5 2' }: { p: string; at: number; tone?: 'cons' | 'mute' | 'hot'; dash?: string }) => (
+  <path d={p} className={cx('in', `ff-rv-${tone}`)} strokeDasharray={dash} style={d(at)} />
+)
+
 /**
- * Last place's mark: a pile in three tiers with a twist on top, sad eyes and a frown, and three stink lines that
- * waft. Line art like everything else here, not a cartoon.
+ * Last place's mark, drawn as a technical study: a pile in three tiers with a twist on top, sad eyes and a frown,
+ * set on a centre line and a ground datum, dimensioned across and up, with its right side broken out in section
+ * (hatched) along the cut line A. Three stink lines waft off the top. Line art like everything else here, not a cartoon.
  */
 export const Poop = ({ size = 48, start = 0, className }: { size?: number; start?: number; className?: string }) => {
   const t = (ms: number) => start + ms
   return (
-    <svg viewBox="0 0 48 48" width={size} height={size} className={cx('ff-dg ff-rv-art ff-rv-poop block overflow-visible', className)} role="img" aria-label="Last place">
-      <Ln p="M8 41H40C42.5 41 43.5 38.5 42.5 36.5C41.5 34 39 33 36.5 33H11.5C9 33 6.5 34 5.5 36.5C4.5 38.5 5.5 41 8 41Z" at={t(0)} />
-      <Ln p="M11.5 33C9.5 33 8.5 31 9.5 29C10.5 27 12.5 26 15 26H33C35.5 26 37.5 27 38.5 29C39.5 31 38.5 33 36.5 33" at={t(140)} />
-      <Ln p="M15 26C14 24 15 21 18 20C21 19 23 18.5 24 16.5C25 14.5 26 13.5 28 14.5C30 15.5 30.5 17.5 29.5 19.5C32 20 33.5 22 33 26" at={t(280)} />
-      <Ln p="M24 16.5C23 14.5 24 12 26.5 11" at={t(420)} />
+    <svg viewBox="0 0 64 60" width={size} height={(size * 60) / 64} className={cx('ff-dg ff-rv-art ff-rv-poop block overflow-visible', className)} role="img" aria-label="Last place">
+      <defs>
+        <pattern id="ff-rv-sect" width="2.4" height="2.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <path d="M0 0V2.4" className="ff-rv-sect-line" />
+        </pattern>
+      </defs>
+      {/* Construction: the centre line and the ground datum. */}
+      <Dash p="M32 8V50" at={t(0)} dash="5 1.5 1 1.5" />
+      <Ln p="M6 45H58" at={t(60)} tone="cons" />
+      {/* The three tiers and the twist. */}
+      <Ln p="M16 45H48C50.5 45 51.5 42.5 50.5 40.5C49.5 38 47 37 44.5 37H19.5C17 37 14.5 38 13.5 40.5C12.5 42.5 13.5 45 16 45Z" at={t(140)} />
+      <Ln p="M19.5 37C17.5 37 16.5 35 17.5 33C18.5 31 20.5 30 23 30H41C43.5 30 45.5 31 46.5 33C47.5 35 46.5 37 44.5 37" at={t(280)} />
+      <Ln p="M23 30C22 28 23 25 26 24C29 23 31 22.5 32 20.5C33 18.5 34 17.5 36 18.5C38 19.5 38.5 21.5 37.5 23.5C40 24 41.5 26 41 30" at={t(420)} />
+      <Ln p="M32 20.5C31 18.5 32 16 34.5 15" at={t(560)} />
       {/* Sad eyes and a frown. */}
-      <Ln p="M17.5 30.5C18.5 29.3 20.5 29.3 21.5 30.5M26.5 30.5C27.5 29.3 29.5 29.3 30.5 30.5" at={t(520)} tone="hot" />
-      <Ln p="M20.5 37C22.5 35.5 25.5 35.5 27.5 37" at={t(600)} tone="hot" />
-      {/* Stink lines, drifting up once drawn. */}
-      <g className="ff-rv-waft" style={d(t(900))}>
-        <Ln p="M9 22C7 20 11 18 9 16C7 14 11 12 9 10" at={t(700)} tone="mute" />
-        <Ln p="M39 22C37 20 41 18 39 16C37 14 41 12 39 10" at={t(780)} tone="mute" />
+      <Ln p="M25.5 34.5C26.5 33.3 28.5 33.3 29.5 34.5M34.5 34.5C35.5 33.3 37.5 33.3 38.5 34.5" at={t(660)} tone="hot" />
+      <Ln p="M28.5 41C30.5 39.5 33.5 39.5 35.5 41" at={t(740)} tone="hot" />
+      {/* Broken out in section to the right of the cut line A: the lower two tiers hatched. */}
+      <path d="M42 37H44.5C47 37 49.5 38 50.5 40.5C51.5 42.5 50.5 45 48 45H42Z M42 30C43.5 30.1 45.5 31 46.5 33C47.5 35 46.5 37 44.5 37H42Z" fill="url(#ff-rv-sect)" className="in" style={d(t(860))} />
+      <Dash p="M42 25V49" at={t(820)} tone="hot" dash="4 1.5 1 1.5" />
+      <text x={42} y={23.5} textAnchor="middle" fontSize={5} className="lbl hot in" style={d(t(900))}>
+        A
+      </text>
+      {/* Dimensions: across the base, and from the ground to the tip of the twist. */}
+      <Dash p="M13 46V53M51 46V53" at={t(940)} dash="1 1.5" tone="mute" />
+      <Ln p="M13 51H51M13 49.5V52.5M51 49.5V52.5" at={t(980)} tone="mute" />
+      <text x={32} y={58.5} textAnchor="middle" fontSize={5} className="lbl in" style={d(t(1080))}>
+        38.0
+      </text>
+      <Dash p="M37 15H60" at={t(1000)} dash="1 1.5" tone="mute" />
+      <Ln p="M58 15V45M56.5 15H59.5M56.5 45H59.5" at={t(1040)} tone="mute" />
+      <text x={61.5} y={30} textAnchor="middle" fontSize={5} className="lbl in" transform="rotate(-90 61.5 30)" style={d(t(1120))}>
+        30.0
+      </text>
+      <Node x={34.5} y={15} at={t(1100)} hot />
+      {/* Stink lines over the top, drifting up once drawn. */}
+      <g className="ff-rv-waft" style={d(t(1400))}>
+        <Ln p="M21 14C19 12.5 23 11 21 9.5C19 8 23 6.5 21 5" at={t(1160)} tone="mute" />
+        <Ln p="M27 11C25 9.5 29 8 27 6.5C25 5 29 3.5 27 2" at={t(1220)} tone="mute" />
+        <Ln p="M45 14C43 12.5 47 11 45 9.5C43 8 47 6.5 45 5" at={t(1280)} tone="mute" />
       </g>
     </svg>
   )
