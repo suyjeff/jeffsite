@@ -774,16 +774,17 @@ export const rankSchedule = (recap: Recap) => {
   const mid = recap.teams.filter((t) => t.rankAfter > 3 && t.rankAfter < n).map((t) => t.rosterId)
   const midStart = [...mid].sort((a, b) => recap.byId[b].points - recap.byId[a].points)
   const passes = sortPasses(midStart, mid)
-  const passMs = 130
+  const passMs = 160
   const lastAt = 400
-  const midAt = hasLast ? lastAt + 1700 : lastAt
+  const midAt = hasLast ? lastAt + 2300 : lastAt
   const midEnd = mid.length ? midAt + 380 + mid.length * 40 + passes.length * passMs + 350 : midAt
-  // Slower at each step up: No. 3 holds 1.2s, No. 2 1.3s, then a beat of suspense before No. 1, who holds 2.2s.
+  // Slower at each step up, long enough to read who it is and why: last place holds 2.3s, No. 3 1.7s, No. 2 1.8s, then
+  // a beat of suspense before No. 1, who holds 2.4s.
   const thirdAt = midEnd + 100
-  const secondAt = n >= 3 ? thirdAt + 1200 : thirdAt
-  const tensionAt = n >= 2 ? secondAt + 1300 : secondAt
+  const secondAt = n >= 3 ? thirdAt + 1700 : thirdAt
+  const tensionAt = n >= 2 ? secondAt + 1800 : secondAt
   const firstAt = tensionAt + 700
-  const total = firstAt + 2200
+  const total = firstAt + 2400
   return { n, hasLast, mid, midStart, passes, passMs, lastAt, midAt, thirdAt, secondAt, tensionAt, firstAt, total }
 }
 

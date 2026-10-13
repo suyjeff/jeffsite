@@ -4,7 +4,7 @@ import { MONKE } from './brand'
 import { DIAGRAMS, type DiagramKey } from './TourDiagrams'
 import { cx, shortcutLabel } from './ui'
 
-export type TourStep = { key: DiagramKey; title: string; /** What the title stands for, when it is an acronym. */ aka?: string; what: string; can: string[]; why: string }
+export type TourStep = { key: DiagramKey; title: string; /** What the title stands for, when it is an acronym. */ aka?: string; what: string; can: string[]; /** Replaces the `can` line at that index while grade sharing is on. */ shared?: { at: number; text: string }; why: string }
 
 /** What each page is for, in the order the sidebar lists them. */
 export const TOUR: TourStep[] = [
@@ -34,6 +34,7 @@ export const TOUR: TourStep[] = [
     title: 'Trades',
     what: 'Deals that make both lineups better.',
     can: ['Browse suggested trades with the odds they say yes', 'Grade deals to teach it what is realistic', 'Build and price any trade'],
+    shared: { at: 1, text: 'Grade deals; it learns from every manager’s grades in this league, anonymously' },
     why: 'Buy the points your lineup lacks at a price the other side accepts.',
   },
   {
@@ -119,7 +120,7 @@ const fill = (s: string) => s.replace('{K}', shortcutLabel())
 const Tour = ({ step, setStep, onClose, phone }: { step: number; setStep: (n: number) => void; onClose: () => void; phone: boolean }) => {
   const base = TOUR[step]
   // With shared grades on, say whose grades the trade odds learn from.
-  const s = base.key === 'trades' && sharingOn() ? { ...base, can: base.can.map((c) => (c.startsWith('Grade deals') ? 'Grade deals; it learns from every manager’s grades in this league, anonymously' : c)) } : base
+  const s = base.shared && sharingOn() ? { ...base, can: base.can.map((c, i) => (i === base.shared!.at ? base.shared!.text : c)) } : base
   const Diagram = DIAGRAMS[s.key]
   const card = useRef<HTMLDivElement>(null)
   const next = useRef<HTMLButtonElement>(null)

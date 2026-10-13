@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
 import { SIM } from '../../../lib/fantasy/forecast'
 import { opponentsByWeek, RESULTS_PRIOR_GAMES, type PowerWeights } from '../../../lib/fantasy/power'
@@ -7,8 +7,8 @@ import { DivergingStacks, Legend } from '../charts'
 import ModelExplainer, { type RankingModel } from '../ModelExplainer'
 import { useFantasy } from '../FantasyContext'
 import TeamName from '../TeamName'
-import { PowerBanner, type RevealPending } from '../RevealBanner'
-import type { Recap } from '../../../lib/fantasy/recap'
+import { Crown, PowerBanner, type RevealPending } from '../RevealBanner'
+import { dropsLabel, type Recap } from '../../../lib/fantasy/recap'
 import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, probShade, simOdds, type Column, type PageChange } from '../ui'
 
 type Sub = 'rankings' | 'standings' | 'schedule'
@@ -61,6 +61,14 @@ const PowerView = ({
   // Wide screens keep all six figures above the tabs. A phone page gets the ones that belong to it.
   const here = (page: Sub) => !stacked || tab === page
   const [view, setView] = useState<'table' | 'breakdown'>('table')
+  // The rankings already count a week whose reveal has not dropped, so they would give it away: hold them back
+  // behind a notice until it drops, unless the viewer chooses to look.
+  const spoiled = !!pending && data.regularWeeks.includes(pending.week)
+  const [peek, setPeek] = useState(false)
+  const held = spoiled && !peek
+  // A different week coming up is a fresh reveal to hold back.
+  const pendingWeek = pending?.week
+  useEffect(() => setPeek(false), [pendingWeek])
   const { models } = useFantasy()
   const forecast = models.forecast
   const [rankModel, setRankModel] = useState<RankModel>(forecast ? 'forecast' : 'composite')
@@ -255,13 +263,13 @@ const PowerView = ({
         {(recap || pending) && onReveal && here('rankings') && <PowerBanner recap={recap ?? null} pending={pending ?? null} analysis={analysis} onOpen={onReveal} />}
         {me && (
           <StatGrid>
-            {here('rankings') && <Stat label="Your rank" value={`#${rankIn(order, myRosterId!)}`} sub={rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.eloRated[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />}
+            {here('rankings') && <Stat label="Your rank" value={held ? '–' : `#${rankIn(order, myRosterId!)}`} sub={held ? 'held until the reveal' : rankModel === 'forecast' ? `rating ${fmt(forecast?.byId[myRosterId!]?.rating)} pts/wk` : rankModel === 'elo' ? `elo ${Math.round(models.eloRated[myRosterId!] ?? 1500)}` : `${fmt(me.power.score, 0)}% vs avg team`} />}
             {forecast && here('rankings') && (
               <Stat
                 label="Playoff odds"
-                value={simOdds(forecast.sim[myRosterId!], 'playoffs')}
-                meter={forecast.sim[myRosterId!].playoffs}
-                sub={`title ${simOdds(forecast.sim[myRosterId!], 'title', 1)} · bye ${simOdds(forecast.sim[myRosterId!], 'bye')}`}
+                value={held ? '–' : simOdds(forecast.sim[myRosterId!], 'playoffs')}
+                meter={held ? undefined : forecast.sim[myRosterId!].playoffs}
+                sub={held ? 'held until the reveal' : `title ${simOdds(forecast.sim[myRosterId!], 'title', 1)} · bye ${simOdds(forecast.sim[myRosterId!], 'bye')}`}
               />
             )}
             {here('standings') && (
@@ -328,44 +336,64 @@ const PowerView = ({
                 </>
               }
             >
-              <Swap k={`${rankModel}-${view}`}>
-                {rankModel === 'forecast' && forecast ? (
-                  <Table rows={forecastOrder.map((rosterId) => ({ rosterId }))} columns={forecastColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
-                ) : rankModel === 'elo' ? (
-                  <Table rows={eloOrder.map((rosterId) => ({ rosterId }))} columns={eloColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
-                ) : view === 'table' ? (
-                  <Table
-                    rows={analysis.power.map((p) => ({ rosterId: p.rosterId }))}
-                    columns={powerColumns}
-                    rowKey={(r) => r.rosterId}
-                    onRowClick={(r) => onTeam(r.rosterId)}
-                    rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')}
-                  />
-                ) : (
-                  <div className="space-y-3 p-3">
-                    <Legend items={COMPONENTS.map((c) => ({ label: c.label, slot: c.slot, value: `${Math.round((Math.max(0, weights[c.key]) / weightSum) * 100)}%` }))} />
-                    <DivergingStacks
-                      parts={COMPONENTS}
-                      rows={analysis.power.map((p) => ({
-                        key: p.rosterId,
-                        label: (
-                          <span className={p.rosterId === myRosterId ? 'font-medium text-ff-accent' : ''}>
-                            <span className="num mr-1.5 text-ff-muted">{p.rank}</span>
-                            {analysis.teamById[p.rosterId].name}
-                          </span>
-                        ),
-                        values: COMPONENTS.map((c) => (p.components[c.key] * Math.max(0, weights[c.key])) / weightSum),
-                        total: p.score,
-                      }))}
-                      label={(score) => fmt(score, 0)}
+              {spoiled && pending && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-ff-line bg-ff-sunken/50 px-3 py-2 max-sm:py-2.5">
+                  <Crown size={15} outline />
+                  <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ff-text2">
+                    {held ? 'Rankings update' : 'These rankings already count'} when Week {pending.week} drops <span className="whitespace-nowrap font-mono text-[11px] text-ff-muted">· {dropsLabel(pending.gate)}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setPeek((v) => !v)}
+                    className="h-7 shrink-0 border border-ff-line2 px-2.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-sm:h-10"
+                  >
+                    {held ? 'Show anyway' : 'Hide again'}
+                  </button>
+                </div>
+              )}
+              {/* Not drawn at all while held: a blurred table still shows which row is yours and the moves' colours. */}
+              {!held && (
+              <div>
+                <Swap k={`${rankModel}-${view}`}>
+                  {rankModel === 'forecast' && forecast ? (
+                    <Table rows={forecastOrder.map((rosterId) => ({ rosterId }))} columns={forecastColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
+                  ) : rankModel === 'elo' ? (
+                    <Table rows={eloOrder.map((rosterId) => ({ rosterId }))} columns={eloColumns} rowKey={(r) => r.rosterId} onRowClick={(r) => onTeam(r.rosterId)} rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')} />
+                  ) : view === 'table' ? (
+                    <Table
+                      rows={analysis.power.map((p) => ({ rosterId: p.rosterId }))}
+                      columns={powerColumns}
+                      rowKey={(r) => r.rosterId}
+                      onRowClick={(r) => onTeam(r.rosterId)}
+                      rowClass={(r) => (r.rosterId === myRosterId ? 'ff-mine' : '')}
                     />
-                    <p className="text-[11.5px] text-ff-muted">
-                      Each bar is a component&apos;s z-score × its weight. Results count <N>{Math.round((played / (played + RESULTS_PRIOR_GAMES)) * 100)}%</N> after <N>{played}</N>{' '}
-                      {played === 1 ? 'game' : 'games'}; roster strength counts in full. Right helps, left hurts; <N>50</N> = average. Weights are in Tuning.
-                    </p>
-                  </div>
-                )}
-              </Swap>
+                  ) : (
+                    <div className="space-y-3 p-3">
+                      <Legend items={COMPONENTS.map((c) => ({ label: c.label, slot: c.slot, value: `${Math.round((Math.max(0, weights[c.key]) / weightSum) * 100)}%` }))} />
+                      <DivergingStacks
+                        parts={COMPONENTS}
+                        rows={analysis.power.map((p) => ({
+                          key: p.rosterId,
+                          label: (
+                            <span className={p.rosterId === myRosterId ? 'font-medium text-ff-accent' : ''}>
+                              <span className="num mr-1.5 text-ff-muted">{p.rank}</span>
+                              {analysis.teamById[p.rosterId].name}
+                            </span>
+                          ),
+                          values: COMPONENTS.map((c) => (p.components[c.key] * Math.max(0, weights[c.key])) / weightSum),
+                          total: p.score,
+                        }))}
+                        label={(score) => fmt(score, 0)}
+                      />
+                      <p className="text-[11.5px] text-ff-muted">
+                        Each bar is a component&apos;s z-score × its weight. Results count <N>{Math.round((played / (played + RESULTS_PRIOR_GAMES)) * 100)}%</N> after <N>{played}</N>{' '}
+                        {played === 1 ? 'game' : 'games'}; roster strength counts in full. Right helps, left hurts; <N>50</N> = average. Weights are in Tuning.
+                      </p>
+                    </div>
+                  )}
+                </Swap>
+              </div>
+              )}
             </Panel>
             <ModelExplainer model={rankModel === 'forecast' && !forecast ? 'composite' : rankModel} />
           </div>
@@ -401,7 +429,8 @@ const PowerView = ({
                 { key: 'xw', label: 'xW', align: 'right', hideBelow: 'md', title: 'Expected wins from all-play', render: (r) => fmt(seasonById[r.rosterId].expectedWins, 1) },
                 { key: 'luck', label: 'Luck', align: 'right', hideBelow: 'md', render: (r) => <Num value={seasonById[r.rosterId].luck} signed /> },
                 { key: 'streak', label: 'Strk', align: 'right', hideBelow: 'md', render: (r) => seasonById[r.rosterId].streak || '–' },
-                { key: 'power', label: 'Power', align: 'right', hideBelow: 'sm', render: (r) => <span className="text-ff-muted">#{powerById[r.rosterId].rank}</span> },
+                // The power rank is the reveal's own news, so it waits with it.
+                ...(held ? [] : [{ key: 'power', label: 'Power', align: 'right' as const, hideBelow: 'sm' as const, render: (r: { rosterId: number; seed: number }) => <span className="text-ff-muted">#{powerById[r.rosterId].rank}</span> }]),
               ]}
             />
           </Panel>

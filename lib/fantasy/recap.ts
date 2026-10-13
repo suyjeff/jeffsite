@@ -581,30 +581,38 @@ export const revealState = (opts: {
     const g = revealGate(games, w)
     return !g || now >= g.getTime()
   }
-  if (latest == null) return { revealed: null, pending: null }
   let revealed: number | null = latest
   let pending: { week: number; gate: Date } | null = null
-  if (!open(latest)) {
+  if (latest != null && !open(latest)) {
     pending = { week: latest, gate: revealGate(games, latest)! }
     const before = weeksBefore(matchupsByWeek, latest, playoffStart)
     revealed = before.length ? before[before.length - 1] : null
-  } else if (opts.week > latest && opts.week < playoffStart && kickedOff(matchupsByWeek[opts.week], games, opts.week)) {
-    // The next week is under way: its reveal is the one coming.
-    const g = revealGate(games, opts.week)
-    if (g && now < g.getTime()) pending = { week: opts.week, gate: g }
+  } else {
+    // A week that has kicked off and is not unlocked yet is the one coming. Sleeper moves its week on before the last
+    // game is final (Monday night), so the week under way can be either of the last two; the earlier one wins. Week 1
+    // has nothing revealed before it, so it counts too.
+    for (const w of [opts.week - 1, opts.week]) {
+      if (w < 1 || w >= playoffStart || (latest != null && w <= latest) || !kickedOff(matchupsByWeek[w], games, w)) continue
+      const g = revealGate(games, w)
+      if (g && now < g.getTime()) {
+        pending = { week: w, gate: g }
+        break
+      }
+    }
   }
   return { revealed, pending }
 }
 
 /**
- * When a week's reveal goes stale: the first game day of the week after it. Past that the next week is under way, so the
- * reveal no longer opens by itself (it can still be replayed). Null without a schedule for that week.
+ * When a week's reveal goes stale: midnight Eastern on the first game day of the week after it. Past that the next
+ * week is under way, so the reveal no longer opens by itself (it can still be replayed). Null without a schedule
+ * for that week.
  */
 export const revealStale = (games: ScheduleGame[] | undefined, week: number): Date | null => {
   const dates = (games ?? []).filter((g) => g.week === week + 1 && g.date).map((g) => g.date!)
   if (!dates.length) return null
   const [y, m, d] = dates.sort()[0].split('-').map(Number)
-  return new Date(y, m - 1, d, 0, 0, 0, 0)
+  return zonedInstant(y, m, d, 0)
 }
 
 export const revealSeenKey = (leagueId: string, season: string, week: number) => `ff:reveal:${leagueId}:${season}:${week}`

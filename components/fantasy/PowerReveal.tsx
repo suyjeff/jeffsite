@@ -5,6 +5,7 @@ import { useFantasy } from './FantasyContext'
 import PowerRecap from './PowerRecap'
 import { CalibrateAct, DataAct, FLIGHT, LaunchAct, ModelAct, RankAct, pad2, rankSchedule, reducedMotion, useBox, type RankPhase } from './RevealActs'
 import { Crown } from './RevealBanner'
+import { ShareButton } from './RevealShare'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { lockScroll } from './scrollLock'
 import { cx, usePhone } from './ui'
@@ -15,7 +16,7 @@ import type { RevealApi, RevealSource } from './useReveal'
 //   M.O.N.K.E. 3.1s  the model's face drawn as a study, the composite worked through with real numbers
 //   Data       4.2s  the week's teams and standouts shuffling on an open canvas
 //   Launch     2.2s  a football on a tracked arc into the ranking
-//   Rank       ~7.5s last place, the middle sorted fast, then No. 3, No. 2 and No. 1, crowned (about 19s in all)
+//   Rank       ~11.5s last place, the middle sorted, then No. 3, No. 2 and No. 1, each held long enough to read, crowned (about 23s in all)
 // It then hands its ranking over to the recap (PowerRecap.tsx). A tap, Space or Skip jumps to the end; Replay plays it
 // again. Wide screens get a framed modal over the shaded page; phones a full-height sheet that swipes down to close.
 // Reduced motion skips the acts and fades the recap in.
@@ -293,9 +294,13 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
           Skip ›
         </button>
       ) : (
-        <button type="button" onClick={replay} className="h-8 shrink-0 whitespace-nowrap px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-10" title="Play the reveal again">
-          ↺ Replay
-        </button>
+        <>
+          {/* On a single-column layout the share sits here; on a wide screen it heads the ranking column. */}
+          {stack && <ShareButton recap={recap} icon />}
+          <button type="button" onClick={replay} className="h-8 shrink-0 whitespace-nowrap px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-10" title="Play the reveal again" aria-label="Replay">
+            ↺ <span className="max-[399px]:sr-only">Replay</span>
+          </button>
+        </>
       )}
       <button type="button" onClick={close} className="h-8 shrink-0 whitespace-nowrap px-2.5 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text max-md:h-10" aria-label={phone ? 'Close' : 'Close (Esc)'}>
         {phone ? 'Done' : 'ESC'}
