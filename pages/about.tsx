@@ -6,7 +6,7 @@ const AboutPage = () => {
   const linkClasses =
     'relative inline-block text-[#4183c4] dark:text-sky-300 rounded cursor-pointer group no-underline';
   const hoverBgClasses =
-    'absolute -inset-x-1 -inset-y-0.5 bg-[#dbeaf8] dark:bg-sky-900/50 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in';
+    'absolute -inset-x-1 -inset-y-0.5 bg-[#dbeaf8] dark:bg-sky-900/50 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-out';
 
   return (
     <Layout title="About">
