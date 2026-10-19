@@ -29,7 +29,7 @@ const Layout = ({ children, title = "This is the default title" }: Props) => {
       <main className="max-w-xl mx-auto pt-24 text-left min-h-screen flex flex-col w-full px-4 text-stone-900 dark:text-stone-100">
         <div className="flex-grow">{children}</div>
 
-        <footer className="w-full bg-stone-100 border-t border-stone-200 mt-auto dark:bg-stone-950 dark:border-stone-800 opacity-0 animate-reveal animation-delay-600">
+        <footer className="w-full bg-stone-100 border-t border-stone-200 mt-auto dark:bg-stone-950 dark:border-stone-800 opacity-0 animate-reveal animation-delay-800">
           <div className="max-w-xl mx-auto py-4 flex justify-between items-center">
             <div className="space-x-4">
               <Link href={aboutLinkHref} className={navLinkClasses}>
