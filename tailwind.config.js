@@ -32,7 +32,7 @@ module.exports = {
             },
             animation: {
                 'fade-in': 'fadeIn 0.5s ease-out forwards',
-                'reveal': 'reveal 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                'reveal': 'reveal 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
             },
             keyframes: {
                 fadeIn: {
@@ -42,7 +42,7 @@ module.exports = {
                 reveal: {
                     '0%': {
                         opacity: '0',
-                        filter: 'blur(12px)',
+                        filter: 'blur(6px)',
                         transform: 'translateY(6px)',
                     },
                     '100%': {
@@ -60,7 +60,7 @@ module.exports = {
             const newUtilities = {}
             for (let i = 1; i <= 20; i++) {
                 newUtilities[`.animation-delay-${i * 100}`] = {
-                    'animation-delay': `${i * 0.1}s`,
+                    'animation-delay': `${i * 0.05}s`,
                 }
             }
             addUtilities(newUtilities)
