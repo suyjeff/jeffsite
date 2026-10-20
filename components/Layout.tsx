@@ -2,6 +2,7 @@ import React, { ReactNode } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import ResumeLink from "./resume/ResumeLink";
 
 type Props = {
   children?: ReactNode;
@@ -38,14 +39,7 @@ const Layout = ({ children, title = "This is the default title" }: Props) => {
               <Link href="/lab" className={navLinkClasses}>
                 Labs
               </Link>
-              <a
-                href="/SuJeffResume_oct2025.pdf"
-                className={navLinkClasses}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Resumé
-              </a>
+              <ResumeLink className={navLinkClasses}>Resumé</ResumeLink>
             </div>
             <div className="text-sm text-stone-400 dark:text-stone-500">
               Last updated October 2026

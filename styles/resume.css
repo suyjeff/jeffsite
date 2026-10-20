@@ -1,0 +1,211 @@
+/*
+ * The resumé viewer (components/resume). A sheet of paper over a shade. The paper stays white in both themes,
+ * as paper does; the shade dims the page behind it and softens it just enough to stop it competing.
+ */
+.rs-root {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* On its way back into the link the page underneath is already live. */
+.rs-root[data-phase='closing'] {
+  pointer-events: none;
+}
+
+.rs-shade {
+  position: absolute;
+  inset: 0;
+  background: rgb(41 37 36 / 0.3);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  will-change: opacity;
+}
+@media (prefers-color-scheme: dark) {
+  .rs-shade {
+    background: rgb(0 0 0 / 0.62);
+  }
+  /* White paper in a dark room: a shade dimmer, so it doesn't glare. */
+  .rs-paper {
+    filter: brightness(0.94);
+  }
+  .rs-genie {
+    filter: brightness(0.94) drop-shadow(0 10px 18px rgb(0 0 0 / 0.22));
+  }
+}
+
+.rs-scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.rs-stage {
+  display: flex;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 16px;
+}
+
+/* Fits the whole page on screen where that leaves it readable; on short screens it stays readable and scrolls. */
+.rs-frame {
+  position: relative;
+  flex: none;
+  width: min(calc(100vw - 32px), max(560px, calc((100vh - 112px) * 612 / 792)), 820px);
+  width: min(calc(100vw - 32px), max(560px, calc((100dvh - 112px) * 612 / 792)), 820px);
+  aspect-ratio: 612 / 792;
+}
+
+.rs-paper {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.06),
+    0 1px 2px rgb(0 0 0 / 0.08),
+    0 12px 28px -6px rgb(0 0 0 / 0.22),
+    0 32px 64px -16px rgb(0 0 0 / 0.28);
+  transform-origin: 50% 50%;
+  will-change: transform;
+  cursor: default;
+}
+.rs-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
+/* The edge leaning away from you dims a little. Each sits on its own layer so the tilt never repaints the page. */
+.rs-lean {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  will-change: opacity;
+}
+.rs-lean-x[data-side='right'] { background: linear-gradient(to left, rgb(0 0 0 / 0.05), transparent 75%); }
+.rs-lean-x[data-side='left'] { background: linear-gradient(to right, rgb(0 0 0 / 0.05), transparent 75%); }
+.rs-lean-y[data-side='bottom'] { background: linear-gradient(to top, rgb(0 0 0 / 0.05), transparent 75%); }
+.rs-lean-y[data-side='top'] { background: linear-gradient(to bottom, rgb(0 0 0 / 0.05), transparent 75%); }
+
+/* The page's words, invisible over the art, so they can be selected, copied, found and read aloud. */
+.rs-text {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.rs-text text {
+  fill: transparent;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  cursor: text;
+  white-space: pre;
+}
+/* The page's two links (site, email) answer the pointer like the About page's links: a pale wash behind them. */
+.rs-text a {
+  cursor: pointer;
+  outline: none;
+}
+.rs-text a text {
+  cursor: pointer;
+}
+.rs-text a rect {
+  fill: rgb(65 131 196 / 0);
+  transition: fill 150ms ease-out;
+}
+@media (hover: hover) {
+  .rs-text a:hover rect {
+    fill: rgb(65 131 196 / 0.14);
+  }
+}
+.rs-text a:focus-visible rect {
+  fill: rgb(65 131 196 / 0.14);
+  stroke: #4183c4;
+  stroke-width: 1;
+}
+/* Only the highlight shows; the art supplies the letters. */
+.rs-text ::selection {
+  fill: transparent;
+  color: transparent;
+  background: rgb(65 131 196 / 0.28);
+}
+
+/* Download and close, out of the paper's way in the corner. */
+.rs-bar {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  display: flex;
+  gap: 8px;
+}
+.rs-btn {
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 15px;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+  color: rgb(41 37 36);
+  background: rgb(255 255 255 / 0.86);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 1px 3px rgb(0 0 0 / 0.1);
+  transition: background-color 150ms ease-out;
+}
+@media (hover: hover) {
+  .rs-btn:hover {
+    background: #fff;
+  }
+}
+.rs-btn:active {
+  transform: scale(0.97);
+}
+.rs-btn:focus-visible {
+  outline: 2px solid #4183c4;
+  outline-offset: 2px;
+}
+@media (prefers-color-scheme: dark) {
+  .rs-btn {
+    color: rgb(245 245 244);
+    background: rgb(41 37 36 / 0.86);
+    box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.1), 0 1px 3px rgb(0 0 0 / 0.3);
+  }
+  @media (hover: hover) {
+    .rs-btn:hover {
+      background: rgb(68 64 60);
+    }
+  }
+  .rs-btn:focus-visible {
+    outline-color: #7dd3fc;
+  }
+}
+
+/* The strips the page is cut into while it travels to and from the link. */
+.rs-genie {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 10px 18px rgb(0 0 0 / 0.22));
+}
+.rs-strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  background-color: #fff;
+  background-repeat: no-repeat;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* The footer link after the page went back into it with a click: focused, but no ring (see ResumeLink). */
+a[data-quiet-focus]:focus {
+  outline: none;
+}
