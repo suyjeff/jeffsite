@@ -9,13 +9,14 @@
 // There is no running aggregate to keep in step: a post touches only its own key, and the two
 // snapshots are always overwritten whole, so concurrent posts cannot lose each other's grades.
 
+import { allowed, limited, send } from './common'
+import { handlePost as handleShare, serve as serveShare, type ShareKV } from './share'
 import { cleanGrade, clientKey, clientOf, contribute, LIMITS, priorFor, type Contribution, type StoredGrade, type Sum } from './aggregate'
 
 export interface Env {
-  GRADES: KVNamespace
+  GRADES: ShareKV
 }
 
-const ORIGINS = [/^https:\/\/sujeff\.com$/, /^http:\/\/localhost(:\d+)?$/]
 const LEAGUE = /^[A-Za-z0-9:_.-]{1,64}$/
 const CLIENT = /^[A-Za-z0-9-]{8,64}$/
 const MAX_BODY = 40_000
@@ -24,34 +25,6 @@ const LEAGUE_TTL = 10 * 60_000
 const GLOBAL_TTL = 30 * 60_000
 /** Listing pages read when summing every browser; keeps a rebuild inside the subrequest limit. */
 const GLOBAL_PAGES = 5
-
-const allowed = (origin: string | null) => (origin && ORIGINS.some((r) => r.test(origin)) ? origin : null)
-
-const send = (body: unknown, status: number, origin: string | null, extra: Record<string, string> = {}) =>
-  new Response(body === null ? null : JSON.stringify(body), {
-    status,
-    headers: {
-      ...(origin ? { 'access-control-allow-origin': origin, vary: 'origin' } : { vary: 'origin' }),
-      'access-control-allow-methods': 'GET, POST, OPTIONS',
-      'access-control-allow-headers': 'content-type',
-      'access-control-max-age': '86400',
-      'content-type': 'application/json',
-      'cache-control': 'no-store',
-      ...extra,
-    },
-  })
-
-// A per-IP limit kept in the isolate's memory: free, and good enough to blunt a loop. It resets when
-// the isolate does, so it is a speed bump and not a guarantee.
-const hits = new Map<string, number[]>()
-const limited = (ip: string, max: number, windowMs = 60_000) => {
-  const now = Date.now()
-  const recent = (hits.get(ip) ?? []).filter((t) => now - t < windowMs)
-  recent.push(now)
-  hits.set(ip, recent)
-  if (hits.size > 5000) for (const [k, ts] of hits) if (!ts.some((t) => now - t < windowMs)) hits.delete(k)
-  return recent.length > max
-}
 
 type Snapshot<T> = { at: number; data: T }
 
@@ -164,12 +137,21 @@ async function prior(url: URL, env: Env, origin: string): Promise<Response> {
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
+    const url = new URL(req.url)
+    // Shared links are opened by link-preview bots and by people on any site, so they sit outside the CORS gate below.
+    if (url.pathname.startsWith('/s/') && (req.method === 'GET' || req.method === 'HEAD')) {
+      try {
+        return await serveShare(req, env)
+      } catch {
+        return new Response('Server error', { status: 500 })
+      }
+    }
     const origin = allowed(req.headers.get('origin'))
     if (req.method === 'OPTIONS') return send(null, origin ? 204 : 403, origin)
     if (!origin) return send({ error: 'origin not allowed' }, 403, null)
     const ip = req.headers.get('cf-connecting-ip') ?? 'unknown'
-    const url = new URL(req.url)
     try {
+      if (url.pathname === '/share' && req.method === 'POST') return await handleShare(req, env, origin, ip)
       if (url.pathname === '/grades' && req.method === 'POST') {
         if (limited(`p:${ip}`, 30)) return send({ error: 'slow down' }, 429, origin, { 'retry-after': '60' })
         return await post(req, env, origin)

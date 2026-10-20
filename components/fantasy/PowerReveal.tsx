@@ -230,6 +230,8 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
       const t = e.target as Element | null
       if (t && panel.current && !panel.current.contains(t) && t.closest?.('[aria-modal="true"]')) return
       if (e.key === 'Escape') {
+        // The share sheet takes its own Escape first.
+        if (panel.current?.querySelector('[data-ff-share-open]')) return
         e.preventDefault()
         e.stopPropagation()
         close()
@@ -411,8 +413,8 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
 /** Mounted once inside the league: shows the reveal when the hook says so. */
 export const RevealHost = ({ api }: { api: RevealApi }) => {
   if (!api.open) return null
-  if (!api.source) return null
-  return <PowerReveal source={api.source} run={api.open.run} onClose={api.close} />
+  if (!api.view) return null
+  return <PowerReveal source={api.view} run={api.open.run} onClose={api.close} />
 }
 
 export default PowerReveal

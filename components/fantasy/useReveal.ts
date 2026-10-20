@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
 import type { Models } from '../../lib/fantasy/models'
 import type { PowerWeights } from '../../lib/fantasy/power'
-import { buildRecap, revealSeenKey, revealStale, revealState, weeksBefore, type Recap } from '../../lib/fantasy/recap'
+import { buildRecap, dropsLabel, revealSeenKey, revealStale, revealState, weeksBefore, type Recap } from '../../lib/fantasy/recap'
 import type { SleeperMatchup } from '../../lib/fantasy/types'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { revealOdds } from './revealOdds'
@@ -127,6 +127,7 @@ export const useReveal = ({
   prefs,
   blocked,
   quiet,
+  deep,
 }: {
   data: LeagueData | null
   analysis: Analysis | null
@@ -135,6 +136,8 @@ export const useReveal = ({
   blocked: boolean
   /** Count this week's reveal seen without showing it (a first visit, which has had the tour instead). */
   quiet?: boolean
+  /** A shared link asking for a week (or the latest); `finish` is called once it is used, with a note if it could not be. */
+  deep?: { week: number | 'latest'; finish: (note?: string) => void } | null
 }) => {
   // The page's own clock moves rarely: every five minutes (a week can start between reloads) and once at the gate
   // (below), so the whole page does not re-render on a countdown's beat.
@@ -176,27 +179,41 @@ export const useReveal = ({
   }, [source, data, analysis, models])
 
   const [open, setOpen] = useState<RevealOpen | null>(null)
-  const show = useCallback(() => setOpen((o) => ({ run: (o?.run ?? 0) + 1 })), [])
-  const close = useCallback(() => setOpen(null), [])
+  // An earlier week asked for by a shared link, replayed in place of the latest while it is open.
+  const [replayWeek, setReplayWeek] = useState<number | null>(null)
+  const show = useCallback(() => {
+    setReplayWeek(null)
+    setOpen((o) => ({ run: (o?.run ?? 0) + 1 }))
+  }, [])
+  const close = useCallback(() => {
+    setOpen(null)
+    setReplayWeek(null)
+  }, [])
+  const replaySource = useMemo(() => (data && analysis && models && prefs && replayWeek != null ? recapSource(data, analysis, models, prefs, replayWeek) : null), [data, analysis, models, prefs, replayWeek])
 
   const leagueId = data?.league.league_id
   const season = data?.league.season
 
-  // `?reveal=1`: replay the latest unlocked week, once, then clear the parameter so a reload does not repeat it.
+  // A shared link (`?league=…&reveal=<week>`, or `?reveal=1` for the latest): replay that week once it has unlocked, and
+  // say so when it has not. The league was already chosen (useDeepLink) and the tour and onboarding have had the screen.
   useEffect(() => {
-    if (!source || blocked) return
-    const q = new URLSearchParams(window.location.search)
-    if (q.get('reveal') == null) return
-    q.delete('reveal')
-    const rest = q.toString()
-    window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`)
-    show()
-  }, [source, blocked, show])
+    if (!deep || blocked || !data || !analysis || !models || !prefs) return
+    const target = deep.week === 'latest' ? week : deep.week
+    if (target == null) return deep.finish(pending ? `Week ${pending.week}'s Power Rank drops ${dropsLabel(pending.gate)}.` : 'No Power Rank has dropped in this league yet.')
+    const unlocked = week != null && weeksBefore(data.matchupsByWeek, week + 1, playoffStartOf(data)).includes(target)
+    if (unlocked && source) {
+      setReplayWeek(target === week ? null : target)
+      setOpen((o) => ({ run: (o?.run ?? 0) + 1 }))
+      return deep.finish()
+    }
+    if (pending && pending.week === target) return deep.finish(`Week ${target}'s Power Rank drops ${dropsLabel(pending.gate)}. Come back then.`)
+    deep.finish(`Week ${target}'s Power Rank is not available in this league.`)
+  }, [deep, blocked, data, analysis, models, prefs, week, pending, source])
 
   // On its own: the first load after the gate, once per league and week. Marked seen as it opens, so a reload
   // halfway through never plays it twice.
   useEffect(() => {
-    if (!source || blocked || !leagueId || !season || week == null || !data) return
+    if (!source || blocked || !leagueId || !season || week == null || !data || deep) return
     if (data.league.season !== data.state.season) return
     const key = revealSeenKey(leagueId, season, week)
     if (readSeen(key)) return
@@ -205,9 +222,11 @@ export const useReveal = ({
     if (stale && Date.now() >= stale.getTime()) return
     writeSeen(key)
     if (!quiet) setOpen((o) => o ?? { run: 1 })
-  }, [source, blocked, quiet, leagueId, season, week, data])
+  }, [source, blocked, quiet, leagueId, season, week, data, deep])
 
-  return { week, source, pending, open, show, close }
+  // What the open reveal shows: the replayed week when a link asked for one, else the latest.
+  const view = replaySource ?? source
+  return { week, source, view, pending, open, show, close }
 }
 
 export type RevealApi = ReturnType<typeof useReveal>
