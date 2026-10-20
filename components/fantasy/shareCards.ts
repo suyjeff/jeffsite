@@ -69,7 +69,9 @@ export const loadImage = (src: string | null) =>
       window.clearTimeout(timer)
       resolve(null)
     }
-    img.src = src
+    // Safari reuses the copy the page already loaded without cross-origin headers and then refuses it for the canvas;
+    // a query of its own makes this a separate, cross-origin request.
+    img.src = /^https?:/.test(src) ? `${src}${src.includes('?') ? '&' : '?'}ff-card=1` : src
   })
 
 /** The text cut to a width with an ellipsis. */
