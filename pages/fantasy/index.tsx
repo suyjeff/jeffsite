@@ -43,6 +43,8 @@ import { useTheme } from '../../lib/fantasy/useTheme'
 import { RevealHost } from '../../components/fantasy/PowerReveal'
 import { NavBanner } from '../../components/fantasy/RevealBanner'
 import { useReveal } from '../../components/fantasy/useReveal'
+import { useDeepLink } from '../../components/fantasy/useDeepLink'
+import DeepLinkNote from '../../components/fantasy/DeepLinkNote'
 
 const PREFS_KEY = 'ff:prefs'
 
@@ -278,7 +280,12 @@ const FantasyPage = () => {
     // Storage blocked: the tour never starts by itself either.
   }
   const revealPrefs = useMemo(() => (prefs ? { weights: prefs.weights, model: prefs.model } : null), [prefs?.weights, prefs?.model]) // eslint-disable-line react-hooks/exhaustive-deps
-  const reveal = useReveal({ data, analysis, models, prefs: revealPrefs, blocked: !appUp || tour || tourDue, quiet: toured })
+  // A shared Power Rank link: its league is selected once the visitor is through onboarding, then the week opens.
+  const selectLeague = useCallback((id: string | null, season?: string | null) => setPrefs((p) => (p ? { ...p, leagueId: id, ...(season !== undefined ? { season } : {}) } : p)), [])
+  const deepLink = useDeepLink({ onboarded: !!prefs?.onboarded, data, loading, selectLeague, leagueId: prefs?.leagueId ?? null, season: prefs?.season ?? null })
+  const deep = useMemo(() => (deepLink.ready ? { week: deepLink.ready.week, finish: deepLink.finish } : null), [deepLink.ready?.week, deepLink.finish]) // eslint-disable-line react-hooks/exhaustive-deps
+  // While a link is still finding its league, the reveal that opens by itself waits.
+  const reveal = useReveal({ data, analysis, models, prefs: revealPrefs, blocked: !appUp || tour || tourDue || (!!deepLink.link && !deepLink.ready), quiet: toured, deep })
   const endTour = useCallback(() => {
     setTour(false)
     try {
@@ -444,6 +451,7 @@ const FantasyPage = () => {
         }}
         onCancel={(prefs.provider === 'espn' ? prefs.espnLeagueId : prefs.username) ? () => update({ onboarded: true }) : undefined}
         cancelLabel={prefs.provider === 'espn' ? `keep ESPN league ${prefs.espnLeagueId}` : `keep @${prefs.username}`}
+        hint={deepLink.link ? (deepLink.link.week != null ? 'Someone shared a Power Rank with you. Sign in and it opens right up.' : 'Someone shared a league with you. Sign in and it opens right up.') : undefined}
       />
     )
   }
@@ -538,6 +546,7 @@ const FantasyPage = () => {
         </div>
         {sheets.length > 0 && <SheetHost stack={sheets} onBack={backSheet} onClose={closeSheet} />}
         <RevealHost api={reveal} />
+        {deepLink.note && <DeepLinkNote text={deepLink.note.text} onDismiss={deepLink.dismiss} />}
         <CommandPalette
           open={palette}
           onClose={closePalette}

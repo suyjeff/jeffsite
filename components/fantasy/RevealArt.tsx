@@ -101,6 +101,15 @@ const Dash = ({ p, at, tone = 'cons', dash = '1.5 2' }: { p: string; at: number;
   <path d={p} className={cx('in', `ff-rv-${tone}`)} strokeDasharray={dash} style={d(at)} />
 )
 
+/** Last place's mark as paths in a 64×60 box, shared with the share card, which strokes them on a canvas. */
+export const POOP_BODY = [
+  'M16 45H48C50.5 45 51.5 42.5 50.5 40.5C49.5 38 47 37 44.5 37H19.5C17 37 14.5 38 13.5 40.5C12.5 42.5 13.5 45 16 45Z',
+  'M19.5 37C17.5 37 16.5 35 17.5 33C18.5 31 20.5 30 23 30H41C43.5 30 45.5 31 46.5 33C47.5 35 46.5 37 44.5 37',
+  'M23 30C22 28 23 25 26 24C29 23 31 22.5 32 20.5C33 18.5 34 17.5 36 18.5C38 19.5 38.5 21.5 37.5 23.5C40 24 41.5 26 41 30',
+  'M32 20.5C31 18.5 32 16 34.5 15',
+]
+export const POOP_FACE = ['M25.5 34.5C26.5 33.3 28.5 33.3 29.5 34.5M34.5 34.5C35.5 33.3 37.5 33.3 38.5 34.5', 'M28.5 41C30.5 39.5 33.5 39.5 35.5 41']
+
 /**
  * Last place's mark, drawn as a technical study: a pile in three tiers with a twist on top, sad eyes and a frown,
  * set on a centre line and a ground datum, dimensioned across and up, with its right side broken out in section
@@ -119,13 +128,13 @@ export const Poop = ({ size = 48, start = 0, className }: { size?: number; start
       <Dash p="M32 8V50" at={t(0)} dash="5 1.5 1 1.5" />
       <Ln p="M6 45H58" at={t(60)} tone="cons" />
       {/* The three tiers and the twist. */}
-      <Ln p="M16 45H48C50.5 45 51.5 42.5 50.5 40.5C49.5 38 47 37 44.5 37H19.5C17 37 14.5 38 13.5 40.5C12.5 42.5 13.5 45 16 45Z" at={t(140)} />
-      <Ln p="M19.5 37C17.5 37 16.5 35 17.5 33C18.5 31 20.5 30 23 30H41C43.5 30 45.5 31 46.5 33C47.5 35 46.5 37 44.5 37" at={t(280)} />
-      <Ln p="M23 30C22 28 23 25 26 24C29 23 31 22.5 32 20.5C33 18.5 34 17.5 36 18.5C38 19.5 38.5 21.5 37.5 23.5C40 24 41.5 26 41 30" at={t(420)} />
-      <Ln p="M32 20.5C31 18.5 32 16 34.5 15" at={t(560)} />
+      <Ln p={POOP_BODY[0]} at={t(140)} />
+      <Ln p={POOP_BODY[1]} at={t(280)} />
+      <Ln p={POOP_BODY[2]} at={t(420)} />
+      <Ln p={POOP_BODY[3]} at={t(560)} />
       {/* Sad eyes and a frown. */}
-      <Ln p="M25.5 34.5C26.5 33.3 28.5 33.3 29.5 34.5M34.5 34.5C35.5 33.3 37.5 33.3 38.5 34.5" at={t(660)} tone="hot" />
-      <Ln p="M28.5 41C30.5 39.5 33.5 39.5 35.5 41" at={t(740)} tone="hot" />
+      <Ln p={POOP_FACE[0]} at={t(660)} tone="hot" />
+      <Ln p={POOP_FACE[1]} at={t(740)} tone="hot" />
       {/* Broken out in section to the right of the cut line A: the lower two tiers hatched. */}
       <path d="M42 37H44.5C47 37 49.5 38 50.5 40.5C51.5 42.5 50.5 45 48 45H42Z M42 30C43.5 30.1 45.5 31 46.5 33C47.5 35 46.5 37 44.5 37H42Z" fill="url(#ff-rv-sect)" className="in" style={d(t(860))} />
       <Dash p="M42 25V49" at={t(820)} tone="hot" dash="4 1.5 1 1.5" />

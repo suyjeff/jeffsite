@@ -100,6 +100,21 @@ export const FantasyHead = ({ title }: { title: string }) => (
     <meta key="theme-dark" name="theme-color" content="#111114" media="(prefers-color-scheme: dark)" />
     <meta key="theme-light" name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {/* A plain link to the app unfurls to the weekly Power Rank card; a shared ranking's own link has its own (workers/grades). */}
+    <meta key="og:type" property="og:type" content="website" />
+    <meta key="og:site_name" property="og:site_name" content="sujeff.com / Fantasy" />
+    <meta key="og:title" property="og:title" content="Weekly Power Rank" />
+    <meta key="og:description" property="og:description" content="Your fantasy league, ranked and explained. A new Power Rank every Tuesday at 6 AM ET." />
+    <meta key="og:url" property="og:url" content="https://sujeff.com/fantasy" />
+    <meta key="og:image" property="og:image" content="https://sujeff.com/fantasy/og.png" />
+    <meta key="og:image:type" property="og:image:type" content="image/png" />
+    <meta key="og:image:width" property="og:image:width" content="1200" />
+    <meta key="og:image:height" property="og:image:height" content="630" />
+    <meta key="og:image:alt" property="og:image:alt" content="Weekly Power Rank: your league, ranked and explained. New ranking every Tuesday, 6 AM ET." />
+    <meta key="twitter:card" name="twitter:card" content="summary_large_image" />
+    <meta key="twitter:title" name="twitter:title" content="Weekly Power Rank" />
+    <meta key="twitter:description" name="twitter:description" content="Your fantasy league, ranked and explained. A new Power Rank every Tuesday at 6 AM ET." />
+    <meta key="twitter:image" name="twitter:image" content="https://sujeff.com/fantasy/og.png" />
   </Head>
 )
 

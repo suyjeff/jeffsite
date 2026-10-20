@@ -26,7 +26,7 @@ const parseLeagueId = (s: string) => {
  * box to tick, no notice about it); switching or starting over lives in the
  * profile menu.
  */
-const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: OnboardInitial; onDone: (r: OnboardResult) => void; onCancel?: () => void; cancelLabel?: string }) => {
+const Onboarding = ({ initial, onDone, onCancel, cancelLabel, hint }: { initial: OnboardInitial; onDone: (r: OnboardResult) => void; onCancel?: () => void; cancelLabel?: string; /** Why they are here, when a shared link sent them (it opens once they are in). */ hint?: string }) => {
   const [provider, setProvider] = useState<Provider>(initial.provider)
   const [name, setName] = useState(initial.username)
   const [leagueText, setLeagueText] = useState(initial.espnLeagueId ?? '')
@@ -131,7 +131,7 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel }: { initial: Onboa
             </div>
           )}
           <form onSubmit={submit} className="space-y-4 p-4 sm:p-5">
-
+            {hint && <p className="border-l-2 border-ff-accent/60 pl-2.5 text-[12.5px] leading-[1.5] text-ff-text2">{hint}</p>}
             {!espn && (
               <>
                 <div>

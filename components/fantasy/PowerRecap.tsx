@@ -635,7 +635,7 @@ const PowerRecap = ({
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[400px_minmax(0,1fr)]">
       <div className="relative z-10 flex min-h-0 flex-col border-r border-ff-line">
-        <div className={cx('flex h-11 shrink-0 items-center justify-between gap-2 border-b border-ff-line pl-3 pr-2', entering && 'ff-rv-in')} style={at(0)}>
+        <div className={cx('relative z-20 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-ff-line pl-3 pr-2', entering && 'ff-rv-in')} style={at(0)}>
           <span className="ff-label">Week {recap.week} ranking</span>
           <ShareButton recap={recap} />
         </div>
