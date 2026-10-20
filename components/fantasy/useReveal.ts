@@ -202,18 +202,21 @@ export const useReveal = ({
     if (target == null) return deep.finish(pending ? `Week ${pending.week}'s Power Rank drops ${dropsLabel(pending.gate)}.` : 'No Power Rank has dropped in this league yet.')
     const unlocked = week != null && weeksBefore(data.matchupsByWeek, week + 1, playoffStartOf(data)).includes(target)
     if (unlocked && source) {
+      // The latest week opened by a link is seen; an older one leaves the latest to open on its own after.
+      if (target === week && leagueId && season) writeSeen(revealSeenKey(leagueId, season, week))
       setReplayWeek(target === week ? null : target)
       setOpen((o) => ({ run: (o?.run ?? 0) + 1 }))
       return deep.finish()
     }
     if (pending && pending.week === target) return deep.finish(`Week ${target}'s Power Rank drops ${dropsLabel(pending.gate)}. Come back then.`)
     deep.finish(`Week ${target}'s Power Rank is not available in this league.`)
-  }, [deep, blocked, data, analysis, models, prefs, week, pending, source])
+  }, [deep, blocked, data, analysis, models, prefs, week, pending, source, leagueId, season])
 
   // On its own: the first load after the gate, once per league and week. Marked seen as it opens, so a reload
-  // halfway through never plays it twice.
+  // halfway through never plays it twice. With another reveal on screen (a week a link asked for) it waits, and opens
+  // when that one closes.
   useEffect(() => {
-    if (!source || blocked || !leagueId || !season || week == null || !data || deep) return
+    if (!source || blocked || !leagueId || !season || week == null || !data || deep || open) return
     if (data.league.season !== data.state.season) return
     const key = revealSeenKey(leagueId, season, week)
     if (readSeen(key)) return
@@ -222,7 +225,7 @@ export const useReveal = ({
     if (stale && Date.now() >= stale.getTime()) return
     writeSeen(key)
     if (!quiet) setOpen((o) => o ?? { run: 1 })
-  }, [source, blocked, quiet, leagueId, season, week, data, deep])
+  }, [source, blocked, quiet, leagueId, season, week, data, deep, open])
 
   // What the open reveal shows: the replayed week when a link asked for one, else the latest.
   const view = replaySource ?? source

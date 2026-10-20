@@ -19,7 +19,7 @@ cached in KV (`snap:l:<league>` for 10 minutes, `snap:g` for 30), so most reads 
 2. Install and sign in, from this folder:
    ```
    cd workers/grades
-   npm install
+   npm ci
    npx wrangler login
    ```
 3. Create the KV namespace:
@@ -49,6 +49,8 @@ cached in KV (`snap:l:<league>` for 10 minutes, `snap:g` for 30), so most reads 
 3. If the token can see more than one Cloudflare account, also add `CLOUDFLARE_ACCOUNT_ID` (the
    account id is on the right of the dashboard's Workers & Pages page).
 
+The workflow installs from `package-lock.json` (`npm ci`), and wrangler is pinned to an exact version in
+`package.json`; to move it, change that version and run `npm install` here to refresh the lockfile.
 Without `CLOUDFLARE_API_TOKEN` the workflow skips with a notice instead of failing. The KV namespace
 id stays in `wrangler.toml`; the deploy does not create it.
 
@@ -68,16 +70,19 @@ run the app with `NEXT_PUBLIC_FF_GRADES_URL=http://localhost:8787 npm run dev`.
 
 The app uploads a 1200x630 preview card and a few facts about a ranking, and gets back a short link,
 `https://<worker>/s/<id>`. Pasted into a message, the link unfurls to the card; opened by a person, it
-sends them to `https://sujeff.com/fantasy?league=<id>&reveal=<week>#power`, where the app asks for their
+sends them to `https://sujeff.com/fantasy?league=<id>&season=<year>&reveal=<week>#power`, where the app asks for their
 fantasy name (as any visit does) and then opens that week.
 
 - `POST /share` with `multipart/form-data` (`meta` as JSON, `png` as the file) or JSON
   `{ meta, png }` with `png` in base64. `meta` is `{ league, leagueId, week, season, title,
   description, provider, top: [{ rank, name, score, move }] }`. Every field is checked and
   length-capped, the picture must be a PNG of exactly 1200x630 (read from its header) and at most
-  400 KB, and a post is limited per IP (6 a minute, 40 an hour). Answers `{ id, url }`. CORS as below.
+  400 KB, the request must declare its length (411 without, 413 over the cap) and is read in bounded
+  chunks, and a post is limited per IP (6 a minute, 40 an hour). Answers `{ id, url }`. CORS as below.
 - `GET /s/<id>`: link-preview bots (iMessage, Slack, Discord, WhatsApp, Telegram, LinkedIn, X...)
-  get a page of Open Graph and Twitter tags with no redirect; anyone else gets a 302 to the app. The
+  get a page of Open Graph and Twitter tags with no redirect (matched by name: facebookexternalhit,
+  Facebot, Twitterbot, Slackbot, Discordbot, WhatsApp, TelegramBot, LinkedInBot, Applebot, and a few
+  more); anyone else gets a private, uncached 302 to the app. The
   page also carries a script redirect and an "Open Power Rank" link, and no meta refresh.
 - `GET /s/<id>.png`: the card, cached for a year.
 

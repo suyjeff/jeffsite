@@ -10,6 +10,7 @@
 // Both expire after 120 days; nothing here names a user, only the league and teams already in the ranking.
 
 import { limited, send } from './common'
+import { appUrl, LEAGUE_ID, SITE } from './links'
 
 /** The slice of Workers KV the worker uses, so it can be run against a fake. */
 export interface ShareKV {
@@ -21,19 +22,20 @@ export interface ShareKV {
 }
 export type ShareEnv = { GRADES: ShareKV }
 
-export const SITE = 'https://sujeff.com'
+export { appUrl, SITE }
 export const TTL_SECONDS = 120 * 24 * 60 * 60
 export const MAX_PNG = 400 * 1024
 export const CARD = { w: 1200, h: 630 }
 /** Cap on the whole request: the card, its base64 if sent that way, and the facts. */
 const MAX_BODY = Math.ceil((MAX_PNG * 4) / 3) + 20_000
+/** The facts alone are a few hundred bytes; this is room for five long names. */
+const MAX_META = 4_000
 
-const LEAGUE_ID = /^[A-Za-z0-9:_.-]{1,64}$/
 const ID = /^[A-Za-z0-9]{10,32}$/
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
 const PNG_END = [0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
-/** Sent a page of tags, not a redirect. */
-const BOTS = /facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|WhatsApp|TelegramBot|LinkedInBot|Applebot|bot|preview|embed/i
+/** The unfurlers that get a page of tags instead of a redirect: known by name, so a browser never lands on one. */
+const BOTS = /facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|WhatsApp|TelegramBot|LinkedInBot|Applebot|Pinterest|redditbot|Embedly|Iframely|SkypeUriPreview|Google-PageRenderer|vkShare|Mastodon/i
 
 export type ShareMeta = {
   league: string
@@ -125,28 +127,57 @@ export const newId = (): string => {
   return out.length === 14 ? out.join('') : newId()
 }
 
+/** The body as bytes, read in chunks and given up on as soon as it passes the cap, whatever the headers claimed. */
+const readBounded = async (req: Request, cap: number): Promise<Uint8Array | null> => {
+  if (!req.body) return new Uint8Array(0)
+  const reader = req.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > cap) {
+      await reader.cancel().catch(() => {})
+      return null
+    }
+    chunks.push(value)
+  }
+  const out = new Uint8Array(total)
+  let at = 0
+  for (const c of chunks) {
+    out.set(c, at)
+    at += c.byteLength
+  }
+  return out
+}
+
 /** What a request carried: the facts and the card, from JSON (`png` in base64) or a multipart form (`meta`, `png`). */
-const readBody = async (req: Request): Promise<{ meta: unknown; png: Uint8Array } | string> => {
-  const declared = Number(req.headers.get('content-length') ?? 0)
-  if (declared > MAX_BODY) return 'too large'
+const readBody = async (req: Request): Promise<{ meta: unknown; png: Uint8Array } | { error: string; status: number }> => {
+  // A length must be declared and within the cap before a byte is read; the reader still holds the line if it lied.
+  const declared = req.headers.get('content-length')
+  if (declared == null || !/^\d+$/.test(declared)) return { error: 'length required', status: 411 }
+  if (Number(declared) > MAX_BODY) return { error: 'too large', status: 413 }
+  const bytes = await readBounded(req, MAX_BODY)
+  if (!bytes) return { error: 'too large', status: 413 }
   const type = req.headers.get('content-type') ?? ''
+  const bad = { error: 'bad body', status: 400 }
   try {
     if (type.includes('multipart/form-data')) {
-      const form = await req.formData()
+      const form = await new Response(bytes as BodyInit, { headers: { 'content-type': type } }).formData()
       const file = form.get('png')
       const metaRaw = form.get('meta')
-      if (typeof metaRaw !== 'string' || !file || typeof file === 'string') return 'bad body'
-      if (file.size > MAX_PNG) return 'png too large'
+      if (typeof metaRaw !== 'string' || metaRaw.length > MAX_META || !file || typeof file === 'string') return bad
+      if (file.size > MAX_PNG) return { error: 'png too large', status: 413 }
       return { meta: JSON.parse(metaRaw), png: new Uint8Array(await file.arrayBuffer()) }
     }
-    const text = await req.text()
-    if (text.length > MAX_BODY) return 'too large'
-    const body = JSON.parse(text) as { meta?: unknown; png?: unknown }
-    if (typeof body?.png !== 'string') return 'bad body'
+    const body = JSON.parse(new TextDecoder().decode(bytes)) as { meta?: unknown; png?: unknown }
+    if (typeof body?.png !== 'string') return bad
+    if (JSON.stringify(body.meta ?? null).length > MAX_META) return { error: 'meta too large', status: 413 }
     const png = unbase64(body.png)
-    return png ? { meta: body.meta, png } : 'bad png'
+    return png ? { meta: body.meta, png } : { error: 'bad png', status: 400 }
   } catch {
-    return 'bad body'
+    return bad
   }
 }
 
@@ -154,27 +185,23 @@ const readBody = async (req: Request): Promise<{ meta: unknown; png: Uint8Array 
 export async function handlePost(req: Request, env: ShareEnv, origin: string, ip: string): Promise<Response> {
   if (limited(`s1:${ip}`, 6) || limited(`sh:${ip}`, 40, 3_600_000)) return send({ error: 'slow down' }, 429, origin, { 'retry-after': '60' })
   const body = await readBody(req)
-  if (typeof body === 'string') return send({ error: body }, body === 'too large' || body === 'png too large' ? 413 : 400, origin)
+  if ('error' in body) return send({ error: body.error }, body.status, origin)
   const meta = parseMeta(body.meta)
   if (typeof meta === 'string') return send({ error: meta }, 400, origin)
   const dims = checkPng(body.png)
   if (typeof dims === 'string') return send({ error: dims }, dims === 'png too large' ? 413 : 400, origin)
   const id = newId()
   const buf = body.png.buffer.slice(body.png.byteOffset, body.png.byteOffset + body.png.byteLength) as ArrayBuffer
-  await env.GRADES.put(`s:${id}:png`, buf, { expirationTtl: TTL_SECONDS })
-  await env.GRADES.put(`s:${id}`, JSON.stringify({ v: 1, at: Date.now(), ...meta }), { expirationTtl: TTL_SECONDS })
+  await Promise.all([
+    env.GRADES.put(`s:${id}:png`, buf, { expirationTtl: TTL_SECONDS }),
+    env.GRADES.put(`s:${id}`, JSON.stringify({ v: 1, at: Date.now(), ...meta }), { expirationTtl: TTL_SECONDS }),
+  ])
   return send({ id, url: `${new URL(req.url).origin}/s/${id}` }, 200, origin)
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 /** A string for inside a <script>: JSON, with the characters that could end the tag or the line escaped. */
 const js = (s: string) => JSON.stringify(s).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
-
-/**
- * Where a person goes. Week 1 is written `01`, because a bare `reveal=1` already means "the latest week" in the app.
- */
-export const appUrl = (m: Pick<ShareMeta, 'leagueId' | 'week'>) =>
-  `${SITE}/fantasy?league=${encodeURIComponent(m.leagueId)}&reveal=${m.week === 1 ? '01' : m.week}#power`
 
 /** The page link-preview bots read: Open Graph and Twitter tags, plus a way on for anyone who lands on it. */
 export const previewPage = (meta: ShareMeta, id: string, origin: string) => {
@@ -226,6 +253,9 @@ a{display:inline-block;margin-top:20px;padding:12px 20px;border:1px solid #52a0f
 </html>`
 }
 
+/** The redirect people get. It depends on who asks, so nothing may keep it. */
+const redirect = (to: string) => new Response(null, { status: 302, headers: { location: to, 'cache-control': 'private, no-store', vary: 'User-Agent' } })
+
 const text = (body: string, status: number, extra: Record<string, string> = {}) =>
   new Response(body, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'x-robots-tag': 'noindex', ...extra } })
 
@@ -247,8 +277,8 @@ export async function serve(req: Request, env: ShareEnv): Promise<Response> {
   const bot = BOTS.test(req.headers.get('user-agent') ?? '')
   if (!meta || typeof meta === 'string') {
     // A link that has lapsed still lands people in the app.
-    return bot ? text('Not found', 404) : new Response(null, { status: 302, headers: { location: `${SITE}/fantasy#power`, 'cache-control': 'no-store' } })
+    return bot ? text('Not found', 404) : redirect(`${SITE}/fantasy#power`)
   }
-  if (bot) return text(previewPage(meta, id, url.origin), 200, { 'cache-control': 'public, max-age=300', vary: 'user-agent' })
-  return new Response(null, { status: 302, headers: { location: appUrl(meta), 'cache-control': 'no-store', vary: 'user-agent' } })
+  if (bot) return text(previewPage(meta, id, url.origin), 200, { 'cache-control': 'public, max-age=300', vary: 'User-Agent' })
+  return redirect(appUrl(meta))
 }

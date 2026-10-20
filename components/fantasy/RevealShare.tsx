@@ -117,56 +117,91 @@ const uploadPreview = async (input: ShareInput, blob: Blob, key: string): Promis
   }
 }
 
-// What was made for a recap, kept so reopening the sheet (or the other Share button) finds it. Three steps, each
-// waiting on the one before and none started twice: the full card, the preview card, the link.
-type Job = { key: string; file: Promise<File>; og: Promise<Blob>; link: Promise<string> }
-const jobs = new WeakMap<Recap, Job>()
+// What was made, kept by what it was made from and not by the recap object (a weight slider builds a new recap of the
+// same ranking). The two pictures are drawn ahead in idle time. The link is made only once someone opens the sheet, so
+// a reveal that is only watched uploads nothing; a failed upload is forgotten, so the next try is a real one.
+type Made = { file: Promise<File>; og: Promise<Blob>; link?: Promise<string> }
+const made = new Map<string, Made>()
+const KEEP = 4
 const OG_MAX = 400 * 1024
 
-const startJob = (recap: Recap, input: ShareInput): Job => {
-  const palette = readPalette()
-  const key = JSON.stringify([palette, input.leagueId, input.card.league, input.card.teams.map((t) => [t.name, t.avatar, t.rank, t.move, t.score]), input.og.mine])
-  const hit = jobs.get(recap)
-  if (hit && hit.key === key) return hit
-  const file = renderRankCard(input.card, palette)
+const contentKey = (input: ShareInput) =>
+  JSON.stringify([readPalette(), input.leagueId, input.season, input.card.league, input.card.week, input.card.teams.map((t) => [t.name, t.avatar, t.rank, t.move, t.score]), input.og.mine])
+
+/** The two pictures for a ranking, started if they are not already. */
+const picturesFor = (key: string, input: ShareInput): Made => {
+  const hit = made.get(key)
+  if (hit) {
+    // Most recently used last.
+    made.delete(key)
+    made.set(key, hit)
+    return hit
+  }
+  const file = renderRankCard(input.card)
     .then(toBlob)
-    .then((b) => new File([b], `power-rank-week-${recap.week}.png`, { type: 'image/png' }))
+    .then((b) => new File([b], `power-rank-week-${input.card.week}.png`, { type: 'image/png' }))
   const og = file.then(() => renderOgCard(input.og)).then(toBlob)
-  const sig = hash(JSON.stringify([input.leagueId, input.card.week, input.card.teams.slice(0, 5).map((t) => [t.name, t.avatar, t.rank, t.move, t.score]), ogText(input.card), input.og.mine, input.card.teams.length]))
-  // With no worker, or any trouble with it, the plain link in the app stands in.
-  const link = og
-    .then((b) => (b.size > OG_MAX ? Promise.reject(new Error('card too large')) : uploadPreview(input, b, sig)))
-    .catch(() => deepLinkUrl(input.leagueId, recap.week))
-  const mine: Job = { key, file, og, link }
-  jobs.set(recap, mine)
-  // A failed step clears only its own entry, so the next open tries again.
-  file.catch(() => jobs.get(recap) === mine && jobs.delete(recap))
-  og.catch(() => jobs.get(recap) === mine && jobs.delete(recap))
+  const mine: Made = { file, og }
+  made.set(key, mine)
+  while (made.size > KEEP) made.delete(made.keys().next().value as string)
+  // A failed draw clears only its own entry.
+  const drop = () => made.get(key) === mine && made.delete(key)
+  file.catch(drop)
+  og.catch(drop)
   return mine
 }
 
-type Kit = { file: File | null; fileFailed: boolean; preview: string | null; link: string | null; plain: boolean; retry: () => void }
+/** The worker's link for a ranking, uploading the preview card the first time it is asked for. */
+const linkFor = (m: Made, input: ShareInput): Promise<string> => {
+  if (m.link) return m.link
+  const sig = hash(JSON.stringify([input.leagueId, input.season, input.card.week, input.card.teams.slice(0, 5).map((t) => [t.name, t.avatar, t.rank, t.move, t.score]), ogText(input.card), input.og.mine, input.card.teams.length]))
+  const p = m.og.then((b) => (b.size > OG_MAX ? Promise.reject(new Error('card too large')) : uploadPreview(input, b, sig)))
+  m.link = p
+  p.catch(() => {
+    if (m.link === p) m.link = undefined
+  })
+  return p
+}
 
-/** Makes the share ahead of the tap, once the recap has had its entrance (about a second), and only when the page is idle. */
-const useShareKit = (recap: Recap, input: ShareInput): Kit => {
-  const [state, setState] = useState<{ file: File | null; fileFailed: boolean; ogBlob: Blob | null; link: string | null }>({ file: null, fileFailed: false, ogBlob: null, link: null })
+/**
+ * Where the link stands: not asked for yet, being made, made by the worker, failed (a plain link stands in, and it can be
+ * tried again), or plain from the start because there is no worker.
+ */
+type LinkStatus = 'idle' | 'working' | 'ready' | 'failed' | 'plain'
+type Kit = { file: File | null; fileFailed: boolean; preview: string | null; link: string | null; linkStatus: LinkStatus; plainLink: string; retryFile: () => void; retryLink: () => void }
+
+/**
+ * Draws the pictures ahead of the tap, once the recap has had its entrance (about a second) and the page is idle, and makes
+ * the link as soon as `wantLink` (the sheet is open), so a tap on Share link only has to hand over what is ready.
+ */
+const useShareKit = (input: ShareInput, wantLink: boolean): Kit => {
+  const [state, setState] = useState<{ file: File | null; fileFailed: boolean; ogBlob: Blob | null }>({ file: null, fileFailed: false, ogBlob: null })
+  // The link belongs to the ranking it was made for; for any other it counts as not asked for yet.
+  const [stored, setLink] = useState<{ key: string; url: string | null; status: LinkStatus }>({ key: '', url: null, status: 'idle' })
   const [preview, setPreview] = useState<string | null>(null)
   const [tries, setTries] = useState(0)
+  const [linkTries, setLinkTries] = useState(0)
+  const key = useMemo(() => contentKey(input), [input])
+  const inputRef = useRef(input)
+  inputRef.current = input
+  const link = stored.key === key ? stored : { key, url: null, status: 'idle' as LinkStatus }
+  const linkRef = useRef(link)
+  linkRef.current = link
+  const keyRef = useRef(key)
+  keyRef.current = key
 
   useEffect(() => {
     let live = true
-    setState({ file: null, fileFailed: false, ogBlob: null, link: null })
+    setState({ file: null, fileFailed: false, ogBlob: null })
     const start = () => {
-      if (tries > 0) jobs.delete(recap)
-      const job = startJob(recap, input)
-      job.file.then((file) => live && setState((s) => ({ ...s, file })), () => live && setState((s) => ({ ...s, fileFailed: true })))
-      job.og.then((ogBlob) => live && setState((s) => ({ ...s, ogBlob })), () => {})
-      job.link.then((link) => live && setState((s) => ({ ...s, link })))
+      if (tries > 0) made.delete(key)
+      const pics = picturesFor(key, inputRef.current)
+      pics.file.then((file) => live && setState((s) => ({ ...s, file })), () => live && setState((s) => ({ ...s, fileFailed: true })))
+      pics.og.then((ogBlob) => live && setState((s) => ({ ...s, ogBlob })), () => {})
     }
     const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (h: number) => void }
     let idle = 0
-    const made = jobs.get(recap)
-    const wait = made && tries === 0 ? 0 : 1500
+    const wait = made.has(key) && tries === 0 ? 0 : 1500
     const id = window.setTimeout(() => {
       if (w.requestIdleCallback) idle = w.requestIdleCallback(start, { timeout: 4000 })
       else start()
@@ -176,7 +211,21 @@ const useShareKit = (recap: Recap, input: ShareInput): Kit => {
       window.clearTimeout(id)
       if (idle) w.cancelIdleCallback?.(idle)
     }
-  }, [recap, input, tries])
+  }, [key, tries])
+
+  // The link, once someone opens the sheet: the worker's, or the plain one when there is no worker. A request already in
+  // flight, or a link already made, is left alone; only a failed one is asked again (Retry).
+  useEffect(() => {
+    if (!wantLink) return
+    if (!sharedUrl()) return setLink({ key, url: null, status: 'plain' })
+    if (linkRef.current.status === 'ready' || linkRef.current.status === 'working') return
+    setLink({ key, url: null, status: 'working' })
+    // Whatever the sheet does meanwhile, the answer lands for the ranking it was asked for, if it is still the one on show.
+    linkFor(picturesFor(key, inputRef.current), inputRef.current).then(
+      (url) => keyRef.current === key && setLink({ key, url, status: 'ready' }),
+      () => keyRef.current === key && setLink({ key, url: null, status: 'failed' }),
+    )
+  }, [wantLink, key, linkTries])
 
   // The preview picture is an object URL of the card, let go of when it is replaced or the sheet is gone.
   useEffect(() => {
@@ -186,8 +235,16 @@ const useShareKit = (recap: Recap, input: ShareInput): Kit => {
     return () => URL.revokeObjectURL(url)
   }, [state.ogBlob])
 
-  const base = sharedUrl()
-  return { file: state.file, fileFailed: state.fileFailed, preview, link: state.link, plain: !!state.link && !(base && state.link.startsWith(`${base}/s/`)), retry: () => setTries((n) => n + 1) }
+  return {
+    file: state.file,
+    fileFailed: state.fileFailed,
+    preview,
+    link: link.url,
+    linkStatus: link.status,
+    plainLink: deepLinkUrl(input.leagueId, input.card.week, input.season),
+    retryFile: () => setTries((n) => n + 1),
+    retryLink: () => setLinkTries((n) => n + 1),
+  }
 }
 
 type Status = null | { tone: 'ok' | 'bad'; text: string }
@@ -248,25 +305,28 @@ const SharePanel = ({ recap, input, kit, onClose, stack }: { recap: Recap; input
     root.current?.querySelector<HTMLElement>('button:not([disabled])')?.focus({ preventScroll: true })
   }, [])
 
+  // The worker's link when it is made; the plain one when there is no worker or it failed. None until then.
+  const href = kit.linkStatus === 'ready' ? kit.link : kit.linkStatus === 'failed' || kit.linkStatus === 'plain' ? kit.plainLink : null
+  const plain = kit.linkStatus === 'failed' || kit.linkStatus === 'plain'
   // Called straight from the tap, with the link already in hand.
   const shareLink = () => {
-    if (!kit.link) return
-    navigator.share({ title, text: description, url: kit.link }).then(
+    if (!href) return
+    navigator.share({ title, text: description, url: href }).then(
       () => say(null),
       (e) => ((e as DOMException)?.name === 'AbortError' ? say(null) : say({ tone: 'bad', text: 'Could not open the share sheet. Copy the link instead.' })),
     )
   }
   const copy = () => {
-    if (!kit.link) return
-    copyText(kit.link).then((ok) => say(ok ? { tone: 'ok', text: 'Link copied' } : { tone: 'bad', text: 'Could not copy. Select the link and copy it.' }))
+    if (!href) return
+    copyText(href).then((ok) => say(ok ? { tone: 'ok', text: 'Link copied' } : { tone: 'bad', text: 'Could not copy. Select the link and copy it.' }))
   }
   const download = () => {
     if (!kit.file) return
     say({ tone: 'ok', text: save(kit.file) === 'opened' ? 'Opened the image: press and hold to save it' : 'Downloaded the image' })
   }
 
-  const preparing = !kit.link
-  const shown = kit.link ? kit.link.replace(/^https?:\/\//, '') : ''
+  const preparing = !href
+  const shown = href ? href.replace(/^https?:\/\//, '') : ''
   return (
     <div
       ref={root}
@@ -297,12 +357,21 @@ const SharePanel = ({ recap, input, kit, onClose, stack }: { recap: Recap; input
         <div>
           <div className="ff-label mb-1">Link</div>
           <div className="flex h-9 items-center border border-ff-line bg-ff-sunken px-2.5 font-mono text-[11.5px] text-ff-text2">
-            <span className="min-w-0 flex-1 truncate" title={kit.link ?? undefined}>
+            <span className="min-w-0 flex-1 truncate" title={href ?? undefined}>
               {preparing ? <span className="text-ff-muted motion-safe:animate-pulse">Preparing…</span> : shown}
             </span>
+            {kit.linkStatus === 'failed' && (
+              <button type="button" onClick={kit.retryLink} className="-mr-1.5 ml-2 h-8 shrink-0 px-2 uppercase tracking-[0.08em] text-ff-accent hover:bg-ff-raised">
+                Retry
+              </button>
+            )}
           </div>
           <p className="mt-1 text-[11.5px] leading-snug text-ff-muted">
-            {kit.plain ? 'A plain link to the week. Opening it asks for a fantasy name first.' : 'Shows this preview in a message. Opening it asks for a fantasy name first.'}
+            {kit.linkStatus === 'failed'
+              ? 'Could not make the preview link. This plain link still opens the week; retry for the preview.'
+              : plain
+                ? 'A plain link to the week. Opening it asks for a fantasy name first.'
+                : 'Shows this preview in a message. Opening it asks for a fantasy name first.'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -314,7 +383,7 @@ const SharePanel = ({ recap, input, kit, onClose, stack }: { recap: Recap; input
           <Btn primary={!canShare} onClick={copy} disabled={preparing}>
             {preparing ? 'Preparing…' : 'Copy link'}
           </Btn>
-          <Btn onClick={kit.fileFailed ? kit.retry : download} disabled={!kit.file && !kit.fileFailed}>
+          <Btn onClick={kit.fileFailed ? kit.retryFile : download} disabled={!kit.file && !kit.fileFailed}>
             {kit.fileFailed ? 'Retry PNG' : kit.file ? 'Download PNG' : 'PNG…'}
           </Btn>
         </div>
@@ -333,8 +402,8 @@ const SharePanel = ({ recap, input, kit, onClose, stack }: { recap: Recap; input
  */
 export const ShareButton = ({ recap, icon, className }: { recap: Recap; icon?: boolean; className?: string }) => {
   const input = useShareInput(recap)
-  const kit = useShareKit(recap, input)
   const [open, setOpen] = useState(false)
+  const kit = useShareKit(input, open)
   const wrap = useRef<HTMLSpanElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
 

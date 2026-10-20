@@ -20,13 +20,13 @@ export const send = (body: unknown, status: number, origin: string | null, extra
 
 // A per-IP limit kept in the isolate's memory: free, and good enough to blunt a loop. It resets when
 // the isolate does, so it is a speed bump and not a guarantee.
-const hits = new Map<string, number[]>()
+const hits = new Map<string, { windowMs: number; at: number[] }>()
 export const limited = (ip: string, max: number, windowMs = 60_000) => {
   const now = Date.now()
-  const recent = (hits.get(ip) ?? []).filter((t) => now - t < windowMs)
+  const recent = (hits.get(ip)?.at ?? []).filter((t) => now - t < windowMs)
   recent.push(now)
-  hits.set(ip, recent)
-  if (hits.size > 5000) for (const [k, ts] of hits) if (!ts.some((t) => now - t < windowMs)) hits.delete(k)
+  hits.set(ip, { windowMs, at: recent })
+  // Each key is swept by its own window: a key kept for an hour is not dropped on a minute's say-so.
+  if (hits.size > 5000) for (const [k, e] of hits) if (!e.at.some((t) => now - t < e.windowMs)) hits.delete(k)
   return recent.length > max
 }
-

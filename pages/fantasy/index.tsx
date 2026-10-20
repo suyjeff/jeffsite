@@ -281,8 +281,8 @@ const FantasyPage = () => {
   }
   const revealPrefs = useMemo(() => (prefs ? { weights: prefs.weights, model: prefs.model } : null), [prefs?.weights, prefs?.model]) // eslint-disable-line react-hooks/exhaustive-deps
   // A shared Power Rank link: its league is selected once the visitor is through onboarding, then the week opens.
-  const selectLeague = useCallback((id: string) => setPrefs((p) => (p ? { ...p, leagueId: id } : p)), [])
-  const deepLink = useDeepLink({ onboarded: !!prefs?.onboarded, data, loading, selectLeague })
+  const selectLeague = useCallback((id: string | null, season?: string | null) => setPrefs((p) => (p ? { ...p, leagueId: id, ...(season !== undefined ? { season } : {}) } : p)), [])
+  const deepLink = useDeepLink({ onboarded: !!prefs?.onboarded, data, loading, selectLeague, leagueId: prefs?.leagueId ?? null, season: prefs?.season ?? null })
   const deep = useMemo(() => (deepLink.ready ? { week: deepLink.ready.week, finish: deepLink.finish } : null), [deepLink.ready?.week, deepLink.finish]) // eslint-disable-line react-hooks/exhaustive-deps
   // While a link is still finding its league, the reveal that opens by itself waits.
   const reveal = useReveal({ data, analysis, models, prefs: revealPrefs, blocked: !appUp || tour || tourDue || (!!deepLink.link && !deepLink.ready), quiet: toured, deep })

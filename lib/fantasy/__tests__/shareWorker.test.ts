@@ -1,5 +1,6 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { limited } from '../../../workers/grades/src/common'
 import worker from '../../../workers/grades/src/index'
 import { appUrl, checkPng, MAX_PNG, newId, parseMeta, TTL_SECONDS } from '../../../workers/grades/src/share'
 
@@ -54,15 +55,18 @@ const meta = (over: Record<string, unknown> = {}) => ({
 })
 
 let n = 0
-const post = (env: { GRADES: ReturnType<typeof fakeKV> }, body: unknown, init: { origin?: string | null; ip?: string; headers?: Record<string, string> } = {}) =>
-  worker.fetch(
+const post = (env: { GRADES: ReturnType<typeof fakeKV> }, body: unknown, init: { origin?: string | null; ip?: string; headers?: Record<string, string> } = {}) => {
+  const text = typeof body === 'string' ? body : JSON.stringify(body)
+  return worker.fetch(
     new Request('https://ff-grades.example.workers.dev/share', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', origin: init.origin === undefined ? 'https://sujeff.com' : (init.origin ?? ''), 'cf-connecting-ip': init.ip ?? `10.0.0.${++n}`, ...(init.headers ?? {}) },
-      body: typeof body === 'string' ? body : JSON.stringify(body),
+      // A length is required up front, as the worker reads nothing without one.
+      headers: { 'content-type': 'application/json', 'content-length': String(new TextEncoder().encode(text).length), origin: init.origin === undefined ? 'https://sujeff.com' : (init.origin ?? ''), 'cf-connecting-ip': init.ip ?? `10.0.0.${++n}`, ...(init.headers ?? {}) },
+      body: text,
     }),
     env as never,
   )
+}
 const get = (env: { GRADES: ReturnType<typeof fakeKV> }, path: string, ua = 'Mozilla/5.0 (iPhone) Safari') => worker.fetch(new Request(`https://ff-grades.example.workers.dev${path}`, { headers: { 'user-agent': ua } }), env as never)
 
 describe('checkPng', () => {
@@ -128,12 +132,18 @@ describe('POST /share', () => {
   })
   it('takes a multipart form as well', async () => {
     const env = { GRADES: fakeKV() }
-    const form = new FormData()
-    form.set('meta', JSON.stringify(meta()))
-    form.set('png', new Blob([png() as BlobPart], { type: 'image/png' }), 'card.png')
-    const r = await worker.fetch(new Request('https://x.workers.dev/share', { method: 'POST', headers: { origin: 'http://localhost:3200', 'cf-connecting-ip': '9.9.9.9' }, body: form }), env as never)
-    expect(r.status).toBe(200)
+    const send = async (m: unknown, ip: string) => {
+      const form = new FormData()
+      form.set('meta', typeof m === 'string' ? m : JSON.stringify(m))
+      form.set('png', new Blob([png() as BlobPart], { type: 'image/png' }), 'card.png')
+      // What a browser puts on the wire: the encoded form, with its boundary and its length.
+      const wire = new Response(form)
+      const bytes = new Uint8Array(await wire.arrayBuffer())
+      return worker.fetch(new Request('https://x.workers.dev/share', { method: 'POST', headers: { 'content-type': wire.headers.get('content-type')!, 'content-length': String(bytes.length), origin: 'http://localhost:3200', 'cf-connecting-ip': ip }, body: bytes }), env as never)
+    }
+    expect((await send(meta(), '9.9.9.9')).status).toBe(200)
     expect(env.GRADES.store.size).toBe(2)
+    expect((await send(JSON.stringify(meta({ description: 'x'.repeat(5000) })), '9.9.9.8')).status).toBe(400)
   })
   it('refuses other origins, bad pictures and bad facts, and stores nothing', async () => {
     const env = { GRADES: fakeKV() }
@@ -145,7 +155,33 @@ describe('POST /share', () => {
     expect((await post(env, { meta: meta(), png: '!!!not base64!!!' })).status).toBe(400)
     expect((await post(env, 'not json')).status).toBe(400)
     expect((await post(env, { meta: meta(), png: 'A'.repeat(900_000) })).status).toBe(413)
+    expect((await post(env, { meta: meta({ top: [{ rank: 1, name: 'a', score: 1, move: 0, pad: 'x'.repeat(5000) }] }), png: b64(png()) })).status).toBe(413)
     expect(env.GRADES.store.size).toBe(0)
+  })
+  it('wants a declared length within the cap, and holds to the cap if the length lied', async () => {
+    const env = { GRADES: fakeKV() }
+    const body = JSON.stringify({ meta: meta(), png: b64(png()) })
+    const bare = await worker.fetch(new Request('https://x.workers.dev/share', { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://sujeff.com', 'cf-connecting-ip': '8.8.1.1' }, body }), env as never)
+    expect(bare.status).toBe(411)
+    expect((await post(env, body, { headers: { 'content-length': '99999999' } })).status).toBe(413)
+    // Says 100 bytes, sends a megabyte: the read stops at the cap and nothing is stored.
+    const big = JSON.stringify({ meta: meta(), png: 'A'.repeat(1_000_000) })
+    expect((await post(env, big, { headers: { 'content-length': '100' } })).status).toBe(413)
+    expect(env.GRADES.store.size).toBe(0)
+  })
+  it('counts each key in its own window', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(0)
+      expect(limited('k:long', 2, 3_600_000)).toBe(false)
+      expect(limited('k:long', 2, 3_600_000)).toBe(false)
+      vi.setSystemTime(5 * 60_000)
+      // Enough minute-window keys to trigger a sweep, five minutes on: the hour-window key must survive it.
+      for (let i = 0; i < 5100; i++) limited(`sweep:${i}`, 5)
+      expect(limited('k:long', 2, 3_600_000)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
   it('slows down one address', async () => {
     const env = { GRADES: fakeKV() }
@@ -165,7 +201,7 @@ describe('GET /s/:id', () => {
   }
   it('gives link-preview bots the Open Graph page, with no redirect', async () => {
     const { env, id } = await stored()
-    for (const ua of ['facebookexternalhit/1.1 Facebot Twitterbot/1.0', 'Slackbot-LinkExpanding 1.0', 'Discordbot/2.0', 'WhatsApp/2.23', 'TelegramBot (like TwitterBot)', 'LinkedInBot/1.0', 'Mozilla/5.0 (Macintosh) Applebot/0.1']) {
+    for (const ua of ['facebookexternalhit/1.1 Facebot Twitterbot/1.0', 'Slackbot-LinkExpanding 1.0', 'Discordbot/2.0', 'WhatsApp/2.23', 'TelegramBot (like TwitterBot)', 'LinkedInBot/1.0', 'Mozilla/5.0 (Macintosh) Applebot/0.1', 'Pinterestbot/1.0', 'redditbot/1.0', 'Iframely/1.3', 'Mastodon/4.2 http.rb', 'Mozilla/5.0 Google-PageRenderer']) {
       const r = await get(env, `/s/${id}`, ua)
       expect(r.status).toBe(200)
       expect(r.headers.get('location')).toBeNull()
@@ -182,13 +218,24 @@ describe('GET /s/:id', () => {
       expect(html).not.toContain('http-equiv')
     }
   })
+  it('does not mistake a browser for an unfurler', async () => {
+    const { env, id } = await stored()
+    for (const ua of ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) AppleWebKit/605.1.15 Version/17.0 Mobile Safari/604.1', 'Mozilla/5.0 (X11; Linux) Chrome/120 Safari/537.36 PreviewBrowser', 'Mozilla/5.0 (compatible; EmbeddedWebView; bot-free)', '']) {
+      expect((await get(env, `/s/${id}`, ua)).status).toBe(302)
+    }
+  })
   it('sends people on to the app, which asks for their name first', async () => {
     const { env, id } = await stored()
     const r = await get(env, `/s/${id}`)
     expect(r.status).toBe(302)
-    expect(r.headers.get('location')).toBe('https://sujeff.com/fantasy?league=1234567890&reveal=5#power')
+    // The season rides along, so a past season's league can be found.
+    expect(r.headers.get('location')).toBe('https://sujeff.com/fantasy?league=1234567890&season=2026&reveal=5#power')
+    // What it says about itself: for this visitor, and kept by nobody.
+    expect(r.headers.get('vary')).toBe('User-Agent')
+    expect(r.headers.get('cache-control')).toBe('private, no-store')
     // Week 1 is written 01: a bare 1 already means "the latest week".
     expect(appUrl({ leagueId: 'abc', week: 1 })).toBe('https://sujeff.com/fantasy?league=abc&reveal=01#power')
+    expect(appUrl({ leagueId: 'abc', week: 1, season: '2025' })).toBe('https://sujeff.com/fantasy?league=abc&season=2025&reveal=01#power')
   })
   it('escapes everything it prints', async () => {
     const { env, id } = await stored({ league: '<script>alert(1)</script>', title: '"><img src=x onerror=alert(1)>', description: "a & b </script><script>x('1')", top: [{ rank: 1, name: '<b>x</b>', score: 1, move: 0 }] })

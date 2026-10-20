@@ -10,6 +10,7 @@
 // snapshots are always overwritten whole, so concurrent posts cannot lose each other's grades.
 
 import { allowed, limited, send } from './common'
+import { LEAGUE_ID } from './links'
 import { handlePost as handleShare, serve as serveShare, type ShareKV } from './share'
 import { cleanGrade, clientKey, clientOf, contribute, LIMITS, priorFor, type Contribution, type StoredGrade, type Sum } from './aggregate'
 
@@ -17,7 +18,7 @@ export interface Env {
   GRADES: ShareKV
 }
 
-const LEAGUE = /^[A-Za-z0-9:_.-]{1,64}$/
+const LEAGUE = LEAGUE_ID
 const CLIENT = /^[A-Za-z0-9-]{8,64}$/
 const MAX_BODY = 40_000
 const MAX_PER_POST = 60

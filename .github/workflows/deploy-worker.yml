@@ -39,10 +39,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: workers/grades/package-lock.json
 
+      # From the lockfile, so the wrangler that deploys is the one that was tested (pinned in package.json).
       - name: Install
         if: steps.token.outputs.present == 'true'
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Deploy
         if: steps.token.outputs.present == 'true'
