@@ -138,52 +138,81 @@
   background: rgb(65 131 196 / 0.28);
 }
 
-/* Download and close, out of the paper's way in the corner. */
+/* Download and close: one small pill, out of the paper's way in the corner, a hairline between the two. */
 .rs-bar {
   position: absolute;
   top: max(12px, env(safe-area-inset-top));
   right: max(12px, env(safe-area-inset-right));
   display: flex;
-  gap: 8px;
-}
-.rs-btn {
+  align-items: center;
+  height: 30px;
+  padding: 0 2px;
   border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 15px;
-  line-height: 20px;
-  letter-spacing: -0.01em;
   color: rgb(41 37 36);
   background: rgb(255 255 255 / 0.86);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 1px 3px rgb(0 0 0 / 0.1);
+}
+.rs-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 26px;
+  border-radius: 999px;
+  color: inherit;
   transition: background-color 150ms ease-out;
+}
+/* A larger target than it looks, for fingers. */
+.rs-btn::after {
+  content: '';
+  position: absolute;
+  inset: -8px -2px;
+}
+.rs-btn svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 @media (hover: hover) {
   .rs-btn:hover {
-    background: #fff;
+    background: rgb(0 0 0 / 0.06);
   }
 }
 .rs-btn:active {
-  transform: scale(0.97);
+  background: rgb(0 0 0 / 0.1);
 }
 .rs-btn:focus-visible {
   outline: 2px solid #4183c4;
-  outline-offset: 2px;
+  outline-offset: 1px;
+}
+.rs-divider {
+  width: 1px;
+  height: 14px;
+  background: rgb(0 0 0 / 0.12);
 }
 @media (prefers-color-scheme: dark) {
-  .rs-btn {
+  .rs-bar {
     color: rgb(245 245 244);
     background: rgb(41 37 36 / 0.86);
     box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.1), 0 1px 3px rgb(0 0 0 / 0.3);
   }
   @media (hover: hover) {
     .rs-btn:hover {
-      background: rgb(68 64 60);
+      background: rgb(255 255 255 / 0.1);
     }
+  }
+  .rs-btn:active {
+    background: rgb(255 255 255 / 0.14);
   }
   .rs-btn:focus-visible {
     outline-color: #7dd3fc;
+  }
+  .rs-divider {
+    background: rgb(255 255 255 / 0.14);
   }
 }
 

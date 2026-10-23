@@ -5,11 +5,13 @@
 // so the lifted material genuinely rolls and shows its backing, rather than
 // creasing along a straight hinge. A second pass draws the same deformed
 // geometry flattened onto the page as a contact shadow.
+//
+// Once it comes off the page it can be carried anywhere in the window, held by
+// the point that was grabbed, and flies home when let go.
 
 import { paintShadow, paintSticker, StickerPalette } from './stickerArt'
 import {
   CANVAS_BLEED,
-  EdgeHit,
   GRAB_BAND,
   Point,
   STAGE_MARGIN,
@@ -19,6 +21,7 @@ import {
   extentFrom,
   isInsideBlob,
   nearestEdge,
+  supportPoint,
 } from './stickerShape'
 
 const COLS = 60
@@ -26,28 +29,63 @@ const ROWS = 48
 const OUTLINE_POINTS = 120
 
 /** How far the free edge lifts on hover alone. */
-const HINT_FOLD = 17
+const HINT_FOLD = 20
 const MAX_TILT = 0.17
 const CAMERA_DISTANCE = 1100
-/** Fraction of the available travel after which the sticker comes off. */
-const DETACH_AT = 0.82
-/** Curl kept while the sticker is off the page, so it does not look rigid. */
-const AIRBORNE_FOLD = 0.16
-const AIRBORNE_LIFT = 96
+
+// Coming off the page. Grabbed near an edge and pulled back across itself, the
+// sticker folds over with the grabbed point riding under the pointer, and comes
+// away once the flap covers DETACH_FLAP of it. Grabbed anywhere else, or pulled
+// away from itself, it pops off after a few pixels: there is nothing to fold.
+/** Grabbed within this share of its length from the trailing edge, a pull folds it back. */
+const FOLD_BACK_ZONE = 0.3
+const DETACH_FLAP = 0.34
+/** Pointer travel before a sticker that can't fold back pops off; a finger gets a little more. */
+const POP_DISTANCE = 9
+const POP_DISTANCE_TOUCH = 14
+
+// In the air: held up off the page, swinging a little round the point it is
+// held by, the trailing edge curling in the wind of its own travel.
+const AIRBORNE_LIFT = 72
+const AIR_CURL = 7
+const AIR_CURL_PER_SPEED = 0.012
+const AIR_CURL_MAX = 24
+/** The flick of the trailing edge as it comes unstuck. */
+const POP_CURL = 34
+const POP_TIME = 0.16
+const MAX_SWING = 0.22
+const SWING_PER_SPEED = 0.00022
 
 // Radius of the roll per unit of fold. A fatter tube than a strict
 // half-cylinder (which would be 1/PI): seen from a camera looking straight
 // down at the page, a thin roll foreshortens into a flat crease, while this
 // keeps enough of the curved surface facing the viewer to read as vinyl
-// lifting off the paper.
+// lifting off the paper. Capped, so a long fold-back stays a tight roll of
+// vinyl instead of a tube.
 const ROLL_RATIO = 0.42
-/** Angle swept by the material between the fold line and the free edge. */
-const ROLL_ANGLE = 1 / ROLL_RATIO
-/** Distance the free edge travels per unit of fold. */
-const PULL_RATIO = Math.hypot(
-  1 - ROLL_RATIO * Math.sin(ROLL_ANGLE),
-  ROLL_RATIO * (1 - Math.cos(ROLL_ANGLE)),
-)
+const RADIUS_MAX = 9
+
+const rollRadius = (fold: number) => Math.min(fold * ROLL_RATIO, RADIUS_MAX)
+
+/** How far along the fold direction the material at the fold's origin ends up. */
+const foldReach = (fold: number) => {
+  const radius = rollRadius(fold)
+  if (radius <= 0) return 0
+  const theta = fold / radius
+  return fold - radius * Math.sin(Math.min(theta, Math.PI)) + Math.max(fold - Math.PI * radius, 0)
+}
+
+/** The fold that carries its origin `reach` pixels along: foldReach inverted (it is monotonic). */
+const foldFor = (reach: number) => {
+  let lo = 0
+  let hi = reach * 2 + Math.PI * RADIUS_MAX
+  for (let i = 0; i < 24; i += 1) {
+    const mid = (lo + hi) / 2
+    if (foldReach(mid) < reach) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
 
 // Physics runs on a fixed step, decoupled from the display's refresh rate, so
 // the springs feel identical on 60Hz and 120Hz screens and stay stable through
@@ -56,18 +94,33 @@ const STEP = 1 / 240
 const MAX_FRAME = 0.05
 
 // Spring tunings as [stiffness, damping]. The ones driven directly by the
-// pointer sit just under critical damping, so the sticker keeps up with the
-// cursor without wobbling; the return home stays deliberately soft.
-const FOLD_DRAG: [number, number] = [1400, 66]
-const FOLD_REST: [number, number] = [260, 30]
-const FOLLOW_DRAG: [number, number] = [1000, 56]
-const LIFT_DRAG: [number, number] = [160, 24]
-const FOLLOW_HOME: [number, number] = [88, 12.5]
-const LIFT_HOME: [number, number] = [52, 11]
+// pointer sit at or just under critical damping, so the sticker keeps up with
+// the cursor without wobbling.
+const FOLD_DRAG: [number, number] = [1600, 76]
+const FOLD_AIR: [number, number] = [700, 44]
+const FOLD_REST: [number, number] = [320, 32]
+// In the hand the sticker tracks the pointer almost 1:1, smoothed over TRACK
+// seconds; just after it comes unstuck, or is caught in the air, it catches up
+// over CATCH seconds instead, so it doesn't teleport to the pointer.
+const TRACK = 0.014
+const CATCH = 0.04
+const CATCH_FADE = 0.07
+/** Smoothing of the travel velocity that drives lean, curl and swing. */
+const VELOCITY_SMOOTH = 0.05
+const FOLLOW_RETURN: [number, number] = [900, 60]
+const LIFT: [number, number] = [520, 44]
+const SWING: [number, number] = [170, 15]
+const SWING_HOME: [number, number] = [700, 53]
 const TILT: [number, number] = [380, 35]
 const GLOSS: [number, number] = [90, 16]
 
-type Mode = 'idle' | 'peel' | 'airborne' | 'settle'
+const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
+/** Leaves at once, settles softly: half ease-in-out, half ease-out. */
+const easeHome = (t: number) => (easeInOutCubic(t) + 1 - (1 - t) ** 3) / 2
+
+type Mode = 'idle' | 'peel' | 'airborne' | 'return'
+/** Which curl is on the sticker: an edge folding over (hover, peel) or the trailing edge in flight. */
+type CurlKind = 'edge' | 'trail'
 
 type Spring = { value: number; velocity: number }
 
@@ -113,6 +166,10 @@ const perspective = (fovY: number, aspect: number, near: number, far: number): M
   ])
 }
 
+/**
+ * Tilt (rotateY * rotateX) about the sticker's centre, then a swing in the
+ * page's plane about the point it is held by (px, py), then translation.
+ */
 const composeModel = (
   out: Mat4,
   tx: number,
@@ -120,27 +177,38 @@ const composeModel = (
   tz: number,
   rotX: number,
   rotY: number,
+  swing: number,
+  px: number,
+  py: number,
 ): Mat4 => {
   const cx = Math.cos(rotX)
   const sx = Math.sin(rotX)
   const cy = Math.cos(rotY)
   const sy = Math.sin(rotY)
+  const cz = Math.cos(swing)
+  const sz = Math.sin(swing)
 
-  // Column-major rotateY * rotateX, then translation.
-  out[0] = cy
-  out[1] = 0
-  out[2] = -sy
+  // Columns of rotateY * rotateX.
+  const a0 = cy, a1 = 0, a2 = -sy
+  const b0 = sy * sx, b1 = cx, b2 = cy * sx
+  const c0 = sy * cx, c1 = -sx, c2 = cy * cx
+
+  // Column-major rotateZ * (rotateY * rotateX).
+  out[0] = cz * a0 - sz * a1
+  out[1] = sz * a0 + cz * a1
+  out[2] = a2
   out[3] = 0
-  out[4] = sy * sx
-  out[5] = cx
-  out[6] = cy * sx
+  out[4] = cz * b0 - sz * b1
+  out[5] = sz * b0 + cz * b1
+  out[6] = b2
   out[7] = 0
-  out[8] = sy * cx
-  out[9] = -sx
-  out[10] = cy * cx
+  out[8] = cz * c0 - sz * c1
+  out[9] = sz * c0 + cz * c1
+  out[10] = c2
   out[11] = 0
-  out[12] = tx
-  out[13] = ty
+  // Swinging about the pivot rather than the origin: t + p - Rz p.
+  out[12] = tx + px - (cz * px - sz * py)
+  out[13] = ty + py - (sz * px + cz * py)
   out[14] = tz
   out[15] = 1
   return out
@@ -152,7 +220,6 @@ const composeModel = (
 // surface normal there.
 const DEFORM = `
 const float PI = 3.14159265359;
-const float ROLL_RATIO = ${ROLL_RATIO.toFixed(4)};
 
 void deform (vec2 uv, out vec3 position, out vec3 normal) {
   vec2 plane = vec2((uv.x - 0.5) * uSize.x, (0.5 - uv.y) * uSize.y);
@@ -161,7 +228,7 @@ void deform (vec2 uv, out vec3 position, out vec3 normal) {
 
   if (uFold <= 0.25) return;
 
-  float radius = uFold * ROLL_RATIO;
+  float radius = max(uRadius, 0.5);
   vec2 perp = vec2(-uDir.y, uDir.x);
   vec2 rel = plane - uGrab;
   float along = dot(rel, uDir);
@@ -189,6 +256,7 @@ uniform vec2 uSize;
 uniform vec2 uGrab;
 uniform vec2 uDir;
 uniform float uFold;
+uniform float uRadius;
 uniform mat4 uModel;
 uniform mat4 uViewProj;
 
@@ -256,6 +324,7 @@ uniform vec2 uSize;
 uniform vec2 uGrab;
 uniform vec2 uDir;
 uniform float uFold;
+uniform float uRadius;
 uniform mat4 uModel;
 uniform mat4 uViewProj;
 uniform vec2 uSkew;
@@ -461,15 +530,14 @@ export const createStickerScene = (
 
   // --- layout ---------------------------------------------------------------
   //
-  // The stage is the layout box the sticker sits in and is clamped to. The
-  // canvas is not the size of the stage: it is the sticker plus CANVAS_BLEED of
-  // headroom on every side, and it travels with the sticker. Lift, tilt and
-  // curl therefore always have room to be drawn wherever the sticker is, and
-  // the GPU only ever clears and composites a sticker-sized surface.
+  // The stage is the layout box the sticker rests in. The canvas is not the
+  // size of the stage: it is the sticker plus CANVAS_BLEED of headroom on every
+  // side, and it travels with the sticker, anywhere in the window. Lift, tilt,
+  // swing and curl therefore always have room to be drawn wherever the sticker
+  // is, and the GPU only ever clears and composites a sticker-sized surface.
   let stageLeft = 0
   let stageTop = 0
   let stageRectStale = true
-  let stageWidth = 1
   let stageHeight = 1
   let anchorX = 0
   let anchorY = 0
@@ -481,6 +549,7 @@ export const createStickerScene = (
   const offsetZ: Spring = { value: 0, velocity: 0 }
   const tiltX: Spring = { value: 0, velocity: 0 }
   const tiltY: Spring = { value: 0, velocity: 0 }
+  const swing: Spring = { value: 0, velocity: 0 }
   const gloss: Spring = { value: 0.15, velocity: 0 }
 
   // Where each spring is heading. Worked out once per frame from the pointer,
@@ -491,6 +560,7 @@ export const createStickerScene = (
   let targetZ = 0
   let tiltTargetX = 0
   let tiltTargetY = 0
+  let swingTarget = 0
   let glossTarget = 0.15
 
   // Hover response, computed when the pointer moves rather than every frame.
@@ -498,18 +568,41 @@ export const createStickerScene = (
   let hoverTiltY = 0
   let hoverFold = 0
   let hoverGloss = 0.15
+  let hoverGrab: Point = { x: 0, y: 0 }
+  let hoverDir: Point = { x: 1, y: 0 }
 
-  let mode: Mode = 'idle'
+  // The curl on the sticker, in sticker-local pixels (origin top-left, y down):
+  // material on the near side of a line `fold` pixels from `grab` along
+  // `direction` rolls over. Switching to a different kind of curl first rolls
+  // the current one flat, so the sticker never jumps from one shape to another.
+  let curlKind: CurlKind = 'edge'
   let grab: Point = { x: 0, y: 0 }
   let direction: Point = { x: 1, y: 0 }
-  let inward: Point = { x: 1, y: 0 }
-  let extent = STICKER_WIDTH
+  // Direction of travel in flight, eased so the trailing curl swings round smoothly.
+  let trail: Point = { x: 1, y: 0 }
+
+  let mode: Mode = 'idle'
   let pointerId: number | null = null
+  let pointerTouch = false
   let pointerInside = false
   let pointer: Point = { x: 0, y: 0 }
-  let dragStart: Point = { x: 0, y: 0 }
+  // Where the held point was when the drag began, so the sticker's offset is
+  // simply how far the pointer has travelled since.
+  let pressPoint: Point = { x: 0, y: 0 }
+  // The held point, sticker-local: what the pointer is pulling, and what the
+  // sticker swings around in the air.
+  let held: Point = { x: STICKER_WIDTH / 2, y: STICKER_HEIGHT / 2 }
+  let popTimer = 0
+  let catchUp = 0
+  // Travel velocity in stage pixels per second (y down), smoothed.
+  let travelX = 0
+  let travelY = 0
+  /** The hover lift showing when the press began, held until the drag outgrows it. */
+  let pressFold = 0
+  const flight = { x: 0, y: 0, z: 0, swing: 0, t: 0, duration: 1, arc: 0 }
   let sweep = -1
   let sweepStrength = 0
+  let sweepStart = 0.7
   let sweepDone = false
   let elapsed = 0
   let accumulator = 0
@@ -522,18 +615,40 @@ export const createStickerScene = (
   let backingRgb = toRgb(palette.backing)
   let shadowRgb = toRgb(palette.shadow)
 
-  /** Sticker-local coordinates (origin top-left, y down) for a stage point. */
-  const toLocal = (stageX: number, stageY: number): Point => ({
-    x: stageX - (anchorX + offsetX.value),
-    y: stageY - (anchorY - offsetY.value),
-  })
+  /** The held point in shader space (origin at the sticker centre, y up): the swing's pivot. */
+  const pivotX = () => held.x - STICKER_WIDTH / 2
+  const pivotY = () => STICKER_HEIGHT / 2 - held.y
+
+  /** Sticker-local coordinates (origin top-left, y down) for a stage point, undoing travel and swing. */
+  const toLocal = (stageX: number, stageY: number): Point => {
+    const wx = stageX - anchorX - STICKER_WIDTH / 2 - offsetX.value - pivotX()
+    const wy = -(stageY - anchorY - STICKER_HEIGHT / 2) - offsetY.value - pivotY()
+    const c = Math.cos(-swing.value)
+    const s = Math.sin(-swing.value)
+    const x = wx * c - wy * s + pivotX()
+    const y = wx * s + wy * c + pivotY()
+    return { x: x + STICKER_WIDTH / 2, y: STICKER_HEIGHT / 2 - y }
+  }
+
+  /** Hold the sticker by a new point without it moving: re-pivot, and absorb the difference in the offset. */
+  const holdAt = (point: Point) => {
+    const oldX = pivotX()
+    const oldY = pivotY()
+    held = point
+    const dx = pivotX() - oldX
+    const dy = pivotY() - oldY
+    const c = Math.cos(swing.value)
+    const s = Math.sin(swing.value)
+    // (Rz - I)(p' - p)
+    offsetX.value += c * dx - s * dy - dx
+    offsetY.value += s * dx + c * dy - dy
+  }
 
   const setLayout = () => {
     const rect = stage.getBoundingClientRect()
     stageLeft = rect.left
     stageTop = rect.top
     stageRectStale = false
-    stageWidth = Math.max(1, rect.width)
     stageHeight = Math.max(1, rect.height)
     // Flush with the text column; the die-cut's own inset supplies the optical
     // margin a round shape wants.
@@ -563,29 +678,44 @@ export const createStickerScene = (
     multiply(projection, view, viewProj)
 
     // The hit area covers the sticker plus its grab band, and stops at the
-    // bottom of the stage so it never sits over the text below.
+    // bottom of the stage so, at rest, it never sits over the text below.
     const top = anchorY - GRAB_BAND
     const bottom = Math.min(stageHeight, anchorY + STICKER_HEIGHT + GRAB_BAND)
     hitArea.style.left = `${anchorX - GRAB_BAND}px`
     hitArea.style.top = `${top}px`
     hitArea.style.width = `${STICKER_WIDTH + GRAB_BAND * 2}px`
     hitArea.style.height = `${bottom - top}px`
+    hitPivotX = NaN
   }
 
-  const clampOffset = () => {
-    const minX = -anchorX + STAGE_MARGIN
-    const maxX = stageWidth - STICKER_WIDTH - anchorX - STAGE_MARGIN
-    const minY = -(stageHeight - STICKER_HEIGHT - anchorY - STAGE_MARGIN)
-    const maxY = anchorY - STAGE_MARGIN
-    offsetX.value = clamp(offsetX.value, Math.min(minX, 0), Math.max(maxX, 0))
-    offsetY.value = clamp(offsetY.value, Math.min(minY, 0), Math.max(maxY, 0))
+  // Past the edge of the window the sticker follows on a rubber band, so it
+  // can be flung at the edge but never lost off it.
+  const rubber = (excess: number) => 48 * (1 - Math.exp(-excess / 120))
+  const band = (value: number, min: number, max: number) =>
+    value < min ? min - rubber(min - value) : value > max ? max + rubber(value - max) : value
+
+  /** Keep a travel target inside the window. Offsets are stage-relative; y is up. */
+  const inWindow = (x: number, y: number): Point => {
+    const width = document.documentElement.clientWidth
+    const height = window.innerHeight
+    const homeLeft = stageLeft + anchorX
+    const homeTop = stageTop + anchorY
+    return {
+      x: band(x, STAGE_MARGIN - homeLeft, width - STAGE_MARGIN - STICKER_WIDTH - homeLeft),
+      y: band(y, homeTop - (height - STAGE_MARGIN - STICKER_HEIGHT), homeTop - STAGE_MARGIN),
+    }
   }
 
-  const aimAt = (hit: EdgeHit) => {
-    grab = hit.point
-    inward = hit.inward
-    direction = hit.inward
-    extent = Math.max(24, extentFrom(outline, hit.point, hit.inward))
+  /** Ask for a curl. A different kind of curl waits until the current one has rolled flat. */
+  const curl = (kind: CurlKind, at: Point, toward: Point, amount: number) => {
+    if (kind === curlKind || fold.value < 0.75) {
+      curlKind = kind
+      grab = at
+      direction = toward
+      foldTarget = amount
+    } else {
+      foldTarget = 0
+    }
   }
 
   const updateHover = () => {
@@ -604,91 +734,153 @@ export const createStickerScene = (
     const hit = nearestEdge(outline, local.x, local.y)
     if (hit.distance < GRAB_BAND) {
       const proximity = 1 - hit.distance / GRAB_BAND
-      aimAt(hit)
+      hoverGrab = hit.point
+      hoverDir = hit.inward
       hoverFold = HINT_FOLD * proximity * proximity
       hoverGloss = 0.24
     }
   }
 
-  const peelTarget = () => {
-    const dragX = pointer.x - dragStart.x
-    const dragY = -(pointer.y - dragStart.y)
-    // Outward normal in shader space (y up). `inward` is stored in local space
-    // (y down), so negating it and flipping y leaves x negated and y as-is.
-    const outX = -inward.x
-    const outY = inward.y
-
-    const along = dragX * outX + dragY * outY
-    const perpX = dragX - outX * along
-    const perpY = dragY - outY * along
-    const pull = Math.max(0, along) + 0.35 * Math.hypot(perpX, perpY)
-
-    const dragLength = Math.hypot(dragX, dragY)
-    if (dragLength > 6) {
-      // The fold axis leans into whichever way the pointer is pulling, so the
-      // curl reads as a response to the gesture rather than a fixed animation.
-      const pullX = -dragX / dragLength
-      const pullY = -dragY / dragLength
-      const inX = inward.x
-      const inY = -inward.y
-      const alignment = pullX * inX + pullY * inY
-      if (alignment > 0.15) {
-        const mixX = inX * 0.4 + pullX * 0.6
-        const mixY = inY * 0.4 + pullY * 0.6
-        const length = Math.hypot(mixX, mixY) || 1
-        direction = { x: mixX / length, y: -mixY / length }
-      } else {
-        direction = inward
-      }
-    }
-
-    const target = clamp(pull / PULL_RATIO, 0, extent * 1.04)
-    if (target > extent * DETACH_AT) mode = 'airborne'
-    return target
+  const detach = () => {
+    mode = 'airborne'
+    popTimer = POP_TIME
+    catchUp = 1
   }
 
-  const updateTargets = () => {
-    if (mode === 'settle') {
-      const home =
-        Math.abs(fold.value) < 0.35 &&
-        Math.abs(offsetX.value) < 0.35 &&
-        Math.abs(offsetY.value) < 0.35 &&
-        Math.abs(offsetZ.value) < 0.35 &&
-        Math.abs(fold.velocity) < 6 &&
-        Math.abs(offsetX.velocity) < 6 &&
-        Math.abs(offsetY.velocity) < 6
-      if (home) {
-        mode = 'idle'
-        updateHover()
-      }
+  /** Stuck to the page, being pulled: fold back over itself, or pop off. */
+  const peel = (dt: number) => {
+    const dx = pointer.x - pressPoint.x
+    const dy = pointer.y - pressPoint.y
+    const length = Math.hypot(dx, dy)
+    glossTarget = 0.28
+
+    if (length < 1.5) {
+      curl('edge', grab, direction, pressFold)
+      return
     }
 
+    const pull = { x: dx / length, y: dy / length }
+    const behind = extentFrom(outline, held, { x: -pull.x, y: -pull.y })
+    const total = behind + extentFrom(outline, held, pull)
+
+    if (behind <= total * FOLD_BACK_ZONE) {
+      // The held point rides under the pointer and everything behind the fold
+      // turns over with it, showing the backing. The fold turns from the
+      // hover lift's direction to the pull's over a few frames rather than at
+      // once, and never drops below the lift that was already showing.
+      const k = 1 - Math.exp(-dt * 30)
+      const fx = direction.x + (pull.x - direction.x) * k
+      const fy = direction.y + (pull.y - direction.y) * k
+      const turn = Math.hypot(fx, fy) || 1
+      const amount = Math.max(foldFor(length), pressFold)
+      curl('edge', held, { x: fx / turn, y: fy / turn }, amount)
+      if ((behind + amount) / total > DETACH_FLAP) detach()
+      return
+    }
+
+    // Held somewhere a fold can't start, or pulled away from itself: the
+    // trailing edge starts to lift, and a few pixels on it comes away.
+    trail = pull
+    curl('trail', supportPoint(outline, centre, { x: -pull.x, y: -pull.y }), pull, length * 2.4)
+    if (length > (pointerTouch ? POP_DISTANCE_TOUCH : POP_DISTANCE)) detach()
+  }
+
+  const centre: Point = { x: STICKER_WIDTH / 2, y: STICKER_HEIGHT / 2 }
+
+  /** Curl, lean and swing from the way the sticker is travelling. */
+  const inFlight = (dt: number, curlScale: number) => {
+    const vx = travelX
+    const vy = travelY
+    const speed = Math.hypot(vx, vy)
+
+    if (speed > 40) {
+      // Ease the direction of travel round rather than snapping it, so the curl
+      // migrates along the outline.
+      const k = 1 - Math.exp(-dt * 14)
+      const tx = trail.x + (vx / speed - trail.x) * k
+      const ty = trail.y + (vy / speed - trail.y) * k
+      const length = Math.hypot(tx, ty) || 1
+      trail = { x: tx / length, y: ty / length }
+    }
+
+    popTimer = Math.max(0, popTimer - dt)
+    catchUp *= Math.exp(-dt / CATCH_FADE)
+    const flick = POP_CURL * (popTimer / POP_TIME) ** 2
+    const amount = (AIR_CURL + Math.min(speed * AIR_CURL_PER_SPEED, AIR_CURL_MAX)) * curlScale + flick
+    curl('trail', supportPoint(outline, centre, { x: -trail.x, y: -trail.y }), trail, amount)
+
+    // Lean into the direction of travel.
+    tiltTargetY = clamp(vx * 0.0004, -0.34, 0.34)
+    tiltTargetX = clamp(vy * 0.0004, -0.34, 0.34)
+
+    // Held by one point, the rest of the sticker trails behind it: the swing
+    // turns the lever from the held point to the centre away from the motion.
+    const leverX = centre.x - held.x
+    const leverY = centre.y - held.y
+    const lever = Math.hypot(leverX, leverY)
+    if (lever > 4) {
+      const torque = (leverX * vy - leverY * vx) / lever
+      swingTarget = clamp(torque * SWING_PER_SPEED, -MAX_SWING, MAX_SWING)
+    }
+  }
+
+  const startReturn = () => {
+    mode = 'return'
+    flight.x = offsetX.value
+    flight.y = offsetY.value
+    flight.z = offsetZ.value
+    flight.swing = swing.value
+    flight.t = 0
+    const distance = Math.hypot(flight.x, flight.y)
+    flight.duration = clamp(0.3 + distance * 0.00042, 0.32, 0.62)
+    flight.arc = Math.min(28, distance * 0.06)
+  }
+
+  const updateTargets = (dt: number) => {
     foldTarget = 0
     targetX = 0
     targetY = 0
     targetZ = 0
     tiltTargetX = 0
     tiltTargetY = 0
+    swingTarget = 0
     glossTarget = 0.15
 
-    if (mode === 'peel') {
-      foldTarget = peelTarget()
-      glossTarget = 0.28
-    }
+    if (mode === 'peel') peel(dt)
 
     if (mode === 'airborne') {
-      foldTarget = extent * AIRBORNE_FOLD
-      targetX = pointer.x - dragStart.x
-      targetY = -(pointer.y - dragStart.y)
+      const to = inWindow(pointer.x - pressPoint.x, -(pointer.y - pressPoint.y))
+      targetX = to.x
+      targetY = to.y
       targetZ = AIRBORNE_LIFT
-      // Flutter: lean into the direction of travel.
-      tiltTargetY = clamp(offsetX.velocity * 0.0005, -0.4, 0.4)
-      tiltTargetX = clamp(-offsetY.velocity * 0.0005, -0.4, 0.4)
-      glossTarget = 0.36
+      glossTarget = 0.34
+      inFlight(dt, 1)
+    }
+
+    if (mode === 'return') {
+      // Home on an arc: away briskly, settling into place, and down onto the
+      // page at the very end, so it lands rather than slides.
+      flight.t += dt
+      const t = Math.min(1, flight.t / flight.duration)
+      const eased = easeHome(t)
+      targetX = flight.x * (1 - eased)
+      targetY = flight.y * (1 - eased)
+      targetZ = Math.max(0, flight.z * (1 - t ** 3) + flight.arc * Math.sin(Math.PI * t) * (1 - t))
+      glossTarget = 0.3
+      inFlight(dt, 1 - t)
+      // Square to the page well before it touches down.
+      swingTarget = flight.swing * (1 - easeInOutCubic(Math.min(1, t / 0.7)))
+      if (t >= 1) {
+        mode = 'idle'
+        // A glint across the vinyl as it sticks back down.
+        sweepStart = elapsed + 0.04
+        sweepDone = false
+        updateHover()
+      }
     }
 
     if (mode === 'idle') {
-      foldTarget = hoverFold
+      curl('edge', hoverFold > 0 ? hoverGrab : grab, hoverFold > 0 ? hoverDir : direction, hoverFold)
       tiltTargetX = hoverTiltX
       tiltTargetY = hoverTiltY
       glossTarget = hoverGloss
@@ -696,25 +888,31 @@ export const createStickerScene = (
   }
 
   const integrate = (dt: number) => {
-    const dragging = mode === 'peel' || mode === 'airborne'
-    spring(fold, foldTarget, dragging ? FOLD_DRAG : FOLD_REST, dt)
+    spring(fold, foldTarget, mode === 'peel' ? FOLD_DRAG : mode === 'idle' ? FOLD_REST : FOLD_AIR, dt)
     fold.value = Math.max(0, fold.value)
 
     if (mode === 'airborne') {
-      spring(offsetX, targetX, FOLLOW_DRAG, dt)
-      spring(offsetY, targetY, FOLLOW_DRAG, dt)
-      spring(offsetZ, targetZ, LIFT_DRAG, dt)
+      const k = 1 - Math.exp(-dt / (TRACK + (CATCH - TRACK) * catchUp))
+      for (const [axis, target] of [[offsetX, targetX], [offsetY, targetY]] as const) {
+        const before = axis.value
+        axis.value += (target - axis.value) * k
+        // Kept as a spring velocity too, so letting go hands over without a hitch.
+        axis.velocity = (axis.value - before) / dt
+      }
     } else {
-      // Softer on the way home so it floats back down rather than snapping.
-      spring(offsetX, targetX, FOLLOW_HOME, dt)
-      spring(offsetY, targetY, FOLLOW_HOME, dt)
-      spring(offsetZ, targetZ, LIFT_HOME, dt)
+      spring(offsetX, targetX, FOLLOW_RETURN, dt)
+      spring(offsetY, targetY, FOLLOW_RETURN, dt)
     }
+    const v = 1 - Math.exp(-dt / VELOCITY_SMOOTH)
+    travelX += (offsetX.velocity - travelX) * v
+    travelY += (-offsetY.velocity - travelY) * v
+    spring(offsetZ, targetZ, LIFT, dt)
+    offsetZ.value = Math.max(0, offsetZ.value)
 
     spring(tiltX, tiltTargetX, TILT, dt)
     spring(tiltY, tiltTargetY, TILT, dt)
+    spring(swing, swingTarget, mode === 'airborne' ? SWING : SWING_HOME, dt)
     spring(gloss, glossTarget, GLOSS, dt)
-    clampOffset()
   }
 
   const springs: [Spring, () => number, number][] = [
@@ -724,6 +922,7 @@ export const createStickerScene = (
     [offsetZ, () => targetZ, 0.05],
     [tiltX, () => tiltTargetX, 0.0005],
     [tiltY, () => tiltTargetY, 0.0005],
+    [swing, () => swingTarget, 0.0005],
     [gloss, () => glossTarget, 0.002],
   ]
 
@@ -738,6 +937,9 @@ export const createStickerScene = (
 
   let hitX = NaN
   let hitY = NaN
+  let hitSwing = NaN
+  let hitPivotX = NaN
+  let hitPivotY = NaN
   let canvasX = NaN
   let canvasY = NaN
 
@@ -767,11 +969,15 @@ export const createStickerScene = (
       offsetZ.value,
       tiltX.value,
       tiltY.value,
+      swing.value,
+      pivotX(),
+      pivotY(),
     )
 
-    // Grab point in shader space: origin at the sticker centre, y up.
+    // Curl origin and direction in shader space: origin at the sticker centre, y up.
     const grabX = grab.x - STICKER_WIDTH / 2
     const grabY = STICKER_HEIGHT / 2 - grab.y
+    const radius = rollRadius(fold.value)
 
     gl.bindVertexArray(vao)
 
@@ -786,6 +992,7 @@ export const createStickerScene = (
       gl.uniform2f(shadowUniforms.uGrab ?? null, grabX, grabY)
       gl.uniform2f(shadowUniforms.uDir ?? null, direction.x, -direction.y)
       gl.uniform1f(shadowUniforms.uFold ?? null, fold.value)
+      gl.uniform1f(shadowUniforms.uRadius ?? null, radius)
       gl.uniformMatrix4fv(shadowUniforms.uModel ?? null, false, model)
       gl.uniformMatrix4fv(shadowUniforms.uViewProj ?? null, false, viewProj)
       gl.uniform2f(shadowUniforms.uSkew ?? null, 0.18, -0.22)
@@ -807,6 +1014,7 @@ export const createStickerScene = (
       gl.uniform2f(stickerUniforms.uGrab ?? null, grabX, grabY)
       gl.uniform2f(stickerUniforms.uDir ?? null, direction.x, -direction.y)
       gl.uniform1f(stickerUniforms.uFold ?? null, fold.value)
+      gl.uniform1f(stickerUniforms.uRadius ?? null, radius)
       gl.uniformMatrix4fv(stickerUniforms.uModel ?? null, false, model)
       gl.uniformMatrix4fv(stickerUniforms.uViewProj ?? null, false, viewProj)
       gl.uniform3fv(stickerUniforms.uCamera ?? null, cameraPosition)
@@ -819,14 +1027,21 @@ export const createStickerScene = (
 
     gl.bindVertexArray(null)
 
-    // Keep the hit area over the sticker as it travels, so a sticker still
-    // floating home can be caught again where it is.
+    // Keep the hit area over the sticker as it travels and swings, so a
+    // sticker on its way home can be caught again where it is.
     const x = Math.round(offsetX.value)
     const y = Math.round(-offsetY.value)
-    if (x !== hitX || y !== hitY) {
+    const turn = Math.round(swing.value * 500) / 500
+    if (held.x + GRAB_BAND !== hitPivotX || held.y + GRAB_BAND !== hitPivotY) {
+      hitPivotX = held.x + GRAB_BAND
+      hitPivotY = held.y + GRAB_BAND
+      hitArea.style.transformOrigin = `${hitPivotX}px ${hitPivotY}px`
+    }
+    if (x !== hitX || y !== hitY || turn !== hitSwing) {
       hitX = x
       hitY = y
-      hitArea.style.transform = `translate3d(${x}px, ${y}px, 0)`
+      hitSwing = turn
+      hitArea.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${-turn}rad)`
     }
   }
 
@@ -836,21 +1051,21 @@ export const createStickerScene = (
     lastTime = time
     elapsed += dt
 
-    // A single gloss sweep shortly after the page reveal settles.
+    // A gloss sweep shortly after the page reveal settles, and again whenever
+    // the sticker lands back home.
     if (!sweepDone) {
-      const start = 0.7
       const duration = 0.9
-      if (elapsed >= start + duration) {
+      if (elapsed >= sweepStart + duration) {
         sweepStrength = 0
         sweepDone = true
-      } else if (elapsed >= start) {
-        const progress = (elapsed - start) / duration
+      } else if (elapsed >= sweepStart) {
+        const progress = (elapsed - sweepStart) / duration
         sweep = -0.85 + progress * 1.7
         sweepStrength = Math.sin(Math.PI * progress) * 0.26
       }
     }
 
-    updateTargets()
+    updateTargets(dt)
     accumulator += dt
     while (accumulator >= STEP) {
       integrate(STEP)
@@ -920,14 +1135,41 @@ export const createStickerScene = (
     if (!canGrab(point)) return
 
     pointer = point
-    dragStart = point
     pointerInside = true
     pointerId = event.pointerId
+    pointerTouch = event.pointerType !== 'mouse'
     hitArea.style.cursor = 'grabbing'
 
     const local = toLocal(point.x, point.y)
-    aimAt(nearestEdge(outline, local.x, local.y))
-    mode = 'peel'
+    const edge = nearestEdge(outline, local.x, local.y)
+    const away =
+      mode === 'airborne' ||
+      mode === 'return' ||
+      Math.hypot(offsetX.value, offsetY.value) > 2 ||
+      offsetZ.value > 2
+
+    if (away) {
+      // Caught off the page: it stays in the air and comes with the pointer from
+      // exactly where it is.
+      holdAt(edge.inside ? local : edge.point)
+      mode = 'airborne'
+      popTimer = 0
+      catchUp = 1
+    } else {
+      // On the page: hold the point under the pointer, or the edge itself when
+      // the press lands on or just off it, which is where the hover lift already is.
+      holdAt(edge.inside && edge.distance > 10 ? local : edge.point)
+      pressFold = 0
+      if (hoverFold > 0 && curlKind === 'edge') {
+        grab = hoverGrab
+        direction = hoverDir
+        // Pressed, the edge comes up a touch more than the hover lift, to say it has hold.
+        pressFold = hoverFold + 6
+      }
+      mode = 'peel'
+    }
+    // The held point starts under the pointer; from here the offset is the pointer's travel.
+    pressPoint = { x: point.x - offsetX.value, y: point.y + offsetY.value }
 
     try {
       hitArea.setPointerCapture(event.pointerId)
@@ -945,11 +1187,14 @@ export const createStickerScene = (
     } catch {
       // Already released.
     }
-    mode = 'settle'
+    if (mode === 'airborne') startReturn()
+    else mode = 'idle'
     pointerId = null
     // Touch pointers cease to exist on release; a mouse is still hovering.
     pointerInside = event.pointerType === 'mouse'
-    hitArea.style.cursor = pointerInside && canGrab(stagePoint(event)) ? 'grab' : 'default'
+    pointer = stagePoint(event)
+    hitArea.style.cursor = pointerInside && mode === 'idle' && canGrab(pointer) ? 'grab' : 'default'
+    updateHover()
     wake()
   }
 
@@ -998,7 +1243,6 @@ export const createStickerScene = (
     },
     resize() {
       setLayout()
-      clampOffset()
       draw()
       wake()
     },

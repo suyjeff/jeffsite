@@ -458,20 +458,27 @@ export default function ResumeLink({ className, children }: { className?: string
             </div>
           </div>
         </div>
-        <div ref={barRef} className="rs-bar" style={{ opacity: 0 }}>
-          <a href={resumePdf} download className="rs-btn">
-            Download PDF
+        <div ref={barRef} className="rs-bar" role="group" aria-label="Resumé actions" style={{ opacity: 0 }}>
+          <a href={resumePdf} download className="rs-btn" aria-label="Download PDF" title="Download PDF">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 2.5v7.25M4.75 6.75 8 10l3.25-3.25M3 13h10" />
+            </svg>
           </a>
+          <span className="rs-divider" aria-hidden="true" />
           <button
             type="button"
             className="rs-btn"
+            aria-label="Close"
+            title="Close"
             onClick={(e) => {
               // A keyboard press on a button arrives as a click with no pointer position.
               closedByKey.current = e.detail === 0
               close()
             }}
           >
-            Close
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
+            </svg>
           </button>
         </div>
         <div ref={genieRef} className="rs-genie" aria-hidden="true" style={{ ['--rs-art' as string]: `url(${resumeArt})` }} />

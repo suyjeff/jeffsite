@@ -109,14 +109,15 @@ const StickerHeader = () => {
   }, [motionKey])
 
   return (
-    <div className="-mt-6 sm:-mt-8 opacity-0 animate-reveal">
+    // Above the rest of the page, so the sticker can be carried over anything on it.
+    <div className="relative z-10 -mt-6 sm:-mt-8 opacity-0 animate-reveal">
       <h1 className="sr-only">Jeff Su</h1>
       <div ref={stageRef} className="relative w-full h-44 sm:h-52 select-none">
         {/* Sized and positioned by the scene: the sticker plus headroom, moving
-            with it, so a sticker lifted or curling at the edge of where it can
-            be dragged is still drawn in full. Never interactive: input goes
-            through the hit area, so it can pass over the text below without
-            blocking it. */}
+            with it wherever it is carried, so a sticker lifted, swinging or
+            curling is still drawn in full. Never interactive: input goes
+            through the hit area, so the canvas's empty margin never blocks
+            the page beneath it. */}
         <canvas
           ref={canvasRef}
           aria-hidden="true"

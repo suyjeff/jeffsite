@@ -70,15 +70,15 @@ export const STICKER_HEIGHT = Math.round(CUT_HEIGHT * SCALE + EDGE_MARGIN * 2)
 export const SCRIPT_OFFSET_X = -CUT_MIN_X * SCALE + EDGE_MARGIN
 export const SCRIPT_OFFSET_Y = -CUT_MIN_Y * SCALE + EDGE_MARGIN
 
-/** Gap kept between the sticker and the edge of its stage. */
+/** Gap kept between a dragged sticker and the edge of the window. */
 export const STAGE_MARGIN = 6
 
 /**
- * How far the canvas overhangs the stage on every side. The stage bounds where
- * the sticker can be dragged; the bleed gives a sticker that is lifted, tilted
- * or curling right at that boundary room to be drawn instead of clipped.
+ * How far the canvas overhangs the sticker on every side. The canvas travels
+ * with the sticker; the bleed gives it room to be drawn lifted, tilted, swung
+ * round the point it is held by, or curling, instead of clipped.
  */
-export const CANVAS_BLEED = 72
+export const CANVAS_BLEED = 104
 
 /** Distance from the outline at which the peel affordance starts to show. */
 export const GRAB_BAND = 34
@@ -220,4 +220,20 @@ export const extentFrom = (points: Point[], origin: Point, dir: Point): number =
   }
 
   return max
+}
+
+/** The outline point furthest along `dir` from `origin`: the edge that leads in that direction. */
+export const supportPoint = (points: Point[], origin: Point, dir: Point): Point => {
+  let best = points[0]
+  let max = -Infinity
+
+  for (const point of points) {
+    const along = (point.x - origin.x) * dir.x + (point.y - origin.y) * dir.y
+    if (along > max) {
+      max = along
+      best = point
+    }
+  }
+
+  return best
 }
