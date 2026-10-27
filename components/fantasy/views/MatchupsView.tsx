@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { useFantasy } from '../FantasyContext'
 import { providerName } from '../../../lib/fantasy/useLeagueData'
 import { Disclosure } from '../Disclosure'
-import { Benches, LineupDuel, OddsBar, decidedBy, useMatchups, type MatchupRead } from '../matchup'
+import { Benches, LineupDuel, OddsBar, decidedBy, useMatchups, winText, type MatchupRead } from '../matchup'
 import TeamName from '../TeamName'
-import { Badge, Button, Empty, PageHeader, Panel, Pts, PtsKey, RowCover, Segmented, cx, pct } from '../ui'
+import { Badge, Button, Empty, PageHeader, Panel, Pts, PtsKey, RowCover, Segmented, cx } from '../ui'
 
 type View = 'list' | 'grid'
 
@@ -26,7 +26,7 @@ const Row = ({ m, surname, open }: { m: MatchupRead; surname: (id: string) => st
         <span className="relative flex min-w-0 flex-1">
           <TeamName id={s.rosterId} size={20} className="text-[13px]" />
         </span>
-        <span className="num w-9 text-right text-[10.5px] text-ff-muted">{pct(p)}</span>
+        <span className="num w-9 text-right text-[10.5px] text-ff-muted">{winText(m, p)}</span>
         <span className="w-12 text-right text-[14px] font-medium">
           <Score m={m} side={k} />
         </span>
@@ -56,9 +56,9 @@ const Row = ({ m, surname, open }: { m: MatchupRead; surname: (id: string) => st
           <Score m={m} side="a" />
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="num w-8 text-right text-[10.5px] text-ff-muted">{pct(m.p)}</span>
+          <span className="num w-8 text-right text-[10.5px] text-ff-muted">{winText(m, m.p)}</span>
           <OddsBar p={m.p} />
-          <span className="num w-8 text-[10.5px] text-ff-muted">{pct(1 - m.p)}</span>
+          <span className="num w-8 text-[10.5px] text-ff-muted">{winText(m, 1 - m.p)}</span>
         </span>
         <span className="text-[13.5px] font-medium">
           <Score m={m} side="b" />
@@ -87,7 +87,7 @@ const Card = ({ m, mine, surname, open }: { m: MatchupRead; mine: boolean; surna
         <span className="relative flex min-w-0 flex-1">
           <TeamName id={s.rosterId} size={22} className="text-[13px]" />
         </span>
-        <span className="num w-9 text-right text-[10.5px] text-ff-muted">{pct(p)}</span>
+        <span className="num w-9 text-right text-[10.5px] text-ff-muted">{winText(m, p)}</span>
         <span className={cx('w-14 text-right text-[16px] font-medium', p >= 0.5 ? 'text-ff-text' : 'text-ff-text2')}>
           <Score m={m} side={side} />
         </span>

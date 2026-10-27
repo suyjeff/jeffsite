@@ -278,7 +278,7 @@ const GameRow = ({ g, recap }: { g: RecapGame; recap: Recap }) => {
       </div>
       {upset && (
         <div className="mt-1 font-mono text-[10.5px] text-ff-warn">
-          upset · <TeamLabel id={g.winner!} /> had {pct(g.pWinner)} to win
+          upset · <TeamLabel id={g.winner!} /> had {chance(g.pWinner)} to win
         </div>
       )}
     </li>
@@ -297,7 +297,7 @@ const headlines = (recap: Recap): ReactNode[] => {
       <Award
         key="upset"
         label="Upset of the week"
-        value={pct(a.upset.pWinner)}
+        value={chance(a.upset.pWinner)}
         unit="to win"
         tone="gold"
         who={<TeamLabel id={a.upset.winner!} avatar={18} />}
@@ -462,7 +462,7 @@ const PlayoffPanel = ({ recap, odds, at }: { recap: Recap; odds: Record<number, 
           ))}
           {swing && Math.abs(swing.o.after.playoffs - swing.o.before.playoffs) >= 0.02 && (
             <p>
-              Biggest swing: <span className="font-medium"><TeamLabel id={swing.t.rosterId} /></span>, {chance(swing.o.before.playoffs, 0, swing.o.before.clinch)} to {chance(swing.o.after.playoffs, 0, swing.o.after.clinch)}.
+              Biggest swing: <span className="font-medium"><TeamLabel id={swing.t.rosterId} /></span>, {chance(swing.o.before.playoffs, swing.o.before.clinch)} to {chance(swing.o.after.playoffs, swing.o.after.clinch)}.
             </p>
           )}
         </div>

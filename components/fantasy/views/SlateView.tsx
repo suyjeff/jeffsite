@@ -239,7 +239,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
       watch.push({
         text: (
           <>
-            <b className="font-medium text-ff-text">A win is worth {pts(gap)} points of playoff odds.</b> {odds(st.win.playoffs)} with it, {odds(st.loss.playoffs)} without.
+            <b className="font-medium text-ff-text">A win is worth {pts(gap)} points of playoff odds.</b> {odds(st.win.playoffs, st.win.clinch)} with it, {odds(st.loss.playoffs, st.loss.clinch)} without.
           </>
         ),
         tone: gap >= 0.12 ? 'warn' : 'neutral',
@@ -532,7 +532,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
                 <Stat
                   label="On the line"
                   value={mine.stakes ? `${pts(mine.stakes.win.playoffs - mine.stakes.loss.playoffs)}pt` : '…'}
-                  sub={mine.stakes ? `playoff odds: ${odds(mine.stakes.win.playoffs)} with a win, ${odds(mine.stakes.loss.playoffs)} without` : 'simulating the season both ways'}
+                  sub={mine.stakes ? `playoff odds: ${odds(mine.stakes.win.playoffs, mine.stakes.win.clinch)} with a win, ${odds(mine.stakes.loss.playoffs, mine.stakes.loss.clinch)} without` : 'simulating the season both ways'}
                 />
                 <Stat
                   label="Banked"

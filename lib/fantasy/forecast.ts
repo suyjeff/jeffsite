@@ -30,6 +30,8 @@ import type { PlayerMap } from './types'
 
 const round2 = (x: number) => Math.round(x * 100) / 100
 const round3 = (x: number) => Math.round(x * 1000) / 1000
+/** A stored pre-game probability is never exactly 0 or 1: rounding must not turn a heavy favourite into a certainty. */
+const clampOdds = (p: number) => Math.min(0.999, Math.max(0.001, p))
 
 /** Standard normal CDF (Abramowitz–Stegun 7.1.26 on erf), |error| < 1.5e-7. */
 export const phi = (x: number) => {
@@ -403,13 +405,15 @@ export const divisionsOf = (rows: { roster_id: number; settings?: { division?: n
  * Playoff spots settled by wins alone. A team is in when, even losing out,
  * fewer than `spots` other teams could still reach its win total; out when at
  * least `spots` teams already have more wins than it could reach. Ties count
- * against the team (points-for is unknown in advance), and head-to-head games
- * are not netted out, so this only ever errs toward "still open".
+ * against the team (points-for is unknown in advance, and platforms break ties
+ * differently), and head-to-head games are not netted out, so this only ever
+ * errs toward "still open".
  *
  * `weeksLeft` is how many regular-season weeks remain on the calendar. Each
  * team is assumed to play at least that many games, so a week whose matchups
  * failed to load never makes a race look decided. With nothing left to play,
- * the standings are final and points-for breaks the ties.
+ * the standings are final, and a spot that hangs on a tie in wins stays open
+ * rather than being handed out by a tiebreak.
  */
 export const clinchStatus = (
   teams: number[],
@@ -432,8 +436,16 @@ export const clinchStatus = (
   const divs = new Set(teams.map(div).filter((d): d is number => d != null))
   const split = divs.size >= 2
   if (spots > 0 && spots < teams.length && teams.every((t) => games(t) === 0)) {
-    const final = seedOrder(teams, now, (t) => record[t]?.pf ?? 0, split ? div : undefined)
-    final.forEach((t, i) => (out[t] = i < spots ? 'in' : 'out'))
+    // Final standings. Only a result no tiebreak can change is called: the team is put last, then first, among
+    // everyone level with it on wins (platforms break those ties differently, so none is assumed), and it is in or
+    // out only if both seatings agree. Without ties that is the plain final order.
+    const BIG = 1e12
+    const seat = (t: number, pf: number) => seedOrder(teams, now, (o) => (o === t ? pf : 0), split ? div : undefined).indexOf(t)
+    for (const t of teams) {
+      if (seat(t, -BIG) < spots) out[t] = 'in'
+      else if (seat(t, BIG) >= spots) out[t] = 'out'
+      else out[t] = null
+    }
     return out
   }
   for (const t of teams) {
@@ -447,12 +459,13 @@ export const clinchStatus = (
       out[t] = threats < spots ? 'in' : ahead >= spots ? 'out' : null
       continue
     }
-    // With divisions, a division winner takes a spot whatever its record. Winning its own division puts a team in;
-    // otherwise every other division's winner may be someone who cannot reach its wins, so each one costs a spot.
-    // And a team that can still win its division is never out.
-    const rivals = teams.filter((o) => o !== t && div(o) === div(t))
-    const winsDivision = rivals.every((o) => max(o) < now(t))
-    const canWinDivision = rivals.every((o) => now(o) <= max(t))
+    // With divisions, a division winner takes a spot whatever its record. Winning its own division puts a team in
+    // only when every division's winner makes it (no more divisions than spots; otherwise the winners are ranked
+    // among themselves); a team in no division cannot win one. Otherwise every other division's winner may be someone
+    // who cannot reach its wins, so each one costs a spot. And a team that can still win its division is never out.
+    const rivals = div(t) == null ? null : teams.filter((o) => o !== t && div(o) === div(t))
+    const winsDivision = rivals != null && divs.size <= spots && rivals.every((o) => max(o) < now(t))
+    const canWinDivision = rivals != null && rivals.every((o) => now(o) <= max(t))
     const otherDivisions = [...divs].filter((d) => d !== div(t)).length
     out[t] = winsDivision || threats + otherDivisions < spots ? 'in' : ahead >= spots && !canWinDivision ? 'out' : null
   }
@@ -670,12 +683,14 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = past
     .map((g) => {
       const muA = mean(g.a, g.week)
       const muB = mean(g.b, g.week)
-      return { week: g.week, a: g.a, b: g.b, muA: round2(muA), muB: round2(muB), pA: round3(winProb(muA, muB, noise.sigma)) }
+      return { week: g.week, a: g.a, b: g.b, muA: round2(muA), muB: round2(muB), pA: clampOdds(round3(winProb(muA, muB, noise.sigma))) }
     })
   return { ratings, byId, sim, sigma: round2(noise.sigma), noiseN: noise.n, tau: round2(tau), leagueEff: round3(leagueEff), sims, nextWeek, mean }
 }
 
-export type Stakes = { win: { playoffs: number; title: number }; loss: { playoffs: number; title: number } }
+/** What a team's odds are in one outcome of its game; `clinch` is that outcome's settled status, if any. */
+export type Stake = { playoffs: number; title: number; clinch?: SimTeam['clinch'] }
+export type Stakes = { win: Stake; loss: Stake }
 
 /**
  * What this week's result is worth: each team's playoff and title odds if it wins this week's game and if
@@ -686,7 +701,7 @@ export const weekStakes = (input: ForecastInput, base: Forecast, sims = 1500): R
   const out: Record<number, Stakes> = {}
   const ids = input.teams.map((t) => t.rosterId)
   const mean = persistMean(base.mean, ids)
-  const pick = (t: SimTeam | undefined) => ({ playoffs: t?.playoffs ?? 0, title: t?.title ?? 0 })
+  const pick = (t: SimTeam | undefined): Stake => ({ playoffs: t?.playoffs ?? 0, title: t?.title ?? 0, clinch: t?.clinch ?? null })
   for (const g of base.nextWeek) {
     const rest = input.schedule.filter((x) => !(x.week === g.week && ((x.a === g.a && x.b === g.b) || (x.a === g.b && x.b === g.a))))
     const run = (aWins: boolean) => {

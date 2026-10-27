@@ -8,15 +8,10 @@ import { optimalLineup, type LineupPlayer, type Slot } from './lineup'
 import { activeParts, buildTeamSeasons, buildTeamWeeks, computePower, type PowerWeights, type TeamSeason, type TeamWeek } from './power'
 import type { ScheduleGame } from './context'
 import { longPastByCalendar } from './gameTime'
+import { chance } from './format'
 import type { PlayerMap, SleeperMatchup } from './types'
 
 /** A phrase about teams: plain text and team references, so the view can render names its own way. */
-/** A pre-game chance as a whole percent that never reads as a certainty: ">99%", "<1%". */
-const chancePct = (p: number) => {
-  const r = Math.round(p * 100)
-  return r >= 100 ? '>99%' : r <= 0 ? '<1%' : `${r}%`
-}
-
 export type Part = string | { team: number }
 export type Reason = { tone: 'pos' | 'neg' | 'neutral'; parts: Part[] }
 
@@ -269,10 +264,10 @@ export const buildRecap = (input: RecapInput): Recap => {
     const margin = t.oppPoints != null ? Math.abs(t.points - t.oppPoints) : 0
     const upset = g && g.pWinner != null && g.pWinner < 0.4
     if (t.result === 'W' && opp != null) {
-      if (upset) out.push({ w: 9, r: { tone: 'pos', parts: [`Upset `, { team: opp }, ` as a ${chancePct(g!.pWinner!)} underdog`] } })
+      if (upset) out.push({ w: 9, r: { tone: 'pos', parts: [`Upset `, { team: opp }, ` as a ${chance(g!.pWinner!)} underdog`] } })
       else out.push({ w: margin >= 30 ? 6 : 3, r: { tone: 'pos', parts: [`Beat `, { team: opp }, ` by ${margin.toFixed(1)}`] } })
     } else if (t.result === 'L' && opp != null) {
-      if (upset) out.push({ w: 9, r: { tone: 'neg', parts: [`Upset by `, { team: opp }, ` as a ${chancePct(1 - g!.pWinner!)} favourite`] } })
+      if (upset) out.push({ w: 9, r: { tone: 'neg', parts: [`Upset by `, { team: opp }, ` as a ${chance(1 - g!.pWinner!)} favourite`] } })
       else out.push({ w: margin >= 30 ? 6 : 3, r: { tone: 'neg', parts: [`Lost to `, { team: opp }, ` by ${margin.toFixed(1)}`] } })
     } else if (t.result === 'T' && opp != null) out.push({ w: 5, r: { tone: 'neutral', parts: [`Tied `, { team: opp }] } })
     if (n > 2 && t.weekRank === 1) out.push({ w: 8, r: { tone: 'pos', parts: [`Week-high ${t.points.toFixed(1)}`] } })

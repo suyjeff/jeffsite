@@ -1,5 +1,6 @@
 import React, { Children, createContext, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { TrimmedPlayer } from '../../lib/fantasy/types'
+import { chance, share } from '../../lib/fantasy/format'
 import { ShowMore } from './views/ShowMore'
 
 // ---------- Formatting ----------
@@ -13,45 +14,21 @@ export const fmtSigned = (n: number | null | undefined, digits = 1) => {
   return `${n > 0 ? '+' : '−'}${Math.abs(n).toFixed(digits)}`
 }
 
-/**
- * A share as a whole percent. Percents are only ever whole numbers here, and a share strictly between 0 and 1 never
- * rounds to a certainty: 99.6% reads ">99%" and 0.3% reads "<1%"; only an exact 1 or 0 reads 100% or 0%. For a
- * simulated probability, where even an exact 1 is not a certainty, use `odds`.
- */
-export const pct = (n: number | null | undefined, _digits = 0) => {
-  if (n === null || n === undefined || Number.isNaN(n)) return '–'
-  const r = Math.round(n * 100)
-  if (n > 0 && n < 1) {
-    if (r >= 100) return '>99%'
-    if (r <= 0) return '<1%'
-  }
-  return `${r}%`
-}
+/** A share as a whole percent; only an exact 1 or 0 reads 100% or 0% (see lib/fantasy/format). */
+export const pct = share
 
 /**
  * One of a simulated team's odds, settled by its clinch status: playoffs read
  * it directly; bye, final and title are only ever settled at zero, by elimination.
  */
-export const simOdds = (s: { playoffs: number; bye: number; final: number; title: number; clinch: 'in' | 'out' | null } | null | undefined, key: 'playoffs' | 'bye' | 'final' | 'title', digits = 0) =>
-  s ? odds(s[key], digits, key === 'playoffs' ? s.clinch : s.clinch === 'out' ? 'out' : null) : '–'
+export const simOdds = (s: { playoffs: number; bye: number; final: number; title: number; clinch: 'in' | 'out' | null } | null | undefined, key: 'playoffs' | 'bye' | 'final' | 'title') =>
+  s ? odds(s[key], key === 'playoffs' ? s.clinch : s.clinch === 'out' ? 'out' : null) : '–'
 
 /** A read on a player as a signed percent: −25%, +10%. */
 export const signedPct = (p: number) => `${fmtSigned(p * 100, 0)}%`
 
-/**
- * A simulated probability, as a whole percent. It never reads as a certainty the arithmetic has not settled: 99.7%,
- * and even every one of the simulated seasons, reads ">99%"; 100% or 0% appear only when `settled` says the outcome is
- * decided (clinched, eliminated).
- */
-export const odds = (p: number | null | undefined, _digits = 0, settled?: 'in' | 'out' | null) => {
-  if (p === null || p === undefined || Number.isNaN(p)) return '–'
-  if (settled === 'in') return '100%'
-  if (settled === 'out') return '0%'
-  const r = Math.round(p * 100)
-  if (r >= 100) return '>99%'
-  if (r <= 0) return '<1%'
-  return `${r}%`
-}
+/** A simulated probability as a whole percent, 100% or 0% only when `settled` says it is decided (see lib/fantasy/format). */
+export const odds = chance
 
 /** How long ago a timestamp (ms) was, compactly: "40m", "5h", "3d". */
 export const ago = (ms: number, now = Date.now()) => {

@@ -9,7 +9,7 @@ import { Callout } from './Callout'
 import { InsightMark } from './InsightMark'
 import { scoutPlayers, useScout } from './ScoutReport'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
-import { Avatar, Badge, Button, DeltaChip, Stat, fmt, pct, simOdds } from './ui'
+import { Avatar, Badge, Button, DeltaChip, Stat, fmt, odds, simOdds } from './ui'
 
 /**
  * One team at a glance, over the page: where it stands, what it projects, how it got here and what it starts this
@@ -84,7 +84,7 @@ const TeamSheet = ({ rosterId }: { rosterId: number }) => {
                   <span className="flex min-w-0 flex-1">
                     <TeamName id={opp} size={18} />
                   </span>
-                  <span className="num text-ff-text">{pct(p)}</span>
+                  <span className="num text-ff-text">{odds(p)}</span>
                   <span className="text-[11.5px] text-ff-muted">to win</span>
                 </div>
               </SheetSection>

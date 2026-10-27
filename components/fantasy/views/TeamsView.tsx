@@ -30,6 +30,7 @@ import {
   usePhone,
   fmt,
   fmtSigned,
+  odds,
   pct,
   simOdds,
   type Column,
@@ -162,7 +163,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
             <span className="flex max-w-[130px]">
               <TeamName id={opp} avatar={false} />
             </span>
-            <span className={cx('num', p >= 0.6 ? 'text-ff-pos' : p <= 0.4 ? 'text-ff-neg' : 'text-ff-text2')}>{pct(p)}</span>
+            <span className={cx('num', p >= 0.6 ? 'text-ff-pos' : p <= 0.4 ? 'text-ff-neg' : 'text-ff-text2')}>{odds(p)}</span>
           </span>
         )
       },

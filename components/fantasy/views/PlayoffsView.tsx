@@ -187,12 +187,12 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                   <td className="h-8 whitespace-nowrap border-b border-ff-line/60 px-2 text-right">
                     <span className="inline-flex items-center justify-end gap-1.5">
                       <Meter value={s?.playoffs ?? 0} max={1} width={48} thin className="hidden md:inline-block" />
-                      <span className="num w-10 text-right text-ff-text">{odds(s?.playoffs, 0, s?.clinch)}</span>
+                      <span className="num w-10 text-right text-ff-text">{odds(s?.playoffs, s?.clinch)}</span>
                       {tweaked && <Delta v={(s?.playoffs ?? 0) - (b?.playoffs ?? 0)} />}
                     </span>
                   </td>
                   <td className="h-8 whitespace-nowrap border-b border-ff-line/60 pl-2 pr-3 text-right">
-                    <span className="num inline-block w-10 text-right text-ff-text2">{odds(s?.title, (s?.title ?? 0) < 0.1 ? 1 : 0)}</span>
+                    <span className="num inline-block w-10 text-right text-ff-text2">{odds(s?.title)}</span>
                     {tweaked && <Delta v={(s?.title ?? 0) - (b?.title ?? 0)} />}
                   </td>
                 </tr>
@@ -413,7 +413,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
             <StatGrid>
               <Stat
                 label="Your playoff odds"
-                value={odds(mine.playoffs, 0, mine.clinch)}
+                value={odds(mine.playoffs, mine.clinch)}
                 meter={mine.playoffs}
                 badge={
                   tweaked && base
@@ -426,7 +426,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                 sub={`${fmt(mine.wins)} wins on average`}
               />
               <Stat label="Bye" value={odds(mine.bye)} sub="a top seed, skipping round one" />
-              <Stat label="Title" value={odds(mine.title, mine.title < 0.1 ? 1 : 0)} sub={`final ${odds(mine.final)}`} />
+              <Stat label="Title" value={odds(mine.title)} sub={`final ${odds(mine.final)}`} />
               <Stat label="Most likely seed" value={likelySeed ? `#${likelySeed}` : '–'} sub={likelySeed ? `${odds(mine.seeds[likelySeed])} of seasons` : undefined} />
             </StatGrid>
           )}

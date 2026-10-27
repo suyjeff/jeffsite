@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../../lib/fantasy/analysis'
-import { SIM } from '../../../lib/fantasy/forecast'
+import { chance } from '../../../lib/fantasy/format'
+import { SIM, seedOrder } from '../../../lib/fantasy/forecast'
 import { opponentsByWeek, RESULTS_PRIOR_GAMES, type PowerWeights } from '../../../lib/fantasy/power'
 import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
 import { DivergingStacks, Legend } from '../charts'
@@ -82,14 +83,17 @@ const PowerView = ({
     return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0
   }, [teams, seasonById])
 
+  // The playoff order: by record, except that a league with divisions seeds each division's winner first.
+  const divisions = models.forecastInput.divisions
   const standings = useMemo(
     () =>
-      [...teams].sort((a, b) => {
-        const sa = seasonById[a.rosterId]
-        const sb = seasonById[b.rosterId]
-        return sb.wins + sb.ties / 2 - (sa.wins + sa.ties / 2) || sb.pf - sa.pf
-      }),
-    [teams, seasonById],
+      seedOrder(
+        teams,
+        (t) => seasonById[t.rosterId].wins + seasonById[t.rosterId].ties / 2,
+        (t) => seasonById[t.rosterId].pf,
+        divisions ? (t) => divisions[t.rosterId] : undefined,
+      ),
+    [teams, seasonById, divisions],
   )
 
   const weightSum = COMPONENTS.reduce((a, c) => a + Math.max(0, weights[c.key]), 0) || 1
@@ -118,7 +122,7 @@ const PowerView = ({
       ),
     },
     { key: 'proj', label: 'Lineup', align: 'right', title: 'Projected optimal lineup per week, before lineup efficiency', sort: (r) => forecast!.byId[r.rosterId].projected, render: (r) => fmt(forecast!.byId[r.rosterId].projected) },
-    { key: 'eff', label: 'Eff', align: 'right', title: 'Points scored per point of projected optimal lineup, shrunk toward the league. Captures lineup calls and how a roster runs against its projections.', sort: (r) => forecast!.byId[r.rosterId].efficiency, render: (r) => pct(forecast!.byId[r.rosterId].efficiency, 1) },
+    { key: 'eff', label: 'Eff', align: 'right', title: 'Points scored per point of projected optimal lineup, shrunk toward the league. Captures lineup calls and how a roster runs against its projections.', sort: (r) => forecast!.byId[r.rosterId].efficiency, render: (r) => pct(forecast!.byId[r.rosterId].efficiency) },
     {
       key: 'form',
       label: 'Form',
@@ -137,7 +141,7 @@ const PowerView = ({
     },
     { key: 'xw', label: 'Proj W', align: 'right', hideBelow: 'sm', title: 'Mean simulated wins at season end', sort: (r) => forecast!.sim[r.rosterId].wins, render: (r) => fmt(forecast!.sim[r.rosterId].wins) },
     { key: 'po', label: 'Playoffs', align: 'right', sort: (r) => forecast!.sim[r.rosterId].playoffs, render: (r) => <span className={forecast!.sim[r.rosterId].playoffs >= 0.5 ? 'text-ff-text' : 'text-ff-muted'}>{simOdds(forecast!.sim[r.rosterId], 'playoffs')}</span> },
-    { key: 'title', label: 'Title', align: 'right', sort: (r) => forecast!.sim[r.rosterId].title, render: (r) => simOdds(forecast!.sim[r.rosterId], 'title', forecast!.sim[r.rosterId].title < 0.1 ? 1 : 0) },
+    { key: 'title', label: 'Title', align: 'right', sort: (r) => forecast!.sim[r.rosterId].title, render: (r) => simOdds(forecast!.sim[r.rosterId], 'title') },
     { key: 'elo', label: 'Elo', align: 'right', hideBelow: 'xl', sort: (r) => models.eloRated[r.rosterId] ?? 1500, render: (r) => <span className="text-ff-muted">{Math.round(models.eloRated[r.rosterId] ?? 1500)}</span> },
   ]
 
@@ -269,7 +273,7 @@ const PowerView = ({
                 label="Playoff odds"
                 value={held ? '–' : simOdds(forecast.sim[myRosterId!], 'playoffs')}
                 meter={held ? undefined : forecast.sim[myRosterId!].playoffs}
-                sub={held ? 'held until the reveal' : `title ${simOdds(forecast.sim[myRosterId!], 'title', 1)} · bye ${simOdds(forecast.sim[myRosterId!], 'bye')}`}
+                sub={held ? 'held until the reveal' : `title ${simOdds(forecast.sim[myRosterId!], 'title')} · bye ${simOdds(forecast.sim[myRosterId!], 'bye')}`}
               />
             )}
             {here('standings') && (
@@ -400,7 +404,7 @@ const PowerView = ({
         </TabSection>
 
         <TabSection id="standings" active={tab === 'standings'}>
-          <Panel title="Standings" pad={false} actions={playoffTeams ? <span>playoff line after #{playoffTeams}</span> : null}>
+          <Panel title="Standings" pad={false} actions={playoffTeams ? <span>{divisions ? 'division winners seed first · ' : ''}playoff line after #{playoffTeams}</span> : null}>
             <Table
               rows={standings.map((t, i) => ({ rosterId: t.rosterId, seed: i + 1 }))}
               rowKey={(r) => r.rosterId}
@@ -491,7 +495,7 @@ export const OddsGrid = ({ onTeam }: { onTeam?: (id: number) => void }) => {
                         className={cx('num h-8 border-b border-ff-line/60 text-center text-[10.5px]', p >= 0.25 ? 'text-ff-panel' : p >= 0.02 ? 'text-ff-text2' : 'text-ff-muted/50', i + 1 === cut && 'border-r border-r-ff-line2')}
                         style={{ background: probShade(p) }}
                       >
-                        {p >= 0.005 ? Math.round(p * 100) : '·'}
+                        {p >= 0.005 ? chance(p).replace('%', '') : '·'}
                       </td>
                     )
                   })}
@@ -499,7 +503,7 @@ export const OddsGrid = ({ onTeam }: { onTeam?: (id: number) => void }) => {
                   <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text">{simOdds(s, 'playoffs')}</td>
                   <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{simOdds(s, 'bye')}</td>
                   <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text2">{simOdds(s, 'final')}</td>
-                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text">{simOdds(s, 'title', 1)}</td>
+                  <td className="num h-8 border-b border-ff-line/60 px-2 text-right text-ff-text">{simOdds(s, 'title')}</td>
                 </tr>
               )
             })}

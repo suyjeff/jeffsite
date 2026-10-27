@@ -5,7 +5,7 @@ import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
 import { dayOf } from './slateBits'
-import { BOX_LINE, Pts, ScoreState, WeekScore, WinBar, cx, fmt, fmtSigned, pct, usePhone, type PtsKind } from './ui'
+import { BOX_LINE, Pts, ScoreState, WeekScore, WinBar, cx, fmt, fmtSigned, odds, pct, usePhone, type PtsKind } from './ui'
 import { useSlate } from './useSlate'
 import { boxScore, useWeekNow, type WeekNow } from './useWeekNow'
 
@@ -36,6 +36,9 @@ export const countLine = (c: SideCount) =>
   [c.final && `${c.final} final`, c.live && `${c.live} live`, `${c.left} to play`].filter(Boolean).join(' · ')
 
 export type SlotRow = { slot: string; a: string | null; b: string | null; sa: ReturnType<typeof scoreOf> | null; sb: ReturnType<typeof scoreOf> | null; edge: number }
+
+/** A side's win chance. Once the games have begun it can be settled for real, so it is a plain share; before, it is a forecast and never reads as a certainty. */
+export const winText = (m: { started: boolean }, p: number) => (m.started ? pct(p) : odds(p))
 
 /** A matchup read for display: both sides, their score kinds, slot by slot, and the players still to decide it. */
 export type MatchupRead = {
@@ -194,10 +197,10 @@ export const MatchupScore = ({ m, size = 'lg' }: { m: MatchupHead; size?: 'lg' |
         <span className={cx('font-mono text-[11px] text-ff-muted', size === 'lg' ? 'pt-12' : 'pt-10')}>vs</span>
         {side(m.b, m.kindB, 'right', m.countB)}
       </div>
-      <div className="mt-4 flex items-center gap-2" title={`Win odds ${pct(m.p)} – ${pct(1 - m.p)}`}>
-        <span className="num w-10 text-[13px] font-medium text-ff-text">{pct(m.p)}</span>
+      <div className="mt-4 flex items-center gap-2" title={`Win odds ${winText(m, m.p)} – ${winText(m, 1 - m.p)}`}>
+        <span className="num w-10 text-[13px] font-medium text-ff-text">{winText(m, m.p)}</span>
         <OddsBar p={m.p} height="h-2" />
-        <span className="num w-10 text-right text-[13px] font-medium text-ff-text">{pct(1 - m.p)}</span>
+        <span className="num w-10 text-right text-[13px] font-medium text-ff-text">{winText(m, 1 - m.p)}</span>
       </div>
       <div className="mt-1 text-center text-[11.5px] text-ff-text2">
         {m.close ? <span className="text-ff-warn">Close: </span> : null}
