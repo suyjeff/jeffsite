@@ -90,6 +90,8 @@ export const purgeStaleCache = () => {
   removeKeys((k) => /^ff:v\d+:/.test(k) && !k.startsWith(CACHE_PREFIX))
   // Transactions moved to tx2 (FAAB bids kept); the old copies are dead weight.
   removeKeys((k) => k.startsWith(`${CACHE_PREFIX}tx:`))
+  // Week stats moved to actuals2 (zero-point players kept).
+  removeKeys((k) => k.startsWith(`${CACHE_PREFIX}actuals:`))
   // The player database moved to its own versioned key; the old copy is the biggest thing kept.
   removeKeys((k) => k === `${CACHE_PREFIX}${BASE}/players/nfl`)
 }
@@ -388,7 +390,8 @@ export type WeekActuals = { pts: Record<string, number>; lines: WeekStats }
  */
 export const getWeekActuals = (leagueId: string, season: string, week: number, scoring: Record<string, number>, isPast: boolean) =>
   cachedGet<WeekStats, WeekActuals>(`/stats/nfl/regular/${season}/${week}`, isPast ? 24 * HOUR : 25_000, {
-    key: `actuals:${leagueId}:${season}:${week}${isPast ? ':final' : ':live'}`,
+    // v2: every player with a line has points, zero included, so a zero is a reading and not a gap.
+    key: `actuals2:${leagueId}:${season}:${week}${isPast ? ':final' : ':live'}`,
     persist: isPast,
     transform: (raw) => {
       const out: WeekActuals = { pts: {}, lines: {} }
@@ -400,8 +403,7 @@ export const getWeekActuals = (leagueId: string, season: string, week: number, s
         const def = /^[A-Z]{2,3}$/.test(id)
         if (!def && !line.gp && Object.keys(line).length === 0) continue
         out.lines[id] = line
-        const pts = scoreStatLine(s, scoring)
-        if (pts) out.pts[id] = pts
+        out.pts[id] = scoreStatLine(s, scoring)
       }
       return out
     },

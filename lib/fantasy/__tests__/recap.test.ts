@@ -135,6 +135,9 @@ describe('reveal timing', () => {
     const live = games.map((g, i) => (i ? { ...g, status: 'in_game' } : g))
     expect(revealWeek({ regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games: live, week: 5, playoffStart: 15, now })).toBe(4)
     expect(revealWeek({ regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games: live, week: 5, playoffStart: 15, now: Date.parse('2026-10-14T09:00:00Z') })).toBe(5)
+    // A postponed game sits at pre_game under its old date: the week never opens on the calendar alone.
+    const postponed = games.map((g, i) => (i ? { ...g, status: 'pre_game' } : g))
+    expect(revealWeek({ regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games: postponed, week: 5, playoffStart: 15, now: Date.parse('2026-10-20T09:00:00Z') })).toBe(4)
     expect(weeksBefore(mbw, 5, 15)).toEqual([4])
   })
 })

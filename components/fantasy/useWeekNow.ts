@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
-import { readFeed } from '../../lib/fantasy/gameTime'
+import { useEffect, useMemo, useState } from 'react'
+import { longPastByCalendar, readFeed } from '../../lib/fantasy/gameTime'
 import type { Broadcast } from '../../lib/fantasy/nfl'
 import type { Slate } from '../../lib/fantasy/slate'
+import { getWeekActuals, type WeekActuals } from '../../lib/fantasy/sleeper'
 import type { StatLine } from '../../lib/fantasy/types'
 import { useFantasy } from './FantasyContext'
 import { useBroadcasts, useLiveTick } from './useBroadcasts'
@@ -22,6 +23,21 @@ export type PlayerWeek = WeekState & {
 
 /** A scoreboard reading that is still current (lib/fantasy/gameTime): a feed gone quiet shows no clock or score. */
 const fresh = (c: Broadcast | undefined, now: number) => (c?.state && c.at != null && readFeed({ state: c.state, at: c.at }, now) ? c : undefined)
+
+// The week's stats when the live reads have none (a week outside the poll, another season's league): the cached load,
+// one request per league and week whichever views ask at once.
+const runs = new Map<string, Promise<WeekActuals | null>>()
+const load = (leagueId: string, season: string, week: number, scoring: Record<string, number>, settled: boolean) => {
+  const key = `${leagueId}:${season}:${week}:${settled}`
+  let run = runs.get(key)
+  if (!run) {
+    run = getWeekActuals(leagueId, season, week, scoring, settled)
+      .catch(() => null)
+      .finally(() => runs.delete(key))
+    runs.set(key, run)
+  }
+  return run
+}
 
 const n = (x?: number) => Math.round(x ?? 0)
 
@@ -75,7 +91,20 @@ export const useWeekNow = (slate: Slate, proj: Record<string, number>) => {
   const week = started ? slate.week : null
   // The box scores come from the week's live reads (useLiveWeek), which the slate keeps current: read each minute
   // while a game is on, again on Reload, and kept for a day once the week settles. The clock is read on the same poll.
-  const actuals = useLiveWeekSnapshot(week != null ? liveKey(league.league_id, league.season, week) : null)?.actuals?.data ?? null
+  const fromLive = useLiveWeekSnapshot(week != null ? liveKey(league.league_id, league.season, week) : null)?.actuals?.data ?? null
+  // Outside the live reads, the cached load: kept for a day once Sleeper calls every game complete (or the calendar
+  // is a day past them all), else a short-lived copy.
+  const settled = slate.games.length > 0 && slate.games.every((g) => g.status === 'complete' || (g.final && longPastByCalendar(g.date)))
+  const [loaded, setLoaded] = useState<WeekActuals | null>(null)
+  useEffect(() => {
+    if (week == null || fromLive) return
+    let current = true
+    load(league.league_id, league.season, week, league.scoring_settings ?? {}, settled).then((x) => current && x && setLoaded(x))
+    return () => {
+      current = false
+    }
+  }, [league.league_id, league.season, league.scoring_settings, week, settled, !!fromLive]) // eslint-disable-line react-hooks/exhaustive-deps
+  const actuals = fromLive ?? (week != null ? loaded : null)
   const tick = useLiveTick(slate.games.some((g) => g.live))
   const casts = useBroadcasts(league.season, week, tick)
 

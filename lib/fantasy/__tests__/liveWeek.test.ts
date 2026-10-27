@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { FEED_TTL } from '../gameTime'
-import { calendarSig, feedFrom, freshGames, freshMatchups, shouldPoll, weekGames, weekOn, weekSettled } from '../liveWeek'
+import { calendarSig, endsFrom, feedFrom, freshGames, freshMatchups, nextWindow, pendingSettle, shouldPoll, weekGames, weekOn, weekSettled } from '../liveWeek'
 import { parseScoreboard, type Broadcast } from '../nfl'
 import { buildSlate, DEFAULT_CV } from '../slate'
 import type { PlayerMap, SleeperMatchup } from '../types'
@@ -25,7 +25,7 @@ const liveMatchups = [m(1, ['a1', 'a2'], { a1: 24, a2: 3 }), m(2, ['b1', 'b2'], 
 
 // ESPN's scoreboard at 8:26 PM ET, stamped as the reader stamps it: the early game over, the night game in its first quarter.
 const espnAt = (t: number): Record<string, Broadcast> => ({
-  'DET@ARI': { networks: [], state: 'post', start: KICK_EARLY, at: t, ended: Math.min(t, KICK_EARLY + 5 * 3600_000), away: 27, home: 20 },
+  'DET@ARI': { networks: [], state: 'post', start: KICK_EARLY, at: t, seen: t, ended: Math.min(t, KICK_EARLY + 5 * 3600_000), away: 27, home: 20 },
   'BAL@ATL': { networks: [], state: 'in', start: KICK_NIGHT, at: t, clock: 'Q1 8:00', elapsed: 7 / 60, away: 3, home: 0 },
 })
 
@@ -44,7 +44,8 @@ const base = {
 const slateAt = (now: number, reads: { casts?: Record<string, Broadcast>; live?: { matchups: SleeperMatchup[]; at: number } | null; games?: typeof schedule | null; actuals?: { pts: Record<string, number>; at: number } | null }) => {
   const games = freshGames(weekGames(schedule, 7), reads.games ?? null)
   const clock = feedFrom(reads.casts ?? {}, now)
-  const points = freshMatchups(pageMatchups, reads.live ?? null, PAGE_LOAD)
+  // The page's copy counts as read before any end (its cache can be minutes old), as useSlate has it.
+  const points = freshMatchups(pageMatchups, reads.live ?? null, 0)
   return buildSlate({ ...base, games, matchups: points.matchups, pointsAt: points.at, actuals: reads.actuals ?? null, feed: clock.feed, elapsed: clock.elapsed, now })
 }
 
@@ -66,27 +67,46 @@ describe('Sunday night, 8:27 PM Eastern, with the night game on', () => {
     expect(s.matchups[0].pA).toBeLessThan(0.99)
   })
 
-  it('does not settle a finished game on points read before it ended', () => {
-    // The live reads failed all day: only the page's noon copy, all zeros.
-    const s = slateAt(NIGHT, { casts: espnAt(NIGHT - 60_000), live: null })
-    const early = s.games.find((g) => g.home === 'ARI')!
-    expect(early.final).toBe(false)
-    expect(early.live).toBe(true)
-    expect(s.byId.a1.actual).toBeNull()
-    // Still counted at his projection's worth, not a zero.
-    expect(s.byId.a1.expect).toBeGreaterThan(0)
+  it('calls a finished game final even on points read before it ended, and reads again until newer ones land', () => {
+    // The live reads failed all day: only the page's copy, all zeros.
+    const casts = espnAt(NIGHT - 60_000)
+    const s = slateAt(NIGHT, { casts, live: null })
+    expect(s.games.find((g) => g.home === 'ARI')!.final).toBe(true)
+    expect(s.games.find((g) => g.home === 'ATL')!.live).toBe(true)
+    // The poll stays on for the finished game until a read newer than its end comes in, and no longer than two hours.
+    expect(endsFrom(casts)['DET@ARI']).toBe(KICK_EARLY + 5 * 3600_000)
+    expect(pendingSettle(casts, 0, NIGHT)).toBe(true)
+    expect(pendingSettle(casts, NIGHT, NIGHT)).toBe(false)
+    expect(pendingSettle(casts, 0, NIGHT - 60_000 + 2 * 3600_000 + 1)).toBe(false)
+    // Its projection still counts on the night game's side; the odds are not decided.
     expect(s.matchups[0].pA).toBeGreaterThan(0.01)
     expect(s.matchups[0].pA).toBeLessThan(0.99)
+  })
+
+  it('keeps a completed game over once its reading is old, even with Sleeper stuck at in_game', () => {
+    const old = espnAt(NIGHT - 3 * 3600_000)
+    const stuck = [{ ...schedule[0], status: 'in_game' }, schedule[1]]
+    const s = slateAt(NIGHT, { casts: old, live: { matchups: liveMatchups, at: NIGHT - 30_000 }, games: stuck })
+    expect(s.games.find((g) => g.home === 'ARI')!.final).toBe(true)
+    expect(s.games.find((g) => g.home === 'ARI')!.live).toBe(false)
+    // The night game's 'in' reading has lapsed: Sleeper's pre_game and the calendar keep it open, live by its points.
+    expect(s.games.find((g) => g.home === 'ATL')!.final).toBe(false)
+    expect(s.byId.a2.live).toBe(3)
   })
 
   it('takes the stats feed when it is fresher than the matchups', () => {
     const s = slateAt(NIGHT, { casts: espnAt(NIGHT - 60_000), live: { matchups: liveMatchups, at: NIGHT - 90_000 }, actuals: { pts: { a1: 25.5 }, at: NIGHT - 10_000 } })
     expect(s.byId.a1.actual).toBe(25.5)
     expect(s.byId.b2.actual).toBe(11)
+    // A zero in the fresher stats is a reading too, not a gap to fill from the older matchups.
+    const zero = slateAt(NIGHT, { casts: espnAt(NIGHT - 60_000), live: { matchups: liveMatchups, at: NIGHT - 90_000 }, actuals: { pts: { a1: 0 }, at: NIGHT - 10_000 } })
+    expect(zero.byId.a1.actual).toBe(0)
   })
 
   it('ignores a feed that has gone quiet, and Sleeper and the calendar decide', () => {
     const quiet = espnAt(NIGHT - FEED_TTL - 60_000)
+    // Neither game had ended in this reading: both are lapsed now.
+    quiet['DET@ARI'] = { ...quiet['DET@ARI'], state: 'in', ended: undefined }
     expect(feedFrom(quiet, NIGHT).sig).toBe('')
     const s = slateAt(NIGHT, { casts: quiet, live: { matchups: liveMatchups, at: NIGHT - 30_000 } })
     // Sleeper still says pre_game and the calendar keeps Sunday open: nothing final, both games on by their points.
@@ -137,13 +157,25 @@ describe('when to read the week again', () => {
     expect(weekOn(games, {}, at('2026-10-25T12:00:00Z'))).toBe(true)
     expect(weekOn(games, {}, at('2026-10-28T12:00:00Z'))).toBe(true) // the week is over; its box scores still load
   })
-  it('keeps the week as final only once Sleeper agrees, or two hours after ESPN saw the last game end', () => {
+  it('keeps the week as final only once Sleeper agrees, or two hours after the last recorded end', () => {
     const end = at('2026-10-26T03:40:00Z')
-    const over = espnAt(end)
-    over['BAL@ATL'] = { ...over['BAL@ATL'], state: 'post', ended: end }
-    expect(weekSettled(games, over, end + 30 * 60_000)).toBe(false)
-    expect(weekSettled(games, { ...over, 'BAL@ATL': { ...over['BAL@ATL'], at: end + 2 * 3600_000 }, 'DET@ARI': { ...over['DET@ARI'], at: end + 2 * 3600_000 } }, end + 2 * 3600_000 + 60_000)).toBe(true)
+    const ends = { 'DET@ARI': at('2026-10-25T20:15:00Z'), 'BAL@ATL': end }
+    expect(weekSettled(games, ends, end + 30 * 60_000)).toBe(false)
+    // Recorded ends, not fresh readings: the feed can have stopped long since.
+    expect(weekSettled(games, ends, end + 2 * 3600_000 + 60_000)).toBe(true)
+    expect(weekSettled(games, { 'DET@ARI': ends['DET@ARI'] }, end + 9 * 3600_000)).toBe(false)
     expect(weekSettled(games.map((g) => ({ ...g, status: 'complete' })), {}, end)).toBe(true)
+  })
+  it('wakes for the next kickoff window between the afternoon and night games', () => {
+    const afternoon = espnAt(at('2026-10-25T23:40:00Z'))
+    afternoon['BAL@ATL'] = { networks: [], state: 'pre', start: KICK_NIGHT, at: at('2026-10-25T23:40:00Z') }
+    const t = at('2026-10-25T23:41:00Z') // 7:41 PM ET: the 4:25 games are over, the night game 39 minutes off
+    expect(shouldPoll(games, afternoon, t)).toBe(false)
+    expect(nextWindow(games, afternoon, t)).toBe(KICK_NIGHT - 15 * 60_000)
+    expect(shouldPoll(games, afternoon, KICK_NIGHT - 15 * 60_000)).toBe(true)
+    // A London morning kickoff opens its own window.
+    const london = at('2026-10-25T13:30:00Z')
+    expect(nextWindow(games, { 'DET@ARI': { networks: [], state: 'pre', start: london, at: london - 5 * 3600_000 } }, london - 5 * 3600_000)).toBe(london - 15 * 60_000)
   })
   it('only lets a newer read of the matchups replace the page copy', () => {
     expect(freshMatchups(pageMatchups, { matchups: liveMatchups, at: PAGE_LOAD - 1 }, PAGE_LOAD).matchups).toBe(pageMatchups)

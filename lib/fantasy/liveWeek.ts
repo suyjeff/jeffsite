@@ -18,19 +18,17 @@ export const keyOf = (g: { away: string; home: string }) => `${g.away}@${g.home}
 /** The week's games, canceled ones aside. */
 export const weekGames = (games: ScheduleGame[] | null | undefined, week: number) => (games ?? []).filter((g) => g.week === week && g.status !== 'canceled')
 
-/** A feed reading with what the slate needs to judge it: when it was read, and the latest the game can have ended. */
-export type LiveFeed = FeedReading & { ended?: number }
-
 /**
  * From ESPN's scoreboard: each game's reading for the slate, and the share of regulation played in each game under way.
- * Stale readings are dropped here as well as in the slate. The key changes only when what the slate reads does.
+ * Lapsed readings are dropped here as well as in the slate (a completed game's never lapses). The key changes only
+ * when what the slate reads does.
  */
 export const feedFrom = (casts: Record<string, Broadcast>, now: number) => {
-  const feed: Record<string, LiveFeed> = {}
+  const feed: Record<string, FeedReading> = {}
   const elapsed: Record<string, number> = {}
   for (const [k, c] of Object.entries(casts)) {
     if (!c.state || c.at == null || !readFeed({ state: c.state, at: c.at }, now)) continue
-    feed[k] = { state: c.state, at: c.at, ...(c.ended != null ? { ended: c.ended } : {}) }
+    feed[k] = { state: c.state, at: c.at }
     if (c.state === 'in' && c.elapsed != null) elapsed[k] = c.elapsed
   }
   const sig = Object.keys(feed)
@@ -38,6 +36,13 @@ export const feedFrom = (casts: Record<string, Broadcast>, now: number) => {
     .map((k) => `${k}:${feed[k].state}${elapsed[k] != null ? `:${elapsed[k].toFixed(3)}` : ''}`)
     .join('|')
   return { feed, elapsed, sig }
+}
+
+/** When each game ESPN calls over ended (as first seen, or kickoff plus five hours), by "AWAY@HOME". */
+export const endsFrom = (casts: Record<string, Broadcast>) => {
+  const out: Record<string, number> = {}
+  for (const [k, c] of Object.entries(casts)) if (c.state === 'post' && c.ended != null) out[k] = c.ended
+  return out
 }
 
 /** A scoreboard entry as a feed reading, when it has a state and a fetch time. */
@@ -74,19 +79,41 @@ export const shouldPoll = (games: ScheduleGame[], casts: Record<string, Broadcas
 }
 
 /**
- * Whether the week's results can be kept as final: Sleeper's schedule says every game is complete, or two hours have
- * passed since ESPN last saw one end, so Sleeper's stats have caught up before the week is cached for a day.
+ * When the next game's kickoff window opens (fifteen minutes before ESPN's kickoff), for a game not yet started or
+ * over: a timer set to it resumes polling exactly then, between the afternoon games and the night one, say. Null if
+ * none is coming.
  */
-export const weekSettled = (games: ScheduleGame[], casts: Record<string, Broadcast>, now: number) => {
+export const nextWindow = (games: ScheduleGame[], casts: Record<string, Broadcast>, now: number) => {
+  let next: number | null = null
+  for (const g of games) {
+    const c = casts[keyOf(g)]
+    if (c?.start == null || c.state === 'post' || g.status === 'complete') continue
+    const open = c.start - 15 * MIN
+    if (open > now && (next == null || open < next)) next = open
+  }
+  return next
+}
+
+/**
+ * Whether the week's results can be kept as final: Sleeper's schedule says every game is complete, or two hours have
+ * passed since the last game's recorded end (`ends`, kept as each game is first seen over), so Sleeper's stats have
+ * caught up before the week is cached for a day. The store keeps it once true.
+ */
+export const weekSettled = (games: ScheduleGame[], ends: Record<string, number>, now: number) => {
   if (!games.length) return false
   if (games.every((g) => g.status === 'complete')) return true
-  const ends = games.map((g) => {
-    const c = casts[keyOf(g)]
-    return readFeed(toReading(c), now) === 'post' ? (c!.ended ?? c!.at!) : null
-  })
-  if (ends.some((e) => e == null)) return false
-  return now - Math.max(...(ends as number[])) >= 2 * HOUR
+  const at = games.map((g) => ends[keyOf(g)])
+  if (at.some((e) => e == null)) return false
+  return now - Math.max(...at) >= 2 * HOUR
 }
+
+/**
+ * Whether a game ESPN calls over has its points from before it ended: then the live reader reads once more, until a
+ * copy newer than the end lands. It gives up two hours after this page first saw the game over, so a source that never
+ * answers cannot poll on.
+ */
+export const pendingSettle = (casts: Record<string, Broadcast>, pointsAt: number, now: number) =>
+  Object.values(casts).some((c) => c.state === 'post' && c.ended != null && pointsAt < c.ended && now - (c.seen ?? c.ended) < 2 * HOUR)
 
 /**
  * The fresher of two copies of a week's matchups: the one loaded with the page, or one read since. Only the newer

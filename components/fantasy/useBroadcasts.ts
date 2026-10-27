@@ -16,32 +16,39 @@ const stamp = (key: string, parsed: Record<string, Broadcast>, at: number) => {
   const out: Record<string, Broadcast> = {}
   for (const [k, b] of Object.entries(parsed)) {
     let ended: number | undefined
+    let seen: number | undefined
     if (b.state === 'post') {
-      const seen = firstPost.get(`${key}:${k}`) ?? at
+      seen = firstPost.get(`${key}:${k}`) ?? at
       firstPost.set(`${key}:${k}`, seen)
       ended = b.start != null ? Math.min(seen, b.start + GAME_SPAN) : seen
     }
-    out[k] = { ...b, at, ...(ended != null ? { ended } : {}) }
+    out[k] = { ...b, at, ...(ended != null ? { ended, seen } : {}) }
   }
   return out
 }
 
 /**
- * A count that goes up once a minute while `active` (a game is under way) and the page is in view, and again when the
- * page comes back into view. Live readers put it in their effects' deps to read again; it never runs between games.
+ * A count that goes up once a minute while `active` (a game is under way) and the page is in view, whenever the page
+ * comes back into view, and at `wakeAt` (the next kickoff window opening), so a reader re-checks whether to poll
+ * exactly when it should start. Live readers put it in their effects' deps to read again.
  */
-export const useLiveTick = (active: boolean, every = 60_000) => {
+export const useLiveTick = (active: boolean, wakeAt: number | null = null, every = 60_000) => {
   const [tick, setTick] = useState(0)
   useEffect(() => {
-    if (!active) return
     const bump = () => document.visibilityState === 'visible' && setTick((t) => t + 1)
-    const id = window.setInterval(bump, every)
     document.addEventListener('visibilitychange', bump)
+    const id = active ? window.setInterval(bump, every) : undefined
     return () => {
       window.clearInterval(id)
       document.removeEventListener('visibilitychange', bump)
     }
   }, [active, every])
+  useEffect(() => {
+    if (wakeAt == null) return
+    // Timers cap at about 24.8 days; a window further off is re-checked by the hour tick long before then.
+    const id = window.setTimeout(() => setTick((t) => t + 1), Math.min(2 ** 31 - 1, Math.max(0, wakeAt - Date.now()) + 500))
+    return () => window.clearTimeout(id)
+  }, [wakeAt])
   return tick
 }
 

@@ -54,6 +54,8 @@ export type Broadcast = {
   at?: number
   /** The latest the game can have ended (ms): when a reading first said it was over, or kickoff plus five hours. */
   ended?: number
+  /** When this page first saw the game over (ms). */
+  seen?: number
   /** A game under way: the quarter and its clock ("Q3 4:12", "Half", "OT 2:00"). */
   clock?: string
   /** Share of regulation played, 0–1, for a game under way. */

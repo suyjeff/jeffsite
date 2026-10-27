@@ -35,12 +35,15 @@ export type FeedState = 'pre' | 'in' | 'post'
 /** One reading of ESPN's feed for a game: its state, and when it was fetched. */
 export type FeedReading = { state: FeedState; at: number }
 
-/** How long a feed reading counts: past this (the fetch failing, the poll stopped) the game falls back to Sleeper. */
+/**
+ * How long an 'in' or 'pre' reading counts: past this (the fetch failing, the poll stopped) the game falls back to
+ * Sleeper. A completed game ('post') stays over however old the reading: once over, always over.
+ */
 export const FEED_TTL = 10 * 60_000
 
-/** A feed's state if it is fresh at `now`, else nothing. A bare state is taken as fresh (a caller that checked). */
+/** A feed's state if it still holds at `now`, else nothing. A bare state is taken as current (a caller that checked). */
 export const readFeed = (f: FeedState | FeedReading | null | undefined, now = Date.now()): FeedState | undefined =>
-  !f ? undefined : typeof f === 'string' ? f : now - f.at <= FEED_TTL ? f.state : undefined
+  !f ? undefined : typeof f === 'string' ? f : f.state === 'post' || now - f.at <= FEED_TTL ? f.state : undefined
 
 type Game = { status?: string | null; date?: string | null }
 const sleeperLive = (g: Game | undefined) => g?.status === 'in_game' || g?.status === 'in_progress'
