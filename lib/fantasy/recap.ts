@@ -7,6 +7,7 @@ import { persistMean, simulateSeason, winProb, type Forecast, type SimTeam } fro
 import { optimalLineup, type LineupPlayer, type Slot } from './lineup'
 import { activeParts, buildTeamSeasons, buildTeamWeeks, computePower, type PowerWeights, type TeamSeason, type TeamWeek } from './power'
 import type { ScheduleGame } from './context'
+import { longPastByCalendar } from './gameTime'
 import type { PlayerMap, SleeperMatchup } from './types'
 
 /** A phrase about teams: plain text and team references, so the view can render names its own way. */
@@ -467,10 +468,15 @@ export const sortPasses = (from: number[], to: number[]): { order: number[]; swa
 /** Weeks with points on the board. */
 const hasScores = (ms: SleeperMatchup[] | undefined) => !!ms && ms.some((m) => (m.points ?? 0) > 0)
 
-/** Whether every NFL game of a week is final by the schedule (canceled games aside). */
-export const weekFinal = (games: ScheduleGame[] | undefined, week: number) => {
+/**
+ * Whether every NFL game of a week is final (canceled games aside), strictly, since the reveal must never open with a
+ * game unplayed: Sleeper calls it complete, or its status has sat at in-game a full day past the calendar's close
+ * (lib/fantasy/gameTime: a stuck status, not a game). A game still 'pre_game' is never taken as played, whatever its
+ * date: that is how a postponed game sits under its old one.
+ */
+export const weekFinal = (games: ScheduleGame[] | undefined, week: number, now = Date.now()) => {
   const gs = (games ?? []).filter((g) => g.week === week && g.status !== 'canceled')
-  return gs.length > 0 && gs.every((g) => g.status === 'complete')
+  return gs.length > 0 && gs.every((g) => g.status === 'complete' || ((g.status === 'in_game' || g.status === 'in_progress') && longPastByCalendar(g.date, now)))
 }
 
 /**
@@ -484,11 +490,13 @@ export const revealWeek = (opts: {
   /** Sleeper's current week. */
   week: number
   playoffStart: number
+  /** The instant to judge games against; defaults to now. */
+  now?: number
 }): number | null => {
   const settled = opts.regularWeeks.length ? Math.max(...opts.regularWeeks) : null
   for (const w of [opts.week, opts.week - 1]) {
     if (w >= opts.playoffStart || w < 1 || (settled != null && w <= settled)) continue
-    if (hasScores(opts.matchupsByWeek[w]) && weekFinal(opts.games, w)) return w
+    if (hasScores(opts.matchupsByWeek[w]) && weekFinal(opts.games, w, opts.now)) return w
   }
   return settled
 }
@@ -554,7 +562,7 @@ export const countdown = (gate: Date, now: number) => {
   return `in ${m}m`
 }
 
-/** A week has kicked off once any of its NFL games has started or finished, or points are on the board. */
+/** A week has kicked off once any of its NFL games has started or finished by Sleeper's status, or points are on the board. */
 const kickedOff = (matchups: SleeperMatchup[] | undefined, games: ScheduleGame[] | undefined, week: number) =>
   hasScores(matchups) || (games ?? []).some((g) => g.week === week && g.status != null && g.status !== 'pre_game' && g.status !== 'canceled')
 

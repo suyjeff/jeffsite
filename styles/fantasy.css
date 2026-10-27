@@ -1052,21 +1052,13 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 
 /* Choreography. Each piece waits for its own --d. */
 .ff .ff-rv-in {
-  animation: ff-rv-fade 360ms ease-out var(--d, 0ms) both;
+  animation: ff-rv-fade 280ms ease-out var(--d, 0ms) both;
 }
 .ff .ff-rv-rise {
-  animation: ff-rv-rise 420ms var(--ff-ease-out) var(--d, 0ms) both;
-}
-.ff .ff-rv-x {
-  transform-origin: left center;
-  animation: ff-rv-x 700ms var(--ff-ease-out) var(--d, 0ms) both;
-}
-.ff .ff-rv-y {
-  transform-origin: center bottom;
-  animation: ff-rv-y 640ms var(--ff-ease-out) var(--d, 0ms) both;
+  animation: ff-rv-rise 340ms var(--ff-ease-out) var(--d, 0ms) both;
 }
 .ff .ff-rv-wipe {
-  animation: ff-rv-wipe 620ms var(--ff-ease-out) var(--d, 0ms) both;
+  animation: ff-rv-wipe 420ms var(--ff-ease-out) var(--d, 0ms) both;
 }
 /* A cursor block: blinks in hard steps, like a terminal. */
 .ff .ff-rv-blink {
@@ -1076,16 +1068,6 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   from {
     opacity: 0;
     transform: translateY(10px);
-  }
-}
-@keyframes ff-rv-x {
-  from {
-    transform: scaleX(0);
-  }
-}
-@keyframes ff-rv-y {
-  from {
-    transform: scaleY(0);
   }
 }
 @keyframes ff-rv-wipe {
@@ -1103,11 +1085,11 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 
 /* The ranking while it sorts: rows sit at their slot by transform and travel between slots on the on-screen
-   ease-in-out, a little longer than a pass so a row is still settling as the next pass begins. */
+   ease-in-out, just inside a pass so each lands before the next begins. */
 .ff .ff-rv-slot {
   transition:
-    transform 300ms var(--ff-ease-in-out),
-    opacity 400ms ease;
+    transform 240ms var(--ff-ease-in-out),
+    opacity 300ms ease;
   will-change: transform;
 }
 /* A row that just swapped flashes the way it went. */
@@ -1161,15 +1143,15 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 .ff .ff-rv-crown.is-drawing .ff-rv-crown-line {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: ff-rv-draw 760ms var(--ff-ease-out) var(--d, 0ms) forwards;
+  animation: ff-rv-draw 560ms var(--ff-ease-out) var(--d, 0ms) forwards;
 }
 .ff .ff-rv-crown.is-drawing :is(.ff-rv-crown-body, .ff-rv-crown-band) {
-  animation: ff-rv-fill 420ms ease-out calc(var(--d, 0ms) + 560ms) both;
+  animation: ff-rv-fill 320ms ease-out calc(var(--d, 0ms) + 400ms) both;
 }
 .ff .ff-rv-crown.is-drawing .ff-rv-crown-node {
   transform-box: fill-box;
   transform-origin: center;
-  animation: ff-rv-node 360ms var(--ff-ease-out) calc(var(--d, 0ms) + 640ms) both;
+  animation: ff-rv-node 300ms var(--ff-ease-out) calc(var(--d, 0ms) + 460ms) both;
 }
 @keyframes ff-rv-draw {
   to {
@@ -1378,8 +1360,6 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
       .ff-rv-frame,
       .ff-rv-in,
       .ff-rv-rise,
-      .ff-rv-x,
-      .ff-rv-y,
       .ff-rv-wipe,
       .ff-rv-cmp,
       .ff-rv-hat,
@@ -1419,13 +1399,13 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
  * transform only, since these layers fill the stage and blurring them costs every frame on a weak phone. The
  * presenter's small block, swapped at each step of the ranking, can afford the blur that bridges the swap. */
 .ff .ff-rv-act-in {
-  animation: ff-rv-act-in 300ms var(--ff-ease-out) both;
+  animation: ff-rv-act-in 260ms var(--ff-ease-out) both;
 }
 .ff .ff-rv-act-out {
-  animation: ff-rv-act-out 160ms var(--ff-ease-out) both;
+  animation: ff-rv-act-out 150ms var(--ff-ease-out) both;
 }
 .ff .ff-rv-swap-in {
-  animation: ff-rv-swap-in 300ms var(--ff-ease-out) both;
+  animation: ff-rv-swap-in 240ms var(--ff-ease-out) both;
 }
 @keyframes ff-rv-act-in {
   from {
@@ -1447,8 +1427,8 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
 }
 
-/* Line art: ink, accent, construction and gold strokes; square nodes; the football's hull filled so lines stop at it. */
-.ff .ff-rv-art :is(.ff-rv-ink, .ff-rv-hot, .ff-rv-cons, .ff-rv-gold, .ff-rv-predict, .ff-rv-ghost) {
+/* Line art: ink, accent, construction and gold strokes; square nodes. */
+.ff .ff-rv-art :is(.ff-rv-ink, .ff-rv-hot, .ff-rv-cons, .ff-rv-gold) {
   fill: none;
   stroke-width: 1.25;
   stroke-linecap: round;
@@ -1473,9 +1453,6 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   stroke-width: 1;
   stroke-linecap: round;
 }
-.ff .ff-rv-art .ff-rv-hull {
-  fill: rgb(var(--ff-panel));
-}
 .ff .ff-rv-art .ff-rv-node {
   fill: rgb(var(--ff-text2));
 }
@@ -1489,169 +1466,19 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   stroke: rgb(var(--ff-warn) / 0.55);
   stroke-width: 0.6;
 }
-.ff .ff-rv-art .ff-rv-predict {
-  stroke: rgb(var(--ff-text2) / 0.45);
-  stroke-width: 1;
-  stroke-dasharray: 4 5;
-}
-.ff .ff-rv-art .ff-rv-ghost {
-  stroke: rgb(var(--ff-accent) / 0.5);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-}
 
-/* Calibrate: the tessellation trail, the tracked tile and the quieter second one. Tiles hop on the on-screen curve. */
-.ff .ff-rv-art .ff-rv-trail {
-  fill: rgb(var(--ff-accent) / 0.05);
-  stroke: rgb(var(--ff-accent) / 0.25);
-  stroke-width: 1;
-}
-.ff .ff-rv-art .ff-rv-trail-dim {
-  fill: rgb(var(--ff-text) / 0.03);
-  stroke: rgb(var(--ff-text2) / 0.25);
-  stroke-width: 1;
-}
-.ff .ff-rv-art .ff-rv-tile {
-  fill: rgb(var(--ff-accent) / 0.12);
-  stroke: rgb(var(--ff-accent));
-  stroke-width: 1.25;
-}
-.ff .ff-rv-art .ff-rv-tile-dim {
-  fill: none;
-  stroke: rgb(var(--ff-text2) / 0.5);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-}
-.ff .ff-rv-hop {
-  transition: transform 180ms var(--ff-ease-in-out);
+/* Art drawn at speed (the reveal's gorilla and last place's mark): each stroke traces in quicker. */
+.ff .ff-rv-quick .draw {
+  animation-duration: 380ms;
 }
 /* The model's matrix: the scan steps a row at a time. */
 .ff .ff-rv-scanrow {
-  transition: transform 130ms var(--ff-ease-out);
-}
-
-/* Data: cards travel between slots on the on-screen curve; off the canvas they are wiped away to the left. */
-.ff .ff-rv-card {
-  opacity: 0;
-  clip-path: inset(0 100% 0 0);
-  transition:
-    transform 640ms var(--ff-ease-in-out),
-    clip-path 240ms var(--ff-ease-out),
-    opacity 240ms ease,
-    border-color 200ms ease;
-  will-change: transform;
-}
-.ff .ff-rv-card[data-shown] {
-  opacity: 1;
-  clip-path: inset(0 0 0 0);
-}
-/* Corner ticks that snap onto a card as it moves, then let go. */
-.ff .ff-rv-tick {
-  animation: ff-rv-tick 640ms var(--ff-ease-out) both;
-}
-@keyframes ff-rv-tick {
-  from {
-    opacity: 0;
-    transform: scale(1.8);
-  }
-  35% {
-    opacity: 1;
-    transform: none;
-  }
-  to {
-    opacity: 0;
-  }
-}
-/* A ghost and its vector: the vector draws in fast, then both fade over the next tick. */
-.ff .ff-rv-fade {
-  animation: ff-rv-fade-out 520ms ease-out 260ms both;
-}
-.ff .ff-rv-art .ff-rv-qdraw {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: ff-rv-draw 220ms var(--ff-ease-out) forwards;
-}
-.ff .ff-rv-sweepx {
-  animation: ff-rv-sweepx 1.9s linear infinite;
-}
-@keyframes ff-rv-sweepx {
-  from {
-    transform: translateX(0);
-    opacity: 0;
-  }
-  10%,
-  90% {
-    opacity: 1;
-  }
-  to {
-    transform: translateX(var(--w, 600px));
-    opacity: 0;
-  }
-}
-
-/* Launch: across at a steady speed, up decelerating and down accelerating (a true parabola), turned along the path. */
-.ff .ff-rv-art .ff-rv-flown {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: ff-rv-draw var(--air) linear var(--lead) forwards;
-}
-.ff .ff-rv-ball-x {
-  animation: ff-rv-ball-x var(--air) linear var(--lead) both;
-}
-.ff .ff-rv-ball-y {
-  animation: ff-rv-ball-y var(--air) linear var(--lead) both;
-}
-.ff .ff-rv-ball-r {
-  transform-origin: 28px 18px;
-  animation: ff-rv-ball-r var(--air) linear var(--lead) both;
-}
-@keyframes ff-rv-ball-x {
-  to {
-    transform: translateX(var(--dx));
-  }
-}
-@keyframes ff-rv-ball-y {
-  0% {
-    transform: translateY(0);
-    animation-timing-function: cubic-bezier(0.333, 0.667, 0.667, 1);
-  }
-  50% {
-    transform: translateY(calc(var(--h) * -1));
-    animation-timing-function: cubic-bezier(0.333, 0, 0.667, 0.333);
-  }
-  100% {
-    transform: translateY(0);
-  }
-}
-@keyframes ff-rv-ball-r {
-  from {
-    transform: rotate(calc(var(--rot) * -1));
-  }
-  to {
-    transform: rotate(var(--rot));
-  }
-}
-.ff .ff-rv-ping-land {
-  animation: ff-rv-land 900ms var(--ff-ease-out) var(--d, 0ms) both;
-}
-@keyframes ff-rv-land {
-  from {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  1% {
-    opacity: 0.9;
-    transform: scale(0.5);
-  }
-  to {
-    opacity: 0;
-    transform: scale(1.8);
-  }
+  transition: transform 90ms var(--ff-ease-out);
 }
 
 /* Rank: last place sinks in, tinted; the top three slide in from the right; the stink lines drift. */
 .ff .ff-rv-sink {
-  animation: ff-rv-sink 760ms var(--ff-ease-out) var(--d, 0ms) both;
+  animation: ff-rv-sink 480ms var(--ff-ease-out) var(--d, 0ms) both;
 }
 @keyframes ff-rv-sink {
   from {
@@ -1664,7 +1491,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   background-color: rgb(var(--ff-neg) / 0.06);
 }
 .ff .ff-rv-present {
-  animation: ff-rv-present 560ms var(--ff-ease-out) var(--d, 0ms) both;
+  animation: ff-rv-present 380ms var(--ff-ease-out) var(--d, 0ms) both;
 }
 @keyframes ff-rv-present {
   from {
@@ -1700,14 +1527,10 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   .ff .ff-rv-act-out {
     animation: ff-rv-fade-out 160ms ease-out both;
   }
-  .ff .ff-rv-art .ff-rv-qdraw {
-    animation: none;
-    stroke-dashoffset: 0;
-  }
-  .ff :is(.ff-rv-tick, .ff-rv-fade, .ff-rv-sweepx, .ff-rv-ball-x, .ff-rv-ball-y, .ff-rv-ball-r, .ff-rv-ping-land, .ff-rv-waft, .ff-rv-scan-box) {
+  .ff :is(.ff-rv-waft, .ff-rv-scan-box) {
     animation: none;
   }
-  .ff :is(.ff-rv-hop, .ff-rv-scanrow, .ff-rv-card) {
+  .ff .ff-rv-scanrow {
     transition: none;
   }
 }

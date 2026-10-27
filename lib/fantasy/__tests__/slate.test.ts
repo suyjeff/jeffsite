@@ -22,7 +22,7 @@ const m = (roster_id: number, starters: string[], pts: Record<string, number> = 
   players_points: pts,
 })
 const base = {
-  today: '2026-10-10',
+  now: Date.parse('2026-10-10T16:00:00Z'),
   week: 5,
   games,
   players,
@@ -76,21 +76,39 @@ describe('slate', () => {
   })
 
   it('a game under way counts what is on the board, and a past date counts as final when the status lags', () => {
-    const live = buildSlate({ ...base, today: '2026-10-11', matchups: [m(1, ['a1', 'a2'], { a1: 22 }), m(2, ['b1', 'b2'])] })
+    const live = buildSlate({ ...base, now: Date.parse('2026-10-11T16:00:00Z'), matchups: [m(1, ['a1', 'a2'], { a1: 22 }), m(2, ['b1', 'b2'])] })
     // 22 on the board plus half of his 20 still to come.
     expect(live.byId.a1.live).toBe(22)
     expect(live.matchups[0].a.mu).toBeCloseTo(22 + 10 + 12, 6)
     expect(live.matchups[0].a.banked).toBe(22)
     expect(live.games.find((g) => g.home === 'ARI')!.live).toBe(true)
     // With the clock known, a quarter left is a quarter of his projection, and his expected finish says so too.
-    const timed = buildSlate({ ...base, today: '2026-10-11', elapsed: { 'DET@ARI': 0.75 }, matchups: [m(1, ['a1', 'a2'], { a1: 22 }), m(2, ['b1', 'b2'])] })
+    const timed = buildSlate({ ...base, now: Date.parse('2026-10-11T16:00:00Z'), elapsed: { 'DET@ARI': 0.75 }, matchups: [m(1, ['a1', 'a2'], { a1: 22 }), m(2, ['b1', 'b2'])] })
     expect(timed.byId.a1.expect).toBeCloseTo(22 + 5, 6)
     expect(timed.matchups[0].a.mu).toBeCloseTo(22 + 5 + 12, 6)
     expect(timed.byId.a1.sd).toBeLessThan(live.byId.a1.sd)
-    const stale = buildSlate({ ...base, today: '2026-10-13', matchups: [m(1, ['a1', 'a2'], { a1: 22, a2: 9 }), m(2, ['b1', 'b2'], { b1: 15, b2: 7 })] })
+    const stale = buildSlate({ ...base, now: Date.parse('2026-10-13T16:00:00Z'), matchups: [m(1, ['a1', 'a2'], { a1: 22, a2: 9 }), m(2, ['b1', 'b2'], { b1: 15, b2: 7 })] })
     expect(stale.games.every((g) => g.final)).toBe(true)
     expect(stale.matchups[0].a.mu).toBe(31)
     expect(stale.matchups[0].pA).toBe(1)
+  })
+
+  it('keeps Sunday night games live past 8 PM Eastern, when UTC has already turned to Monday', () => {
+    // 8:27 PM ET Sunday Oct 11 is 00:27 UTC Monday. Sleeper still says pre_game; the old UTC check called these final.
+    const night = Date.parse('2026-10-12T00:27:00Z')
+    const s = buildSlate({ ...base, now: night, matchups: [m(1, ['a1', 'a2'], { a1: 12 }), m(2, ['b1', 'b2'])] })
+    expect(s.games.some((g) => g.final)).toBe(false)
+    expect(s.byId.a1.actual).toBeNull()
+    expect(s.byId.a1.live).toBe(12)
+    expect(s.matchups[0].b.left).toBe(2)
+    expect(s.matchups[0].pA).toBeLessThan(1)
+    // ESPN's feed decides game by game: one over, one still on.
+    const fed = buildSlate({ ...base, now: night, feed: { 'DET@ARI': 'post', 'BAL@ATL': 'in' }, matchups: [m(1, ['a1', 'a2'], { a1: 12 }), m(2, ['b1', 'b2'])] })
+    expect(fed.games.find((g) => g.home === 'ARI')!.final).toBe(true)
+    expect(fed.games.find((g) => g.home === 'ATL')!.live).toBe(true)
+    // By 4 AM Eastern the calendar closes them even if no feed answered.
+    const morning = buildSlate({ ...base, now: Date.parse('2026-10-12T08:05:00Z'), matchups: [m(1, ['a1', 'a2'], { a1: 12 }), m(2, ['b1', 'b2'])] })
+    expect(morning.games.every((g) => g.final)).toBe(true)
   })
 
   it('measures position spread on this season, shrunk toward the long-run figure', () => {

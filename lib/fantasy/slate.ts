@@ -22,6 +22,7 @@
 
 import type { ScheduleGame } from './context'
 import { phi, type Stakes } from './forecast'
+import { gameIsFinal, gameIsLive, type FeedReading, type FeedState } from './gameTime'
 import type { PlayerMap, SleeperMatchup } from './types'
 import type { TeamTotal } from './waivers'
 import type { WeekPoints } from './war'
@@ -153,8 +154,17 @@ export type SlateInput = {
   stakes: Record<number, Stakes> | null
   /** Share of regulation played in each game under way, by "AWAY@HOME", where a live clock answers; halftime is assumed otherwise. */
   elapsed?: Record<string, number>
-  /** YYYY-MM-DD, for tests; defaults to today (UTC). */
-  today?: string
+  /**
+   * Each game's state on ESPN's live feed, by "AWAY@HOME", where it answers: it overrides Sleeper's lagging status
+   * while current (a completed game stays over).
+   */
+  feed?: Record<string, FeedState | FeedReading>
+  /** When the matchups' points were read (ms). With `actuals`, the fresher source gives each player's points. */
+  pointsAt?: number
+  /** Each player's points from the stats feed in league scoring, and when they were read: used when fresher. */
+  actuals?: { pts: Record<string, number>; at: number } | null
+  /** The instant to judge games against, for tests; defaults to now. */
+  now?: number
 }
 
 const gameKey = (g: ScheduleGame) => `${g.week}:${g.away}@${g.home}`
@@ -164,11 +174,19 @@ export const buildSlate = (input: SlateInput): Slate => {
   const games = input.games.filter((g) => g.week === input.week && g.status !== 'canceled')
   const gameOf: Record<string, ScheduleGame> = {}
   for (const g of games) gameOf[g.home] = gameOf[g.away] = g
-  // Final by Sleeper's status, or by the calendar once the game's date is past (the status can lag).
-  const today = input.today ?? new Date().toISOString().slice(0, 10)
-  const isFinal = (g: ScheduleGame | undefined) => g?.status === 'complete' || (!!g?.date && g.date < today)
-  // Under way: Sleeper says so, or points are already on the board for its players.
-  const isLive = (g: ScheduleGame | undefined) => g?.status === 'in_game' || g?.status === 'in_progress'
+  // Final by ESPN's feed, then Sleeper's status, then the calendar in Eastern time (lib/fantasy/gameTime): never while
+  // either feed says the game is on.
+  const now = input.now ?? Date.now()
+  // Points from whichever source was read last: the stats feed when it is newer than the matchups.
+  const actuals = input.actuals && input.actuals.at > (input.pointsAt ?? -Infinity) ? input.actuals : null
+  // A player the stats feed has a line for scores what it says, zero included; anyone else, what the matchup posted.
+  const postedOf = (m: SleeperMatchup, id: string) => (actuals && id in actuals.pts ? actuals.pts[id] : m.players_points?.[id])
+  // A game ESPN calls over is final, whenever its points were read: the live reader reads again until a copy newer
+  // than the end lands (lib/fantasy/liveWeek pendingSettle), so a finished game never reads as live.
+  const feedOf = (g: ScheduleGame | undefined) => (g ? input.feed?.[`${g.away}@${g.home}`] : undefined)
+  const isFinal = (g: ScheduleGame | undefined) => gameIsFinal(g, feedOf(g), now)
+  // Under way: ESPN or Sleeper says so (points already on the board count too, below).
+  const isLive = (g: ScheduleGame | undefined) => gameIsLive(g, feedOf(g), now)
 
   // Pairings and lineups, from Sleeper's own matchups when the week has them.
   const byMatchup = new Map<number, SleeperMatchup[]>()
@@ -183,14 +201,15 @@ export const buildSlate = (input: SlateInput): Slate => {
     const parts = starters.map((id, i) => {
       const g = gameOf[players[id].team ?? '']
       const final = isFinal(g)
-      const posted = m.players_points?.[id]
+      const posted = postedOf(m, id)
       const actual = final ? (posted ?? 0) : null
       const p = g ? (proj[id] ?? 0) : 0
       // A game under way: what he has plus his projection for the time left, and the spread of that much of a game.
       // The time left comes from the game clock where it is known; without one, halftime is the assumption.
       const live = !final && (isLive(g) || (posted != null && posted !== 0)) ? (posted ?? 0) : null
       if (live != null) {
-        const left = 1 - Math.min(1, Math.max(0, (g && input.elapsed?.[`${g.away}@${g.home}`]) ?? 0.5))
+        const clock = g ? input.elapsed?.[`${g.away}@${g.home}`] : undefined
+        const left = 1 - Math.min(1, Math.max(0, clock ?? 0.5))
         return { id, final, actual, live, proj: p, mu: live + left * p, sd: raw[i] * k * Math.sqrt(left), sd0: raw[i] * k }
       }
       return { id, final, actual, live, proj: p, mu: final ? (posted ?? 0) : p, sd: final || !g ? 0 : raw[i] * k, sd0: raw[i] * k }
