@@ -6,7 +6,7 @@
 import type { Analysis } from './analysis'
 import { leagueBehavior, type LeagueBehavior } from './behavior'
 import { perceivedValues } from './consensus'
-import { backtest, buildForecast, ELO, gamesFrom, lineupEdge, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
+import { backtest, buildForecast, divisionsOf, ELO, gamesFrom, lineupEdge, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
 import { faabState, type Faab } from './faab'
 import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, type TeamWeek } from './power'
 import type { LeagueData } from './useLeagueData'
@@ -87,6 +87,7 @@ const forecastInputFor = (data: LeagueData, analysis: Analysis, elo: Record<numb
     elo,
     sigmaFallback: analysis.sigma * 0.9,
     weeksLeft: data.futureWeeks.length,
+    divisions: divisionsOf(data.rosters, data.league.settings?.divisions as number | undefined),
   }
 }
 

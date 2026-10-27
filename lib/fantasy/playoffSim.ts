@@ -4,7 +4,7 @@
 // The odds are the average over thousands of these. A trace is one of them: any single season is unlikely, which is
 // the point. Locked results hold in both.
 
-import { bracketOrder, lockKey, lockStream, lockedScores, normals, persistMean, rng, type Forecast, type ForecastInput, type SimInput } from './forecast'
+import { bracketOrder, lockKey, seedOrder, lockStream, lockedScores, normals, persistMean, rng, type Forecast, type ForecastInput, type SimInput } from './forecast'
 
 /** The simulation's input from the forecast, as the odds use it, with locked results and a chaos factor on the noise. */
 export const simInputFor = (input: ForecastInput, f: Forecast, opts: { locks?: Record<string, number>; chaos?: number; sims?: number; seed?: number } = {}): SimInput => {
@@ -20,6 +20,7 @@ export const simInputFor = (input: ForecastInput, f: Forecast, opts: { locks?: R
     sigma: f.sigma * k,
     tau: f.tau * k,
     weeksLeft: input.weeksLeft,
+    divisions: input.divisions,
     sims: opts.sims ?? 2000,
     seed: opts.seed,
     locks: opts.locks,
@@ -89,7 +90,12 @@ export const simulateOnce = (input: SimInput, seed: number): Trace => {
     }
     regular.push({ week: g.week, a: g.a, b: g.b, sa, sb, locked: lock !== undefined })
   }
-  const standings = Object.values(rows).sort((x, y) => y.wins + 0.5 * y.ties - (x.wins + 0.5 * x.ties) || y.pf - x.pf)
+  const standings = seedOrder(
+    Object.values(rows),
+    (r) => r.wins + 0.5 * r.ties,
+    (r) => r.pf,
+    input.divisions ? (r) => input.divisions![r.rosterId] : undefined,
+  )
   standings.forEach((r, i) => (r.seed = i + 1))
 
   const nPlayoff = Math.min(input.playoffTeams || 0, teams.length)

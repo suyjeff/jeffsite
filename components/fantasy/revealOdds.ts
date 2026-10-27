@@ -39,6 +39,7 @@ export const revealOdds = (source: RevealSource, data: LeagueData, analysis: Ana
     schedule: models.forecastInput.schedule,
     playoffWeeks: models.forecastInput.playoffWeeks,
     playoffTeams: models.forecastInput.playoffTeams,
+    divisions: models.forecastInput.divisions,
     weeksLeft: data.futureWeeks.filter((w) => w > source.recap.week).length,
   })
   const slices = Math.ceil(RECAP_SIMS / RECAP_SLICE)

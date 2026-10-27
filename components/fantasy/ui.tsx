@@ -13,7 +13,20 @@ export const fmtSigned = (n: number | null | undefined, digits = 1) => {
   return `${n > 0 ? '+' : '−'}${Math.abs(n).toFixed(digits)}`
 }
 
-export const pct = (n: number | null | undefined, digits = 0) => (n === null || n === undefined || Number.isNaN(n) ? '–' : `${(n * 100).toFixed(digits)}%`)
+/**
+ * A share as a whole percent. Percents are only ever whole numbers here, and a share strictly between 0 and 1 never
+ * rounds to a certainty: 99.6% reads ">99%" and 0.3% reads "<1%"; only an exact 1 or 0 reads 100% or 0%. For a
+ * simulated probability, where even an exact 1 is not a certainty, use `odds`.
+ */
+export const pct = (n: number | null | undefined, _digits = 0) => {
+  if (n === null || n === undefined || Number.isNaN(n)) return '–'
+  const r = Math.round(n * 100)
+  if (n > 0 && n < 1) {
+    if (r >= 100) return '>99%'
+    if (r <= 0) return '<1%'
+  }
+  return `${r}%`
+}
 
 /**
  * One of a simulated team's odds, settled by its clinch status: playoffs read
@@ -26,18 +39,18 @@ export const simOdds = (s: { playoffs: number; bye: number; final: number; title
 export const signedPct = (p: number) => `${fmtSigned(p * 100, 0)}%`
 
 /**
- * A simulated probability. It never rounds to a certainty the arithmetic has
- * not settled: 99.7% reads ">99%", and 100% or 0% appear only when `settled`
- * says the outcome is decided.
+ * A simulated probability, as a whole percent. It never reads as a certainty the arithmetic has not settled: 99.7%,
+ * and even every one of the simulated seasons, reads ">99%"; 100% or 0% appear only when `settled` says the outcome is
+ * decided (clinched, eliminated).
  */
-export const odds = (p: number | null | undefined, digits = 0, settled?: 'in' | 'out' | null) => {
+export const odds = (p: number | null | undefined, _digits = 0, settled?: 'in' | 'out' | null) => {
   if (p === null || p === undefined || Number.isNaN(p)) return '–'
   if (settled === 'in') return '100%'
   if (settled === 'out') return '0%'
-  const unit = 10 ** -digits
-  if (p * 100 >= 100 - unit / 2) return `>${(100 - unit).toFixed(digits)}%`
-  if (p * 100 < unit / 2) return `<${unit.toFixed(digits)}%`
-  return `${(p * 100).toFixed(digits)}%`
+  const r = Math.round(p * 100)
+  if (r >= 100) return '>99%'
+  if (r <= 0) return '<1%'
+  return `${r}%`
 }
 
 /** How long ago a timestamp (ms) was, compactly: "40m", "5h", "3d". */

@@ -7,7 +7,7 @@ import LinesBlock from './LinesBlock'
 import PlayerNews from './PlayerNews'
 import TeamName from './TeamName'
 import { SheetBody, SheetContent, SheetHeader, SheetSection } from './Sheet'
-import { Badge, PlayerAvatar, PosTag, Pts, ScoreDelta, ScoreState, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel } from './ui'
+import { Badge, PlayerAvatar, PosTag, Pts, ScoreDelta, ScoreState, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel, pct } from './ui'
 import { useSlate } from './useSlate'
 import { boxParts, useWeekNow, type PlayerWeek } from './useWeekNow'
 
@@ -73,7 +73,7 @@ const ThisWeek = ({ week, w, pos, loaded }: { week: number; w: PlayerWeek; pos: 
             <>
               <dt className="ff-label self-center">Snaps</dt>
               <dd className="num text-ff-text">
-                {Math.round(snaps * 100)}% <span className="text-ff-muted">({Math.round(w.line!.off_snp)} of {Math.round(w.line!.tm_off_snp)})</span>
+                {pct(snaps)} <span className="text-ff-muted">({Math.round(w.line!.off_snp)} of {Math.round(w.line!.tm_off_snp)})</span>
               </dd>
             </>
           )}
@@ -178,7 +178,7 @@ const PlayerSheet = ({ id }: { id: string }) => {
               <Stat
                 inset="sheet"
                 label="Plays"
-                value={ctx?.play != null ? `${Math.round(ctx.play * 100)}%` : '–'}
+                value={ctx?.play != null ? pct(ctx.play) : '–'}
                 sub="of weeks ahead"
                 meter={ctx?.play ?? undefined}
                 tone={ctx?.play != null && ctx.play < 0.75 ? 'neg' : ctx?.play != null && ctx.play < 0.9 ? 'warn' : undefined}
@@ -209,8 +209,8 @@ const PlayerSheet = ({ id }: { id: string }) => {
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <div className="ff-label">Snaps</div>
-                    <div className="num mt-0.5 text-[15px] text-ff-text">{Math.round(usage.snaps * 100)}%</div>
-                    <div className="text-[10.5px] text-ff-muted">last {Math.round(usage.lastSnaps * 100)}%</div>
+                    <div className="num mt-0.5 text-[15px] text-ff-text">{pct(usage.snaps)}</div>
+                    <div className="text-[10.5px] text-ff-muted">last {pct(usage.lastSnaps)}</div>
                   </div>
                   <div>
                     <div className="ff-label">Touches + tgts</div>

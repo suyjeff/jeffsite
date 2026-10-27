@@ -218,6 +218,8 @@ export type ForecastInput = {
   sigmaFallback: number
   /** Regular-season weeks left on the calendar (the schedule above can be missing one that failed to load). */
   weeksLeft?: number
+  /** Each team's division, when the league has divisions (see seedOrder). */
+  divisions?: Record<number, number>
 }
 
 /** Each team's projected optimal lineup in every completed week that has projections, from the roster it had then. */
@@ -366,6 +368,38 @@ export type SimTeam = {
 }
 
 /**
+ * Playoff order from the standings. With divisions, each division's winner (best record there, points-for breaking
+ * ties) takes a top seed, the winners ranked among themselves by record, and everyone else follows by record; this is
+ * how Sleeper and ESPN seed a league with divisions. Without them it is the standings.
+ */
+export const seedOrder = <T>(rows: T[], winsOf: (r: T) => number, pfOf: (r: T) => number, divisionOf?: (r: T) => number | null | undefined): T[] => {
+  const byRecord = [...rows].sort((x, y) => winsOf(y) - winsOf(x) || pfOf(y) - pfOf(x))
+  if (!divisionOf) return byRecord
+  const winners: T[] = []
+  const seen = new Set<number>()
+  for (const r of byRecord) {
+    const d = divisionOf(r)
+    if (d == null || seen.has(d)) continue
+    seen.add(d)
+    winners.push(r)
+  }
+  if (seen.size < 2) return byRecord
+  const won = new Set(winners)
+  return [...winners, ...byRecord.filter((r) => !won.has(r))]
+}
+
+/**
+ * Each team's division, when the league has two or more; otherwise nothing, and seeding is by record alone. `count` is
+ * the league's setting where it has one (Sleeper); without it (ESPN) the rosters' own divisions decide.
+ */
+export const divisionsOf = (rows: { roster_id: number; settings?: { division?: number } | null }[], count?: number | null) => {
+  if (count != null && count < 2) return undefined
+  const out: Record<number, number> = {}
+  for (const r of rows) if (r.settings?.division != null) out[r.roster_id] = r.settings.division
+  return new Set(Object.values(out)).size >= 2 ? out : undefined
+}
+
+/**
  * Playoff spots settled by wins alone. A team is in when, even losing out,
  * fewer than `spots` other teams could still reach its win total; out when at
  * least `spots` teams already have more wins than it could reach. Ties count
@@ -383,6 +417,7 @@ export const clinchStatus = (
   schedule: { a: number; b: number }[],
   spots: number,
   weeksLeft = 0,
+  divisions?: Record<number, number>,
 ): Record<number, 'in' | 'out' | null> => {
   const left: Record<number, number> = {}
   for (const g of schedule) {
@@ -393,8 +428,11 @@ export const clinchStatus = (
   const games = (t: number) => Math.max(left[t] ?? 0, weeksLeft)
   const max = (t: number) => now(t) + games(t)
   const out: Record<number, 'in' | 'out' | null> = {}
+  const div = (t: number) => divisions?.[t]
+  const divs = new Set(teams.map(div).filter((d): d is number => d != null))
+  const split = divs.size >= 2
   if (spots > 0 && spots < teams.length && teams.every((t) => games(t) === 0)) {
-    const final = [...teams].sort((x, y) => now(y) - now(x) || (record[y]?.pf ?? 0) - (record[x]?.pf ?? 0))
+    const final = seedOrder(teams, now, (t) => record[t]?.pf ?? 0, split ? div : undefined)
     final.forEach((t, i) => (out[t] = i < spots ? 'in' : 'out'))
     return out
   }
@@ -405,7 +443,18 @@ export const clinchStatus = (
     }
     const threats = teams.filter((o) => o !== t && max(o) >= now(t)).length
     const ahead = teams.filter((o) => o !== t && now(o) > max(t)).length
-    out[t] = threats < spots ? 'in' : ahead >= spots ? 'out' : null
+    if (!split) {
+      out[t] = threats < spots ? 'in' : ahead >= spots ? 'out' : null
+      continue
+    }
+    // With divisions, a division winner takes a spot whatever its record. Winning its own division puts a team in;
+    // otherwise every other division's winner may be someone who cannot reach its wins, so each one costs a spot.
+    // And a team that can still win its division is never out.
+    const rivals = teams.filter((o) => o !== t && div(o) === div(t))
+    const winsDivision = rivals.every((o) => max(o) < now(t))
+    const canWinDivision = rivals.every((o) => now(o) <= max(t))
+    const otherDivisions = [...divs].filter((d) => d !== div(t)).length
+    out[t] = winsDivision || threats + otherDivisions < spots ? 'in' : ahead >= spots && !canWinDivision ? 'out' : null
   }
   return out
 }
@@ -426,6 +475,8 @@ export type SimInput = {
   seed?: number
   /** Results fixed in advance, by lockKey: the winner's roster id. Their scores are drawn given that result. */
   locks?: Record<string, number>
+  /** Each team's division, when the league has divisions: their winners take the top seeds (see seedOrder). */
+  divisions?: Record<number, number>
 }
 
 /** The seed of the separate stream locked results redraw from. */
@@ -483,7 +534,7 @@ export const simulateSeason = (input: SimInput): Record<number, SimTeam> => {
   const order = size ? bracketOrder(size) : []
   const byes = size - nPlayoff
   const out: Record<number, SimTeam> = {}
-  const settled = clinchStatus(teams, record, schedule, nPlayoff, input.weeksLeft ?? 0)
+  const settled = clinchStatus(teams, record, schedule, nPlayoff, input.weeksLeft ?? 0, input.divisions)
   for (const t of teams) out[t] = { rosterId: t, wins: 0, playoffs: 0, bye: 0, final: 0, title: 0, seeds: Array(teams.length + 1).fill(0), clinch: settled[t] }
   const z = normals(rng(input.seed ?? 20240917))
   // Redraws for locked results come from their own stream, so a pick never shifts the draws every other game
@@ -522,7 +573,12 @@ export const simulateSeason = (input: SimInput): Record<number, SimTeam> => {
       if (sa > sb) wins[ia]++
       else wins[ib]++
     }
-    const standings = teams.map((_, i) => i).sort((x, y) => wins[y] - wins[x] || pf[y] - pf[x])
+    const standings = seedOrder(
+      teams.map((_, i) => i),
+      (i) => wins[i],
+      (i) => pf[i],
+      input.divisions ? (i) => input.divisions![teams[i]] : undefined,
+    )
     standings.forEach((i, rank) => {
       out[teams[i]].seeds[rank + 1]++
       out[teams[i]].wins += wins[i]
@@ -602,6 +658,7 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = past
     mean: persistMean(mean, ids),
     sigma: noise.sigma,
     weeksLeft: input.weeksLeft,
+    divisions: input.divisions,
     tau,
     sims,
   })
@@ -640,7 +697,7 @@ export const weekStakes = (input: ForecastInput, base: Forecast, sims = 1500): R
       }
       add(g.a, aWins, g.muA)
       add(g.b, !aWins, g.muB)
-      return simulateSeason({ teams: ids, record, schedule: rest, playoffWeeks: input.playoffWeeks, playoffTeams: input.playoffTeams, mean, sigma: base.sigma, tau: base.tau, weeksLeft: input.weeksLeft, sims })
+      return simulateSeason({ teams: ids, record, schedule: rest, playoffWeeks: input.playoffWeeks, playoffTeams: input.playoffTeams, mean, sigma: base.sigma, tau: base.tau, weeksLeft: input.weeksLeft, divisions: input.divisions, sims })
     }
     const aWon = run(true)
     const bWon = run(false)
@@ -672,6 +729,7 @@ export const tradeLeverage = (input: ForecastInput, base: Forecast, trade: { me:
     sigma: base.sigma,
     tau: base.tau,
     weeksLeft: input.weeksLeft,
+    divisions: input.divisions,
     sims,
     seed: 777,
   }

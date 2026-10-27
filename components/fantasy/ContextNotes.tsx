@@ -1,7 +1,7 @@
 import React from 'react'
 import { BASE_AVAILABILITY, type ContextNote, type PlayerContext } from '../../lib/fantasy/context'
 import type { PlayerMap } from '../../lib/fantasy/types'
-import type { Reason } from './ui'
+import { pct, type Reason } from './ui'
 
 const last = (name: string | undefined, id: string) => (name ? name.split(' ').slice(-1)[0] : id)
 
@@ -27,14 +27,14 @@ export const describeNote = (note: ContextNote, players: PlayerMap): { tone: Ton
     case 'status':
       return {
         tone: 'warn',
-        label: `${note.status} · ${Math.round(note.play * 100)}% wk ${note.week}`,
-        title: `Listed ${note.status}. Counted at ${Math.round(note.play * 100)}% to play in week ${note.week}; teammates get the rest.`,
+        label: `${note.status} · ${pct(note.play)} wk ${note.week}`,
+        title: `Listed ${note.status}. Counted at ${pct(note.play)} to play in week ${note.week}; teammates get the rest.`,
       }
     case 'history':
       return {
         tone: 'bad',
         label: `played ${note.played}/${note.games}`,
-        title: `Played ${note.played} of his team's last ${note.games}. Expect ${Math.round(note.rate * 100)}% of games ahead; a typical starter plays ${Math.round(BASE_AVAILABILITY * 100)}%.`,
+        title: `Played ${note.played} of his team's last ${note.games}. Expect ${pct(note.rate)} of games ahead; a typical starter plays ${Math.round(BASE_AVAILABILITY * 100)}%.`,
       }
     case 'bump': {
       const who = note.from.map((id) => last(players[id]?.name, id)).join(', ')
@@ -61,7 +61,7 @@ export const describeNote = (note: ContextNote, players: PlayerMap): { tone: Ton
       return {
         tone: up ? 'good' : 'warn',
         label: `work ${Math.round(note.prior)}→${note.last}`,
-        title: `Carries and targets: ${note.prior.toFixed(1)} a game before, ${note.last} last game, on ${Math.round(note.lastSnaps * 100)}% of snaps.${!up && note.injury ? ` Listed ${note.injury}, so maybe an injury, not a new role.` : ''} About ${Math.round(note.carryover * 100)}% of a swing like this lasts, and Sleeper already counts it.`,
+        title: `Carries and targets: ${note.prior.toFixed(1)} a game before, ${note.last} last game, on ${pct(note.lastSnaps)} of snaps.${!up && note.injury ? ` Listed ${note.injury}, so maybe an injury, not a new role.` : ''} About ${Math.round(note.carryover * 100)}% of a swing like this lasts, and Sleeper already counts it.`,
       }
     }
     case 'playoffs':

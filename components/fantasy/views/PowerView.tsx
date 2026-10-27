@@ -9,7 +9,7 @@ import { useFantasy } from '../FantasyContext'
 import TeamName from '../TeamName'
 import { Crown, PowerBanner, type RevealPending } from '../RevealBanner'
 import { dropsLabel, type Recap } from '../../../lib/fantasy/recap'
-import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, pct, probShade, simOdds, type Column, type PageChange } from '../ui'
+import { Avatar, Badge, CenterMeter, Meter, Num, PageHeader, Panel, Segmented, Sparkline, N, Stat, StatGrid, Swap, Table, TabSection, Tabs, DeltaChip, usePhone, cx, fmt, fmtSigned, odds, pct, probShade, simOdds, type Column, type PageChange } from '../ui'
 
 type Sub = 'rankings' | 'standings' | 'schedule'
 const SUBS: Sub[] = ['rankings', 'standings', 'schedule']
@@ -487,7 +487,7 @@ export const OddsGrid = ({ onTeam }: { onTeam?: (id: number) => void }) => {
                     return (
                       <td
                         key={i}
-                        title={`${analysis.teamById[id].name}: ${pct(p, 1)} to finish ${i + 1}`}
+                        title={`${analysis.teamById[id].name}: ${odds(p)} to finish ${i + 1}`}
                         className={cx('num h-8 border-b border-ff-line/60 text-center text-[10.5px]', p >= 0.25 ? 'text-ff-panel' : p >= 0.02 ? 'text-ff-text2' : 'text-ff-muted/50', i + 1 === cut && 'border-r border-r-ff-line2')}
                         style={{ background: probShade(p) }}
                       >

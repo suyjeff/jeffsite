@@ -1,7 +1,7 @@
 import React from 'react'
 import { PROP_LABEL } from '../../lib/fantasy/lines'
 import { useFantasy } from './FantasyContext'
-import { fmt } from './ui'
+import { fmt, pct } from './ui'
 
 /** A player's prop lines for the coming week, each read as an expected stat, beside what they add up to. */
 const LinesBlock = ({ id }: { id: string }) => {
@@ -22,7 +22,7 @@ const LinesBlock = ({ id }: { id: string }) => {
             <span className="w-10 text-right text-ff-text">{p.stat === 'anytime_touchdowns' ? '' : p.line}</span>
             <span className="w-9 text-right text-ff-muted" title="Chance of the over, margin removed">
               {p.stat === 'anytime_touchdowns' ? '' : 'o'}
-              {Math.round(p.pOver * 100)}%
+              {pct(p.pOver)}
             </span>
             <span className="w-14 shrink-0 whitespace-nowrap text-right text-ff-text2" title="Implied expected value">
               {p.stat === 'anytime_touchdowns' ? `${p.mean.toFixed(2)} td` : `≈${p.mean.toFixed(p.mean < 10 ? 1 : 0)}`}

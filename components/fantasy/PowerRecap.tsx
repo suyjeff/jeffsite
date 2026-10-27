@@ -3,7 +3,7 @@ import { RECAP_SIMS, type Odds, type Part, type Reason, type Recap, type RecapGa
 import { useFantasy } from './FantasyContext'
 import { Crown } from './RevealBanner'
 import { ShareButton } from './RevealShare'
-import { Avatar, PlayerAvatar, PosTag, Segmented, cx, fmt, pct } from './ui'
+import { Avatar, PlayerAvatar, PosTag, Segmented, cx, fmt, odds as chance, pct } from './ui'
 
 // What the reveal settles into: the new ranking with each team's move, and the week that made it. On wide screens
 // the ranking holds the left column and the week reads down the right; on phones they are three pages under tabs.
@@ -168,7 +168,7 @@ const OddsMove = ({ o, className }: { o: Odds; className?: string }) => {
   const a = o.before.playoffs
   const b = o.after.playoffs
   const dlt = Math.round((b - a) * 100)
-  const label = (s: Odds['after']) => (s.clinch === 'in' ? 'IN' : s.clinch === 'out' ? 'OUT' : pct(s.playoffs))
+  const label = (s: Odds['after']) => (s.clinch === 'in' ? 'IN' : s.clinch === 'out' ? 'OUT' : chance(s.playoffs))
   return (
     <span className={cx('num inline-flex items-baseline gap-1.5 whitespace-nowrap text-[12px]', className)}>
       <span className="text-ff-muted">{label(o.before)}</span>
@@ -462,7 +462,7 @@ const PlayoffPanel = ({ recap, odds, at }: { recap: Recap; odds: Record<number, 
           ))}
           {swing && Math.abs(swing.o.after.playoffs - swing.o.before.playoffs) >= 0.02 && (
             <p>
-              Biggest swing: <span className="font-medium"><TeamLabel id={swing.t.rosterId} /></span>, {pct(swing.o.before.playoffs)} to {pct(swing.o.after.playoffs)}.
+              Biggest swing: <span className="font-medium"><TeamLabel id={swing.t.rosterId} /></span>, {chance(swing.o.before.playoffs, 0, swing.o.before.clinch)} to {chance(swing.o.after.playoffs, 0, swing.o.after.clinch)}.
             </p>
           )}
         </div>
