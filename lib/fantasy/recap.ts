@@ -7,6 +7,7 @@ import { persistMean, simulateSeason, winProb, type Forecast, type SimTeam } fro
 import { optimalLineup, type LineupPlayer, type Slot } from './lineup'
 import { activeParts, buildTeamSeasons, buildTeamWeeks, computePower, type PowerWeights, type TeamSeason, type TeamWeek } from './power'
 import type { ScheduleGame } from './context'
+import { gameIsFinal, gameIsLive } from './gameTime'
 import type { PlayerMap, SleeperMatchup } from './types'
 
 /** A phrase about teams: plain text and team references, so the view can render names its own way. */
@@ -467,10 +468,13 @@ export const sortPasses = (from: number[], to: number[]): { order: number[]; swa
 /** Weeks with points on the board. */
 const hasScores = (ms: SleeperMatchup[] | undefined) => !!ms && ms.some((m) => (m.points ?? 0) > 0)
 
-/** Whether every NFL game of a week is final by the schedule (canceled games aside). */
-export const weekFinal = (games: ScheduleGame[] | undefined, week: number) => {
+/**
+ * Whether every NFL game of a week is final (canceled games aside), the way every view decides it
+ * (lib/fantasy/gameTime): Sleeper's status, and the Eastern calendar where the status lags.
+ */
+export const weekFinal = (games: ScheduleGame[] | undefined, week: number, now = Date.now()) => {
   const gs = (games ?? []).filter((g) => g.week === week && g.status !== 'canceled')
-  return gs.length > 0 && gs.every((g) => g.status === 'complete')
+  return gs.length > 0 && gs.every((g) => gameIsFinal(g, undefined, now))
 }
 
 /**
@@ -484,11 +488,13 @@ export const revealWeek = (opts: {
   /** Sleeper's current week. */
   week: number
   playoffStart: number
+  /** The instant to judge games against; defaults to now. */
+  now?: number
 }): number | null => {
   const settled = opts.regularWeeks.length ? Math.max(...opts.regularWeeks) : null
   for (const w of [opts.week, opts.week - 1]) {
     if (w >= opts.playoffStart || w < 1 || (settled != null && w <= settled)) continue
-    if (hasScores(opts.matchupsByWeek[w]) && weekFinal(opts.games, w)) return w
+    if (hasScores(opts.matchupsByWeek[w]) && weekFinal(opts.games, w, opts.now)) return w
   }
   return settled
 }
@@ -554,9 +560,9 @@ export const countdown = (gate: Date, now: number) => {
   return `in ${m}m`
 }
 
-/** A week has kicked off once any of its NFL games has started or finished, or points are on the board. */
-const kickedOff = (matchups: SleeperMatchup[] | undefined, games: ScheduleGame[] | undefined, week: number) =>
-  hasScores(matchups) || (games ?? []).some((g) => g.week === week && g.status != null && g.status !== 'pre_game' && g.status !== 'canceled')
+/** A week has kicked off once any of its NFL games has started or finished (lib/fantasy/gameTime), or points are on the board. */
+const kickedOff = (matchups: SleeperMatchup[] | undefined, games: ScheduleGame[] | undefined, week: number, now: number) =>
+  hasScores(matchups) || (games ?? []).some((g) => g.week === week && g.status !== 'canceled' && (gameIsLive(g, undefined, now) || gameIsFinal(g, undefined, now)))
 
 /**
  * Which week the reveal shows and which is on its way. `revealed` is the latest finished week whose gate has passed:
@@ -592,7 +598,7 @@ export const revealState = (opts: {
     // game is final (Monday night), so the week under way can be either of the last two; the earlier one wins. Week 1
     // has nothing revealed before it, so it counts too.
     for (const w of [opts.week - 1, opts.week]) {
-      if (w < 1 || w >= playoffStart || (latest != null && w <= latest) || !kickedOff(matchupsByWeek[w], games, w)) continue
+      if (w < 1 || w >= playoffStart || (latest != null && w <= latest) || !kickedOff(matchupsByWeek[w], games, w, now)) continue
       const g = revealGate(games, w)
       if (g && now < g.getTime()) {
         pending = { week: w, gate: g }

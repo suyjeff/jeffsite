@@ -129,9 +129,12 @@ describe('reveal timing', () => {
   })
   it('picks a week once every game is final, before it is settled', () => {
     const mbw = { 4: matchupsByWeek[1], 5: matchupsByWeek[2] }
-    expect(revealWeek({ regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games, week: 5, playoffStart: 15 })).toBe(5)
+    // Late Monday night Eastern: a Monday game still in play holds the week; a day past, a stuck status no longer does.
+    const now = Date.parse('2026-10-13T03:00:00Z')
+    expect(revealWeek({ regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games, week: 5, playoffStart: 15, now })).toBe(5)
     const live = games.map((g, i) => (i ? { ...g, status: 'in_game' } : g))
-    expect(revealWeek({ regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games: live, week: 5, playoffStart: 15 })).toBe(4)
+    expect(revealWeek({ regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games: live, week: 5, playoffStart: 15, now })).toBe(4)
+    expect(revealWeek({ regularWeeks: [1, 2, 3, 4], matchupsByWeek: mbw, games: live, week: 5, playoffStart: 15, now: Date.parse('2026-10-14T09:00:00Z') })).toBe(5)
     expect(weeksBefore(mbw, 5, 15)).toEqual([4])
   })
 })

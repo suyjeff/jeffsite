@@ -167,6 +167,13 @@ export const getMatchups = (leagueId: string, week: number, isPast: boolean) =>
     isPast ? 24 * HOUR : 5 * MINUTE,
   )
 
+/**
+ * The week's matchups read again while its games are on: points move each play, so memory only, and kept for less
+ * than the poll's gap, so each poll reads them new and their read time is when they were fetched.
+ */
+export const getLiveMatchups = (leagueId: string, week: number) =>
+  cachedGet<SleeperMatchup[]>(`/league/${leagueId}/matchups/${week}`, 25_000, { key: `live-matchups:${leagueId}:${week}`, persist: false })
+
 export const getTrendingAdds = (lookbackHours = 24, limit = 50) =>
   cachedGet<TrendingEntry[]>(
     `/players/nfl/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`,
@@ -279,6 +286,10 @@ export const getSchedule = (season: string) =>
   // Short-lived: the rows carry each game's status, which Gameday reads to know what is final.
   cachedGet<ScheduleGame[]>(`/schedule/nfl/regular/${season}`, 20 * MINUTE, { base: 'https://api.sleeper.app' })
 
+/** The schedule read again while games are on, for each game's status: memory only, kept for less than the poll's gap. */
+export const getLiveSchedule = (season: string) =>
+  cachedGet<ScheduleGame[]>(`/schedule/nfl/regular/${season}`, 25_000, { base: 'https://api.sleeper.app', key: `live-schedule:${season}`, persist: false })
+
 /**
  * Games played per player across a whole regular season, from the season-total
  * stat line (~1.2MB) reduced to one number per player. A finished season never
@@ -371,11 +382,12 @@ export type WeekActuals = { pts: Record<string, number>; lines: WeekStats }
  * then cut to the box-score keys: a whole week's raw payload is ~600KB, this is a small fraction of it. Team
  * defenses are kept whatever they did, since their points allowed are the game's score.
  *
- * A week still being played is a snapshot: it lives a minute, in memory only. Once every game is final the week is
- * read again under its own key and kept for a day, so a mid-game copy can never stand in for the result.
+ * A week still being played is a snapshot: it lives under the live poll's gap, in memory only. Once the week is
+ * settled (lib/fantasy/liveWeek weekSettled) it is read again under its own key and kept for a day, so a mid-game copy
+ * can never stand in for the result.
  */
 export const getWeekActuals = (leagueId: string, season: string, week: number, scoring: Record<string, number>, isPast: boolean) =>
-  cachedGet<WeekStats, WeekActuals>(`/stats/nfl/regular/${season}/${week}`, isPast ? 24 * HOUR : MINUTE, {
+  cachedGet<WeekStats, WeekActuals>(`/stats/nfl/regular/${season}/${week}`, isPast ? 24 * HOUR : 25_000, {
     key: `actuals:${leagueId}:${season}:${week}${isPast ? ':final' : ':live'}`,
     persist: isPast,
     transform: (raw) => {

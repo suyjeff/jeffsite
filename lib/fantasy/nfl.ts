@@ -46,8 +46,14 @@ export type Broadcast = {
   networks: string[]
   away?: number
   home?: number
-  /** ESPN's game state: before, during or after. */
+  /** ESPN's game state: before, during or over. A game postponed, canceled or suspended reads 'pre': it is not over. */
   state?: 'pre' | 'in' | 'post'
+  /** Kickoff, as ESPN schedules it (ms). */
+  start?: number
+  /** When this reading was fetched (ms); stamped by the reader, not the payload. */
+  at?: number
+  /** The latest the game can have ended (ms): when a reading first said it was over, or kickoff plus five hours. */
+  ended?: number
   /** A game under way: the quarter and its clock ("Q3 4:12", "Half", "OT 2:00"). */
   clock?: string
   /** Share of regulation played, 0–1, for a game under way. */
@@ -66,12 +72,13 @@ export const parseScoreboard = (json: unknown): Record<string, Broadcast> => {
   const events = (json as { events?: unknown[] })?.events
   if (!Array.isArray(events)) return out
   for (const e of events) {
+    const ev = e as { date?: string }
     const c = (
       e as {
         competitions?: {
           competitors?: { homeAway?: string; score?: string; team?: { abbreviation?: string } }[]
           broadcasts?: { names?: string[] }[]
-          status?: { period?: number; displayClock?: string; type?: { state?: string; name?: string } }
+          status?: { period?: number; displayClock?: string; type?: { state?: string; name?: string; completed?: boolean } }
         }[]
       }
     )?.competitions?.[0]
@@ -85,7 +92,12 @@ export const parseScoreboard = (json: unknown): Record<string, Broadcast> => {
     const away = side('away')
     if (!home || !away) continue
     const num = (s?: string) => (s != null && s !== '' && !Number.isNaN(Number(s)) ? Number(s) : undefined)
-    const state = c.status?.type?.state === 'in' ? 'in' : c.status?.type?.state === 'post' ? 'post' : 'pre'
+    // Over only when ESPN calls it complete: a postponed, canceled or suspended game also sits in its 'post' state, but
+    // it has not been played, so it reads as not started.
+    const type = c.status?.type
+    const done = type?.completed === true || type?.name === 'STATUS_FINAL' || type?.name === 'STATUS_FINAL_OVERTIME'
+    const state = type?.state === 'in' ? 'in' : type?.state === 'post' && done ? 'post' : 'pre'
+    const start = ev.date ? Date.parse(ev.date) : NaN
     // The clock, for a game under way: quarters are 15 minutes, so the share played is what a projection has left.
     const period = c.status?.period ?? 0
     const left = clockSecs(c.status?.displayClock)
@@ -98,6 +110,7 @@ export const parseScoreboard = (json: unknown): Record<string, Broadcast> => {
       away: num(away.score),
       home: num(home.score),
       state,
+      ...(Number.isFinite(start) ? { start } : {}),
       ...(clock ? { clock, elapsed } : {}),
     }
   }
