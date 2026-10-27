@@ -1,3 +1,4 @@
+import { gameIsFinal } from '../../../lib/fantasy/gameTime'
 import React, { useMemo, useState } from 'react'
 import { pastProjection } from '../../../lib/fantasy/analysis'
 import { deadStarters } from '../../../lib/fantasy/lineup'
@@ -98,17 +99,18 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
   const { models, data } = useFantasy()
   const f = models.forecast
   const unset = useUnsetLineups(f?.nextWeek[0]?.week ?? null)
-  const { read, week: slateWeek } = useMatchups()
+  const { read, week: slateWeek, slate } = useMatchups()
   if (!f || !f.nextWeek.length) return <NoForecast />
   const week = f.nextWeek[0].week
   const live = data.matchupsByWeek[week] ?? []
   const pts = (rid: number) => live.find((m) => m.roster_id === rid)?.points ?? 0
   // Once the week has started, every row shows points scored; before, every row shows expectations. Never a mix.
   const started = live.some((m) => (m.points ?? 0) > 0)
-  // Final once every NFL game of the week is (by status, or by the calendar when the status lags).
-  const today = new Date().toISOString().slice(0, 10)
+  // Final once every NFL game of the week is: the slate's own reading when it is this week (ESPN's feed, then Sleeper,
+  // then the Eastern calendar), else Sleeper's status and the calendar.
   const weekGames = (data.schedule?.games ?? []).filter((x) => x.week === week && x.status !== 'canceled')
-  const done = weekGames.length > 0 && weekGames.every((x) => x.status === 'complete' || (!!x.date && x.date < today))
+  const slateGames = slateWeek === week ? slate.games : null
+  const done = slateGames ? slateGames.length > 0 && slateGames.every((x) => x.final) : weekGames.length > 0 && weekGames.every((x) => gameIsFinal(x, undefined))
   const kind = !started ? 'proj' : done ? 'final' : 'live'
   // Each side as the slate reads it, once the week is on: points banked, and starters still to play under them. The
   // slate itself is shared with every other view (useSlate); each pairing is read once.

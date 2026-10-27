@@ -4,6 +4,7 @@ import { weekStakes, type Forecast, type ForecastInput, type Stakes } from '../.
 import { buildSlate, positionCV, type Slate } from '../../lib/fantasy/slate'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { impliedTotals, type TeamTotal } from '../../lib/fantasy/waivers'
+import { etDay, gameIsLive, pastByCalendar, type FeedState } from '../../lib/fantasy/gameTime'
 import type { Broadcast } from '../../lib/fantasy/nfl'
 import { useFantasy } from './FantasyContext'
 import { useBroadcasts, useLiveTick } from './useBroadcasts'
@@ -15,11 +16,22 @@ type Built = { deps: unknown[]; slate: Slate; totals: Record<string, TeamTotal> 
 const built = new WeakMap<LeagueData, Built>()
 const sameDeps = (a: unknown[], b: unknown[]) => a.length === b.length && a.every((x, i) => Object.is(x, b[i]))
 
-/** Share of regulation played in each game under way, from ESPN's clock, with a key that changes only when it does. */
+/**
+ * From ESPN's scoreboard: each game's state (pre, in, post), which overrides Sleeper's lagging status, and the share of
+ * regulation played in each game under way. The key changes only when one of them does.
+ */
 const clockOf = (casts: Record<string, Broadcast>) => {
   const elapsed: Record<string, number> = {}
-  for (const [k, c] of Object.entries(casts)) if (c.state === 'in' && c.elapsed != null) elapsed[k] = c.elapsed
-  return { elapsed, sig: Object.entries(elapsed).map(([k, v]) => `${k}:${v.toFixed(3)}`).join('|') }
+  const feed: Record<string, FeedState> = {}
+  for (const [k, c] of Object.entries(casts)) {
+    if (c.state) feed[k] = c.state
+    if (c.state === 'in' && c.elapsed != null) elapsed[k] = c.elapsed
+  }
+  const sig = Object.keys(feed)
+    .sort()
+    .map((k) => `${k}:${feed[k]}${elapsed[k] != null ? `:${elapsed[k].toFixed(3)}` : ''}`)
+    .join('|')
+  return { elapsed, feed, sig }
 }
 
 // The stakes simulation runs once per forecast, whichever view asks first: one shared run, a game at a time,
@@ -60,8 +72,14 @@ export const useSlate = (data: LeagueData, analysis: Analysis) => {
   const lines = useStatLines(data.league.season, live ? [week] : [])
   const statLines = lines[week] ?? null
   // The clock of any game under way, so a player's expected finish counts the time actually left; read again each
-  // minute while a game is on.
-  const playing = live && (data.schedule?.games ?? []).some((g) => g.week === week && (g.status === 'in_game' || g.status === 'in_progress'))
+  // minute while a game is on. Sleeper's status can lag a kickoff, so any game day with a game not yet over by the
+  // calendar counts too: ESPN then says which games are on and which are over.
+  const today = etDay(Date.now())
+  const playing =
+    live &&
+    (data.schedule?.games ?? []).some(
+      (g) => g.week === week && g.status !== 'canceled' && (gameIsLive(g, undefined) || (g.status !== 'complete' && !!g.date && g.date <= today && !pastByCalendar(g.date))),
+    )
   const tick = useLiveTick(playing)
   const clock = clockOf(useBroadcasts(data.league.season, playing ? week : null, tick))
 
@@ -100,6 +118,7 @@ export const useSlate = (data: LeagueData, analysis: Analysis) => {
       totals,
       stakes,
       elapsed: clock.elapsed,
+      feed: clock.feed,
     })
     const out = { deps, slate, totals }
     built.set(data, out)

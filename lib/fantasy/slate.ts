@@ -22,6 +22,7 @@
 
 import type { ScheduleGame } from './context'
 import { phi, type Stakes } from './forecast'
+import { gameIsFinal, gameIsLive, type FeedState } from './gameTime'
 import type { PlayerMap, SleeperMatchup } from './types'
 import type { TeamTotal } from './waivers'
 import type { WeekPoints } from './war'
@@ -153,8 +154,10 @@ export type SlateInput = {
   stakes: Record<number, Stakes> | null
   /** Share of regulation played in each game under way, by "AWAY@HOME", where a live clock answers; halftime is assumed otherwise. */
   elapsed?: Record<string, number>
-  /** YYYY-MM-DD, for tests; defaults to today (UTC). */
-  today?: string
+  /** Each game's state on ESPN's live feed, by "AWAY@HOME", where it answers: it overrides Sleeper's lagging status. */
+  feed?: Record<string, FeedState>
+  /** The instant to judge games against, for tests; defaults to now. */
+  now?: number
 }
 
 const gameKey = (g: ScheduleGame) => `${g.week}:${g.away}@${g.home}`
@@ -164,11 +167,13 @@ export const buildSlate = (input: SlateInput): Slate => {
   const games = input.games.filter((g) => g.week === input.week && g.status !== 'canceled')
   const gameOf: Record<string, ScheduleGame> = {}
   for (const g of games) gameOf[g.home] = gameOf[g.away] = g
-  // Final by Sleeper's status, or by the calendar once the game's date is past (the status can lag).
-  const today = input.today ?? new Date().toISOString().slice(0, 10)
-  const isFinal = (g: ScheduleGame | undefined) => g?.status === 'complete' || (!!g?.date && g.date < today)
-  // Under way: Sleeper says so, or points are already on the board for its players.
-  const isLive = (g: ScheduleGame | undefined) => g?.status === 'in_game' || g?.status === 'in_progress'
+  // Final by ESPN's feed, then Sleeper's status, then the calendar in Eastern time (lib/fantasy/gameTime): never while
+  // either feed says the game is on.
+  const now = input.now ?? Date.now()
+  const feedOf = (g: ScheduleGame | undefined) => (g ? input.feed?.[`${g.away}@${g.home}`] : undefined)
+  const isFinal = (g: ScheduleGame | undefined) => gameIsFinal(g, feedOf(g), now)
+  // Under way: ESPN or Sleeper says so (points already on the board count too, below).
+  const isLive = (g: ScheduleGame | undefined) => gameIsLive(g, feedOf(g))
 
   // Pairings and lineups, from Sleeper's own matchups when the week has them.
   const byMatchup = new Map<number, SleeperMatchup[]>()
