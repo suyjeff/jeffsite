@@ -3,7 +3,7 @@ import { findMoves, type Move, type MoveKind } from '../../lib/fantasy/moves'
 import { useFantasy } from './FantasyContext'
 import { providerName } from '../../lib/fantasy/useLeagueData'
 import { useNews } from './useNews'
-import { Badge, Empty, Panel, PlayerAvatar, ago, cx, fmt, fmtSigned } from './ui'
+import { Badge, Empty, Panel, PlayerAvatar, ago, cx, fmt, fmtSigned, pct } from './ui'
 
 const KIND: Record<MoveKind, { label: string; tone: 'pos' | 'warn' | 'neg' | 'accent' | 'neutral' }> = {
   start: { label: 'START', tone: 'pos' },
@@ -92,7 +92,7 @@ const Sentence = ({ m }: { m: Move }) => {
     case 'cover':
       return (
         <>
-          <Who id={m.outId} /> is {m.status}, <span className="num">{Math.round((m.play ?? 0) * 100)}%</span> to play.{' '}
+          <Who id={m.outId} /> is {m.status}, <span className="num">{pct(m.play ?? 0)}</span> to play.{' '}
           {m.inId ? (
             <>
               {m.backup ? (

@@ -1,5 +1,6 @@
 import { gameIsFinal } from '../../../lib/fantasy/gameTime'
 import React, { useMemo, useState } from 'react'
+import { seedOrder } from '../../../lib/fantasy/forecast'
 import { pastProjection } from '../../../lib/fantasy/analysis'
 import { deadStarters } from '../../../lib/fantasy/lineup'
 import type { SlateSide } from '../../../lib/fantasy/slate'
@@ -15,7 +16,7 @@ import TeamName from '../TeamName'
 import { MoveList, useMoves } from '../Moves'
 import { ruledOutBy } from '../../../lib/fantasy/grades'
 import PlayerName from '../PlayerName'
-import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, ScoreState, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, ownerLabel, simOdds, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, ScoreState, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, odds, ownerLabel, simOdds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -152,7 +153,7 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
             {score(g, 'a')}
           </span>
           <span className="flex w-16 shrink-0 items-center gap-1">
-            <span className="num w-7 text-right text-[10.5px] text-ff-text2">{Math.round(g.pA * 100)}</span>
+            <span className="num w-7 text-right text-[10.5px] text-ff-text2">{odds(g.pA).replace('%', '')}</span>
             <WinBar p={g.pA} />
           </span>
           <span className="num flex w-12 shrink-0 text-ff-text" title={!started && unset[g.b] ? unsetNote(unset[g.b]) : undefined}>
@@ -207,7 +208,7 @@ const Odds = ({ sel, select }: WidgetProps) => {
             <span className="num hidden w-9 text-right text-ff-text2 sm:inline">{simOdds(s, 'bye')}</span>
             <span className="flex w-[78px] items-center justify-end gap-1.5">
               <Bar value={s.title} max={maxTitle} width={30} />
-              <span className="num w-9 text-right text-ff-text">{simOdds(s, 'title', s.title < 0.1 ? 1 : 0)}</span>
+              <span className="num w-9 text-right text-ff-text">{simOdds(s, 'title')}</span>
             </span>
           </Row>
         )
@@ -418,9 +419,11 @@ const Power = ({ sel, select }: WidgetProps) => {
 }
 
 const Standings = ({ sel, select }: WidgetProps) => {
-  const { analysis, data } = useFantasy()
+  const { analysis, data, models } = useFantasy()
   const cut = Number(data.league.settings?.playoff_teams ?? 6)
-  const rows = [...analysis.seasons].sort((a, b) => b.wins + b.ties / 2 - (a.wins + a.ties / 2) || b.pf - a.pf)
+  // Playoff order: by record, with each division's winner seeded first in a league with divisions.
+  const divisions = models.forecastInput.divisions
+  const rows = seedOrder(analysis.seasons, (s) => s.wins + s.ties / 2, (s) => s.pf, divisions ? (s) => divisions[s.rosterId] : undefined)
   return (
     <div>
       <Th>
@@ -630,7 +633,7 @@ const TeamCard = ({ sel, select }: WidgetProps) => {
             {[
               ['rtg', fmt(r.rating)],
               ['po', simOdds(s, 'playoffs')],
-              ['title', simOdds(s, 'title', s.title < 0.1 ? 1 : 0)],
+              ['title', simOdds(s, 'title')],
             ].map(([k, v]) => (
               <div key={k}>
                 <div className="ff-label">{k}</div>

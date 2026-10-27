@@ -138,7 +138,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
         {fav != null && (
           <>
             <TeamName id={fav} avatar={false} plain className="font-medium" /> {(scenario[fav]?.title ?? 0) >= 0.25 ? 'is the clear title favorite' : 'leads an open title race'} at{' '}
-            {pct(scenario[fav]?.title ?? 0)}.{' '}
+            {odds(scenario[fav]?.title ?? 0)}.{' '}
           </>
         )}
         {bubble != null && (
@@ -176,7 +176,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                       {(s?.seeds.slice(1) ?? []).map((p, k) => (
                         <span
                           key={k}
-                          title={`${pct(p, 1)} to finish ${k + 1}`}
+                          title={`${odds(p)} to finish ${k + 1}`}
                           className={cx('h-3.5 w-2.5 transition-colors duration-300', k + 1 === nPlayoff && 'mr-[3px]')}
                           style={{ background: probShade(p) ?? 'rgb(var(--ff-line) / 0.5)' }}
                         />
@@ -187,12 +187,12 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                   <td className="h-8 whitespace-nowrap border-b border-ff-line/60 px-2 text-right">
                     <span className="inline-flex items-center justify-end gap-1.5">
                       <Meter value={s?.playoffs ?? 0} max={1} width={48} thin className="hidden md:inline-block" />
-                      <span className="num w-10 text-right text-ff-text">{odds(s?.playoffs, 0, s?.clinch)}</span>
+                      <span className="num w-10 text-right text-ff-text">{odds(s?.playoffs, s?.clinch)}</span>
                       {tweaked && <Delta v={(s?.playoffs ?? 0) - (b?.playoffs ?? 0)} />}
                     </span>
                   </td>
                   <td className="h-8 whitespace-nowrap border-b border-ff-line/60 pl-2 pr-3 text-right">
-                    <span className="num inline-block w-10 text-right text-ff-text2">{odds(s?.title, (s?.title ?? 0) < 0.1 ? 1 : 0)}</span>
+                    <span className="num inline-block w-10 text-right text-ff-text2">{odds(s?.title)}</span>
                     {tweaked && <Delta v={(s?.title ?? 0) - (b?.title ?? 0)} />}
                   </td>
                 </tr>
@@ -312,7 +312,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                     <Avatar src={t?.avatar ?? null} name={t?.name ?? '?'} size={22} />
                     <span className="min-w-0 flex-1 leading-tight">
                       <span className={cx('block truncate text-[12.5px]', id === me ? 'font-medium text-ff-accent' : 'text-ff-text')}>{t?.name}</span>
-                      <span className={cx('num block text-[10.5px]', on ? 'text-ff-text2' : 'text-ff-muted')}>{on ? '✓ wins' : off ? 'loses' : `${pct(p)} to win`}</span>
+                      <span className={cx('num block text-[10.5px]', on ? 'text-ff-text2' : 'text-ff-muted')}>{on ? '✓ wins' : off ? 'loses' : `${odds(p)} to win`}</span>
                     </span>
                   </button>
                 )
@@ -413,7 +413,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
             <StatGrid>
               <Stat
                 label="Your playoff odds"
-                value={odds(mine.playoffs, 0, mine.clinch)}
+                value={odds(mine.playoffs, mine.clinch)}
                 meter={mine.playoffs}
                 badge={
                   tweaked && base
@@ -426,8 +426,8 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                 sub={`${fmt(mine.wins)} wins on average`}
               />
               <Stat label="Bye" value={odds(mine.bye)} sub="a top seed, skipping round one" />
-              <Stat label="Title" value={odds(mine.title, mine.title < 0.1 ? 1 : 0)} sub={`final ${odds(mine.final)}`} />
-              <Stat label="Most likely seed" value={likelySeed ? `#${likelySeed}` : '–'} sub={likelySeed ? `${pct(mine.seeds[likelySeed])} of seasons` : undefined} />
+              <Stat label="Title" value={odds(mine.title)} sub={`final ${odds(mine.final)}`} />
+              <Stat label="Most likely seed" value={likelySeed ? `#${likelySeed}` : '–'} sub={likelySeed ? `${odds(mine.seeds[likelySeed])} of seasons` : undefined} />
             </StatGrid>
           )}
           {tweaked && (

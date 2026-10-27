@@ -7,7 +7,7 @@ import { Callout } from './Callout'
 import { Disclosure } from './Disclosure'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
-import { Badge, Button, Dropdown, Panel, PlayerAvatar, WeekBars, cx, fmt, fmtSigned } from './ui'
+import { Badge, Button, Dropdown, Panel, PlayerAvatar, WeekBars, cx, fmt, fmtSigned, pct } from './ui'
 
 const MAX_TEAMS = 4
 
@@ -377,7 +377,7 @@ const TradeBuilder = ({ deal, setDeal }: { deal: Deal; setDeal: (d: Deal) => voi
         actions={
           active && Object.keys(accept).length ? (
             <span title="Every other team saying yes, taken as independent">
-              all say yes <span className={cx('num', odds >= 0.5 ? 'text-ff-pos' : odds >= 0.25 ? 'text-ff-text' : 'text-ff-neg')}>{Math.round(odds * 100)}%</span>
+              all say yes <span className={cx('num', odds >= 0.5 ? 'text-ff-pos' : odds >= 0.25 ? 'text-ff-text' : 'text-ff-neg')}>{pct(odds)}</span>
             </span>
           ) : null
         }

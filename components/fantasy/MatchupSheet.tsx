@@ -2,7 +2,7 @@ import React from 'react'
 import { useFantasy } from './FantasyContext'
 import { Benches, Deciders, LineupDuel, decidedBy, useMatchups } from './matchup'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
-import { Avatar, Badge, pct } from './ui'
+import { Avatar, Badge, odds } from './ui'
 
 /**
  * One fantasy matchup over the page: the score as it stands and where it is heading, what it is worth to each side,
@@ -77,12 +77,12 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
           <p className="px-4 py-3 text-[12.5px] leading-[1.5] text-ff-text2">
             {stA && (
               <>
-                A win takes <b className="font-medium text-ff-text">{A?.name}</b> to {pct(stA.win.playoffs)} for the playoffs, a loss to {pct(stA.loss.playoffs)}.{' '}
+                A win takes <b className="font-medium text-ff-text">{A?.name}</b> to {odds(stA.win.playoffs, stA.win.clinch)} for the playoffs, a loss to {odds(stA.loss.playoffs, stA.loss.clinch)}.{' '}
               </>
             )}
             {stB && (
               <>
-                For <b className="font-medium text-ff-text">{B?.name}</b>: {pct(stB.win.playoffs)} or {pct(stB.loss.playoffs)}.
+                For <b className="font-medium text-ff-text">{B?.name}</b>: {odds(stB.win.playoffs, stB.win.clinch)} or {odds(stB.loss.playoffs, stB.loss.clinch)}.
               </>
             )}
           </p>

@@ -10,7 +10,7 @@ import { InsightMark } from './InsightMark'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { PRICING_VERSION } from '../../lib/fantasy/currency'
 import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../../lib/fantasy/grades'
-import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, simOdds } from './ui'
+import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, pct, simOdds } from './ui'
 
 export const SHAPE_LABEL: Record<TradeIdea['shape'], string> = {
   'one-for-one': 'Straight swap',
@@ -54,7 +54,7 @@ const PlayerLine = ({ id, data, analysis, notes }: { id: string; data: LeagueDat
           )}
           {play != null && play < 0.85 && (
             <span className={cx('px-1', play < 0.75 ? 'bg-ff-neg/10 text-ff-neg' : 'bg-ff-warn/10 text-ff-warn')} title="Chance he plays in a given week, from his status and history">
-              plays {Math.round(play * 100)}%
+              plays {pct(play)}
             </span>
           )}
         </div>

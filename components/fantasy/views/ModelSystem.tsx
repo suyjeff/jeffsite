@@ -88,7 +88,7 @@ export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
         <Panel title="What it says about you" pad={false}>
           <StatGrid className="border-0">
             <Stat label="Playoffs" value={simOdds(f.sim[me], 'playoffs')} meter={f.sim[me].playoffs} sub={`bye ${simOdds(f.sim[me], 'bye')}`} />
-            <Stat label="Title" value={simOdds(f.sim[me], 'title', 1)} sub={`final ${simOdds(f.sim[me], 'final')}`} />
+            <Stat label="Title" value={simOdds(f.sim[me], 'title')} sub={`final ${simOdds(f.sim[me], 'final')}`} />
             <Stat label="Lineup rank" value={lineupRank ? `#${lineupRank}` : '–'} sub={`of ${analysis.teams.length}, projected`} />
             <Stat label="Biggest hole" value={analysis.needs[me]?.worstPos ?? '–'} tone="warn" sub="weakest slot vs league" />
           </StatGrid>
@@ -436,7 +436,7 @@ export const ForecastTab = () => {
       <StatGrid>
         <Stat label="Weekly σ" value={fmt(f.sigma)} sub={f.noiseN ? `measured, ${f.noiseN} team-weeks` : 'fallback'} />
         <Stat label="Season τ" value={fmt(f.tau)} sub={`${SIM.tauShare} × σ`} />
-        <Stat label="League eff" value={pct(f.leagueEff, 1)} sub="actual / projected optimum" />
+        <Stat label="League eff" value={pct(f.leagueEff)} sub="actual / projected optimum" />
         <Stat label="Simulations" value={f.sims.toLocaleString()} sub="seasons + bracket" />
         <Stat label="Elo K" value={ELO.k} sub={`regress ${Math.round(ELO.regress * 100)}% / summer`} />
         <Stat label="Form weight" value={`×${FORM_WEIGHT}`} sub="by backtest" />
@@ -450,14 +450,14 @@ export const ForecastTab = () => {
             { key: 't', label: 'Team', sticky: true, render: (r) => <span className={r.rosterId === analysis.myRosterId ? 'font-medium text-ff-accent' : 'text-ff-text'}>{analysis.teamById[r.rosterId].name}</span> },
             { key: 'p', label: 'Lineup', align: 'right', title: 'Projected optimal lineup, pts/wk, horizon mean', sort: (r) => r.projected, render: (r) => fmt(r.projected) },
             { key: 'x', label: '×', align: 'center', render: () => <span className="text-ff-muted">×</span> },
-            { key: 'e', label: 'Eff', align: 'right', sort: (r) => r.efficiency, render: (r) => pct(r.efficiency, 1) },
+            { key: 'e', label: 'Eff', align: 'right', sort: (r) => r.efficiency, render: (r) => pct(r.efficiency) },
             { key: 'f', label: 'Form', align: 'right', title: `Shown, weighted ×${FORM_WEIGHT}`, sort: (r) => r.form, render: (r) => <span className="text-ff-muted">{fmtSigned(r.form)}</span> },
             { key: 'eq', label: '=', align: 'center', render: () => <span className="text-ff-muted">=</span> },
             { key: 'r', label: 'Rating', align: 'right', sort: (r) => r.rating, render: (r) => <span className="text-ff-text">{fmt(r.rating)}</span> },
             { key: 'elo', label: 'Elo', align: 'right', sort: (r) => r.elo, render: (r) => r.elo },
             { key: 'w', label: 'Proj W', align: 'right', sort: (r) => f.sim[r.rosterId].wins, render: (r) => fmt(f.sim[r.rosterId].wins) },
             { key: 'po', label: 'PO', align: 'right', sort: (r) => f.sim[r.rosterId].playoffs, render: (r) => simOdds(f.sim[r.rosterId], 'playoffs') },
-            { key: 'ti', label: 'Title', align: 'right', sort: (r) => f.sim[r.rosterId].title, render: (r) => simOdds(f.sim[r.rosterId], 'title', 1) },
+            { key: 'ti', label: 'Title', align: 'right', sort: (r) => f.sim[r.rosterId].title, render: (r) => simOdds(f.sim[r.rosterId], 'title') },
           ]}
         />
       </Panel>

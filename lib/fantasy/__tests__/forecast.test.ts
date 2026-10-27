@@ -222,10 +222,13 @@ describe('clinching and persistence', () => {
     const gap = clinchStatus([1, 2, 3, 4], { 1: rec(5), 2: rec(4), 3: rec(3), 4: rec(3) }, [], 2, 2)
     expect(gap[1]).toBeNull()
   })
-  it('settles the cut line by points-for once the season is over', () => {
+  it('settles the cut line from the final standings, but leaves a tie in wins for the cut open', () => {
     const r = (wins: number, pf: number) => ({ wins, losses: 0, ties: 0, pf })
-    const s = clinchStatus([1, 2, 3], { 1: r(9, 1500), 2: r(8, 1400), 3: r(8, 1350) }, [], 2, 0)
-    expect([s[1], s[2], s[3]]).toEqual(['in', 'in', 'out'])
+    const s = clinchStatus([1, 2, 3, 4], { 1: r(9, 1500), 2: r(8, 1400), 3: r(7, 1350), 4: r(6, 1300) }, [], 2, 0)
+    expect([s[1], s[2], s[3], s[4]]).toEqual(['in', 'in', 'out', 'out'])
+    // Points-for is not a tiebreak every platform uses, so a tie across the cut is not called.
+    const tied = clinchStatus([1, 2, 3], { 1: r(9, 1500), 2: r(8, 1400), 3: r(8, 1350) }, [], 2, 0)
+    expect([tied[1], tied[2], tied[3]]).toEqual(['in', null, null])
   })
   it('pulls ratings toward the week average', () => {
     const m = persistMean((t) => (t === 1 ? 120 : 100), [1, 2], 0.5)
