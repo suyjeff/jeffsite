@@ -27,10 +27,10 @@ const Tag = ({ x, y, at, children, anchor }: { x: number; y: number; at: number;
  * The model's face: a gorilla drawn as a technical study. Head with its crest, ears, the heavy brow, the face mask,
  * eyes, the broad nose and the muzzle, over a construction circle and axes, with the measured points marked.
  */
-export const GorillaFace = ({ size = 200, start = 0, className }: { size?: number; start?: number; className?: string }) => {
-  const t = (ms: number) => start + ms
+export const GorillaFace = ({ size = 200, start = 0, speed = 1, className }: { size?: number; start?: number; /** Under 1 draws it faster: every delay scaled, each stroke quicker. */ speed?: number; className?: string }) => {
+  const t = (ms: number) => start + ms * speed
   return (
-    <svg viewBox="0 0 200 200" width={size} height={size} className={cx('ff-dg ff-rv-art block overflow-visible', className)} role="img" aria-label="The model's gorilla, drawn as a technical study">
+    <svg viewBox="0 0 200 200" width={size} height={size} className={cx('ff-dg ff-rv-art block overflow-visible', speed < 1 && 'ff-rv-quick', className)} role="img" aria-label="The model's gorilla, drawn as a technical study">
       {/* Construction: the bounding circle, the centre axis and the eye line. */}
       <Ln p="M100 15a84 84 0 1 1 0 168a84 84 0 1 1 0-168" at={t(0)} tone="cons" />
       <Ln p="M100 6V194" at={t(80)} tone="cons" />
@@ -75,27 +75,6 @@ export const GorillaFace = ({ size = 200, start = 0, className }: { size?: numbe
   )
 }
 
-/**
- * A football in line art, side on: a prolate spheroid (about 1.7 to 1 across, its tips just pointed), the long seam
- * over the top with the laces stitched across it, the panel seam below, and the long axis as a construction line.
- * The hull is filled with the panel so lines behind it stop at its edge. Centred on (28, 18).
- */
-export const Football = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 56 36" width={56} height={36} className={cx('ff-rv-art block overflow-visible', className)} aria-hidden>
-    <path d="M2 18C7 7.5 17 2.5 28 2.5C39 2.5 49 7.5 54 18C49 28.5 39 33.5 28 33.5C17 33.5 7 28.5 2 18Z" className="ff-rv-ink ff-rv-hull" />
-    {/* The long axis, dashed, out past each tip. */}
-    <path d="M-3 18H59" className="ff-rv-cons" strokeDasharray="1.5 2.5" />
-    {/* The panel seams: the laced one over the top, the plain one below. */}
-    <path d="M4.5 15C12 9 20 7.2 28 7.2C36 7.2 44 9 51.5 15" className="ff-rv-ink" />
-    <path d="M4.5 21C12 27 20 28.8 28 28.8C36 28.8 44 27 51.5 21" className="ff-rv-cons" />
-    {/* Laces: eight stitches across the top seam, square to it. */}
-    <path d="M19 6.4V10.6M21.6 6V10.2M24.2 5.7V9.9M26.8 5.5V9.7M29.4 5.5V9.7M32 5.7V9.9M34.6 6V10.2M37.2 6.4V10.6" className="ff-rv-hot" />
-    <rect x={1} y={17} width={2} height={2} className="ff-rv-node-hot" />
-    <rect x={53} y={17} width={2} height={2} className="ff-rv-node-hot" />
-    <rect x={27} y={17} width={2} height={2} className="ff-rv-node" />
-  </svg>
-)
-
 /** A dashed line that fades in (a dashed stroke cannot also trace itself in). */
 const Dash = ({ p, at, tone = 'cons', dash = '1.5 2' }: { p: string; at: number; tone?: 'cons' | 'mute' | 'hot'; dash?: string }) => (
   <path d={p} className={cx('in', `ff-rv-${tone}`)} strokeDasharray={dash} style={d(at)} />
@@ -115,10 +94,10 @@ export const POOP_FACE = ['M25.5 34.5C26.5 33.3 28.5 33.3 29.5 34.5M34.5 34.5C35
  * set on a centre line and a ground datum, dimensioned across and up, with its right side broken out in section
  * (hatched) along the cut line A. Three stink lines waft off the top. Line art like everything else here, not a cartoon.
  */
-export const Poop = ({ size = 48, start = 0, className }: { size?: number; start?: number; className?: string }) => {
-  const t = (ms: number) => start + ms
+export const Poop = ({ size = 48, start = 0, speed = 1, className }: { size?: number; start?: number; /** Under 1 draws it faster. */ speed?: number; className?: string }) => {
+  const t = (ms: number) => start + ms * speed
   return (
-    <svg viewBox="0 0 64 60" width={size} height={(size * 60) / 64} className={cx('ff-dg ff-rv-art ff-rv-poop block overflow-visible', className)} role="img" aria-label="Last place">
+    <svg viewBox="0 0 64 60" width={size} height={(size * 60) / 64} className={cx('ff-dg ff-rv-art ff-rv-poop block overflow-visible', speed < 1 && 'ff-rv-quick', className)} role="img" aria-label="Last place">
       <defs>
         <pattern id="ff-rv-sect" width="2.4" height="2.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <path d="M0 0V2.4" className="ff-rv-sect-line" />

@@ -3,7 +3,7 @@ import { MONKE } from './brand'
 import { useRevealOdds } from './revealOdds'
 import { useFantasy } from './FantasyContext'
 import PowerRecap from './PowerRecap'
-import { CalibrateAct, DataAct, FLIGHT, LaunchAct, ModelAct, RankAct, pad2, rankSchedule, reducedMotion, useBox, type RankPhase } from './RevealActs'
+import { ModelAct, RankAct, pad2, rankSchedule, reducedMotion, useBox, type RankPhase } from './RevealActs'
 import { Crown } from './RevealBanner'
 import { ShareButton } from './RevealShare'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
@@ -11,27 +11,23 @@ import { lockScroll } from './scrollLock'
 import { cx, usePhone } from './ui'
 import type { RevealApi, RevealSource } from './useReveal'
 
-// The weekly power-rank reveal: five acts (RevealActs.tsx), then the recap.
-//   Calibrate  2.3s  an empty plane, tiles tessellating, every corner tracked
-//   M.O.N.K.E. 3.1s  the model's face drawn as a study, the composite worked through with real numbers
-//   Data       4.2s  the week's teams and standouts shuffling on an open canvas
-//   Launch     2.2s  a football on a tracked arc into the ranking
-//   Rank       ~11.5s last place, the middle sorted, then No. 3, No. 2 and No. 1, each held long enough to read, crowned (about 23s in all)
+// The weekly power-rank reveal: two acts (RevealActs.tsx), then the recap.
+//   M.O.N.K.E. 2.0s  the model's face drawn as a study, the composite worked through with real numbers
+//   Rank       ~5.8s last place, the middle sorted in a pass or two, then No. 3, No. 2 and No. 1, crowned (about 8s in all)
 // It then hands its ranking over to the recap (PowerRecap.tsx). A tap, Space or Skip jumps to the end; Replay plays it
 // again. Wide screens get a framed modal over the shaded page; phones a full-height sheet that swipes down to close.
 // Reduced motion skips the acts and fades the recap in.
 
-type Act = 'calibrate' | 'model' | 'data' | 'launch' | 'rank'
+type Act = 'model' | 'rank'
 const ACTS: { key: Act; title: string; dur?: number }[] = [
-  { key: 'calibrate', title: 'Calibrating', dur: 2300 },
-  { key: 'model', title: MONKE.name, dur: 3100 },
-  { key: 'data', title: 'Reading the week', dur: 4200 },
-  { key: 'launch', title: 'Launch', dur: FLIGHT.lead + FLIGHT.air + 350 },
+  { key: 'model', title: MONKE.name, dur: 2000 },
   { key: 'rank', title: 'Ranking' },
 ]
-const STEPS = ['Calibrate', MONKE.name, 'Data', 'Launch', 'Rank', 'Crown']
-/** How long an act takes to fade out under the next one. */
-const HANDOFF = 180
+const STEPS = [MONKE.name, 'Rank', 'Crown']
+/** The step the crown is in the footer's pipeline. */
+const CROWN_STEP = STEPS.length - 1
+/** How long an act takes to fade out under the next one, which is already arriving. */
+const HANDOFF = 160
 
 /** The elapsed clock in the footer: T+03.21s, ticking until the reveal lands. */
 const Clock = ({ running, run }: { running: boolean; run: number }) => {
@@ -135,7 +131,7 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
   const sch = useMemo(() => rankSchedule(recap), [recap])
   const acts = useMemo(() => ACTS.map((x) => ({ ...x, dur: x.dur ?? sch.total })), [sch])
 
-  const [act, setAct] = useState<Act | 'done'>(reduced ? 'done' : 'calibrate')
+  const [act, setAct] = useState<Act | 'done'>(reduced ? 'done' : 'model')
   const [leaving, setLeaving] = useState<Act | null>(null)
   const [step, setStep] = useState(0)
   const [phase, setPhase] = useState<RankPhase>('frame')
@@ -168,7 +164,7 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
       setAct('done')
       return
     }
-    setAct('calibrate')
+    setAct('model')
     setLeaving(null)
     setStep(0)
     setPhase('frame')
@@ -193,7 +189,7 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
 
   const onPhase = useCallback((p: RankPhase) => {
     setPhase(p)
-    if (p === 'tension' || p === 'first') setStep(5)
+    if (p === 'tension' || p === 'first') setStep(CROWN_STEP)
   }, [])
 
   const skip = useCallback(() => {
@@ -316,10 +312,7 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
     if (!box) return null
     // Side by side wherever the stage is wide, or wider than it is tall (a phone on its side); stacked otherwise.
     const side = !phone && (box.w >= 760 || box.w > box.h * 1.6)
-    if (k === 'calibrate') return <CalibrateAct box={box} dur={acts[0].dur} />
-    if (k === 'model') return <ModelAct recap={recap} box={box} stacked={!side} dur={acts[1].dur} />
-    if (k === 'data') return <DataAct recap={recap} box={box} stacked={!side} dur={acts[2].dur} />
-    if (k === 'launch') return <LaunchAct box={box} recap={recap} />
+    if (k === 'model') return <ModelAct recap={recap} box={box} stacked={!side} dur={acts[0].dur} />
     // Rows as tall as the recap's when they fit, so the list hands over without a jump, never under 30px.
     const room = side ? box.h - 26 : box.h - 104 - 24 - 26
     const rowH = Math.max(30, Math.min(recapRowH, Math.floor(room / Math.max(1, n))))
@@ -339,7 +332,7 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
       <div className={cx('absolute inset-0 flex flex-col', phone ? 'px-3 pb-3 pt-4' : narrow ? 'px-6 pb-5 pt-6' : 'px-10 pb-6 pt-7')}>
         <div className="mb-4 flex shrink-0 items-baseline justify-between gap-3 font-mono text-[10.5px] uppercase tracking-[0.12em]">
           <span key={title} className="ff-rv-wipe text-ff-text">
-            <span className="text-ff-accent">{pad2(title === 'The crown' ? 6 : actIndex + 1)} //</span> {title}
+            <span className="text-ff-accent">{pad2(title === 'The crown' ? CROWN_STEP + 1 : actIndex + 1)} //</span> {title}
           </span>
           <span className="text-ff-muted">
             wk {pad2(recap.week)} · {recap.games.length} games
