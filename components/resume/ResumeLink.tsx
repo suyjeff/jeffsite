@@ -461,7 +461,7 @@ export default function ResumeLink({ className, children }: { className?: string
         <div ref={barRef} className="rs-bar" role="group" aria-label="Resumé actions" style={{ opacity: 0 }}>
           <a href={resumePdf} download className="rs-btn" aria-label="Download PDF" title="Download PDF">
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M8 2.5v7.25M4.75 6.75 8 10l3.25-3.25M3 13h10" />
+              <path d="M2 11v1.5A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5V11M11 8 8 11m0 0L5 8m3 3V2" />
             </svg>
           </a>
           <span className="rs-divider" aria-hidden="true" />
@@ -477,7 +477,7 @@ export default function ResumeLink({ className, children }: { className?: string
             }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
+              <path d="M4 12 12 4M4 4l8 8" />
             </svg>
           </button>
         </div>
