@@ -677,7 +677,7 @@ export const BehaviorTab = () => {
           {b.trades.length === 0 ? (
             <p className="px-3 py-6 text-center text-[12px] text-ff-muted">No trades yet. Yes-odds lean on engagement and consensus.</p>
           ) : (
-            <div className="ff-scroll max-h-[420px] overflow-y-auto">
+            <div className="ff-scroll max-h-[420px] overflow-auto">
               {b.trades.map((t, i) => (
                 <div key={i} className="border-b border-ff-line/60 px-3 py-2 text-[12px] last:border-0">
                   <div className="flex items-center gap-2 font-mono text-[10.5px] text-ff-muted">

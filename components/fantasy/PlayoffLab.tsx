@@ -139,7 +139,7 @@ export const Bracket = ({ t, run }: { t: Trace; run: number }) => {
   const { analysis } = useFantasy()
   const champ = t.champion != null ? analysis.teamById[t.champion] : null
   return (
-    <div className="ff-scroll overflow-x-auto">
+    <div className="ff-scroll ff-scroll-x">
       <div className="flex min-w-max items-stretch gap-3 p-3">
         {t.rounds.map((rd, i) => (
           <div key={`${run}:${i}`} className="ff-rise flex w-[160px] flex-col" style={{ animationDelay: `${60 + i * 50}ms` }}>

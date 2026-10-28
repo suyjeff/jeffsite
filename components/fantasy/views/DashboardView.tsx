@@ -339,7 +339,7 @@ const DashboardView = () => {
                     </button>
                   </span>
                 </header>
-                <div className="ff-scroll min-h-0 flex-1 overflow-y-auto">
+                <div className="ff-scroll min-h-0 flex-1 overflow-auto">
                   <Body sel={sel} select={(s) => setSelection((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...s } }))} w={w.w} h={w.h} />
                 </div>
                 {/* Selection frame, in the manner of a design tool: an accent outline, square handles on the

@@ -739,7 +739,7 @@ const SlotGrid = ({ analysis }: { analysis: Analysis }) => {
   const { needs, slots, teams, myRosterId } = analysis
   const maxGap = Math.max(1, ...teams.flatMap((t) => needs[t.rosterId]?.slots.map((s) => Math.abs(s.gap)) ?? []))
   return (
-    <div className="ff-scroll overflow-x-auto">
+    <div className="ff-scroll ff-scroll-x">
       <table className="w-full border-separate border-spacing-[2px] text-[12px]">
         <thead>
           <tr>

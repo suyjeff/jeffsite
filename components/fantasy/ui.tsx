@@ -378,6 +378,7 @@ export const FadeStrip = ({ className, children, ...rest }: React.HTMLAttributes
       {...rest}
       // Each edge fades only while something sits beyond it, so a strip at rest shows no fade and one mid-scroll hints both ways.
       className={cx(
+        'ff-scroll-x',
         className,
         more && before && 'max-md:[mask-image:linear-gradient(to_right,transparent,black_10%,black_88%,transparent)]',
         more && !before && 'max-md:[mask-image:linear-gradient(to_right,black_88%,transparent)]',
@@ -1617,7 +1618,7 @@ export function Table<T>({
       <div
         ref={scroller}
         tabIndex={scrolls ? 0 : undefined}
-        className={cx('ff-scroll focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent', maxHeight ? 'overflow-auto' : 'overflow-x-auto')}
+        className={cx('ff-scroll focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent', maxHeight ? 'overflow-auto' : 'ff-scroll-x')}
         style={maxHeight ? { maxHeight } : undefined}
       >
         <table className="w-full border-collapse text-[13px]">

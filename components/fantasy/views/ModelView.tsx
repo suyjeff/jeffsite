@@ -145,7 +145,7 @@ const Spec = ({ rows, stacked }: { rows: { k: string; v: ReactNode; note?: React
 )
 
 const Code = ({ children }: { children: string }) => (
-  <pre className="ff-scroll overflow-x-auto rounded-sm border border-ff-line bg-ff-sunken px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-ff-text2">{children}</pre>
+  <pre className="ff-scroll ff-scroll-x rounded-sm border border-ff-line bg-ff-sunken px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-ff-text2">{children}</pre>
 )
 
 /** z-score as a bar either side of a centre line, clipped at ±2.5. */
@@ -849,7 +849,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
 
       <Panel title="Horizon weeks and weights" actions={<span className="font-mono text-[10.5px]">source: {data.horizonSource}</span>}>
         {data.horizon.length ? (
-          <div className="ff-scroll flex gap-[2px] overflow-x-auto pb-1">
+          <div className="ff-scroll ff-scroll-x flex gap-[2px] pb-1">
             {data.horizon.map((w) => {
               const share = (w.weight ?? 1) / totalWeight
               return (

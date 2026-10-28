@@ -195,24 +195,21 @@ html:has(body .ff) body {
   display: none;
 }
 
-/* A scroller moves along one axis. Tailwind's overflow-x-auto leaves overflow-y visible, which the browser computes to
-   auto: any child that pokes out of the strip by a pixel (a tab's underline, a focus ring, a badge) then gives the strip a
-   vertical scroll range, and a finger on it wobbles the strip instead of scrolling the page. So a sideways strip clips
-   the other axis, a vertical pane clips the sideways one, and a sideways strip keeps its own overscroll (the browser's back-swipe) to itself. Vertical
-   overscroll is left alone, so a swipe that starts on a strip still chains to the page. */
-.ff .overflow-x-auto,
-.ff .overflow-x-scroll {
+/* A sideways strip scrolls along one axis. Tailwind's overflow-x-auto leaves overflow-y visible, which the browser
+   computes to auto: any child that pokes out of the strip by a pixel (a tab's underline, a focus ring, a badge) then
+   gives the strip a vertical scroll range, and a finger on it wobbles the strip instead of scrolling the page. So a
+   strip opts in to this: it clips the other axis and keeps its own overscroll (the browser's back-swipe) to itself.
+   Vertical overscroll is left alone, so a swipe that starts on a strip still chains to the page. Zero specificity
+   (:where), so a responsive utility beside it (`md:overflow-visible`) still wins. */
+:where(.ff .ff-scroll-x) {
+  overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   /* Focus or scrollIntoView lands a control clear of the edge fades. */
   scroll-padding-inline: 28px;
 }
-.ff .overflow-y-auto:not(.overflow-x-auto),
-.ff .overflow-y-scroll:not(.overflow-x-auto) {
-  overflow-x: hidden;
-}
 /* Clipped on the cross axis, so a focus ring drawn outside a child would be cut at the strip's edge: draw it inside. */
-.ff :is(.overflow-x-auto, .overflow-x-scroll) > :focus-visible {
+.ff .ff-scroll-x > :focus-visible {
   outline-offset: -2px;
 }
 
