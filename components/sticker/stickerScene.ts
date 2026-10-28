@@ -33,15 +33,21 @@ const HINT_FOLD = 20
 const MAX_TILT = 0.17
 const CAMERA_DISTANCE = 1100
 
-// Coming off the page. Grabbed near an edge and pulled back across itself, the
+// Coming off the page. Grabbed by its edge and pulled back across itself, the
 // sticker folds over with the grabbed point riding under the pointer, and comes
 // away once the flap covers DETACH_FLAP of it. Grabbed anywhere else, or pulled
 // away from itself, it pops off after a few pixels: there is nothing to fold.
-/** Grabbed within this share of its length from the trailing edge, a pull folds it back. */
-const FOLD_BACK_ZONE = 0.3
+/**
+ * How much sticker may lie behind the held edge, along the pull, for the pull to
+ * fold it back. Any more and the first frame of the fold would flip that whole
+ * strip over at once.
+ */
+const FOLD_BACK_BEHIND = 10
 const DETACH_FLAP = 0.34
 /** Pointer travel before a sticker that can't fold back pops off; a finger gets a little more. */
 const POP_DISTANCE = 9
+/** An edge curl's origin moving further than this in one go is a different curl, not the same one following. */
+const CURL_JUMP = 12
 const POP_DISTANCE_TOUCH = 14
 
 // In the air: held up off the page, swinging a little round the point it is
@@ -593,6 +599,10 @@ export const createStickerScene = (
   // sticker swings around in the air.
   let held: Point = { x: STICKER_WIDTH / 2, y: STICKER_HEIGHT / 2 }
   let popTimer = 0
+  /** Whether the press took the sticker by its edge, the only place a fold-back can start. */
+  let heldOnEdge = false
+  /** A fold-back has just come away and its flap is still unrolling. */
+  let unrolling = false
   let catchUp = 0
   // Travel velocity in stage pixels per second (y down), smoothed.
   let travelX = 0
@@ -677,14 +687,16 @@ export const createStickerScene = (
     view[14] = -CAMERA_DISTANCE
     multiply(projection, view, viewProj)
 
-    // The hit area covers the sticker plus its grab band, and stops at the
-    // bottom of the stage so, at rest, it never sits over the text below.
+    // The hit area covers the sticker plus its grab band. At home it stops at
+    // the bottom of the stage, so it never sits over the text below; away from
+    // home it is whole, so the sticker can be caught by any part of its band.
     const top = anchorY - GRAB_BAND
-    const bottom = Math.min(stageHeight, anchorY + STICKER_HEIGHT + GRAB_BAND)
+    hitHeightHome = Math.min(stageHeight, anchorY + STICKER_HEIGHT + GRAB_BAND) - top
+    hitHeightAway = STICKER_HEIGHT + GRAB_BAND * 2
     hitArea.style.left = `${anchorX - GRAB_BAND}px`
     hitArea.style.top = `${top}px`
     hitArea.style.width = `${STICKER_WIDTH + GRAB_BAND * 2}px`
-    hitArea.style.height = `${bottom - top}px`
+    hitHeight = NaN
     hitPivotX = NaN
   }
 
@@ -706,9 +718,15 @@ export const createStickerScene = (
     }
   }
 
-  /** Ask for a curl. A different kind of curl waits until the current one has rolled flat. */
+  /**
+   * Ask for a curl. A different kind of curl, or an edge curl starting from a
+   * different part of the edge, waits until the current one has rolled flat,
+   * so a curl never jumps from one place to another. (Sliding the pointer along
+   * the edge moves the origin a little each frame, which follows directly.)
+   */
   const curl = (kind: CurlKind, at: Point, toward: Point, amount: number) => {
-    if (kind === curlKind || fold.value < 0.75) {
+    const moved = kind === 'edge' && Math.hypot(at.x - grab.x, at.y - grab.y) > CURL_JUMP
+    if ((kind === curlKind && !moved) || fold.value < 0.75) {
       curlKind = kind
       grab = at
       direction = toward
@@ -741,7 +759,8 @@ export const createStickerScene = (
     }
   }
 
-  const detach = () => {
+  const detach = (fromFold: boolean) => {
+    unrolling = fromFold
     mode = 'airborne'
     popTimer = POP_TIME
     catchUp = 1
@@ -763,7 +782,7 @@ export const createStickerScene = (
     const behind = extentFrom(outline, held, { x: -pull.x, y: -pull.y })
     const total = behind + extentFrom(outline, held, pull)
 
-    if (behind <= total * FOLD_BACK_ZONE) {
+    if (heldOnEdge && behind <= FOLD_BACK_BEHIND) {
       // The held point rides under the pointer and everything behind the fold
       // turns over with it, showing the backing. The fold turns from the
       // hover lift's direction to the pull's over a few frames rather than at
@@ -774,15 +793,15 @@ export const createStickerScene = (
       const turn = Math.hypot(fx, fy) || 1
       const amount = Math.max(foldFor(length), pressFold)
       curl('edge', held, { x: fx / turn, y: fy / turn }, amount)
-      if ((behind + amount) / total > DETACH_FLAP) detach()
+      if ((behind + amount) / total > DETACH_FLAP) detach(true)
       return
     }
 
-    // Held somewhere a fold can't start, or pulled away from itself: the
+    // Held inside, where a fold can't start, or pulled away from itself: the
     // trailing edge starts to lift, and a few pixels on it comes away.
     trail = pull
     curl('trail', supportPoint(outline, centre, { x: -pull.x, y: -pull.y }), pull, length * 2.4)
-    if (length > (pointerTouch ? POP_DISTANCE_TOUCH : POP_DISTANCE)) detach()
+    if (length > (pointerTouch ? POP_DISTANCE_TOUCH : POP_DISTANCE)) detach(false)
   }
 
   const centre: Point = { x: STICKER_WIDTH / 2, y: STICKER_HEIGHT / 2 }
@@ -807,7 +826,12 @@ export const createStickerScene = (
     catchUp *= Math.exp(-dt / CATCH_FADE)
     const flick = POP_CURL * (popTimer / POP_TIME) ** 2
     const amount = (AIR_CURL + Math.min(speed * AIR_CURL_PER_SPEED, AIR_CURL_MAX)) * curlScale + flick
-    curl('trail', supportPoint(outline, centre, { x: -trail.x, y: -trail.y }), trail, amount)
+    // The direction of travel is on screen; the curl is in the sticker's own
+    // frame, which is turned by the swing.
+    const c = Math.cos(swing.value)
+    const sn = Math.sin(swing.value)
+    const back = { x: trail.x * c - trail.y * sn, y: trail.x * sn + trail.y * c }
+    curl('trail', supportPoint(outline, centre, { x: -back.x, y: -back.y }), back, amount)
 
     // Lean into the direction of travel.
     tiltTargetY = clamp(vx * 0.0004, -0.34, 0.34)
@@ -849,7 +873,16 @@ export const createStickerScene = (
     if (mode === 'peel') peel(dt)
 
     if (mode === 'airborne') {
-      const to = inWindow(pointer.x - pressPoint.x, -(pointer.y - pressPoint.y))
+      // Just after a fold-back comes away, the flap still carries the held point
+      // ahead of the body by the fold's reach. Hold the body back by that much
+      // as it unrolls, so the held point stays under the pointer instead of
+      // shooting past it.
+      if (curlKind !== 'edge') unrolling = false
+      const reach = unrolling ? foldReach(fold.value) : 0
+      const to = inWindow(
+        pointer.x - pressPoint.x - direction.x * reach,
+        -(pointer.y - pressPoint.y - direction.y * reach),
+      )
       targetX = to.x
       targetY = to.y
       targetZ = AIRBORNE_LIFT
@@ -937,6 +970,9 @@ export const createStickerScene = (
 
   let hitX = NaN
   let hitY = NaN
+  let hitHeight = NaN
+  let hitHeightHome = 0
+  let hitHeightAway = 0
   let hitSwing = NaN
   let hitPivotX = NaN
   let hitPivotY = NaN
@@ -1037,6 +1073,11 @@ export const createStickerScene = (
       hitPivotY = held.y + GRAB_BAND
       hitArea.style.transformOrigin = `${hitPivotX}px ${hitPivotY}px`
     }
+    const height = mode === 'airborne' || mode === 'return' ? hitHeightAway : hitHeightHome
+    if (height !== hitHeight) {
+      hitHeight = height
+      hitArea.style.height = `${height}px`
+    }
     if (x !== hitX || y !== hitY || turn !== hitSwing) {
       hitX = x
       hitY = y
@@ -1097,20 +1138,36 @@ export const createStickerScene = (
 
   // --- pointer --------------------------------------------------------------
 
+  // The pointer in window coordinates, kept so a scroll mid-drag can work out
+  // where it now is relative to the stage without waiting for it to move.
+  let clientX = 0
+  let clientY = 0
+
+  const readStage = () => {
+    const rect = stage.getBoundingClientRect()
+    stageLeft = rect.left
+    stageTop = rect.top
+    stageRectStale = false
+  }
+
   const markStageRectStale = () => {
     stageRectStale = true
+    if (pointerId !== null) {
+      // Scrolled while holding the sticker: it stays under the pointer, not
+      // with the page.
+      readStage()
+      pointer = { x: clientX - stageLeft, y: clientY - stageTop }
+      wake()
+    }
   }
 
   const stagePoint = (event: PointerEvent): Point => {
     // Reading layout on every pointer event forces style recalculation while
     // the page reveal is still animating; read it once and refresh only after
     // a scroll or resize.
-    if (stageRectStale) {
-      const rect = stage.getBoundingClientRect()
-      stageLeft = rect.left
-      stageTop = rect.top
-      stageRectStale = false
-    }
+    if (stageRectStale) readStage()
+    clientX = event.clientX
+    clientY = event.clientY
     return { x: event.clientX - stageLeft, y: event.clientY - stageTop }
   }
 
@@ -1121,6 +1178,8 @@ export const createStickerScene = (
   }
 
   const onPointerMove = (event: PointerEvent) => {
+    // While one pointer holds the sticker, any other is ignored.
+    if (pointerId !== null && event.pointerId !== pointerId) return
     pointer = stagePoint(event)
     if (pointerId === null) {
       pointerInside = true
@@ -1131,6 +1190,7 @@ export const createStickerScene = (
   }
 
   const onPointerDown = (event: PointerEvent) => {
+    if (pointerId !== null) return
     const point = stagePoint(event)
     if (!canGrab(point)) return
 
@@ -1155,10 +1215,12 @@ export const createStickerScene = (
       mode = 'airborne'
       popTimer = 0
       catchUp = 1
+      unrolling = false
     } else {
       // On the page: hold the point under the pointer, or the edge itself when
       // the press lands on or just off it, which is where the hover lift already is.
-      holdAt(edge.inside && edge.distance > 10 ? local : edge.point)
+      heldOnEdge = !edge.inside || edge.distance <= 10
+      holdAt(heldOnEdge ? edge.point : local)
       pressFold = 0
       if (hoverFold > 0 && curlKind === 'edge') {
         grab = hoverGrab
@@ -1190,10 +1252,12 @@ export const createStickerScene = (
     if (mode === 'airborne') startReturn()
     else mode = 'idle'
     pointerId = null
-    // Touch pointers cease to exist on release; a mouse is still hovering.
-    pointerInside = event.pointerType === 'mouse'
     pointer = stagePoint(event)
-    hitArea.style.cursor = pointerInside && mode === 'idle' && canGrab(pointer) ? 'grab' : 'default'
+    // Touch pointers cease to exist on release. A mouse is still there, but
+    // only counts as hovering if the sticker is staying under it; one flying
+    // home picks the hover up again when the pointer next moves over it.
+    pointerInside = event.pointerType === 'mouse' && mode === 'idle' && canGrab(pointer)
+    hitArea.style.cursor = pointerInside ? 'grab' : 'default'
     updateHover()
     wake()
   }

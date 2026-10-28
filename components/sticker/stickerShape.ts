@@ -212,14 +212,8 @@ export const nearestEdge = (points: Point[], x: number, y: number): EdgeHit => {
 
 /** How far the sticker extends from `origin` in direction `dir`. */
 export const extentFrom = (points: Point[], origin: Point, dir: Point): number => {
-  let max = 0
-
-  for (const point of points) {
-    const along = (point.x - origin.x) * dir.x + (point.y - origin.y) * dir.y
-    if (along > max) max = along
-  }
-
-  return max
+  const far = supportPoint(points, origin, dir)
+  return Math.max(0, (far.x - origin.x) * dir.x + (far.y - origin.y) * dir.y)
 }
 
 /** The outline point furthest along `dir` from `origin`: the edge that leads in that direction. */

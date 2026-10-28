@@ -164,11 +164,11 @@
   color: inherit;
   transition: background-color 150ms ease-out;
 }
-/* A larger target than it looks, for fingers. */
+/* A taller target than it looks, for fingers. Only taller: sideways the two buttons meet at the divider. */
 .rs-btn::after {
   content: '';
   position: absolute;
-  inset: -8px -2px;
+  inset: -8px 0;
 }
 .rs-btn svg {
   fill: none;
