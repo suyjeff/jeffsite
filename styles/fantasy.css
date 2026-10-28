@@ -82,6 +82,31 @@ html:has(body .ff) body {
   overscroll-behavior-y: none;
 }
 
+/* The page only scrolls up and down. Anything wider than the screen (a strip, a table) scrolls inside its own
+   ff-scroll-x box; nothing may widen or pan the page itself. iOS Safari lets the whole page rubber-band sideways when
+   any box pokes past the edge, so the lock is on html and body (the class is set by pages/fantasy), not left to main.
+   html is the one that matters: a hidden/clip overflow there propagates to the viewport. body gets clip only (never
+   hidden, which would make it a scroll container and break the sticky page headers). */
+html.ff-page {
+  overflow-x: hidden;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+  max-width: 100%;
+}
+html.ff-page body {
+  overscroll-behavior-x: none;
+  max-width: 100%;
+}
+@supports (overflow: clip) {
+  html.ff-page body {
+    overflow-x: clip;
+  }
+}
+.ff {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 /* Every control answers the moment it is pressed, not when the finger lifts: a faint ink wash layered over
    whatever background it already has, so selected and coloured states keep their colour. */
 .ff :is(button, a[href], summary, [role='option'], [role='menuitem']):not(:disabled):not([aria-disabled='true']):not(.ff-aqua):active {
@@ -1006,16 +1031,17 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 
 /* ---------- Power-rank reveal (weekly) ----------
  * The Tuesday reveal (components/fantasy/PowerReveal.tsx) and its banners (RevealBanner.tsx). The reveal is an
- * event, so it is allowed more colour than the rest of the app: the accent's deep step running into the purple series
- * colour for the banners, and gold for the No. 1 crown. Gold is an RGB triplet like every token, set per mode here
+ * event, so it is allowed more colour than the rest of the app: the theme's accent running into the crown's gold for the
+ * banners' edge, and gold for the No. 1 crown. Gold is an RGB triplet like every token, set per mode here
  * for before a theme loads; a chosen theme sets its own (lib/fantasy/themes.ts). Every motion here is a transform, an
  * opacity or a clip, and each one is switched off under reduced motion. */
 .ff {
   --ff-gold: 182 128 4;
   /* Gold as text: deeper in light mode so it reads at 4.5:1 on the panel. */
   --ff-gold-ink: 140 98 0;
-  --ff-rv-a: rgb(var(--ff-accent-deep));
-  --ff-rv-b: color-mix(in oklab, rgb(var(--ff-c4)) 72%, black);
+  /* The reveal's two hues, from the active theme: its accent into the crown's gold. */
+  --ff-rv-a: rgb(var(--ff-accent));
+  --ff-rv-b: rgb(var(--ff-gold));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1248,20 +1274,38 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 
 /* ---- Banners ----
- * The Power page's banner and the sidebar's: the accent's deep step into purple, a dot grid and hairline drafting
- * shapes in white. On a pointer that hovers, the shapes come alive: a scan crosses, the squares turn a quarter,
+ * The Power page's banner and the sidebar's: the panel washed with the theme's accent into a breath of gold, a crisp
+ * accent edge (left and top), a dot grid and hairline drafting shapes in the theme's own ink. On a pointer that hovers, the shapes come alive: a scan crosses, the squares turn a quarter,
  * the ticks slide, and the crown lifts. A press gives a little on any device. */
 .ff .ff-rv-banner {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  color: white;
-  /* Plain deep accent where color-mix() is not supported (Safari before 16.2): the gradient below then drops out. */
-  background: rgb(var(--ff-accent-deep));
+  color: rgb(var(--ff-text));
+  /* Plain raised panel where color-mix() is not supported (Safari before 16.2): the gradient below then drops out. */
+  background: rgb(var(--ff-raised));
   background:
-    radial-gradient(rgb(255 255 255 / 0.16) 1px, transparent 1.3px) -6px -6px / 12px 12px,
-    linear-gradient(100deg, var(--ff-rv-a) 0%, color-mix(in oklab, var(--ff-rv-a) 45%, var(--ff-rv-b)) 55%, var(--ff-rv-b) 100%);
+    radial-gradient(rgb(var(--ff-text) / 0.1) 1px, transparent 1.3px) -6px -6px / 12px 12px,
+    linear-gradient(
+      100deg,
+      color-mix(in oklab, var(--ff-rv-a) 24%, rgb(var(--ff-panel))) 0%,
+      color-mix(in oklab, var(--ff-rv-a) 9%, rgb(var(--ff-panel))) 58%,
+      color-mix(in oklab, var(--ff-rv-b) 17%, rgb(var(--ff-panel))) 100%
+    );
+  /* A hairline of the accent all round and a stronger rule down the left edge. */
+  box-shadow:
+    inset 3px 0 0 var(--ff-rv-a),
+    inset 0 0 0 1px color-mix(in oklab, var(--ff-rv-a) 38%, rgb(var(--ff-line)));
   transition: scale 200ms var(--ff-ease-out);
+}
+/* The top rule: the accent running into gold. */
+.ff .ff-rv-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--ff-rv-a), var(--ff-rv-b));
 }
 .ff .ff-rv-banner:focus-visible,
 .ff .ff-rv-replay:focus-visible {
@@ -1275,13 +1319,13 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
 }
 .ff .ff-rv-banner .ff-rv-ink {
-  stroke: rgb(255 255 255 / 0.42);
+  stroke: rgb(var(--ff-text) / 0.3);
   fill: none;
   stroke-width: 1;
   shape-rendering: crispEdges;
 }
 .ff .ff-rv-banner .ff-rv-ink-fill {
-  fill: rgb(255 255 255 / 0.55);
+  fill: rgb(var(--ff-text) / 0.45);
 }
 .ff .ff-rv-banner .ff-rv-sq,
 .ff .ff-rv-banner .ff-rv-ruler,
@@ -1296,7 +1340,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   inset: 0 auto 0 0;
   width: 40%;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.16) 45%, rgb(255 255 255 / 0.34) 50%, transparent 52%);
+  background: linear-gradient(90deg, transparent, rgb(var(--ff-accent) / 0.12) 45%, rgb(var(--ff-accent) / 0.3) 50%, transparent 52%);
   transform: translateX(-110%);
   z-index: -1;
 }
@@ -1317,7 +1361,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     transform: translateY(-3px) rotate(-8deg);
   }
   .ff .ff-rv-replay:hover {
-    background-color: rgb(255 255 255 / 0.2);
+    background-color: rgb(var(--ff-accent) / 0.2);
   }
   .ff .ff-rv-replay:hover .ff-rv-nudge,
   .ff button.ff-rv-banner:hover .ff-rv-nudge {

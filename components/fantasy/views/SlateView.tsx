@@ -607,7 +607,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
         </TabSection>
 
         <TabSection id="managers" active={tab === 'managers'}>
-          <Panel title="Every manager's week" actions={<span>win odds · what a win is worth · the game that decides it</span>} pad={false}>
+          <Panel title="Every manager's week" actions={<span className="max-sm:hidden">win odds · what a win is worth · the game that decides it</span>} pad={false}>
             <div className="grid grid-cols-1 gap-px bg-ff-line/60 sm:grid-cols-2 xl:grid-cols-3">
               {Object.values(slate.managers)
                 .sort(
