@@ -3,6 +3,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import ResumeLink from "./resume/ResumeLink";
+import { neutralLinkClasses, NeutralLinkLabel } from "./NeutralLink";
 
 type Props = {
   children?: ReactNode;
@@ -18,7 +19,7 @@ const Layout = ({ children, title = "This is the default title" }: Props) => {
   const aboutLinkHref = isHomeLinkPage ? "/" : "/about";
   const aboutLinkLabel = isHomeLinkPage ? "Home" : "About";
   const navLinkClasses =
-    "text-stone-600 hover:text-stone-900 transition-colors duration-300 ease-in-out dark:text-stone-300 dark:hover:text-stone-100";
+    `${neutralLinkClasses} text-stone-600 hover:text-stone-900 transition-colors duration-300 ease-in-out dark:text-stone-300 dark:hover:text-stone-100`;
 
   return (
     <div className="flex flex-col min-h-screen overflow-clip bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
@@ -36,15 +37,17 @@ const Layout = ({ children, title = "This is the default title" }: Props) => {
           <div className="max-w-xl mx-auto py-4 flex justify-between items-center">
             <div className="space-x-4">
               <Link href={aboutLinkHref} className={navLinkClasses}>
-                {aboutLinkLabel}
+                <NeutralLinkLabel>{aboutLinkLabel}</NeutralLinkLabel>
               </Link>
               <Link href="/lab" className={navLinkClasses}>
-                Labs
+                <NeutralLinkLabel>Labs</NeutralLinkLabel>
               </Link>
               <Link href="/writing" className={navLinkClasses}>
-                Writing
+                <NeutralLinkLabel>Writing</NeutralLinkLabel>
               </Link>
-              <ResumeLink className={navLinkClasses}>Resumé</ResumeLink>
+              <ResumeLink className={navLinkClasses}>
+                <NeutralLinkLabel>Resumé</NeutralLinkLabel>
+              </ResumeLink>
             </div>
             <div className="text-sm text-stone-400 dark:text-stone-500">
               Last updated October 2026
