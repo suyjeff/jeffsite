@@ -108,7 +108,7 @@ const Drafting = ({ compact }: { compact?: boolean }) => (
         ].map(([x, y]) => (
           <rect key={x} className="ff-rv-ink-fill" x={x - 1.5} y={y - 1.5} width={3} height={3} />
         ))}
-        <text x={84} y={12} className="font-mono" fontSize={8} letterSpacing="0.08em" style={{ fill: 'rgb(var(--ff-muted))' }}>
+        <text x={84} y={12} className="font-mono" fontSize={8} letterSpacing="0.08em" style={{ fill: 'rgb(var(--ff-text2))' }}>
           RK·Δ
         </text>
       </>
