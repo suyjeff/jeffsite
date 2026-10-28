@@ -5,6 +5,7 @@
     "start": "next start",
     "export": "next export",
     "test": "vitest run --passWithNoTests",
+    "test:accuracy": "vitest run --config vitest.accuracy.config.ts",
     "resume": "node scripts/render-resume.mjs public/SuJeffResume_oct2025.pdf"
   },
   "dependencies": {

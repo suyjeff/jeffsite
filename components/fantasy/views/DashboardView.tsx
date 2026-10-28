@@ -240,7 +240,7 @@ const DashboardView = () => {
               {catalog && (
                 <div className="fixed inset-x-2 top-[calc(var(--ff-top)+52px)] z-40 border border-ff-line2 bg-ff-panel shadow-[0_8px_24px_rgba(0,0,0,0.25)] md:absolute md:inset-x-auto md:right-0 md:top-full md:mt-1 md:w-[300px]">
                   <div className="ff-label border-b border-ff-line px-3 py-1.5">add widget</div>
-                  <div className="ff-scroll max-h-[60dvh] overflow-auto">
+                  <div className="ff-scroll max-h-[60dvh] overflow-y-auto overscroll-contain">
                     {(Object.keys(WIDGETS) as WidgetKind[]).map((k) => (
                       <button key={k} onClick={() => add(k)} className="block w-full border-b border-ff-line/60 px-3 py-2 text-left last:border-0 hover:bg-ff-raised">
                         <span className="flex items-baseline justify-between">
@@ -339,7 +339,7 @@ const DashboardView = () => {
                     </button>
                   </span>
                 </header>
-                <div className="ff-scroll min-h-0 flex-1 overflow-auto">
+                <div className="ff-scroll min-h-0 flex-1 overflow-y-auto">
                   <Body sel={sel} select={(s) => setSelection((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...s } }))} w={w.w} h={w.h} />
                 </div>
                 {/* Selection frame, in the manner of a design tool: an accent outline, square handles on the

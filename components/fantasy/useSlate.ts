@@ -46,11 +46,11 @@ export const useSlate = (data: LeagueData, analysis: Analysis) => {
   const live = data.state.season_type === 'regular' && data.league.season === data.state.season
   const week = data.state.week
 
-  // This week's projections, in league scoring.
+  // This week's projections: Sleeper's, in league scoring (the model's horizon only if Sleeper has none for the week).
   const proj = useMemo(() => {
     if (data.projections && data.projectionWeek === week) return data.projections
-    return data.horizon.find((h) => h.week === week)?.pts ?? {}
-  }, [data.projections, data.projectionWeek, data.horizon, week])
+    return data.projectionsByWeek[week] ?? data.horizon.find((h) => h.week === week)?.pts ?? {}
+  }, [data.projections, data.projectionWeek, data.projectionsByWeek, data.horizon, week])
   const lines = useStatLines(data.league.season, live ? [week] : [])
   const statLines = lines[week] ?? null
   // The week as it is being played. The page's copy of the matchups and schedule is read again on the live poll, with

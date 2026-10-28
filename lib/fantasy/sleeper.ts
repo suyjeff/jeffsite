@@ -1,5 +1,5 @@
 import type { ScheduleGame } from './context'
-import { scoreStatLine } from './scoring'
+import { scoreProjectionLine, scoreStatLine } from './scoring'
 import type {
   DraftBoard,
   PlayerMap,
@@ -92,6 +92,8 @@ export const purgeStaleCache = () => {
   removeKeys((k) => k.startsWith(`${CACHE_PREFIX}tx:`))
   // Week stats moved to actuals2 (zero-point players kept).
   removeKeys((k) => k.startsWith(`${CACHE_PREFIX}actuals:`))
+  // Scored projections moved to scored-proj2 (derived to the league's keys).
+  removeKeys((k) => k.startsWith(`${CACHE_PREFIX}scored-proj:`))
   // The player database moved to its own versioned key; the old copy is the biggest thing kept.
   removeKeys((k) => k === `${CACHE_PREFIX}${BASE}/players/nfl`)
 }
@@ -267,11 +269,12 @@ export const getScoredProjections = (
     `/projections/nfl/regular/${season}/${week}`,
     near ? 3 * HOUR : 12 * HOUR,
     {
-      key: `scored-proj:${leagueId}:${season}:${week}`,
+      // v2: lines are derived to the league's keys before scoring (lib/fantasy/scoring deriveProjectionLine).
+      key: `scored-proj2:${leagueId}:${season}:${week}`,
       transform: (raw) => {
         const out: Record<string, number> = {}
         for (const id of Object.keys(raw)) {
-          const pts = scoreStatLine(raw[id], scoring)
+          const pts = scoreProjectionLine(raw[id], scoring)
           if (pts) out[id] = pts
         }
         return out

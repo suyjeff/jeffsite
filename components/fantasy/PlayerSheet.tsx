@@ -120,7 +120,8 @@ const PlayerSheet = ({ id }: { id: string }) => {
       weeks,
       // This week's column fills in once his game is final, before the week itself closes.
       actual: weeks.map((w) => (past.includes(w) ? (data.weekPoints[w]?.[id] ?? null) : w === slate.week && thisWeek?.kind === 'final' ? thisWeek.value : null)),
-      projected: weeks.map((w) => (past.includes(w) ? (data.pastProjections[w]?.[id] ?? null) : (data.horizon.find((h) => h.week === w)?.pts[id] ?? null))),
+      // Sleeper's projection in league scoring, past and ahead alike: the same number "projected" means everywhere.
+      projected: weeks.map((w) => (past.includes(w) ? (data.pastProjections[w]?.[id] ?? null) : (data.projectionsByWeek[w]?.[id] ?? null))),
       // His current team's opponent each week, for the readout; a traded player's old games read against his new team's.
       labels: weeks.map((w) => {
         const opp = data.schedule?.opp[data.players[id]?.team ?? '']?.[w]

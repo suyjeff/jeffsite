@@ -422,6 +422,8 @@ export const clinchStatus = (
   spots: number,
   weeksLeft = 0,
   divisions?: Record<number, number>,
+  /** Games of those weeks already decided for each team (locked results, counted in `record`). */
+  decided?: Record<number, number>,
 ): Record<number, 'in' | 'out' | null> => {
   const left: Record<number, number> = {}
   for (const g of schedule) {
@@ -429,7 +431,7 @@ export const clinchStatus = (
     left[g.b] = (left[g.b] ?? 0) + 1
   }
   const now = (t: number) => (record[t]?.wins ?? 0) + 0.5 * (record[t]?.ties ?? 0)
-  const games = (t: number) => Math.max(left[t] ?? 0, weeksLeft)
+  const games = (t: number) => Math.max(left[t] ?? 0, weeksLeft - (decided?.[t] ?? 0))
   const max = (t: number) => now(t) + games(t)
   const out: Record<number, 'in' | 'out' | null> = {}
   const div = (t: number) => divisions?.[t]

@@ -110,9 +110,14 @@ export type LeagueData = {
   valueSeason: string
   weekPoints: WeekPoints
   pointsSource: PointsSource
-  /** Projected points for the upcoming week in league scoring, when available. */
+  /** Projected points for the upcoming week in league scoring, when available: Sleeper's projection, nothing added. */
   projections: Record<string, number> | null
   projectionWeek: number | null
+  /**
+   * Sleeper's projection in league scoring for each week ahead, as Sleeper has it: what "projected" means anywhere a
+   * week's number is shown. The horizon below is the model's expectation built on it (market, injury odds, roles).
+   */
+  projectionsByWeek: Record<number, Record<string, number>>
   /**
    * Per-week league-scored points for the weeks a trade made today would cover.
    * Built from live weekly projections when the season is running, so byes and
@@ -467,6 +472,7 @@ export const loadLeagueData = async (
   let projectionWeek: number | null = null
   let rawHorizon: Horizon = []
   let horizon: Horizon = []
+  const projectionsByWeek: Record<number, Record<string, number>> = {}
   let horizonSource: HorizonSource = 'none'
   let trending: TrendingEntry[] = []
   let context: Record<string, PlayerContext> = {}
@@ -498,7 +504,9 @@ export const loadLeagueData = async (
       if (!raw || !Object.keys(raw).length) return
       const pts: Record<string, number> = {}
       for (const id of Object.keys(raw)) if (players[id]) pts[id] = raw[id]
-      if (Object.keys(pts).length) rawHorizon.push({ week: w, pts, weight: playoffWeeks.includes(w) ? playoffWeight : 1 })
+      if (!Object.keys(pts).length) return
+      rawHorizon.push({ week: w, pts, weight: playoffWeeks.includes(w) ? playoffWeight : 1 })
+      projectionsByWeek[w] = pts
     })
     if (rawHorizon.length) {
       horizonSource = 'projections'
@@ -654,6 +662,7 @@ export const loadLeagueData = async (
     pointsSource,
     projections,
     projectionWeek,
+    projectionsByWeek,
     horizon,
     horizonSource,
     rawHorizon,

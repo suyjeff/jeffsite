@@ -106,15 +106,38 @@ export const deriveProjectionLine = (line: StatLine, scoring: Record<string, num
 export const scoreProjectionLine = (line: StatLine | undefined | null, scoring: Record<string, number>) =>
   line ? scoreStatLine(deriveProjectionLine(line, scoring), scoring) : 0
 
+/** A bucketed key's family and range: "fgm_50p" → fgm, 50 to ∞; "fgm_50_59" → fgm, 50 to 59. Null if not bucketed. */
+const rangeOf = (k: string): { family: string; lo: number; hi: number } | null => {
+  const m = /^(.*)_(\d+)(?:_(\d+)|p)$/.exec(k)
+  return m ? { family: m[1], lo: Number(m[2]), hi: m[3] != null ? Number(m[3]) : Infinity } : null
+}
+
 /**
  * League-scored keys a projection line carries in another form that the derivation did not fill: should be empty for
- * every line. Keys left unscored on purpose (fgmiss, bonuses: see above) are not listed.
+ * every line. Two ways a key goes missing are checked. A bucket the line carries but the league does not score
+ * (fgm_50p) overlapping one the league does (fgm_50_59, fgm_60p) that the derived line still lacks; and a total
+ * (pts_allow, yds_allow) whose buckets the league scores with none of them on the line. Keys left unscored on
+ * purpose, as Sleeper leaves them (fgmiss from its buckets, bonuses: see above), are not listed.
  */
 export const unscoredProjectionKeys = (line: StatLine, scoring: Record<string, number>): string[] => {
   const d = deriveProjectionLine(line, scoring)
   const out: string[] = []
-  const scored = (k: string) => !!scoring[k] && d[k] != null
-  if (d.fgm_50p && !scoring.fgm_50p && !scored('fgm_50_59') && !scored('fgm_60p') && (scoring.fgm_50_59 || scoring.fgm_60p)) out.push('fgm_50p')
+  const scoredKeys = Object.keys(scoring).filter((k) => scoring[k])
+  for (const k of Object.keys(line)) {
+    if (!line[k] || scoring[k]) continue
+    const r = rangeOf(k)
+    if (!r) continue
+    const missing = scoredKeys.filter((j) => {
+      const q = rangeOf(j)
+      return q && q.family === r.family && q.lo <= r.hi && r.lo <= q.hi && d[j] == null
+    })
+    // Covered if some overlapping bucket the league scores was filled.
+    const filled = scoredKeys.some((j) => {
+      const q = rangeOf(j)
+      return q && q.family === r.family && q.lo <= r.hi && r.lo <= q.hi && d[j] != null
+    })
+    if (missing.length && !filled) out.push(k)
+  }
   if (d.pts_allow != null && PTS_ALLOW.some(([k]) => scoring[k]) && !PTS_ALLOW.some(([k]) => d[k] != null)) out.push('pts_allow')
   if (d.yds_allow != null && YDS_ALLOW.some(([k]) => scoring[k]) && !YDS_ALLOW.some(([k]) => d[k] != null)) out.push('yds_allow')
   return out

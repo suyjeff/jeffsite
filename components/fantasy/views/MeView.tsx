@@ -454,11 +454,11 @@ const MeView = ({
           {kpis && (
             <StatGrid>
               <Stat
-                label="Projected lineup"
+                label="Expected lineup"
                 value={fmt(kpis.mine)}
                 delta={<DeltaChip value={kpis.mine - kpis.avg} title="Against the league's average lineup" />}
                 badge={{ text: `#${kpis.rank} of ${n}`, tone: kpis.rank <= Math.ceil(n / 3) ? 'pos' : kpis.rank > n - Math.ceil(n / 3) ? 'neg' : 'neutral' }}
-                sub={`pts/wk · league ${fmt(kpis.avg)}`}
+                sub={`pts/wk ahead, model · league ${fmt(kpis.avg)}`}
               />
               <Stat label="Injury drag" value={fmtSigned(-kpis.drag, 1)} tone={kpis.drag > 1.5 ? 'neg' : undefined} sub="pts/wk to expected absences, net" />
               <Stat label="Biggest hole" value={kpis.hole ?? '–'} tone={kpis.hole ? 'warn' : undefined} sub={kpis.hole ? `an average starter adds ${fmt(kpis.holePts)}/wk` : undefined} />

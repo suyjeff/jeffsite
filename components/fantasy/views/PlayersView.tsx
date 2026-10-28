@@ -256,7 +256,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       />
       <div className="mt-4 space-y-3">
         <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-          <FadeStrip className="no-scrollbar ff-bleed ff-gutter flex gap-2 overflow-x-auto md:!mx-0 md:flex-wrap md:overflow-visible md:!px-0">
+          <FadeStrip className="no-scrollbar ff-bleed ff-gutter flex gap-2 overflow-x-auto md:!mx-0 md:flex-wrap md:!overflow-visible md:!px-0">
             <Segmented<Basis>
               label="Basis"
               value={basis}

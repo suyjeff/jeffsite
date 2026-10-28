@@ -85,5 +85,6 @@ export const applyAdjustments = (data: LeagueData, adj: Adjustments): LeagueData
     horizon: data.horizon.map((h) => ({ ...h, pts: scale(h.week, h.pts) })),
     rawHorizon: data.rawHorizon.map((h) => ({ ...h, pts: scale(h.week, h.pts) })),
     projections: data.projections && data.projectionWeek != null ? scale(data.projectionWeek, data.projections) : data.projections,
+    projectionsByWeek: Object.fromEntries(Object.entries(data.projectionsByWeek ?? {}).map(([w, pts]) => [w, scale(Number(w), pts)])),
   }
 }
