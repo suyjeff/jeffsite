@@ -39,6 +39,16 @@
 }
 
 
+/* Lars has no regular-weight italic: its italic face is Medium. This is the Regular face with no
+   italic of its own, so font-style: italic slants it instead of swapping in the heavier file. */
+@font-face {
+  font-family: 'Lars Slant';
+  src: url('/fonts/Lars-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 body {
   font-family: 'Lars', sans-serif;
 }

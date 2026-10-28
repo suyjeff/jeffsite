@@ -42,7 +42,7 @@ const WritingPiecePage = ({ title, date, content }: Props) => {
             </h1>
           </Link>
         </div>
-        <p className="mt-1 text-lg tracking-tight font-normal italic text-stone-400 dark:text-stone-400 opacity-0 animate-reveal animation-delay-200">
+        <p className="mt-1 text-lg tracking-tight font-lars-slant font-normal italic text-stone-400 dark:text-stone-400 opacity-0 animate-reveal animation-delay-200">
           {formatDate(date)}
         </p>
         <div className="mt-4 opacity-0 animate-reveal animation-delay-400">

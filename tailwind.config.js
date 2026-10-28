@@ -10,6 +10,7 @@ module.exports = {
         extend: {
             fontFamily: {
                 sans: ['Lars', 'sans-serif'],
+                'lars-slant': ['"Lars Slant"', 'Lars', 'sans-serif'],
                 mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
                 plex: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
             },
