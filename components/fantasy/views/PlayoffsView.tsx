@@ -159,7 +159,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
           </>
         )}
       </p>
-      <div className="ff-scroll overflow-x-auto">
+      <div className="ff-scroll ff-scroll-x">
         <table className="w-full border-separate border-spacing-0 text-[12px]">
           <thead>
             <tr className="ff-label">

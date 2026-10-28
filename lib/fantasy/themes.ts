@@ -1,12 +1,13 @@
 // Colour themes. Each sets the app's tokens (styles/fantasy.css) as "r g b"
 // triplets on the root element, so every `bg-ff-*` and `rgb(var(--ff-*))` follows.
 //
-// Two families. The Tailwind neutrals (slate, gray, zinc, neutral, stone) come
-// in a light and a dark mode and follow the system unless you pick one; their
-// steps are mapped the same way in each, so only the cast of the grey changes.
-// The editor themes are the popular VS Code ones, each in its own fixed mode,
-// with text and muted inks nudged where the original falls under WCAG contrast
-// for body text (Rosé Pine's "muted" is decorative in the editor, a label here).
+// Two families. The Tailwind neutrals (zinc, slate) come in a light and a dark
+// mode and follow the system unless you pick one; their steps are mapped the
+// same way in each, so only the cast of the grey changes. The editor and
+// terminal themes are the popular ones, most in a fixed mode (Catppuccin and
+// Gruvbox carry both of theirs), with text and muted inks nudged where the
+// original falls under WCAG contrast for body text (Rosé Pine's "muted" is
+// decorative in the editor, a label here).
 
 export type Mode = 'light' | 'dark'
 export type Scheme = 'system' | Mode
@@ -131,45 +132,122 @@ export const THEMES: Theme[] = [
     900: '#0f172a',
     950: '#020617',
   }),
-  neutral('gray', 'Gray', {
-    50: '#f9fafb',
-    100: '#f3f4f6',
-    200: '#e5e7eb',
-    300: '#d1d5db',
-    400: '#9ca3af',
-    500: '#6b7280',
-    600: '#4b5563',
-    700: '#374151',
-    800: '#1f2937',
-    900: '#111827',
-    950: '#030712',
-  }),
-  neutral('neutral', 'Neutral', {
-    50: '#fafafa',
-    100: '#f5f5f5',
-    200: '#e5e5e5',
-    300: '#d4d4d4',
-    400: '#a3a3a3',
-    500: '#737373',
-    600: '#525252',
-    700: '#404040',
-    800: '#262626',
-    900: '#171717',
-    950: '#0a0a0a',
-  }),
-  neutral('stone', 'Stone', {
-    50: '#fafaf9',
-    100: '#f5f5f4',
-    200: '#e7e5e4',
-    300: '#d6d3d1',
-    400: '#a8a29e',
-    500: '#78716c',
-    600: '#57534e',
-    700: '#44403c',
-    800: '#292524',
-    900: '#1c1917',
-    950: '#0c0a09',
-  }),
+  {
+    id: 'catppuccin',
+    label: 'Catppuccin',
+    family: 'Editor',
+    // Latte: base #eff1f5, mantle #e6e9ef, crust #dce0e8, surface0 #ccd0da, surface1 #bcc0cc.
+    light: {
+      bg: '#e6e9ef',
+      panel: '#eff1f5',
+      raised: '#f6f7fa',
+      sunken: '#dce0e8',
+      line: '#ccd0da',
+      line2: '#bcc0cc',
+      text: '#3d4058',
+      text2: '#4c4f69',
+      muted: '#5c5f77',
+      accent: '#6c27c7',
+      accentDeep: '#6c27c7',
+      onAccent: '#ffffff',
+      pos: '#236118',
+      neg: '#a30c2d',
+      warn: '#7d4705',
+      s: ['#1e66f5', '#ec5d0a', '#179299', '#df8e1d', '#ea76cb'],
+      c: ['#1e66f5', '#ec5d0a', '#40a02b', '#8839ef'],
+    },
+    // Mocha: base #1e1e2e, mantle #181825, crust #11111b, surface0 #313244, surface1 #45475a.
+    dark: {
+      bg: '#181825',
+      panel: '#1e1e2e',
+      raised: '#313244',
+      sunken: '#11111b',
+      line: '#2a2b3c',
+      line2: '#45475a',
+      text: '#cdd6f4',
+      text2: '#bac2de',
+      muted: '#a6adc8',
+      accent: '#cba6f7',
+      accentDeep: '#b48ee8',
+      onAccent: '#11111b',
+      pos: '#a6e3a1',
+      neg: '#f59bb4',
+      warn: '#fab387',
+      s: ['#89b4fa', '#fab387', '#94e2d5', '#f9e2af', '#f5c2e7'],
+      c: ['#89b4fa', '#fab387', '#a6e3a1', '#cba6f7'],
+    },
+  },
+  {
+    id: 'gruvbox',
+    label: 'Gruvbox',
+    family: 'Editor',
+    // Light: bg0_s #f2e5bc, bg0 #fbf1c7, bg0_h #f9f5d7, bg1 #ebdbb2, bg2 #d5c4a1; faded inks.
+    // The accent is the faded blue, not the orange: orange here sits beside the loss red and the caution yellow, and "your team" would read as a loss.
+    light: {
+      bg: '#f2e5bc',
+      panel: '#fbf1c7',
+      raised: '#fdf7d9',
+      sunken: '#ebdbb2',
+      line: '#e0d1a6',
+      line2: '#d5c4a1',
+      text: '#282828',
+      text2: '#3c3836',
+      muted: '#5a504a',
+      accent: '#065a6a',
+      accentDeep: '#065a6a',
+      onAccent: '#fbf1c7',
+      pos: '#595508',
+      neg: '#9d0006',
+      warn: '#774708',
+      s: ['#076678', '#d65d0e', '#427b58', '#b57614', '#8f3f71'],
+      c: ['#076678', '#d65d0e', '#79740e', '#8f3f71'],
+    },
+    // Dark: bg0_h #1d2021, bg0 #282828, bg1 #3c3836, bg2 #504945; bright inks.
+    dark: {
+      bg: '#1d2021',
+      panel: '#282828',
+      raised: '#3c3836',
+      sunken: '#181a1b',
+      line: '#35322f',
+      line2: '#504945',
+      text: '#ebdbb2',
+      text2: '#d5c4a1',
+      muted: '#bdae93',
+      accent: '#acc3ba',
+      accentDeep: '#689083',
+      onAccent: '#1d2021',
+      pos: '#c2c628',
+      neg: '#fda89e',
+      warn: '#fabd2f',
+      s: ['#83a598', '#fe8019', '#8ec07c', '#fabd2f', '#d3869b'],
+      c: ['#83a598', '#fe8019', '#b8bb26', '#d3869b'],
+    },
+  },
+  {
+    id: 'monokai',
+    label: 'Monokai',
+    family: 'Editor',
+    dark: {
+      bg: '#1e1f1c',
+      panel: '#272822',
+      raised: '#3e3d32',
+      sunken: '#191a17',
+      line: '#34352c',
+      line2: '#49483e',
+      text: '#f8f8f2',
+      text2: '#dcdcd2',
+      // The comment grey (#75715e) is dim for a label; this is its lifted step.
+      muted: '#b0ac96',
+      accent: '#66d9ef',
+      accentDeep: '#3fb6d3',
+      onAccent: '#1e1f1c',
+      pos: '#a6e22e',
+      neg: '#ffb19e',
+      warn: '#e6db74',
+      s: ['#66d9ef', '#f92672', '#a6e22e', '#fd971f', '#ae81ff'],
+      c: ['#66d9ef', '#f92672', '#a6e22e', '#ae81ff'],
+    },
+  },
   {
     id: 'rose-pine',
     label: 'Rosé Pine',
@@ -382,7 +460,7 @@ const rgb = (h: string) => hex(h).join(' ')
 export const tokensFor = (theme: Theme, mode: Mode): Tokens => ((mode === 'dark' ? theme.dark : theme.light) ?? theme.dark ?? theme.light)!
 
 /** The crown's gold as RGB triplets: a fill, and a deeper ink for gold text that holds 4.5:1 on the panel. */
-const GOLD = { light: '182 128 4', lightInk: '140 98 0', dark: '242 193 78', darkInk: '246 205 110' }
+const GOLD = { light: '182 128 4', lightInk: '132 92 0', dark: '242 193 78', darkInk: '246 205 110' }
 
 /** CSS custom properties for a theme in a mode, ready for a style attribute. */
 export const themeVars = (theme: Theme, mode: Mode): Record<string, string> => {

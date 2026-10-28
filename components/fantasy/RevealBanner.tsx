@@ -4,7 +4,7 @@ import { countdown, dropsLabel, type Recap } from '../../lib/fantasy/recap'
 import { cx } from './ui'
 import { useNow } from './useReveal'
 
-// The way back into the weekly power-rank reveal: a coloured banner on the Power page and a smaller one at the
+// The way back into the weekly power-rank reveal: a themed banner on the Power page and a smaller one at the
 // foot of the sidebar. Once a week has unlocked both are buttons that replay it. Before then, from the week's first
 // kickoff to 6 AM Eastern on the Tuesday, they only say when it drops: no ranks, nothing to open. Drawn in the
 // reveal's own language: hairline drafting shapes, a dot grid, the gold crown. Styles and hover motion live in
@@ -71,7 +71,7 @@ const headline = (recap: Recap, analysis: Analysis) => {
 
 const Move = ({ move, className }: { move: number; className?: string }) =>
   move === 0 ? (
-    <span className={cx('num text-white/90', className)}>–</span>
+    <span className={cx('num text-ff-text2', className)}>–</span>
   ) : (
     <span className={cx('num', className)} aria-label={move > 0 ? `up ${move}` : `down ${-move}`}>
       {move > 0 ? '▲' : '▼'}
@@ -108,7 +108,7 @@ const Drafting = ({ compact }: { compact?: boolean }) => (
         ].map(([x, y]) => (
           <rect key={x} className="ff-rv-ink-fill" x={x - 1.5} y={y - 1.5} width={3} height={3} />
         ))}
-        <text x={84} y={12} className="font-mono" fontSize={8} letterSpacing="0.08em" fill="rgb(255 255 255 / 0.55)">
+        <text x={84} y={12} className="font-mono" fontSize={8} letterSpacing="0.08em" style={{ fill: 'rgb(var(--ff-text2))' }}>
           RK·Δ
         </text>
       </>
@@ -125,9 +125,9 @@ const dropText = (pending: RevealPending, now: number) => ({ when: dropsLabel(pe
 
 /** The crown's box on the Power page's banner, with registration ticks at two corners. */
 const CrownBox = ({ outline }: { outline?: boolean }) => (
-  <span className="relative flex h-11 w-11 shrink-0 items-center justify-center border border-white/35 bg-black/10">
-    <span aria-hidden className="absolute -left-px -top-px h-1.5 w-1.5 border-l border-t border-white" />
-    <span aria-hidden className="absolute -bottom-px -right-px h-1.5 w-1.5 border-b border-r border-white" />
+  <span className="relative flex h-11 w-11 shrink-0 items-center justify-center border border-ff-accent/50 bg-ff-panel/60">
+    <span aria-hidden className="absolute -left-px -top-px h-1.5 w-1.5 border-l border-t border-ff-accent" />
+    <span aria-hidden className="absolute -bottom-px -right-px h-1.5 w-1.5 border-b border-r border-ff-accent" />
     <span className="ff-rv-lift">
       <Crown size={26} outline={outline} />
     </span>
@@ -148,19 +148,19 @@ export const PowerBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap
         <Drafting />
         <CrownBox outline />
         <span className="relative min-w-0 flex-1 leading-tight">
-          <span className="flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-white/90">
-            <span aria-hidden className="ff-rv-pulse inline-block h-1.5 w-1.5 bg-white" />
+          <span className="flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ff-text2">
+            <span aria-hidden className="ff-rv-pulse inline-block h-1.5 w-1.5 bg-ff-accent" />
             Week {pending.week} power rank
             <span className="normal-case tracking-normal max-sm:hidden"> · compiling</span>
           </span>
           <span className="mt-1 block truncate text-[15px] font-medium sm:text-[16px]">Drops {when}</span>
-          {left && <span className="num mt-0.5 block font-mono text-[11.5px] text-white/90">{left}</span>}
+          {left && <span className="num mt-0.5 block font-mono text-[11.5px] text-ff-text2">{left}</span>}
         </span>
         {recap && (
           <button
             type="button"
             onClick={onOpen}
-            className="ff-rv-replay relative flex h-11 shrink-0 items-center gap-1.5 border border-white/50 bg-white/10 px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] sm:h-8"
+            className="ff-rv-replay relative flex h-11 shrink-0 items-center gap-1.5 border border-ff-accent/60 bg-ff-panel/50 px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] sm:h-8"
             aria-label={`Replay the week ${recap.week} power rank reveal`}
           >
             <span className="max-sm:hidden">Replay</span> wk {recap.week}
@@ -180,7 +180,7 @@ export const PowerBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap
       <Drafting />
       <CrownBox />
       <span className="relative min-w-0 flex-1 leading-tight">
-        <span className="block font-mono text-[10.5px] uppercase tracking-[0.1em] text-white/90">
+        <span className="block font-mono text-[10.5px] uppercase tracking-[0.1em] text-ff-text2">
           Week {recap.week} · power rank reveal
           <span className="normal-case tracking-normal max-sm:hidden"> · composite ranking</span>
         </span>
@@ -188,15 +188,15 @@ export const PowerBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap
           {mine ? (
             <>
               You&apos;re No. {mine.rankAfter} <Move move={mine.move} className="ml-0.5 text-[13px]" />
-              {top && top.rosterId !== mine.rosterId && topName && <span className="font-normal text-white/90 max-sm:hidden"> · {topName} is No. 1</span>}
+              {top && top.rosterId !== mine.rosterId && topName && <span className="font-normal text-ff-text2 max-sm:hidden"> · {topName} is No. 1</span>}
             </>
           ) : (
             <>{topName} is No. 1</>
           )}
         </span>
-        {mine && top && top.rosterId !== mine.rosterId && topName && <span className="mt-0.5 block truncate text-[12px] text-white/90 sm:hidden">{topName} is No. 1</span>}
+        {mine && top && top.rosterId !== mine.rosterId && topName && <span className="mt-0.5 block truncate text-[12px] text-ff-text2 sm:hidden">{topName} is No. 1</span>}
       </span>
-      <span className="relative flex h-8 shrink-0 items-center gap-1.5 border border-white/50 bg-white/10 px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] max-sm:hidden">
+      <span className="relative flex h-8 shrink-0 items-center gap-1.5 border border-ff-accent/60 bg-ff-panel/50 px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] max-sm:hidden">
         Replay
         <span aria-hidden className="ff-rv-nudge inline-block">
           ▸
@@ -223,13 +223,13 @@ export const NavBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap |
             <Crown size={22} outline />
           </span>
           <span className="relative min-w-0 flex-1 leading-tight">
-            <span className="flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.1em] text-white/90">
-              <span aria-hidden className="ff-rv-blink inline-block h-1 w-1 bg-white" />
+            <span className="flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.1em] text-ff-text2">
+              <span aria-hidden className="ff-rv-blink inline-block h-1 w-1 bg-ff-accent" />
               Wk {pending.week} power rank
             </span>
             <span className="mt-0.5 block truncate text-[13px] font-medium md:text-[12.5px]">Drops {when}</span>
           </span>
-          {left && <span className="num relative shrink-0 font-mono text-[10.5px] text-white/90">{left.replace(/^in /, '')}</span>}
+          {left && <span className="num relative shrink-0 font-mono text-[10.5px] text-ff-text2">{left.replace(/^in /, '')}</span>}
         </div>
         {/* The last unlocked week stays a tap away; the teaser above is not a control. */}
         {recap && (
@@ -256,7 +256,7 @@ export const NavBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap |
           <Crown size={22} />
         </span>
         <span className="relative min-w-0 flex-1 leading-tight">
-          <span className="block font-mono text-[9.5px] uppercase tracking-[0.1em] text-white/90">Wk {recap.week} power rank</span>
+          <span className="block font-mono text-[9.5px] uppercase tracking-[0.1em] text-ff-text2">Wk {recap.week} power rank</span>
           <span className="mt-0.5 block truncate text-[13px] font-medium md:text-[12.5px]">
             {mine ? (
               <>
@@ -267,7 +267,7 @@ export const NavBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap |
             )}
           </span>
         </span>
-        <span aria-hidden className="ff-rv-nudge relative font-mono text-[12px] text-white/90">
+        <span aria-hidden className="ff-rv-nudge relative font-mono text-[12px] text-ff-text2">
           ▸
         </span>
       </button>

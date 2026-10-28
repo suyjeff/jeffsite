@@ -27,12 +27,13 @@ const LIGHT = {
   pos: '10,122,58',
   neg: '200,46,46',
   gold: '182,128,4',
-  goldInk: '140,98,0',
+  goldInk: '132,92,0',
+  accent: '26,95,189',
   accentDeep: '22,85,171',
   c4: '160,96,220',
 }
 export type Palette = typeof LIGHT
-const VARS: Record<keyof Palette, string> = { bg: '--ff-bg', panel: '--ff-panel', sunken: '--ff-sunken', line: '--ff-line', line2: '--ff-line2', text: '--ff-text', text2: '--ff-text2', muted: '--ff-muted', pos: '--ff-pos', neg: '--ff-neg', gold: '--ff-gold', goldInk: '--ff-gold-ink', accentDeep: '--ff-accent-deep', c4: '--ff-c4' }
+const VARS: Record<keyof Palette, string> = { bg: '--ff-bg', panel: '--ff-panel', sunken: '--ff-sunken', line: '--ff-line', line2: '--ff-line2', text: '--ff-text', text2: '--ff-text2', muted: '--ff-muted', pos: '--ff-pos', neg: '--ff-neg', gold: '--ff-gold', goldInk: '--ff-gold-ink', accent: '--ff-accent', accentDeep: '--ff-accent-deep', c4: '--ff-c4' }
 
 export const readPalette = (): Palette => {
   const out = { ...LIGHT }
@@ -137,12 +138,12 @@ export const renderRankCard = async ({ league, week, teams }: CardInput, palette
   }
   ctx.textBaseline = 'middle'
 
-  // Ground, and the reveal's accent rule along the top.
+  // Ground, and the reveal's accent rule along the top: the theme's accent running into the crown's gold, as on the banners.
   ctx.fillStyle = rgb(p.panel)
   ctx.fillRect(0, 0, W, H)
   const bar = ctx.createLinearGradient(0, 0, W, 0)
-  bar.addColorStop(0, rgb(p.accentDeep))
-  bar.addColorStop(1, rgb(p.c4))
+  bar.addColorStop(0, rgb(p.accent))
+  bar.addColorStop(1, rgb(p.gold))
   ctx.fillStyle = bar
   ctx.fillRect(0, 0, W, 10)
 
@@ -311,6 +312,7 @@ export const DARK: Palette = {
   neg: '244,102,102',
   gold: '242,193,78',
   goldInk: '246,205,110',
+  accent: '82,152,240',
   accentDeep: '42,100,196',
   c4: '170,120,236',
 }
@@ -405,8 +407,8 @@ const ogGround = (p: Palette) => {
   ctx.fillRect(0, 0, OG_W, OG_H)
   dots(ctx, p, OG_W, OG_H)
   const bar = ctx.createLinearGradient(0, 0, OG_W, 0)
-  bar.addColorStop(0, rgb(p.accentDeep))
-  bar.addColorStop(1, rgb(p.c4))
+  bar.addColorStop(0, rgb(p.accent))
+  bar.addColorStop(1, rgb(p.gold))
   ctx.fillStyle = bar
   ctx.fillRect(0, 0, OG_W, 10)
   // Registration crosshairs at the corners, like a plotted sheet.
