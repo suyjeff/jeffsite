@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { THEMES, contrast, mix, themeVars } from '../themes'
+import { DEFAULT_THEME, THEMES, contrast, mix, themeById, themeVars } from '../themes'
 
 const modes = THEMES.flatMap((t) => (['light', 'dark'] as const).filter((m) => t[m]).map((m) => ({ id: `${t.id}/${m}`, t: t[m]! })))
 
@@ -30,5 +30,15 @@ describe('themes', () => {
   it('emits every token the stylesheet uses', () => {
     const v = themeVars(THEMES[0], 'light')
     for (const k of ['--ff-bg', '--ff-panel', '--ff-text', '--ff-accent', '--ff-accent-deep', '--ff-on-accent', '--ff-s5', '--ff-c4', '--ff-gold', '--ff-gold-ink']) expect(v[k]).toMatch(/^\d+ \d+ \d+$/)
+  })
+  it('has unique ids, and the retired Tailwind greys are gone', () => {
+    const ids = THEMES.map((t) => t.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const gone of ['gray', 'neutral', 'stone']) expect(ids).not.toContain(gone)
+    for (const added of ['catppuccin', 'gruvbox', 'monokai']) expect(ids).toContain(added)
+  })
+  it('falls back to the default theme for a retired or unknown saved id', () => {
+    for (const id of ['gray', 'neutral', 'stone', 'nope', '', null, undefined]) expect(themeById(id).id).toBe(DEFAULT_THEME)
+    expect(themeById('monokai').id).toBe('monokai')
   })
 })
