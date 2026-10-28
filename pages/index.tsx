@@ -32,11 +32,11 @@ export default function Home() {
           <h2 className="text-lg tracking-tight font-bold mb-4">Read</h2>
           <ul className="space-y-4 text-lg tracking-tight">
             <li>
-              <a href="https://www.figma.com/proto/TYr8ADxHB3LtvKdrt7RWW8?node-id=37-11813&locale=en" className={`${neutralLinkClasses} text-stone-900 dark:text-stone-100`}><NeutralLinkLabel className="underline decoration-stone-400 dark:decoration-stone-500">Custom Roles</NeutralLinkLabel></a>
+              <a href="https://www.figma.com/proto/TYr8ADxHB3LtvKdrt7RWW8?node-id=37-11813&locale=en" className={`${neutralLinkClasses} text-stone-900 dark:text-stone-100`}><NeutralLinkLabel underline>Custom Roles</NeutralLinkLabel></a>
               <p className="text-lg text-stone-400 dark:text-stone-400 tracking-tight">2025 · MongoDB</p>
             </li>
             <li>
-              <a href="https://www.figma.com/proto/TYr8ADxHB3LtvKdrt7RWW8?node-id=1-32831&locale=en" className={`${neutralLinkClasses} text-stone-900 dark:text-stone-100`}><NeutralLinkLabel className="underline decoration-stone-400 dark:decoration-stone-500">Atlas SQL Schemas</NeutralLinkLabel></a>
+              <a href="https://www.figma.com/proto/TYr8ADxHB3LtvKdrt7RWW8?node-id=1-32831&locale=en" className={`${neutralLinkClasses} text-stone-900 dark:text-stone-100`}><NeutralLinkLabel underline>Atlas SQL Schemas</NeutralLinkLabel></a>
               <p className="text-lg text-stone-400 dark:text-stone-400 tracking-tight">2025 · MongoDB</p>
             </li>
           </ul>
