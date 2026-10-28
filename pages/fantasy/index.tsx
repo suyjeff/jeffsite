@@ -109,7 +109,8 @@ const loadPrefs = (): Prefs => {
     const p = JSON.parse(raw) as Partial<Prefs>
     // Prefs saved before onboarding existed carry a username but no flag: they get the (pre-filled) form once.
     const known = p.provider === 'espn' ? !!p.espnLeagueId : !!p.username
-    return { ...base, ...p, onboarded: p.onboarded === true && known, model: { ...DEFAULT_MODEL, ...(p.model ?? {}) }, weights: { ...DEFAULT_POWER_WEIGHTS, ...(p.weights ?? {}) } }
+    // A saved theme that has since been retired (gray, neutral, stone) falls back to the default.
+    return { ...base, ...p, theme: themeById(p.theme).id, onboarded: p.onboarded === true && known, model: { ...DEFAULT_MODEL, ...(p.model ?? {}) }, weights: { ...DEFAULT_POWER_WEIGHTS, ...(p.weights ?? {}) } }
   } catch {
     return base
   }
@@ -127,6 +128,11 @@ const FantasyPage = () => {
       delete document.documentElement.dataset.ffDensity
     }
   }, [prefs?.density]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The page scrolls vertically only: styles/fantasy.css locks the sideways axis on html/body while this class is set.
+  useEffect(() => {
+    document.documentElement.classList.add('ff-page')
+    return () => document.documentElement.classList.remove('ff-page')
+  }, [])
   // Waivers moved out of My team into their own section; old links still land there.
   useEffect(() => {
     if (route.section === 'me' && route.sub === 'waivers') route.go('waivers', 'adds', { replace: true })

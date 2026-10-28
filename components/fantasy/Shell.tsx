@@ -460,7 +460,7 @@ const Shell = (props: ShellProps) => {
         </div>
       )}
 
-      <main className={cx('overflow-x-clip pt-[var(--ff-top)] md:pt-0', sidebarOpen && 'md:pl-[calc(220px+env(safe-area-inset-left))]')}>
+      <main className={cx('max-w-full overflow-x-clip pt-[var(--ff-top)] md:pt-0', sidebarOpen && 'md:pl-[calc(220px+env(safe-area-inset-left))]')}>
         <PhoneBarContext.Provider value={setBar}>
           <div ref={page} className={cx('ff-gutter mx-auto pb-24 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
         </PhoneBarContext.Provider>
