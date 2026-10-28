@@ -44,7 +44,7 @@ const WritingPage = ({ pieces }: Props) => {
               }`}
             >
               <Link href={`/writing/${piece.slug}`} className={neutralLinkClasses}>
-                <NeutralLinkLabel className="underline decoration-stone-400 dark:decoration-stone-500">
+                <NeutralLinkLabel underline>
                   {piece.title}
                 </NeutralLinkLabel>
               </Link>

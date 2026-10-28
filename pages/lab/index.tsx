@@ -24,7 +24,7 @@ const LabPage = () => {
         </div>
         <p className="mt-4 text-lg tracking-tight opacity-0 animate-reveal animation-delay-200">
           <Link href="/fantasy" className={neutralLinkClasses}>
-            <NeutralLinkLabel className="underline decoration-stone-400 dark:decoration-stone-500">League analysis</NeutralLinkLabel>
+            <NeutralLinkLabel underline>League analysis</NeutralLinkLabel>
           </Link>
           <span className="block text-stone-400 dark:text-stone-400">Power ranks, WAR-style player values and trade math for a Sleeper league.</span>
         </p>
