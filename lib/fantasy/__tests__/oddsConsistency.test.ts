@@ -25,6 +25,7 @@ import {
   type SimTeam,
 } from '../forecast'
 import { simInputFor, simulateOnce } from '../playoffSim'
+import { runSim } from '../simRunner'
 import { recapOdds, recapOddsRuns, mergeSims, type Recap } from '../recap'
 import { buildTeamSeasons, buildTeamWeeks } from '../power'
 import { startingSlots } from '../lineup'
@@ -363,5 +364,21 @@ describe('calibration of a single game', () => {
     const input: SimInput = { teams: [g.a, g.b], record: {}, schedule: [{ week: g.week, a: g.a, b: g.b }], playoffWeeks: [], playoffTeams: 1, mean: f.mean, sigma: f.sigma, tau: 0, sims: 20000 }
     const s = simulateSeason(input) as Record<number, SimTeam>
     expect(s[g.a].seeds[1]).toBeCloseTo(g.pA, 1)
+  })
+})
+
+describe('sliced runs', () => {
+  const { input, f } = LEAGUES['twelve teams, two divisions']
+  it('give exactly the unsliced result, scenario or not', async () => {
+    expect(await runSim(f.simInput)).toEqual(f.sim)
+    const g = f.nextWeek[0]
+    const locked = simInputFor(input, f, { locks: { [lockKey(g)]: g.b } })
+    expect(await runSim(locked, { urgent: false })).toEqual(simulateSeason(locked))
+  })
+  it('drop a run whose signal is aborted', async () => {
+    const ctl = new AbortController()
+    const p = runSim(f.simInput, { signal: ctl.signal })
+    ctl.abort()
+    expect(await p).toBeNull()
   })
 })

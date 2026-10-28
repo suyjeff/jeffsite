@@ -9,10 +9,13 @@
 
 import { addCounts, finishSim, simulateCounts, type SimCounts, type SimInput, type SimTeam } from './forecast'
 
-/** Seasons per slice: a few milliseconds even on a slow phone. */
-export const SLICE = 250
-/** Work per turn before the page gets the thread back. */
-const BUDGET_MS = 6
+/** Seasons per slice, at most and at least: sized from the measured cost so a slice takes about SLICE_MS. */
+export const SLICE = { max: 500, min: 50 }
+const SLICE_MS = 6
+/** Work per turn before the page gets the thread back: one slice, or more while they fit. */
+const BUDGET_MS = 8
+/** Measured cost of a season, ms, kept as a running average (a slow phone's is several times a laptop's). */
+let perSeason = 0.1
 
 type Job = {
   input: SimInput
@@ -49,14 +52,16 @@ const pump = () => {
       job.resolve(null)
       continue
     }
-    const n = Math.min(SLICE, job.end - job.next)
+    const n = Math.min(Math.max(SLICE.min, Math.min(SLICE.max, Math.floor(SLICE_MS / perSeason))), job.end - job.next)
+    const t1 = now()
     if (n > 0) job.parts.push(simulateCounts({ ...job.input, from: job.next, sims: n }))
+    if (n >= SLICE.min) perSeason = 0.7 * perSeason + (0.3 * (now() - t1)) / n
     job.next += n
     if (job.next >= job.end) {
       jobs.splice(i, 1)
       job.resolve(finishSim(addCounts(job.parts)))
     }
-  } while (jobs.length && now() - t0 < BUDGET_MS)
+  } while (jobs.length && now() - t0 + SLICE_MS < BUDGET_MS)
   schedule()
 }
 

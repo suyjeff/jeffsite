@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
 import type { AcceptRead } from '../../lib/fantasy/behavior'
-import { tradeLeverage } from '../../lib/fantasy/forecast'
+import { leverageOf, leverageRun, type Forecast, type ForecastInput, type Leverage, type TradeSides } from '../../lib/fantasy/forecast'
+import { runSim } from '../../lib/fantasy/simRunner'
 import { applyTrade, type TradeIdea } from '../../lib/fantasy/trades'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { ContextNotes } from './ContextNotes'
@@ -70,30 +71,55 @@ const PlayerLine = ({ id, data, analysis, notes }: { id: string; data: LeagueDat
   )
 }
 
-/** Playoff and title odds before and after, run on the same simulated seasons. Deferred so cards paint first. */
+// Each trade's leverage, once per forecast and trade: run sliced in idle time on the shared simulation queue
+// (lib/fantasy/simRunner), one trade at a time, and kept for every card that shows the same trade.
+const leverageCache = new WeakMap<Forecast, Map<string, Promise<Leverage | null>>>()
+const leverageFor = (input: ForecastInput, f: Forecast, trade: TradeSides) => {
+  let byTrade = leverageCache.get(f)
+  if (!byTrade) leverageCache.set(f, (byTrade = new Map()))
+  const key = `${trade.me}:${[...trade.myRoster].sort().join(',')}|${trade.partner}:${[...trade.theirRoster].sort().join(',')}`
+  let hit = byTrade.get(key)
+  if (!hit) {
+    // Rating the two rosters is work too: done in idle time, one trade at a time, ahead of its simulation.
+    hit = (ratingQueue = ratingQueue.catch(() => {}).then(idle)).then(() => {
+      const run = leverageRun(input, f, trade)
+      return run ? runSim(run, { urgent: false }).then((post) => (post ? leverageOf(f, trade, post) : null)) : null
+    })
+    byTrade.set(key, hit)
+  }
+  return hit
+}
+let ratingQueue: Promise<unknown> = Promise.resolve()
+const idle = () =>
+  new Promise<void>((r) => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
+    if (w.requestIdleCallback) w.requestIdleCallback(() => r(), { timeout: 400 })
+    else window.setTimeout(r, 16)
+  })
+
+/** Playoff and title odds before and after, run on the same simulated seasons, in idle time so cards paint first. */
 const useLeverage = (idea: TradeIdea) => {
   const { models, analysis } = useFantasy()
-  const [lev, setLev] = useState<ReturnType<typeof tradeLeverage> | null | undefined>(undefined)
+  const [lev, setLev] = useState<Leverage | null | undefined>(undefined)
   useEffect(() => {
     setLev(undefined)
     if (!models.forecast || analysis.myRosterId == null) {
       setLev(null)
       return
     }
-    const t = setTimeout(() => {
-      const me = analysis.teamById[analysis.myRosterId!]
-      const them = analysis.teamById[idea.partnerId]
-      const pts = analysis.horizon.perWeek
-      setLev(
-        tradeLeverage(models.forecastInput, models.forecast!, {
-          me: me.rosterId,
-          partner: them.rosterId,
-          myRoster: applyTrade(me.players, idea.give, idea.get, analysis.capacity, pts),
-          theirRoster: applyTrade(them.players, idea.get, idea.give, analysis.capacity, pts),
-        }),
-      )
-    }, 30)
-    return () => clearTimeout(t)
+    const me = analysis.teamById[analysis.myRosterId]
+    const them = analysis.teamById[idea.partnerId]
+    const pts = analysis.horizon.perWeek
+    let live = true
+    leverageFor(models.forecastInput, models.forecast, {
+      me: me.rosterId,
+      partner: them.rosterId,
+      myRoster: applyTrade(me.players, idea.give, idea.get, analysis.capacity, pts),
+      theirRoster: applyTrade(them.players, idea.get, idea.give, analysis.capacity, pts),
+    }).then((v) => live && setLev(v))
+    return () => {
+      live = false
+    }
   }, [idea, models, analysis])
   return lev
 }
