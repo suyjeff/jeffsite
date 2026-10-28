@@ -4,6 +4,7 @@ import path from "path";
 import matter from "gray-matter";
 import Link from "next/link";
 import Layout from "../../components/Layout";
+import { neutralLinkClasses, NeutralLinkLabel } from "../../components/NeutralLink";
 
 type Piece = {
   slug: string;
@@ -42,11 +43,10 @@ const WritingPage = ({ pieces }: Props) => {
                 "animation-delay-800"
               }`}
             >
-              <Link
-                href={`/writing/${piece.slug}`}
-                className="underline decoration-stone-400 dark:decoration-stone-500"
-              >
-                {piece.title}
+              <Link href={`/writing/${piece.slug}`} className={neutralLinkClasses}>
+                <NeutralLinkLabel className="underline decoration-stone-400 dark:decoration-stone-500">
+                  {piece.title}
+                </NeutralLinkLabel>
               </Link>
             </li>
           ))}
