@@ -1,10 +1,11 @@
-import React, { useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { lockKey, simulateSeason, winProb, type SimTeam } from '../../../lib/fantasy/forecast'
+import React, { useEffect, useMemo, useState } from 'react'
+import { lockKey, winProb, type SimTeam } from '../../../lib/fantasy/forecast'
+import { runSim } from '../../../lib/fantasy/simRunner'
 import { seasonStories, simInputFor, simulateOnce, type Story, type Trace } from '../../../lib/fantasy/playoffSim'
 import { useFantasy } from '../FantasyContext'
-import { Bracket, CHAOS, Delta, Feed, Headline, LEVER_SIMS, SEED, SIMS, Standings, setupKey, type Chaos } from '../PlayoffLab'
+import { Bracket, CHAOS, Delta, Feed, Headline, Standings, setupKey, type Chaos } from '../PlayoffLab'
 import TeamName from '../TeamName'
-import { Avatar, Button, Empty, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone, type PageChange } from '../ui'
+import { Avatar, Button, Empty, FadeStrip, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone, type PageChange } from '../ui'
 import { Callout } from '../Callout'
 import { OddsGrid } from './PowerView'
 
@@ -31,44 +32,55 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
   const [week, setWeek] = useState<number | null>(weeks[0] ?? null)
   const [locks, setLocks] = useState<Record<string, number>>({})
   const [chaos, setChaos] = useState<Chaos>('normal')
-  // Picks land at once; the simulations behind them run in a deferred render a beat later.
-  const dLocks = useDeferredValue(locks)
-  const dChaos = useDeferredValue(chaos)
-  const pending = dLocks !== locks || dChaos !== chaos
+  // Picks land at once. The simulations behind them start once the taps pause (a quick run of taps is one rerun), run
+  // sliced on the shared queue (lib/fantasy/simRunner) so a tap never waits on them, and a newer pick cancels an older
+  // run. Until a run lands, the last result stays on screen.
+  const setup = setupKey(locks, chaos)
+  const [asked, setAsked] = useState<{ locks: Record<string, number>; chaos: Chaos; key: string }>({ locks, chaos, key: setup })
+  useEffect(() => {
+    if (asked.key === setup) return
+    const t = window.setTimeout(() => setAsked({ locks, chaos, key: setup }), 220)
+    return () => window.clearTimeout(t)
+  }, [locks, chaos, setup, asked.key])
 
-  const baseline = useMemo(() => (f ? simulateSeason(simInputFor(input, f, { sims: SIMS, seed: SEED })) : {}), [input, f]) as Record<number, SimTeam>
-  // Untouched, the scenario is the baseline: no second run of the same seasons.
-  const scenario = useMemo(
-    () =>
-      f && (Object.keys(dLocks).length || dChaos !== 'normal') ? simulateSeason(simInputFor(input, f, { locks: dLocks, chaos: CHAOS[dChaos], sims: SIMS, seed: SEED })) : baseline,
-    [input, f, dLocks, dChaos, baseline],
-  ) as Record<number, SimTeam>
+  // The baseline is the forecast's own odds, the ones every other page shows. A what-if replays the forecast's seasons
+  // on the same draws (simInputFor), so a pick moves the odds only where it changes a result.
+  const baseline = (f?.sim ?? {}) as Record<number, SimTeam>
+  const untouched = (x: { locks: Record<string, number>; chaos: Chaos }) => !Object.keys(x.locks).length && x.chaos === 'normal'
+  const [shown, setShown] = useState<{ sim: Record<number, SimTeam>; key: string; f: typeof f }>({ sim: baseline, key: setupKey({}, 'normal'), f })
+  useEffect(() => {
+    if (!f) return
+    // Untouched, the scenario is the baseline: no second run of the same seasons.
+    if (untouched(asked)) return setShown({ sim: f.sim, key: asked.key, f })
+    const ctl = new AbortController()
+    runSim(simInputFor(input, f, { locks: asked.locks, chaos: CHAOS[asked.chaos] }), { signal: ctl.signal }).then((sim) => sim && setShown({ sim, key: asked.key, f }))
+    return () => ctl.abort()
+  }, [input, f, asked]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A new forecast (a projection nudge) drops a scenario run on the old one.
+  const scenario = shown.f === f ? shown.sim : baseline
+  const pending = shown.key !== setup || shown.f !== f
   const nLocks = Object.keys(locks).length
   const tweaked = nLocks > 0 || chaos !== 'normal'
 
-  // What each result in the chosen week does to your playoff odds, a game at a time so taps never wait on it.
-  const dWeek = useDeferredValue(week)
+  // What each result in the chosen week does to your playoff odds, a game at a time, sliced on the same queue. A new
+  // week starts blank; a new pick keeps the old numbers up until the new ones land.
   const games = useMemo(() => input.schedule.filter((g) => g.week === week), [input.schedule, week])
-  const [lever, setLever] = useState<Record<string, { a: number; b: number }>>({})
+  const [lever, setLever] = useState<{ week: number | null; at: Record<string, { a: number; b: number }> }>({ week: null, at: {} })
   useEffect(() => {
-    setLever({})
-    if (!f || me == null || dWeek == null) return
-    let live = true
-    const out: Record<string, { a: number; b: number }> = {}
+    if (!f || me == null || week == null) return
+    const ctl = new AbortController()
     ;(async () => {
-      for (const g of input.schedule.filter((x) => x.week === dWeek)) {
-        await new Promise<void>((r) => window.setTimeout(r, 0))
-        if (!live) return
+      for (const g of input.schedule.filter((x) => x.week === week)) {
         const k = lockKey(g)
-        const run = (w: number) => simulateSeason(simInputFor(input, f, { locks: { ...dLocks, [k]: w }, chaos: CHAOS[dChaos], sims: LEVER_SIMS, seed: SEED }))[me]?.playoffs ?? 0
-        out[k] = { a: run(g.a), b: run(g.b) }
-        setLever({ ...out })
+        const run = (w: number) => runSim(simInputFor(input, f, { locks: { ...asked.locks, [k]: w }, chaos: CHAOS[asked.chaos] }), { signal: ctl.signal })
+        const [a, b] = await Promise.all([run(g.a), run(g.b)])
+        if (!a || !b || ctl.signal.aborted) return
+        setLever((L) => ({ week, at: { ...(L.week === week ? L.at : {}), [k]: { a: a[me]?.playoffs ?? 0, b: b[me]?.playoffs ?? 0 } } }))
       }
     })()
-    return () => {
-      live = false
-    }
-  }, [me, dWeek, input, f, dLocks, dChaos])
+    return () => ctl.abort()
+  }, [me, week, input, f, asked])
+  const leverAt = lever.week === week ? lever.at : {}
 
   const pick = (g: { week: number; a: number; b: number }, w: number) =>
     setLocks((L) => {
@@ -132,7 +144,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
     <Panel
       title="The race"
       pad={false}
-      actions={<span className={cx(pending && 'ff-pulse')}>{pending ? 'simulating…' : tweaked ? 'change vs the model' : `${SIMS.toLocaleString()} seasons`}</span>}
+      actions={<span className={cx(pending && 'ff-pulse')}>{pending ? 'simulating…' : tweaked ? 'change vs the model' : `${f.sims.toLocaleString()} seasons`}</span>}
     >
       <p className="border-b border-ff-line px-3 py-2 text-[12.5px] leading-[1.5] text-ff-text2">
         {fav != null && (
@@ -253,11 +265,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
         <p className="px-3 py-3 text-[12.5px] text-ff-muted">The regular season is over: the seeds are set. Play out the bracket under Play a season.</p>
       ) : (
         <>
-          <div
-            className="no-scrollbar flex gap-1 overflow-x-auto border-b border-ff-line px-3 py-2 [mask-image:linear-gradient(to_right,black_90%,transparent)]"
-            role="tablist"
-            aria-label="Week"
-          >
+          <FadeStrip className="no-scrollbar flex gap-1 overflow-x-auto border-b border-ff-line px-3 py-2" role="tablist" aria-label="Week">
             {weeks.map((w) => {
               const n = input.schedule.filter((g) => g.week === w && locks[lockKey(g)] !== undefined).length
               return (
@@ -283,13 +291,14 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                 </button>
               )
             })}
-          </div>
+          </FadeStrip>
           <ul className="divide-y divide-ff-line/60">
             {games.map((g) => {
               const k = lockKey(g)
               const locked = locks[k]
-              const pA = f.nextWeek.find((x) => x.week === g.week && x.a === g.a && x.b === g.b)?.pA ?? winProb(f.mean(g.a, g.week), f.mean(g.b, g.week), f.sigma)
-              const lv = lever[k]
+              // Whole percents, the second side the first's complement, so a game's two sides always read 100 between them.
+              const pA = Math.round((f.nextWeek.find((x) => x.week === g.week && x.a === g.a && x.b === g.b)?.pA ?? winProb(f.mean(g.a, g.week), f.mean(g.b, g.week), f.sigma)) * 100) / 100
+              const lv = leverAt[k]
               const side = (id: number, p: number, align: 'left' | 'right') => {
                 const t = analysis.teamById[id]
                 const on = locked === id

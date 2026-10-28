@@ -15,7 +15,7 @@
 // set the scale only; every player-level difference between the market and
 // Sleeper survives.
 
-import { scoreStatLine } from './scoring'
+import { scoreProjectionLine } from './scoring'
 import type { PlayerMap, StatLine, WeekStats } from './types'
 
 export type LineRow = { id: string; game: string; stat: string; line: number; over: number; under: number }
@@ -262,11 +262,12 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
     // Nothing here the market priced (only team-level or unread props): not a market projection.
     if (!reads.length) continue
     const merged: StatLine = { ...base, ...stats }
-    const sleeper = scoreStatLine(base, scoring)
+    // Sleeper's line in this league's scoring, derived to the league's keys as everywhere (lib/fantasy/scoring).
+    const sleeper = scoreProjectionLine(base, scoring)
     // A kicking-points line counts 3 a field goal and 1 an extra point. League scoring may pay by distance,
     // so the line scales Sleeper's league-scored kicker projection rather than replacing it.
     const standard = 3 * (base.fgm ?? 0) + (base.xpm ?? 0)
-    const pts = kicking != null && players[id].pos === 'K' ? (standard > 0 ? sleeper * (kicking / standard) : kicking) : scoreStatLine(merged, scoring)
+    const pts = kicking != null && players[id].pos === 'K' ? (standard > 0 ? sleeper * (kicking / standard) : kicking) : scoreProjectionLine(merged, scoring)
     byId[id] = { props: reads, stats, pts: Math.round(pts * 100) / 100, sleeper: Math.round(sleeper * 100) / 100, anytimeTd }
   }
   return { week, byId, players: Object.keys(byId).length, props, kickers }

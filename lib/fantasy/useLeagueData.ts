@@ -61,6 +61,7 @@ import {
 import { matchConsensus, reduceConsensusCsv, type Consensus } from './consensus'
 import { blendWeek, marketWeek, reduceLines, saveSnapshot, type LineRow, type MarketWeek } from './lines'
 import type { Horizon } from './trades'
+import { playoffRoundWeeks } from './forecast'
 import type { WeekPoints } from './war'
 
 export type PointsSource = 'stats' | 'matchups' | 'proxy-stats' | 'proxy-matchups' | 'none'
@@ -110,9 +111,14 @@ export type LeagueData = {
   valueSeason: string
   weekPoints: WeekPoints
   pointsSource: PointsSource
-  /** Projected points for the upcoming week in league scoring, when available. */
+  /** Projected points for the upcoming week in league scoring, when available: Sleeper's projection, nothing added. */
   projections: Record<string, number> | null
   projectionWeek: number | null
+  /**
+   * Sleeper's projection in league scoring for each week ahead, as Sleeper has it: what "projected" means anywhere a
+   * week's number is shown. The horizon below is the model's expectation built on it (market, injury odds, roles).
+   */
+  projectionsByWeek: Record<number, Record<string, number>>
   /**
    * Per-week league-scored points for the weeks a trade made today would cover.
    * Built from live weekly projections when the season is running, so byes and
@@ -132,6 +138,8 @@ export type LeagueData = {
   playoffWeight: number
   /** Fantasy playoff weeks for this league. */
   playoffWeeks: number[]
+  /** The same weeks by playoff round (fantasyPlayoffRounds); a round past the NFL's last week is empty. */
+  playoffRounds: number[][]
   trending: TrendingEntry[]
   /** This season's transactions, every type. */
   transactions: SleeperTransaction[]
@@ -216,18 +224,18 @@ const pointsFromMatchups = (ms: SleeperMatchup[]): Record<string, number> => {
 }
 
 /**
- * The league's playoff weeks. Each round is one week unless the settings say
- * the championship (round type 1) or every round (type 2) runs two.
+ * The league's playoff rounds, each the weeks it is played over: one week unless the settings say the championship
+ * (round type 1) or every round (type 2) runs two (lib/fantasy/forecast playoffRoundWeeks, the one rule).
  */
-export const fantasyPlayoffWeeks = (league: SleeperLeague): number[] => {
+export const fantasyPlayoffRounds = (league: SleeperLeague): number[][] => {
   const start = league.settings?.playoff_week_start
   const teams = Number(league.settings?.playoff_teams ?? 0)
   if (!start || teams < 2) return []
-  const rounds = Math.ceil(Math.log2(teams))
-  const roundType = Number(league.settings?.playoff_round_type ?? 0)
-  const weeks = roundType === 2 ? rounds * 2 : roundType === 1 ? rounds + 1 : rounds
-  return Array.from({ length: weeks }, (_, i) => start + i).filter((w) => w <= MAX_WEEK)
+  return playoffRoundWeeks(start, teams, Number(league.settings?.playoff_round_type ?? 0), MAX_WEEK)
 }
+
+/** The league's playoff weeks, every round's in order. */
+export const fantasyPlayoffWeeks = (league: SleeperLeague): number[] => fantasyPlayoffRounds(league).flat()
 
 /** Games played this season, against the games each team has actually played. */
 const currentSeasonGames = (weeks: { week: number; stats: WeekStats }[], schedule: Schedule | null) => {
@@ -467,6 +475,7 @@ export const loadLeagueData = async (
   let projectionWeek: number | null = null
   let rawHorizon: Horizon = []
   let horizon: Horizon = []
+  const projectionsByWeek: Record<number, Record<string, number>> = {}
   let horizonSource: HorizonSource = 'none'
   let trending: TrendingEntry[] = []
   let context: Record<string, PlayerContext> = {}
@@ -477,7 +486,8 @@ export const loadLeagueData = async (
 
   const mode: HorizonMode = opts.horizon ?? DEFAULT_HORIZON_MODE
   const playoffWeight = Math.max(0, opts.playoffWeight ?? DEFAULT_PLAYOFF_WEIGHT)
-  const playoffWeeks = fantasyPlayoffWeeks(league)
+  const playoffRounds = fantasyPlayoffRounds(league)
+  const playoffWeeks = playoffRounds.flat()
   const lastWeek = mode === 'playoffs' ? Math.max(playoffStart - 1, ...playoffWeeks) : playoffStart - 1
   const upcoming = state.season_type === 'pre' ? startWeek : Math.max(state.week, currentWeek)
   let horizonWeeks =
@@ -498,7 +508,9 @@ export const loadLeagueData = async (
       if (!raw || !Object.keys(raw).length) return
       const pts: Record<string, number> = {}
       for (const id of Object.keys(raw)) if (players[id]) pts[id] = raw[id]
-      if (Object.keys(pts).length) rawHorizon.push({ week: w, pts, weight: playoffWeeks.includes(w) ? playoffWeight : 1 })
+      if (!Object.keys(pts).length) return
+      rawHorizon.push({ week: w, pts, weight: playoffWeeks.includes(w) ? playoffWeight : 1 })
+      projectionsByWeek[w] = pts
     })
     if (rawHorizon.length) {
       horizonSource = 'projections'
@@ -654,6 +666,7 @@ export const loadLeagueData = async (
     pointsSource,
     projections,
     projectionWeek,
+    projectionsByWeek,
     horizon,
     horizonSource,
     rawHorizon,
@@ -664,6 +677,7 @@ export const loadLeagueData = async (
     horizonMode: mode,
     playoffWeight,
     playoffWeeks,
+    playoffRounds,
     trending,
     transactions,
     history,

@@ -80,20 +80,23 @@ const useUnsetLineups = (week: number | null) => {
   const { data, analysis } = useFantasy()
   return useMemo(() => {
     const out: Record<number, { names: string[]; asSet: number }> = {}
-    const h = week != null ? data.horizon.find((x) => x.week === week) : null
-    if (!h) return out
+    // Sleeper's projection for the week, as the lineup is set: who scores nothing, and the total as it stands.
+    const pts = week != null ? (data.projectionsByWeek[week] ?? data.horizon.find((x) => x.week === week)?.pts) : null
+    if (!pts) return out
     for (const m of data.matchupsByWeek[week!] ?? []) {
-      const dead = deadStarters(analysis.slots, m.starters ?? undefined, h.pts)
+      const dead = deadStarters(analysis.slots, m.starters ?? undefined, pts)
       if (!dead.length) continue
-      const asSet = (m.starters ?? []).reduce((a, id) => a + (id && id !== '0' ? (h.pts[id] ?? 0) : 0), 0)
+      const asSet = (m.starters ?? []).reduce((a, id) => a + (id && id !== '0' ? (pts[id] ?? 0) : 0), 0)
       out[m.roster_id] = { names: dead.map((d) => (d.id ? (data.players[d.id]?.name ?? d.id) : `empty ${d.slot.name}`)), asSet }
     }
     return out
   }, [week, data, analysis.slots])
 }
 
-const unsetNote = (u: { names: string[]; asSet: number }) =>
-  `Lineup not set: ${u.names.join(', ')} can't score this week. As set in Sleeper it projects ${fmt(u.asSet)}; this assumes the manager swaps in the best option.`
+const unsetNote = (u: { names: string[]; asSet: number }, asSet = false) =>
+  asSet
+    ? `Lineup not set: ${u.names.join(', ')} can't score this week. Shown as set in Sleeper.`
+    : `Lineup not set: ${u.names.join(', ')} can't score this week. As set in Sleeper it projects ${fmt(u.asSet)}; this assumes the manager swaps in the best option.`
 
 /** This week's pairings with each side's expectation and win probability. */
 const Scoreboard = ({ sel, select }: WidgetProps) => {
@@ -114,18 +117,23 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
   const weekGames = (data.schedule?.games ?? []).filter((x) => x.week === week && x.status !== 'canceled')
   const done = slateGames ? slateGames.length > 0 && slateGames.every((x) => x.final) : weekGames.length > 0 && weekGames.every((x) => gameIsFinal(x, undefined))
   const kind = !started ? 'proj' : done ? 'final' : 'live'
-  // Each side as the slate reads it, once the week is on: points banked, and starters still to play under them. The
-  // slate itself is shared with every other view (useSlate); each pairing is read once.
-  const reads = new Map(f.nextWeek.map((g) => [g, started && slateWeek === week ? read(g.a, g.b) : null]))
+  // Each side as the slate reads it (shared with every other view; each pairing read once): before kickoff, the lineup
+  // as set at Sleeper's projections, the same total as the matchup itself; once the week is on, points banked and
+  // starters still to play. The model's own expectation stands in only when there is no slate for the week.
+  const reads = new Map(f.nextWeek.map((g) => [g, slateWeek === week ? read(g.a, g.b) : null]))
   const sideOf = (g: (typeof f.nextWeek)[number], k: 'a' | 'b') => {
     const r = reads.get(g)
     if (!r) return null
     const c = k === 'a' ? r.countA : r.countB
+    if (!started) return { value: k === 'a' ? r.a.mu : r.b.mu, kind: 'proj' as const, toGo: null }
     return { value: k === 'a' ? r.a.banked : r.b.banked, kind: k === 'a' ? r.kindA : r.kindB, toGo: c.left + c.live }
   }
+  const oddsOf = (g: (typeof f.nextWeek)[number]) => reads.get(g)?.p ?? g.pA
+  const fromSlate = f.nextWeek.some((g) => reads.get(g))
   const score = (g: (typeof f.nextWeek)[number], k: 'a' | 'b') => {
     const sd = sideOf(g, k)
     if (!sd) return <Pts value={started ? pts(k === 'a' ? g.a : g.b) : k === 'a' ? g.muA : g.muB} kind={kind} />
+    if (sd.toGo == null) return <Pts value={sd.value} kind="proj" />
     return (
       <span className={cx('flex flex-col leading-none', k === 'a' ? 'items-end' : 'items-start')} title={`${sd.toGo} starter${sd.toGo === 1 ? '' : 's'} still to play or playing`}>
         <Pts value={sd.value} kind={sd.kind} className={sd.kind === 'proj' ? undefined : 'font-medium'} />
@@ -137,26 +145,26 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
     <div>
       <Th>
         <span className="w-full">wk {week}</span>
-        <span className="shrink-0">{started ? 'pts' : 'exp'}</span>
-        <span className="w-16 shrink-0 text-center" title={started ? 'Pre-game win probability' : undefined}>
-          {started ? 'pre' : 'win'}
+        <span className="shrink-0">{started ? 'pts' : fromSlate ? 'proj' : 'exp'}</span>
+        <span className="w-16 shrink-0 text-center" title={fromSlate ? 'Win odds as the week stands' : 'Pre-game win probability, from the model'}>
+          win
         </span>
-        <span className="shrink-0">{started ? 'pts' : 'exp'}</span>
+        <span className="shrink-0">{started ? 'pts' : fromSlate ? 'proj' : 'exp'}</span>
       </Th>
       {f.nextWeek.map((g) => (
         <Row key={`${g.a}-${g.b}`} active={sel.team === g.a || sel.team === g.b} className={started ? 'h-10' : undefined}>
           <button onClick={() => select({ team: g.a })} className="min-w-0 flex-1 text-left">
             <TeamTag id={g.a} plain />
           </button>
-          <span className="num flex w-12 shrink-0 justify-end text-right text-ff-text" title={!started && unset[g.a] ? unsetNote(unset[g.a]) : undefined}>
+          <span className="num flex w-12 shrink-0 justify-end text-right text-ff-text" title={!started && unset[g.a] ? unsetNote(unset[g.a], fromSlate) : undefined}>
             {!started && unset[g.a] && <span className="text-ff-warn">*</span>}
             {score(g, 'a')}
           </span>
           <span className="flex w-16 shrink-0 items-center gap-1">
-            <span className="num w-7 text-right text-[10.5px] text-ff-text2">{odds(g.pA).replace('%', '')}</span>
-            <WinBar p={g.pA} />
+            <span className="num w-7 text-right text-[10.5px] text-ff-text2">{odds(oddsOf(g)).replace('%', '')}</span>
+            <WinBar p={oddsOf(g)} />
           </span>
-          <span className="num flex w-12 shrink-0 text-ff-text" title={!started && unset[g.b] ? unsetNote(unset[g.b]) : undefined}>
+          <span className="num flex w-12 shrink-0 text-ff-text" title={!started && unset[g.b] ? unsetNote(unset[g.b], fromSlate) : undefined}>
             {score(g, 'b')}
             {!started && unset[g.b] && <span className="text-ff-warn">*</span>}
           </span>
@@ -166,8 +174,14 @@ const Scoreboard = ({ sel, select }: WidgetProps) => {
         </Row>
       ))}
       <div className="px-3 py-1.5 font-mono text-[10px] text-ff-muted">
-        bar = left team&apos;s pre-game chance · {started ? 'points banked so far, starters to go under each' : 'scores are expectations'}
-        {!started && Object.keys(unset).length > 0 && <> · <span className="text-ff-warn">*</span> lineup has a bye/out starter; expectation assumes the swap</>}
+        {fromSlate ? 'bar = left team’s win odds as the week stands' : 'bar = left team’s pre-game chance, from the model'} ·{' '}
+        {started ? 'points banked so far, starters to go under each' : fromSlate ? 'lineups as set, at Sleeper’s projections' : 'scores are the model’s expectations'}
+        {!started && Object.keys(unset).length > 0 && (
+          <>
+            {' '}
+            · <span className="text-ff-warn">*</span> lineup has a bye/out starter{fromSlate ? ', scored as set' : '; the expectation assumes the swap'}
+          </>
+        )}
       </div>
     </div>
   )
@@ -222,9 +236,10 @@ const useWeekLineup = (rosterId: number | null, week: number | null) => {
   const { data, analysis } = useFantasy()
   return useMemo(() => {
     if (rosterId == null || week == null) return null
-    const h = data.horizon.find((x) => x.week === week)
-    if (!h) return null
-    const ev = makeLineupEval(analysis.slots, data.players, h.pts, analysis.horizonReplacement)
+    // Sleeper's projection for the week, the number shown as projected everywhere; the model's horizon if it has none.
+    const pts = data.projectionsByWeek[week] ?? data.horizon.find((x) => x.week === week)?.pts
+    if (!pts) return null
+    const ev = makeLineupEval(analysis.slots, data.players, pts, analysis.horizonReplacement)
     const res = ev.assign(analysis.teamById[rosterId].players)
     return analysis.slots.map((slot, i) => {
       const p = res.assignments[i]
@@ -251,7 +266,7 @@ const Matchup = ({ select }: WidgetProps) => {
   const { read, week: slateWeek } = useMatchups()
   if (!f || !game || mine == null || opp == null) return <NoForecast />
   const now = slateWeek === game.week ? read(mine, opp) : null
-  // Before the week is on there is no slate to read: the forecast stands in, side by side as projections.
+  // Without a slate for the week, the forecast stands in: the model's expectation, its best lineups at Sleeper's projections.
   const p = flip ? 1 - game.pA : game.pA
   const side = (rosterId: number, mu: number): SlateSide => ({ rosterId, mu, sd: f.sigma, banked: 0, left: 0, starters: [] })
   const forecast: MatchupHead & SlotSource = {
@@ -267,10 +282,13 @@ const Matchup = ({ select }: WidgetProps) => {
     rows: (left ?? []).map((s, i) => {
       const them = right?.[i]
       const proj = (pts: number) => ({ value: pts, kind: 'proj' as const, expect: pts, proj: pts })
-      return { slot: s.slot, a: s.id, b: them?.id ?? null, sa: proj(s.pts), sb: proj(them?.pts ?? 0), edge: s.pts - (them?.pts ?? 0) }
+      // A waiver-filled slot has only the model's estimate, so it shows no projection.
+      return { slot: s.slot, a: s.id, b: them?.id ?? null, sa: s.id ? proj(s.pts) : null, sb: them?.id ? proj(them.pts) : null, edge: s.pts - (them?.pts ?? 0) }
     }),
   }
-  const m = now?.started ? now : forecast
+  // The slate whenever it covers the week: lineups as set at Sleeper's projections, and odds on those, the same
+  // numbers as Gameday and the Matchups page. The forecast (the model's expectation) only when it does not.
+  const m = now ?? forecast
   // A slot nobody holds shows the best pickup for it, before the week is set.
   const empty = (i: number, k: 'a' | 'b') => {
     const s = (k === 'a' ? left : right)?.[i]
@@ -286,8 +304,14 @@ const Matchup = ({ select }: WidgetProps) => {
         between={[mine, opp].map((rid) =>
           unset[rid] && !m.started ? (
             <div key={rid} className="border-t border-ff-line px-3 py-1.5 text-[11.5px] leading-snug text-ff-text2">
-              <span className="text-ff-warn">{rid === mine ? 'Your' : `${analysis.teamById[rid].name}'s`} lineup isn&apos;t set</span>: {unset[rid].names.join(', ')} can&apos;t score. As set it projects{' '}
-              <span className="num">{fmt(unset[rid].asSet)}</span>; the {fmt(rid === mine ? m.a.mu : m.b.mu)} assumes {rid === mine ? 'you swap' : 'they swap'}.
+              <span className="text-ff-warn">{rid === mine ? 'Your' : `${analysis.teamById[rid].name}'s`} lineup isn&apos;t set</span>: {unset[rid].names.join(', ')} can&apos;t score.{' '}
+              {now ? (
+                <>Shown as set.</>
+              ) : (
+                <>
+                  As set it projects <span className="num">{fmt(unset[rid].asSet)}</span>; the model&apos;s {fmt(rid === mine ? m.a.mu : m.b.mu)} assumes {rid === mine ? 'you swap' : 'they swap'}.
+                </>
+              )}
             </div>
           ) : null,
         )}
@@ -361,14 +385,23 @@ const Lineup = ({ sel, select }: WidgetProps) => {
       <Th>
         <span className="w-9">slot</span>
         <span className="flex-1">wk {week} optimal</span>
-        <span className="w-12 text-right">exp</span>
+        <span className="w-12 text-right" title="Sleeper's projection for the week, in league scoring">proj</span>
         <span className="w-10 text-right">plays</span>
       </Th>
       {rows.map((r, i) => (
         <Row key={i} onClick={r.id ? () => select({ player: r.id! }) : undefined} active={!!r.id && sel.player === r.id} label={r.id ? `Follow ${data.players[r.id]?.name ?? 'player'}` : undefined}>
           <span className="w-9 font-mono text-[10.5px] text-ff-muted">{r.slot}</span>
           <span className="min-w-0 flex-1">{r.id ? <PlayerName player={data.players[r.id]} id={r.id} size={18} avatar={false} /> : <FreeAgentPick eligible={r.eligible} week={week} size={18} avatar={false} />}</span>
-          <span className="num w-12 text-right text-ff-text">{fmt(r.pts)}</span>
+          {/* A waiver-filled slot's number is the model's replacement estimate, not anyone's Sleeper projection. */}
+          <span className="w-12 text-right">
+            {r.id ? (
+              <Pts value={r.pts} kind="proj" />
+            ) : (
+              <span className="num text-ff-muted" title="The model's estimate for a waiver pickup in this slot, not a Sleeper projection">
+                {fmt(r.pts)} <span className="font-mono text-[9.5px]">est</span>
+              </span>
+            )}
+          </span>
           <span className="num w-10 text-right text-ff-text2">{r.id ? pct(data.context[r.id]?.play) : ''}</span>
         </Row>
       ))}
@@ -922,7 +955,7 @@ export const WIDGETS: Record<WidgetKind, Meta> = {
   odds: { title: 'Playoff odds', blurb: 'Simulated seasons: wins, playoff, bye and title odds.', w: 5, h: 11, Body: Odds },
   scoreboard: { title: 'Scoreboard', blurb: "This week's games with expected scores and win odds.", w: 6, h: 7, Body: Scoreboard },
   trades: { title: 'Trade ideas', blurb: 'Best deal from each partner, and how likely each lands.', w: 7, h: 9, Body: TradeIdeas },
-  lineup: { title: 'My lineup', blurb: "Next week's optimal lineup from adjusted projections.", w: 4, h: 9, Body: Lineup },
+  lineup: { title: 'My lineup', blurb: "Next week's best lineup on Sleeper's projections.", w: 4, h: 9, Body: Lineup },
   power: { title: 'Power Rank', blurb: 'Rankings under any of the three models.', w: 4, h: 9, Body: Power },
   standings: { title: 'Standings', blurb: 'Record, points and the playoff line.', w: 6, h: 7, Body: Standings },
   injuries: { title: 'Injury watch', blurb: 'Flagged players and who inherits their work.', w: 4, h: 9, Body: Injuries },

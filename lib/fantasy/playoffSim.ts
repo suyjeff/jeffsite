@@ -1,30 +1,20 @@
 // One season played out, game by game, for the playoff simulator: the same model as the odds (lib/fantasy/forecast's
-// simulateSeason), but a single draw kept whole, so it can be shown as standings, a bracket and the stories in it.
+// simulateSeason), and literally one of its seasons: season k of a stream is played by the same code with the same
+// draws, kept whole so it can be shown as standings, a bracket and the stories in it.
 //
 // The odds are the average over thousands of these. A trace is one of them: any single season is unlikely, which is
 // the point. Locked results hold in both.
 
-import { bracketOrder, lockKey, seedOrder, lockStream, lockedScores, normals, persistMean, rng, type Forecast, type ForecastInput, type SimInput } from './forecast'
+import { isPlaceholderWeek, playOne, type Forecast, type ForecastInput, type SimInput } from './forecast'
 
-/** The simulation's input from the forecast, as the odds use it, with locked results and a chaos factor on the noise. */
-export const simInputFor = (input: ForecastInput, f: Forecast, opts: { locks?: Record<string, number>; chaos?: number; sims?: number; seed?: number } = {}): SimInput => {
-  const teams = input.teams.map((t) => t.rosterId)
+/**
+ * The simulation's input for the simulator: the forecast's own (lib/fantasy/forecast Forecast.simInput: same model,
+ * seasons and draws), with locked results and a chaos factor on the noise. Untouched, it reproduces the forecast's
+ * odds exactly.
+ */
+export const simInputFor = (_input: ForecastInput, f: Forecast, opts: { locks?: Record<string, number>; chaos?: number } = {}): SimInput => {
   const k = opts.chaos ?? 1
-  return {
-    teams,
-    record: input.record,
-    schedule: input.schedule,
-    playoffWeeks: input.playoffWeeks,
-    playoffTeams: input.playoffTeams,
-    mean: persistMean(f.mean, teams),
-    sigma: f.sigma * k,
-    tau: f.tau * k,
-    weeksLeft: input.weeksLeft,
-    divisions: input.divisions,
-    sims: opts.sims ?? 2000,
-    seed: opts.seed,
-    locks: opts.locks,
-  }
+  return { ...f.simInput, sigma: f.simInput.sigma * k, tau: f.simInput.tau * k, locks: opts.locks && Object.keys(opts.locks).length ? opts.locks : undefined }
 }
 
 export type TraceGame = { week: number; a: number; b: number; sa: number; sb: number; locked: boolean }
@@ -38,7 +28,14 @@ export type TraceRow = {
   /** Wins and losses before the simulated weeks. */ was: { wins: number; losses: number }
 }
 export type BracketGame = { a: number | null; b: number | null; seedA: number | null; seedB: number | null; sa: number | null; sb: number | null; winner: number | null }
-export type BracketRound = { week: number; name: string; games: BracketGame[] }
+export type BracketRound = {
+  /** The round's last calendar week; null when the calendar has none for it (a placeholder week in the simulation). */
+  week: number | null
+  /** Every calendar week the round is played over (two for a two-week round); empty for a placeholder. */
+  weeks: number[]
+  name: string
+  games: BracketGame[]
+}
 
 export type Trace = {
   seed: number
@@ -52,33 +49,17 @@ export type Trace = {
 
 export const roundName = (teamsLeft: number) => (teamsLeft === 2 ? 'Final' : teamsLeft === 4 ? 'Semifinals' : teamsLeft === 8 ? 'Quarterfinals' : `Round of ${teamsLeft}`)
 
-/** One simulated season, kept whole. */
+/** Season `seed` of the input's stream, kept whole: the very season simulateSeason counts at that index. */
 export const simulateOnce = (input: SimInput, seed: number): Trace => {
-  const { teams, schedule, record, sigma, tau, playoffWeeks } = input
-  const z = normals(rng(seed))
-  const zl = normals(rng(lockStream(seed)))
-  const level: Record<number, number> = {}
+  const { teams, record } = input
+  const { c, played, trace } = playOne(input, seed)
   const rows: Record<number, TraceRow> = {}
   for (const t of teams) {
     const r = record[t] ?? { wins: 0, losses: 0, ties: 0, pf: 0 }
     rows[t] = { rosterId: t, seed: 0, wins: r.wins, losses: r.losses, ties: r.ties, pf: r.pf, was: { wins: r.wins, losses: r.losses } }
-    level[t] = tau * z()
   }
-  const score = (t: number, w: number, draw = z) => input.mean(t, w) + level[t] + sigma * draw()
-  const regular: TraceGame[] = []
-  for (const g of [...schedule].sort((x, y) => x.week - y.week)) {
-    if (!rows[g.a] || !rows[g.b]) continue
-    let sa = score(g.a, g.week)
-    let sb = score(g.b, g.week)
-    const lock = input.locks?.[lockKey(g)]
-    if (lock !== undefined)
-      [sa, sb] = lockedScores(
-        lock === g.a,
-        sa,
-        sb,
-        () => score(g.a, g.week, zl),
-        () => score(g.b, g.week, zl),
-      )
+  const regular: TraceGame[] = c.games.map((g, i) => {
+    const { sa, sb } = trace.regular[i]
     rows[g.a].pf += sa
     rows[g.b].pf += sb
     if (sa > sb) {
@@ -88,27 +69,20 @@ export const simulateOnce = (input: SimInput, seed: number): Trace => {
       rows[g.b].wins++
       rows[g.a].losses++
     }
-    regular.push({ week: g.week, a: g.a, b: g.b, sa, sb, locked: lock !== undefined })
-  }
-  const standings = seedOrder(
-    Object.values(rows),
-    (r) => r.wins + 0.5 * r.ties,
-    (r) => r.pf,
-    input.divisions ? (r) => input.divisions![r.rosterId] : undefined,
-  )
+    return { week: g.week, a: g.a, b: g.b, sa, sb, locked: g.lock !== undefined }
+  })
+  const standings = played.standings.map((i) => rows[teams[i]])
   standings.forEach((r, i) => (r.seed = i + 1))
 
-  const nPlayoff = Math.min(input.playoffTeams || 0, teams.length)
-  const size = nPlayoff > 1 ? 2 ** Math.ceil(Math.log2(nPlayoff)) : 0
   const rounds: BracketRound[] = []
   let champion: number | null = null
   let runnerUp: number | null = null
-  if (size) {
+  if (c.size) {
     const seedOf = (t: number | null) => (t == null ? null : rows[t].seed)
-    let alive: (number | null)[] = bracketOrder(size).map((s) => (s <= nPlayoff ? standings[s - 1].rosterId : null))
+    let alive: (number | null)[] = c.order.map((s) => (s <= c.nPlayoff ? standings[s - 1].rosterId : null))
     let i = 0
+    let p = 0
     while (alive.length > 1) {
-      const week = playoffWeeks[Math.min(i, playoffWeeks.length - 1)] ?? 0
       const games: BracketGame[] = []
       const next: (number | null)[] = []
       for (let m = 0; m < alive.length; m += 2) {
@@ -119,13 +93,15 @@ export const simulateOnce = (input: SimInput, seed: number): Trace => {
           next.push(a ?? b)
           continue
         }
-        const sa = score(a, week)
-        const sb = score(b, week)
+        const g = trace.playoff[p++]
+        const sa = g.sx
+        const sb = g.sy
         const winner = sa >= sb ? a : b
         games.push({ a, b, seedA: seedOf(a), seedB: seedOf(b), sa, sb, winner })
         next.push(winner)
       }
-      rounds.push({ week, name: roundName(alive.length), games })
+      const ws = (c.rounds[i] ?? []).filter((w) => !isPlaceholderWeek(w))
+      rounds.push({ week: ws[ws.length - 1] ?? null, weeks: ws, name: roundName(alive.length), games })
       if (alive.length === 2) {
         const g = games[0]
         champion = g.winner
@@ -136,7 +112,7 @@ export const simulateOnce = (input: SimInput, seed: number): Trace => {
     }
     if (champion == null) champion = alive[0] ?? null
   }
-  return { seed, regular, standings, nPlayoff, rounds, champion, runnerUp }
+  return { seed, regular, standings, nPlayoff: c.nPlayoff, rounds, champion, runnerUp }
 }
 
 // ---------- Stories ----------

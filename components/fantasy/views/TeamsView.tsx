@@ -301,10 +301,10 @@ const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<Teams
             sub="of optimal points scored"
           />
           <Stat
-            label="Projected lineup"
+            label="Expected lineup"
             value={fmt(needs[rosterId]?.lineup)}
             delta={needs[rosterId] && league.lineup ? <DeltaChip value={needs[rosterId].lineup - league.lineup} title="Against the league average" /> : undefined}
-            sub={needs[rosterId]?.worstPos ? `thinnest at ${needs[rosterId].worstPos}` : 'pts/wk'}
+            sub={needs[rosterId]?.worstPos ? `pts/wk, model · thinnest at ${needs[rosterId].worstPos}` : 'pts/wk ahead, model'}
           />
         </StatGrid>
 
@@ -336,13 +336,13 @@ const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<Teams
         </TabSection>
 
         <TabSection id="results" active={tab === 'results'}>
-          <Panel title="Weekly results" pad={false} actions={<span>scored vs projected</span>}>
+          <Panel title="Weekly results" pad={false} actions={<span>scored vs expected</span>}>
             {chartWeeks.length > 0 && (
               <div className="border-b border-ff-line px-2 pb-2 pt-3">
                 <ProjectionChart weeks={chartWeeks} actual={chartWeeks.map((w) => scored[w] ?? null)} projected={chartWeeks.map((w) => expected[w] ?? ahead[w] ?? null)} />
                 {/* On a phone the explainer folds away so the chart and the table share the screen. */}
-                <Disclosure from="md" summary="How projected is figured" className="text-[11px] leading-snug text-ff-muted md:mt-1.5 md:px-1">
-                  Projected = best possible lineup on pre-game projections × the manager&apos;s efficiency. A bye or empty slot left in shows as a miss. Dashed weeks are ahead.
+                <Disclosure from="md" summary="How expected is figured" className="text-[11px] leading-snug text-ff-muted md:mt-1.5 md:px-1">
+                  Expected = best possible lineup on pre-game projections × the manager&apos;s efficiency. A bye or empty slot left in shows as a miss. Dashed weeks are ahead.
                 </Disclosure>
               </div>
             )}

@@ -34,15 +34,15 @@ const AdjustControl = ({ id, className }: { id: string; className?: string }) =>
   const cur = adjust.all[id]
   const pct = cur?.pct ?? 0
   const scope = cur?.scope ?? 'week'
-  const now = data.horizon[0]?.pts[id] ?? 0
-  // The horizon already carries the nudge; undo it to show what it started from.
+  // Sleeper's projection for the week, which carries the nudge already: undo it to show what it started from.
+  const now = data.projectionsByWeek[week]?.[id] ?? data.horizon.find((h) => h.week === week)?.pts[id] ?? 0
   const before = cur && appliesTo(cur, week) && 1 + cur.pct > 0 ? now / (1 + cur.pct) : now
   return (
     <div className={cx('space-y-1.5', className)}>
       <div className="flex items-baseline justify-between gap-2">
         <span className="ff-label">your read</span>
         <span className="num text-[10.5px] text-ff-muted">
-          wk {week}: {fmt(before)}
+          wk {week} proj {fmt(before)}
           {pct ? <span className="text-ff-accent"> → {fmt(now)}</span> : null}
         </span>
       </div>

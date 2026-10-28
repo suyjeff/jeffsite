@@ -6,10 +6,6 @@ import { useFantasy } from './FantasyContext'
 import TeamName from './TeamName'
 import { Avatar, cx, fmt } from './ui'
 
-export const SIMS = 2000
-/** The odds and every what-if share one stream of draws, so a difference is the pick and not the dice. */
-export const SEED = 11
-export const LEVER_SIMS = 600
 
 export type Chaos = 'calm' | 'normal' | 'chaos'
 export const CHAOS: Record<Chaos, number> = { calm: 0.7, normal: 1, chaos: 1.5 }
@@ -143,13 +139,13 @@ export const Bracket = ({ t, run }: { t: Trace; run: number }) => {
   const { analysis } = useFantasy()
   const champ = t.champion != null ? analysis.teamById[t.champion] : null
   return (
-    <div className="ff-scroll overflow-x-auto">
+    <div className="ff-scroll ff-scroll-x">
       <div className="flex min-w-max items-stretch gap-3 p-3">
         {t.rounds.map((rd, i) => (
           <div key={`${run}:${i}`} className="ff-rise flex w-[160px] flex-col" style={{ animationDelay: `${60 + i * 50}ms` }}>
             <div className="ff-label mb-1.5 flex justify-between">
               <span>{rd.name}</span>
-              <span className="num">wk {rd.week}</span>
+              {rd.weeks.length > 0 && <span className="num">wk {rd.weeks.join('–')}</span>}
             </div>
             <div className="flex flex-1 flex-col justify-around gap-2">
               {rd.games.map((g, j) => (

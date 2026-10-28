@@ -83,6 +83,7 @@ const forecastInputFor = (data: LeagueData, analysis: Analysis, elo: Record<numb
     schedule: remainingSchedule(data),
     record,
     playoffWeeks: data.playoffWeeks,
+    playoffRounds: data.playoffRounds,
     playoffTeams: Number(data.league.settings?.playoff_teams ?? 6),
     elo,
     sigmaFallback: analysis.sigma * 0.9,

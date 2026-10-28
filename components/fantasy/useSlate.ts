@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
-import { weekStakes, type Forecast, type ForecastInput, type Stakes } from '../../lib/fantasy/forecast'
+import { stakesOf, stakesRuns, type Forecast, type Stakes } from '../../lib/fantasy/forecast'
+import { runSim } from '../../lib/fantasy/simRunner'
 import { buildSlate, positionCV, type Slate } from '../../lib/fantasy/slate'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { impliedTotals, type TeamTotal } from '../../lib/fantasy/waivers'
@@ -16,25 +17,26 @@ type Built = { deps: unknown[]; slate: Slate; totals: Record<string, TeamTotal> 
 const built = new WeakMap<LeagueData, Built>()
 const sameDeps = (a: unknown[], b: unknown[]) => a.length === b.length && a.every((x, i) => Object.is(x, b[i]))
 
-// The stakes simulation runs once per forecast, whichever view asks first: one shared run, a game at a time,
-// yielding to the page between games so a dozen matchups never lock the main thread in one long task.
-const STAKES_SIMS = 1000
+// The stakes simulation runs once per forecast, whichever view asks first: both sides of every game this week, each
+// the forecast's own seasons with that result locked, so a win and a loss bracket the odds shown everywhere. They run
+// sliced on the shared simulation queue (lib/fantasy/simRunner), a few milliseconds at a time.
 const stakesCache = new WeakMap<Forecast, Record<number, Stakes>>()
-const stakesRuns = new WeakMap<Forecast, Promise<Record<number, Stakes>>>()
-const pause = () => new Promise<void>((r) => window.setTimeout(r, 0))
-const stakesFor = (input: ForecastInput, f: Forecast) => {
-  let run = stakesRuns.get(f)
+const stakesRunning = new WeakMap<Forecast, Promise<Record<number, Stakes>>>()
+const stakesFor = (f: Forecast) => {
+  let run = stakesRunning.get(f)
   if (!run) {
     run = (async () => {
       const out: Record<number, Stakes> = {}
-      for (const g of f.nextWeek) {
-        await pause()
-        Object.assign(out, weekStakes(input, { ...f, nextWeek: [g] }, STAKES_SIMS))
-      }
+      await Promise.all(
+        stakesRuns(f).map(async (r) => {
+          const [aWon, bWon] = await Promise.all([runSim(r.aWins), runSim(r.bWins)])
+          if (aWon && bWon) Object.assign(out, stakesOf(r.game, aWon, bWon))
+        }),
+      )
       stakesCache.set(f, out)
       return out
     })()
-    stakesRuns.set(f, run)
+    stakesRunning.set(f, run)
   }
   return run
 }
@@ -46,11 +48,11 @@ export const useSlate = (data: LeagueData, analysis: Analysis) => {
   const live = data.state.season_type === 'regular' && data.league.season === data.state.season
   const week = data.state.week
 
-  // This week's projections, in league scoring.
+  // This week's projections: Sleeper's, in league scoring (the model's horizon only if Sleeper has none for the week).
   const proj = useMemo(() => {
     if (data.projections && data.projectionWeek === week) return data.projections
-    return data.horizon.find((h) => h.week === week)?.pts ?? {}
-  }, [data.projections, data.projectionWeek, data.horizon, week])
+    return data.projectionsByWeek[week] ?? data.horizon.find((h) => h.week === week)?.pts ?? {}
+  }, [data.projections, data.projectionWeek, data.projectionsByWeek, data.horizon, week])
   const lines = useStatLines(data.league.season, live ? [week] : [])
   const statLines = lines[week] ?? null
   // The week as it is being played. The page's copy of the matchups and schedule is read again on the live poll, with
@@ -99,7 +101,7 @@ export const useSlate = (data: LeagueData, analysis: Analysis) => {
     if (hit) return setStakes(hit)
     setStakes(null)
     let current = true
-    stakesFor(models.forecastInput, f).then((x) => current && setStakes(x))
+    stakesFor(f).then((x) => current && setStakes(x))
     return () => {
       current = false
     }

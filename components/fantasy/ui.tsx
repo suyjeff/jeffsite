@@ -295,7 +295,7 @@ export const Tabs = <K extends string>({ items, value, onChange, stacked, reques
   }, [stacked, value, keys])
 
   return (
-    <FadeStrip role="tablist" className="no-scrollbar -mb-px flex overflow-x-auto border-b border-ff-line">
+    <FadeStrip role="tablist" className="no-scrollbar flex overflow-x-auto shadow-[inset_0_-1px_0_rgb(var(--ff-line))]">
       {items.map((t) => {
         const active = t.key === value
         return (
@@ -309,7 +309,7 @@ export const Tabs = <K extends string>({ items, value, onChange, stacked, reques
             className={cx('relative h-9 shrink-0 px-3 text-[13px] transition-colors first:pl-0.5 max-md:h-11', active ? 'text-ff-text' : 'text-ff-muted hover:text-ff-text')}
           >
             {tabLabel(t)}
-            {active && <span className="absolute inset-x-0 -bottom-px h-[2px] bg-ff-text" />}
+            {active && <span className="absolute inset-x-0 bottom-0 h-[2px] bg-ff-text" />}
           </button>
         )
       })}
@@ -355,10 +355,14 @@ export type SegOption<K extends string> = {
 export const FadeStrip = ({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) => {
   const ref = useRef<HTMLDivElement>(null)
   const [more, setMore] = useState(false)
+  const [before, setBefore] = useState(false)
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const measure = () => setMore(el.scrollWidth - el.scrollLeft - el.clientWidth > 2)
+    const measure = () => {
+      setMore(el.scrollWidth - el.scrollLeft - el.clientWidth > 2)
+      setBefore(el.scrollLeft > 2)
+    }
     measure()
     el.addEventListener('scroll', measure, { passive: true })
     const ro = new ResizeObserver(measure)
@@ -369,7 +373,18 @@ export const FadeStrip = ({ className, children, ...rest }: React.HTMLAttributes
     }
   }, [])
   return (
-    <div ref={ref} {...rest} className={cx(className, more && 'max-md:[mask-image:linear-gradient(to_right,black_88%,transparent)]')}>
+    <div
+      ref={ref}
+      {...rest}
+      // Each edge fades only while something sits beyond it, so a strip at rest shows no fade and one mid-scroll hints both ways.
+      className={cx(
+        'ff-scroll-x',
+        className,
+        more && before && 'max-md:[mask-image:linear-gradient(to_right,transparent,black_10%,black_88%,transparent)]',
+        more && !before && 'max-md:[mask-image:linear-gradient(to_right,black_88%,transparent)]',
+        !more && before && 'max-md:[mask-image:linear-gradient(to_right,transparent,black_10%)]',
+      )}
+    >
       {children}
     </div>
   )
@@ -1603,7 +1618,7 @@ export function Table<T>({
       <div
         ref={scroller}
         tabIndex={scrolls ? 0 : undefined}
-        className="ff-scroll overflow-auto focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
+        className={cx('ff-scroll focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent', maxHeight ? 'overflow-auto' : 'ff-scroll-x')}
         style={maxHeight ? { maxHeight } : undefined}
       >
         <table className="w-full border-collapse text-[13px]">

@@ -459,7 +459,7 @@ export const OddsGrid = ({ onTeam }: { onTeam?: (id: number) => void }) => {
     .sort((a, b) => a.mean - b.mean)
   return (
     <Panel title="Seed distribution, the model" pad={false} actions={<span>{f.sims.toLocaleString()} sims · shade = probability</span>}>
-      <div className="ff-scroll overflow-x-auto">
+      <div className="ff-scroll ff-scroll-x">
         <table className="w-full border-separate border-spacing-0 text-[12px]">
           <thead>
             <tr>
@@ -528,7 +528,7 @@ const ScheduleGrid = ({ data, analysis, onTeam }: { data: LeagueData; analysis: 
   if (!weeks.length) return <Panel title="Remaining schedule">No regular-season weeks left.</Panel>
   return (
     <Panel title="Remaining schedule · hardest first" pad={false} actions={<span>shade = opponent power</span>}>
-      <div className="ff-scroll overflow-x-auto">
+      <div className="ff-scroll ff-scroll-x">
         <table className="w-full border-separate border-spacing-[2px] text-[11.5px]">
           <thead>
             <tr>

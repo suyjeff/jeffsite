@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
 import type { Models } from '../../lib/fantasy/models'
-import { joinOdds, mergeSims, RECAP_SIMS, RECAP_SLICE, recapOddsRuns, type Odds, type Recap } from '../../lib/fantasy/recap'
-import type { SimTeam } from '../../lib/fantasy/forecast'
+import { joinOdds, mergeSims, RECAP_SLICE, recapOddsRuns, type Odds, type Recap } from '../../lib/fantasy/recap'
+import type { SimCounts } from '../../lib/fantasy/forecast'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import type { RevealSource } from './useReveal'
 
@@ -37,26 +37,28 @@ export const revealOdds = (source: RevealSource, data: LeagueData, analysis: Ana
     rosterIds,
     forecast: f,
     schedule: models.forecastInput.schedule,
-    playoffWeeks: models.forecastInput.playoffWeeks,
-    playoffTeams: models.forecastInput.playoffTeams,
-    divisions: models.forecastInput.divisions,
     weeksLeft: data.futureWeeks.filter((w) => w > source.recap.week).length,
   })
-  const slices = Math.ceil(RECAP_SIMS / RECAP_SLICE)
-  const before: Record<number, SimTeam>[] = []
-  const after: Record<number, SimTeam>[] = []
+  // After the latest settled week is now: the forecast's own odds, not a second run of the same seasons. (A week whose
+  // games are all final before Sleeper settles it is revealed with its results counted; the rest of the app counts it
+  // once it is settled, on these same seasons.)
+  const settled = data.regularWeeks.length ? Math.max(...data.regularWeeks) : null
+  const now = settled === source.recap.week ? f.sim : null
+  const slices = Math.ceil(f.sims / RECAP_SLICE)
+  const before: SimCounts[] = []
+  const after: SimCounts[] = []
   const entry = { value: null, urgent: false } as Entry
   entry.done = new Promise((resolve) => {
     // Each turn runs slices for about 6ms, always at least one, then waits for the next turn.
     const step = () => {
       const t0 = performance.now()
       do {
-        const k = after.length
-        if (before.length === k) before.push(runs.before(k, RECAP_SLICE))
-        else after.push(runs.after(k, RECAP_SLICE))
-      } while (after.length < slices && performance.now() - t0 < 6)
-      if (after.length < slices) return next(entry, step)
-      entry.value = joinOdds(rosterIds, mergeSims(before), mergeSims(after))
+        const k = before.length
+        if (now || after.length === k) before.push(runs.before(k, RECAP_SLICE))
+        else after.push(runs.after(before.length - 1, RECAP_SLICE))
+      } while ((before.length < slices || (!now && after.length < slices)) && performance.now() - t0 < 6)
+      if (before.length < slices || (!now && after.length < slices)) return next(entry, step)
+      entry.value = joinOdds(rosterIds, mergeSims(before), now ?? mergeSims(after))
       resolve(entry.value)
     }
     next(entry, step)
