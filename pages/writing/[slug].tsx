@@ -2,10 +2,10 @@ import React from "react";
 import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
-import Link from "next/link";
 import { MDXRemote, MDXRemoteSerializeResult } from "next-mdx-remote";
 import { serialize } from "next-mdx-remote/serialize";
 import Layout from "../../components/Layout";
+import BackTitle from "../../components/BackTitle";
 
 type Props = {
   title: string;
@@ -29,19 +29,7 @@ const WritingPiecePage = ({ title, date, content }: Props) => {
   return (
     <Layout title={title}>
       <div className="pb-10">
-        <div className="flex items-center">
-          <Link href="/writing" className="group">
-            <h1 className="relative inline-block text-lg tracking-tight font-lars font-medium italic text-stone-900 dark:text-stone-100 opacity-0 animate-reveal hover:cursor-pointer">
-              <span className="block transition-opacity duration-300 ease-in group-hover:opacity-0">{title}</span>
-              <span
-                aria-hidden="true"
-                className="absolute inset-0 flex items-center transition-opacity duration-300 ease-in opacity-0 group-hover:opacity-100 pointer-events-none"
-              >
-                Back
-              </span>
-            </h1>
-          </Link>
-        </div>
+        <BackTitle href="/writing">{title}</BackTitle>
         <p className="mt-1 text-lg tracking-tight font-lars-slant font-normal italic text-stone-400 dark:text-stone-400 opacity-0 animate-reveal animation-delay-200">
           {formatDate(date)}
         </p>
