@@ -230,9 +230,9 @@ describe('mergeSims', () => {
     const merged = mergeSims([runs.after(0, 200), runs.after(1, 200)])
     expect(merged).toEqual(mergeSims([runs.after(0, 400)]))
     const p = Object.values(merged).reduce((a, t) => a + t.playoffs, 0)
-    // Two of four teams make it in every season, so the odds sum to two.
-    expect(p).toBeCloseTo(2, 6)
-    expect(merged[1].seeds.reduce((a, x) => a + x, 0)).toBeCloseTo(1, 6)
+    // Two of four teams make it in every season, so the odds sum to two (each rounded to 0.001).
+    expect(Math.abs(p - 2)).toBeLessThanOrEqual(0.002)
+    expect(Math.abs(merged[1].seeds.reduce((a, x) => a + x, 0) - 1)).toBeLessThanOrEqual(0.002)
   })
 })
 

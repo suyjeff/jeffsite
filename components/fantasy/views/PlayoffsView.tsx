@@ -4,7 +4,7 @@ import { seasonStories, simInputFor, simulateOnce, type Story, type Trace } from
 import { useFantasy } from '../FantasyContext'
 import { Bracket, CHAOS, Delta, Feed, Headline, Standings, setupKey, type Chaos } from '../PlayoffLab'
 import TeamName from '../TeamName'
-import { Avatar, Button, Empty, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone, type PageChange } from '../ui'
+import { Avatar, Button, Empty, FadeStrip, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone, type PageChange } from '../ui'
 import { Callout } from '../Callout'
 import { OddsGrid } from './PowerView'
 
@@ -254,11 +254,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
         <p className="px-3 py-3 text-[12.5px] text-ff-muted">The regular season is over: the seeds are set. Play out the bracket under Play a season.</p>
       ) : (
         <>
-          <div
-            className="no-scrollbar flex gap-1 overflow-x-auto border-b border-ff-line px-3 py-2 [mask-image:linear-gradient(to_right,black_90%,transparent)]"
-            role="tablist"
-            aria-label="Week"
-          >
+          <FadeStrip className="no-scrollbar flex gap-1 overflow-x-auto border-b border-ff-line px-3 py-2" role="tablist" aria-label="Week">
             {weeks.map((w) => {
               const n = input.schedule.filter((g) => g.week === w && locks[lockKey(g)] !== undefined).length
               return (
@@ -284,12 +280,13 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                 </button>
               )
             })}
-          </div>
+          </FadeStrip>
           <ul className="divide-y divide-ff-line/60">
             {games.map((g) => {
               const k = lockKey(g)
               const locked = locks[k]
-              const pA = f.nextWeek.find((x) => x.week === g.week && x.a === g.a && x.b === g.b)?.pA ?? winProb(f.mean(g.a, g.week), f.mean(g.b, g.week), f.sigma)
+              // Whole percents, the second side the first's complement, so a game's two sides always read 100 between them.
+              const pA = Math.round((f.nextWeek.find((x) => x.week === g.week && x.a === g.a && x.b === g.b)?.pA ?? winProb(f.mean(g.a, g.week), f.mean(g.b, g.week), f.sigma)) * 100) / 100
               const lv = lever[k]
               const side = (id: number, p: number, align: 'left' | 'right') => {
                 const t = analysis.teamById[id]

@@ -582,9 +582,8 @@ export const simNormal = (seed: number, sim: number, slot: number, team: number)
   let h = mix32((seed ^ Math.imul(sim + 1, 0x9e3779b1)) >>> 0)
   h = mix32((h ^ Math.imul(slot + 1, 0x85ebca6b)) >>> 0)
   h = mix32((h ^ Math.imul(team + 1, 0xc2b2ae35)) >>> 0)
-  const u1 = (h + 0.5) / 4294967296
-  const u2 = mix32((h ^ 0x27d4eb2f) >>> 0) / 4294967296
-  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+  // By inversion: one hash a draw, and no logarithm outside the 5% tails.
+  return phiInv((h + 0.5) / 4294967296)
 }
 
 /** Inverse standard normal CDF (Acklam's rational approximation, relative error < 1.2e-9). */
