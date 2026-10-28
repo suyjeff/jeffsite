@@ -3,7 +3,7 @@
 //   components/resume/resumeText.ts    every line of text with its position, for the invisible
 //                                      selectable layer laid over the art (copy, find, screen readers)
 // Needs poppler (pdftocairo, pdftotext). Run after replacing the PDF:
-//   node scripts/render-resume.mjs public/SuJeffResume_oct2025.pdf
+//   node scripts/render-resume.mjs public/SuJeffResume_oct2026.pdf
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'

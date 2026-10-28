@@ -12,7 +12,9 @@ type Props = {
 const Layout = ({ children, title = "This is the default title" }: Props) => {
   const router = useRouter();
   const isHomeLinkPage =
-    router.pathname === "/about" || router.pathname.startsWith("/lab");
+    router.pathname === "/about" ||
+    router.pathname.startsWith("/lab") ||
+    router.pathname.startsWith("/writing");
   const aboutLinkHref = isHomeLinkPage ? "/" : "/about";
   const aboutLinkLabel = isHomeLinkPage ? "Home" : "About";
   const navLinkClasses =
@@ -38,6 +40,9 @@ const Layout = ({ children, title = "This is the default title" }: Props) => {
               </Link>
               <Link href="/lab" className={navLinkClasses}>
                 Labs
+              </Link>
+              <Link href="/writing" className={navLinkClasses}>
+                Writing
               </Link>
               <ResumeLink className={navLinkClasses}>Resumé</ResumeLink>
             </div>
