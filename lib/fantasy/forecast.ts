@@ -214,6 +214,8 @@ export type ForecastInput = {
   schedule: { week: number; a: number; b: number }[]
   record: Record<number, { wins: number; losses: number; ties: number; pf: number }>
   playoffWeeks: number[]
+  /** The weeks each playoff round is scored over (see playoffRounds); one week a round when absent. */
+  playoffRounds?: number[][]
   playoffTeams: number
   elo: Record<number, number>
   /** Fallback weekly noise when there is nothing to measure it from. */
@@ -479,6 +481,8 @@ export type SimInput = {
   record: Record<number, { wins: number; losses: number; ties: number; pf: number }>
   schedule: { week: number; a: number; b: number }[]
   playoffWeeks: number[]
+  /** The weeks each playoff round is scored over, in order (see playoffRounds); one week a round when absent. */
+  playoffRounds?: number[][]
   playoffTeams: number
   mean: (rosterId: number, week: number) => number
   sigma: number
@@ -487,15 +491,15 @@ export type SimInput = {
   /** Regular-season weeks left on the calendar, for settling clinches (see clinchStatus). */
   weeksLeft?: number
   sims: number
+  /** The random stream (see simNormal). Runs that share it share their draws, season by season. */
   seed?: number
+  /** The first season to play: a run of `sims` plays seasons from..from+sims−1 of the stream, so slices add up. */
+  from?: number
   /** Results fixed in advance, by lockKey: the winner's roster id. Their scores are drawn given that result. */
   locks?: Record<string, number>
   /** Each team's division, when the league has divisions: their winners take the top seeds (see seedOrder). */
   divisions?: Record<number, number>
 }
-
-/** The seed of the separate stream locked results redraw from. */
-export const lockStream = (seed: number) => (seed ^ 0x9e3779b9) >>> 0
 
 /** A regular-season game's key for `locks`, the same whichever side is listed first. */
 export const lockKey = (g: { week: number; a: number; b: number }) => `${g.week}:${Math.min(g.a, g.b)}:${Math.max(g.a, g.b)}`
@@ -517,8 +521,15 @@ export const lockKey = (g: { week: number; a: number; b: number }) => `${g.week}
  * make the playoffs (34 of 34 and 92 of 92), so a very high number for a
  * team that is far ahead is earned; what it never is, until the arithmetic
  * says so, is 100%.
+ *
+ *   sims, seed   Every playoff number in the app is read off the same 4,000
+ *                seasons of the same stream: the forecast itself, and every
+ *                scenario run from it (a result locked, a trade made, a week
+ *                taken back), so a scenario differs from the forecast only where
+ *                its inputs do. 4,000 puts the standard error of a 50% chance at
+ *                0.8 points.
  */
-export const SIM = { sims: 4000, tauShare: 0.4, persistence: 0.85 }
+export const SIM = { sims: 4000, seed: 20240917, tauShare: 0.4, persistence: 0.85 }
 
 /** A team's expectation pulled toward the week's league average by SIM.persistence, for simulating weeks ahead. */
 export const persistMean = (mean: (t: number, w: number) => number, teams: number[], persistence = SIM.persistence) => {
@@ -531,110 +542,283 @@ export const persistMean = (mean: (t: number, w: number) => number, teams: numbe
 }
 
 /**
- * Scores for a game whose winner is fixed: drawn again until the right side wins, which keeps the margin
- * distribution honest; after a few misses (a long-shot pick) the draws swap, so the pick always holds.
+ * The weeks each playoff round is scored over. One week a round unless the league plays a two-week final (round type
+ * 1) or two weeks every round (type 2); a two-week round is decided on the two weeks' total. A round the calendar has
+ * no week for (past the NFL's last) is scored as a week of its own at the team's rating.
  */
-export const lockedScores = (aWins: boolean, sa: number, sb: number, drawA: () => number, drawB: () => number): [number, number] => {
-  for (let i = 0; i < 8 && sa > sb !== aWins; i++) {
-    sa = drawA()
-    sb = drawB()
-  }
-  return sa > sb === aWins ? [sa, sb] : [sb, sa]
-}
-
-export const simulateSeason = (input: SimInput): Record<number, SimTeam> => {
-  const { teams, schedule, record, sigma, tau, sims, playoffWeeks } = input
-  const nPlayoff = Math.min(input.playoffTeams || 0, teams.length)
-  const size = nPlayoff > 1 ? 2 ** Math.ceil(Math.log2(nPlayoff)) : 0
-  const order = size ? bracketOrder(size) : []
-  const byes = size - nPlayoff
-  const out: Record<number, SimTeam> = {}
-  const settled = clinchStatus(teams, record, schedule, nPlayoff, input.weeksLeft ?? 0, input.divisions)
-  for (const t of teams) out[t] = { rosterId: t, wins: 0, playoffs: 0, bye: 0, final: 0, title: 0, seeds: Array(teams.length + 1).fill(0), clinch: settled[t] }
-  const z = normals(rng(input.seed ?? 20240917))
-  // Redraws for locked results come from their own stream, so a pick never shifts the draws every other game
-  // gets: the same season with and without it differs only where the pick does.
-  const zl = normals(rng(lockStream(input.seed ?? 20240917)))
-  // Means are fixed per sim input; read them once.
-  const meanCache = new Map<string, number>()
-  const mean = (t: number, w: number) => {
-    const k = `${t}:${w}`
-    let m = meanCache.get(k)
-    if (m === undefined) meanCache.set(k, (m = input.mean(t, w)))
-    return m
-  }
-  const idx = new Map(teams.map((t, i) => [t, i]))
-  const wins = new Float64Array(teams.length)
-  const pf = new Float64Array(teams.length)
-  const level = new Float64Array(teams.length)
-
-  for (let s = 0; s < sims; s++) {
-    for (let i = 0; i < teams.length; i++) {
-      const r = record[teams[i]] ?? { wins: 0, losses: 0, ties: 0, pf: 0 }
-      wins[i] = r.wins + r.ties * 0.5
-      pf[i] = r.pf
-      level[i] = tau * z()
-    }
-    for (const g of schedule) {
-      const ia = idx.get(g.a)
-      const ib = idx.get(g.b)
-      if (ia === undefined || ib === undefined) continue
-      let sa = mean(g.a, g.week) + level[ia] + sigma * z()
-      let sb = mean(g.b, g.week) + level[ib] + sigma * z()
-      const lock = input.locks?.[lockKey(g)]
-      if (lock !== undefined) [sa, sb] = lockedScores(lock === g.a, sa, sb, () => mean(g.a, g.week) + level[ia] + sigma * zl(), () => mean(g.b, g.week) + level[ib] + sigma * zl())
-      pf[ia] += sa
-      pf[ib] += sb
-      if (sa > sb) wins[ia]++
-      else wins[ib]++
-    }
-    const standings = seedOrder(
-      teams.map((_, i) => i),
-      (i) => wins[i],
-      (i) => pf[i],
-      input.divisions ? (i) => input.divisions![teams[i]] : undefined,
-    )
-    standings.forEach((i, rank) => {
-      out[teams[i]].seeds[rank + 1]++
-      out[teams[i]].wins += wins[i]
-    })
-    if (!size) continue
-    // Fixed bracket; empty slots are byes.
-    let alive: (number | null)[] = order.map((seed) => (seed <= nPlayoff ? standings[seed - 1] : null))
-    for (let i = 0; i < nPlayoff; i++) out[teams[standings[i]]].playoffs++
-    for (let i = 0; i < byes; i++) out[teams[standings[i]]].bye++
-    let round = 0
-    while (alive.length > 1) {
-      // The last two standing are the finalists, whatever the bracket size.
-      if (alive.length === 2) for (const f of alive) if (f !== null) out[teams[f]].final++
-      const week = playoffWeeks[Math.min(round, playoffWeeks.length - 1)] ?? 0
-      const next: (number | null)[] = []
-      for (let m = 0; m < alive.length; m += 2) {
-        const x = alive[m]
-        const y = alive[m + 1]
-        if (x === null || y === null) {
-          next.push(x ?? y)
-          continue
-        }
-        const sx = mean(teams[x], week) + level[x] + sigma * z()
-        const sy = mean(teams[y], week) + level[y] + sigma * z()
-        next.push(sx >= sy ? x : y)
-      }
-      alive = next
-      round++
-    }
-    if (alive[0] !== null && alive[0] !== undefined) out[teams[alive[0]]].title++
-  }
-  for (const t of teams) {
-    const o = out[t]
-    o.wins = round2(o.wins / sims)
-    o.playoffs = round3(o.playoffs / sims)
-    o.bye = round3(o.bye / sims)
-    o.final = round3(o.final / sims)
-    o.title = round3(o.title / sims)
-    o.seeds = o.seeds.map((c) => round3(c / sims))
+export const playoffRounds = (playoffWeeks: number[], playoffTeams: number, roundType = 0): number[][] => {
+  const n = playoffTeams > 1 ? Math.ceil(Math.log2(playoffTeams)) : 0
+  const out: number[][] = []
+  let i = 0
+  for (let r = 0; r < n; r++) {
+    const len = roundType === 2 || (roundType === 1 && r === n - 1) ? 2 : 1
+    const ws = playoffWeeks.slice(i, i + len)
+    i += len
+    out.push(ws.length ? ws : [100 + r])
   }
   return out
+}
+
+/** 32-bit integer hash (murmur3's finalizer). */
+const mix32 = (h: number) => {
+  h ^= h >>> 16
+  h = Math.imul(h, 0x7feb352d)
+  h ^= h >>> 15
+  h = Math.imul(h, 0x846ca68b)
+  h ^= h >>> 16
+  return h >>> 0
+}
+/** The draw slot of a team's season level; weeks use their own number. */
+const LEVEL_SLOT = 4095
+
+/**
+ * The simulation's random numbers: a standard normal for season `sim` of stream `seed`, team `team`, in week `slot`.
+ * Keyed by what each draw is for rather than drawn in sequence, so a team's luck in a week of a given season is the
+ * same in every run on the stream, whatever else that run fixes or leaves out (common random numbers). The odds with a
+ * result locked then match the odds without it in every season where the game went that way anyway, a reveal's
+ * "after" plays exactly the forecast's seasons, and a trade's effect is the trade and not the dice.
+ */
+export const simNormal = (seed: number, sim: number, slot: number, team: number) => {
+  let h = mix32((seed ^ Math.imul(sim + 1, 0x9e3779b1)) >>> 0)
+  h = mix32((h ^ Math.imul(slot + 1, 0x85ebca6b)) >>> 0)
+  h = mix32((h ^ Math.imul(team + 1, 0xc2b2ae35)) >>> 0)
+  const u1 = (h + 0.5) / 4294967296
+  const u2 = mix32((h ^ 0x27d4eb2f) >>> 0) / 4294967296
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+}
+
+/** Inverse standard normal CDF (Acklam's rational approximation, relative error < 1.2e-9). */
+export const phiInv = (p: number) => {
+  if (p <= 0) return -Infinity
+  if (p >= 1) return Infinity
+  const tail = (q: number) => {
+    const r = Math.sqrt(-2 * Math.log(q))
+    return (((((-7.784894002430293e-3 * r - 3.223964580411365e-1) * r - 2.400758277161838) * r - 2.549732539343734) * r + 4.374664141464968) * r + 2.938163982698783) /
+      ((((7.784695709041462e-3 * r + 3.224671290700398e-1) * r + 2.445134137142996) * r + 3.754408661907416) * r + 1)
+  }
+  if (p < 0.02425) return tail(p)
+  if (p > 1 - 0.02425) return -tail(1 - p)
+  const q = p - 0.5
+  const r = q * q
+  return ((((((-3.969683028665376e1 * r + 2.209460984245205e2) * r - 2.759285104469687e2) * r + 1.38357751867269e2) * r - 3.066479806614716e1) * r + 2.506628277459239) * q) /
+    (((((-5.447609879822406e1 * r + 1.615858368580409e2) * r - 1.556989798598866e2) * r + 6.680131188771972e1) * r - 1.328068155288572e1) * r + 1)
+}
+
+/**
+ * Scores for a game whose winner is fixed, from the scores drawn for it. A draw that already went that way is kept.
+ * One that did not keeps the two scores' sum and moves the margin by its quantile into the winning side's range, so
+ * across seasons the margin has exactly its distribution given that result, and in every season the locked winner
+ * scores more than it was drawn to and the loser less. That is what makes a locked win never hurt the team that wins
+ * it: the odds with a win, the odds as they are and the odds with a loss come in that order, season by season.
+ * `mu` is the expected margin (a − b) and `sd` its spread.
+ */
+export const lockedScores = (aWins: boolean, sa: number, sb: number, mu: number, sd: number): [number, number] => {
+  const d = sa - sb
+  if (d > 0 === aWins && d !== 0) return [sa, sb]
+  const sum = sa + sb
+  const p0 = phi(-mu / sd) // P(b wins)
+  const u = phi((d - mu) / sd)
+  const level = aWins ? p0 + (p0 > 0 ? Math.min(1, u / p0) : 0.5) * (1 - p0) : (p0 < 1 ? Math.max(0, (u - p0) / (1 - p0)) : 0.5) * p0
+  let m = mu + sd * phiInv(Math.min(1 - 1e-12, Math.max(1e-12, level)))
+  // The quantile maps into the winner's range; a hair of rounding at the edge must still leave the right winner.
+  if (aWins ? !(m > 0) : !(m < 0)) m = aWins ? 1e-6 : -1e-6
+  return [(sum + m) / 2, (sum - m) / 2]
+}
+
+/** Raw tallies from a run of simulated seasons: sums, so slices of one stream add up to the whole run exactly. */
+export type SimCounts = {
+  sims: number
+  clinch: Record<number, SimTeam['clinch']>
+  teams: Record<number, { wins: number; playoffs: number; bye: number; final: number; title: number; seeds: number[] }>
+}
+
+type SimGame = { week: number; a: number; b: number; ia: number; ib: number; ma: number; mb: number; lock: number | undefined }
+
+/** One run's fixed parts, worked out once: indices, each game's expectation, each round's, the clinches. */
+const compile = (input: SimInput) => {
+  const { teams, record } = input
+  const n = teams.length
+  const idx = new Map(teams.map((t, i) => [t, i]))
+  const nPlayoff = Math.min(input.playoffTeams || 0, n)
+  const size = nPlayoff > 1 ? 2 ** Math.ceil(Math.log2(nPlayoff)) : 0
+  const rounds = (input.playoffRounds ?? playoffRounds(input.playoffWeeks, nPlayoff)).slice()
+  for (let r = rounds.length; size && 2 ** r < size; r++) rounds.push([100 + r])
+  const games: SimGame[] = []
+  // Locked results count as played for the clinch arithmetic: a spot they settle reads as settled.
+  const decidedRecord: SimInput['record'] = {}
+  const decided: Record<number, number> = {}
+  for (const t of teams) decidedRecord[t] = { ...(record[t] ?? { wins: 0, losses: 0, ties: 0, pf: 0 }) }
+  const open: { week: number; a: number; b: number }[] = []
+  for (const g of [...input.schedule].sort((x, y) => x.week - y.week)) {
+    const ia = idx.get(g.a)
+    const ib = idx.get(g.b)
+    if (ia === undefined || ib === undefined) continue
+    const lock = input.locks?.[lockKey(g)]
+    games.push({ week: g.week, a: g.a, b: g.b, ia, ib, ma: input.mean(g.a, g.week), mb: input.mean(g.b, g.week), lock: lock === g.a || lock === g.b ? lock : undefined })
+    if (lock === g.a || lock === g.b) {
+      const loser = lock === g.a ? g.b : g.a
+      decidedRecord[lock].wins++
+      decidedRecord[loser].losses++
+      decided[g.a] = (decided[g.a] ?? 0) + 1
+      decided[g.b] = (decided[g.b] ?? 0) + 1
+    } else open.push(g)
+  }
+  const clinch = clinchStatus(teams, decidedRecord, open, nPlayoff, input.weeksLeft ?? 0, input.divisions, decided)
+  // Each round's expectation per team: the sum over its weeks.
+  const roundMean = rounds.map((ws) => Float64Array.from(teams, (t) => ws.reduce((a, w) => a + input.mean(t, w), 0)))
+  return { n, nPlayoff, size, order: size ? bracketOrder(size) : [], byes: size - nPlayoff, rounds, roundMean, games, clinch }
+}
+
+type Compiled = ReturnType<typeof compile>
+
+/** What one season's playoffs did, by team index. */
+type Played = { standings: number[]; finalists: number[]; champion: number | null }
+
+/**
+ * Season `s` of the stream, played into the arrays given (wins, points for, each game's scores and each playoff game,
+ * when asked for): the one place a season is simulated, for the odds and for the single season the simulator shows.
+ */
+const playSeason = (
+  input: SimInput,
+  c: Compiled,
+  s: number,
+  wins: Float64Array,
+  pf: Float64Array,
+  level: Float64Array,
+  trace?: { regular: { sa: number; sb: number }[]; playoff: { round: number; x: number; y: number; sx: number; sy: number }[] },
+): Played => {
+  const { teams, record, sigma, tau } = input
+  const seed = input.seed ?? SIM.seed
+  const sd = Math.SQRT2 * sigma
+  for (let i = 0; i < c.n; i++) {
+    const r = record[teams[i]] ?? { wins: 0, losses: 0, ties: 0, pf: 0 }
+    wins[i] = r.wins + r.ties * 0.5
+    pf[i] = r.pf
+    level[i] = tau * simNormal(seed, s, LEVEL_SLOT, teams[i])
+  }
+  for (const g of c.games) {
+    let sa = g.ma + level[g.ia] + sigma * simNormal(seed, s, g.week, g.a)
+    let sb = g.mb + level[g.ib] + sigma * simNormal(seed, s, g.week, g.b)
+    if (g.lock !== undefined) [sa, sb] = lockedScores(g.lock === g.a, sa, sb, g.ma + level[g.ia] - g.mb - level[g.ib], sd)
+    pf[g.ia] += sa
+    pf[g.ib] += sb
+    if (sa > sb) wins[g.ia]++
+    else wins[g.ib]++
+    trace?.regular.push({ sa, sb })
+  }
+  const standings = seedOrder(
+    teams.map((_, i) => i),
+    (i) => wins[i],
+    (i) => pf[i],
+    input.divisions ? (i) => input.divisions![teams[i]] : undefined,
+  )
+  if (!c.size) return { standings, finalists: [], champion: null }
+  // Fixed bracket; empty slots are byes.
+  let alive: (number | null)[] = c.order.map((seedNo) => (seedNo <= c.nPlayoff ? standings[seedNo - 1] : null))
+  let finalists: number[] = []
+  let round = 0
+  while (alive.length > 1) {
+    // The last two standing are the finalists, whatever the bracket size.
+    if (alive.length === 2) finalists = alive.filter((x): x is number => x !== null)
+    const ws = c.rounds[round]
+    const score = (i: number) => {
+      let x = c.roundMean[round][i]
+      for (const w of ws) x += level[i] + sigma * simNormal(seed, s, w, teams[i])
+      return x
+    }
+    const next: (number | null)[] = []
+    for (let m = 0; m < alive.length; m += 2) {
+      const x = alive[m]
+      const y = alive[m + 1]
+      if (x === null || y === null) {
+        next.push(x ?? y)
+        continue
+      }
+      const sx = score(x)
+      const sy = score(y)
+      next.push(sx >= sy ? x : y)
+      trace?.playoff.push({ round, x, y, sx, sy })
+    }
+    alive = next
+    round++
+  }
+  return { standings, finalists, champion: alive[0] ?? null }
+}
+
+/** Tally seasons from..from+sims−1 of the stream. */
+export const simulateCounts = (input: SimInput): SimCounts => {
+  const { teams } = input
+  const c = compile(input)
+  const tally: SimCounts['teams'] = {}
+  for (const t of teams) tally[t] = { wins: 0, playoffs: 0, bye: 0, final: 0, title: 0, seeds: Array(teams.length + 1).fill(0) }
+  const wins = new Float64Array(c.n)
+  const pf = new Float64Array(c.n)
+  const level = new Float64Array(c.n)
+  const from = input.from ?? 0
+  for (let s = from; s < from + input.sims; s++) {
+    const { standings, finalists, champion } = playSeason(input, c, s, wins, pf, level)
+    standings.forEach((i, rank) => {
+      const o = tally[teams[i]]
+      o.seeds[rank + 1]++
+      o.wins += wins[i]
+      if (rank < c.nPlayoff && c.size) o.playoffs++
+      if (rank < c.byes) o.bye++
+    })
+    for (const f of finalists) tally[teams[f]].final++
+    if (champion !== null) tally[teams[champion]].title++
+  }
+  return { sims: input.sims, clinch: c.clinch, teams: tally }
+}
+
+/** Slices of one stream added into one run. */
+export const addCounts = (parts: SimCounts[]): SimCounts => {
+  const out: SimCounts = { sims: 0, clinch: parts[0]?.clinch ?? {}, teams: {} }
+  for (const p of parts) {
+    out.sims += p.sims
+    for (const [id, t] of Object.entries(p.teams)) {
+      const o = (out.teams[Number(id)] ??= { wins: 0, playoffs: 0, bye: 0, final: 0, title: 0, seeds: t.seeds.map(() => 0) })
+      o.wins += t.wins
+      o.playoffs += t.playoffs
+      o.bye += t.bye
+      o.final += t.final
+      o.title += t.title
+      t.seeds.forEach((x, i) => (o.seeds[i] += x))
+    }
+  }
+  return out
+}
+
+/** Tallies as probabilities. */
+export const finishSim = (c: SimCounts): Record<number, SimTeam> => {
+  const out: Record<number, SimTeam> = {}
+  const n = Math.max(1, c.sims)
+  for (const [id, t] of Object.entries(c.teams)) {
+    const rid = Number(id)
+    out[rid] = {
+      rosterId: rid,
+      wins: round2(t.wins / n),
+      playoffs: round3(t.playoffs / n),
+      bye: round3(t.bye / n),
+      final: round3(t.final / n),
+      title: round3(t.title / n),
+      seeds: t.seeds.map((x) => round3(x / n)),
+      clinch: c.clinch[rid] ?? null,
+    }
+  }
+  return out
+}
+
+export const simulateSeason = (input: SimInput): Record<number, SimTeam> => finishSim(simulateCounts(input))
+
+/** One season of a run kept whole, by index in its stream: what the playoff simulator shows. */
+export const playOne = (input: SimInput, s: number) => {
+  const c = compile(input)
+  const wins = new Float64Array(c.n)
+  const pf = new Float64Array(c.n)
+  const level = new Float64Array(c.n)
+  const trace = { regular: [] as { sa: number; sb: number }[], playoff: [] as { round: number; x: number; y: number; sx: number; sy: number }[] }
+  const played = playSeason(input, c, s, wins, pf, level, trace)
+  return { c, played, trace, rounds: c.rounds }
 }
 
 /** Probability A outscores B in one week. */
@@ -646,6 +830,11 @@ export type Forecast = {
   ratings: TeamRating[]
   byId: Record<number, TeamRating>
   sim: Record<number, SimTeam>
+  /**
+   * Exactly what `sim` was simulated from. Every scenario on top of the current odds (a result locked, a trade, the
+   * simulator's what-ifs) runs from this, so with nothing changed it reproduces `sim` number for number.
+   */
+  simInput: SimInput
   sigma: number
   /** Team-week residuals the noise was measured on (0 means the fallback was used). */
   noiseN: number
@@ -664,11 +853,12 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = past
   const mean = (t: number, w: number) => byId[t]?.byWeek[w] ?? byId[t]?.rating ?? 0
   const tau = SIM.tauShare * noise.sigma
   const ids = input.teams.map((t) => t.rosterId)
-  const sim = simulateSeason({
+  const simInput: SimInput = {
     teams: ids,
     record: input.record,
     schedule: input.schedule,
     playoffWeeks: input.playoffWeeks,
+    playoffRounds: input.playoffRounds,
     playoffTeams: input.playoffTeams,
     mean: persistMean(mean, ids),
     sigma: noise.sigma,
@@ -676,7 +866,9 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = past
     divisions: input.divisions,
     tau,
     sims,
-  })
+    seed: SIM.seed,
+  }
+  const sim = simulateSeason(simInput)
   // Next week's odds read the rating as is: the per-game backtest grades exactly this, and the
   // persistence pull is about drift over many weeks, which one week ahead has barely begun.
   const firstWeek = input.schedule.length ? Math.min(...input.schedule.map((g) => g.week)) : null
@@ -687,37 +879,27 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = past
       const muB = mean(g.b, g.week)
       return { week: g.week, a: g.a, b: g.b, muA: round2(muA), muB: round2(muB), pA: clampOdds(round3(winProb(muA, muB, noise.sigma))) }
     })
-  return { ratings, byId, sim, sigma: round2(noise.sigma), noiseN: noise.n, tau: round2(tau), leagueEff: round3(leagueEff), sims, nextWeek, mean }
+  return { ratings, byId, sim, simInput, sigma: round2(noise.sigma), noiseN: noise.n, tau: round2(tau), leagueEff: round3(leagueEff), sims, nextWeek, mean }
 }
 
 /** What a team's odds are in one outcome of its game; `clinch` is that outcome's settled status, if any. */
-export type Stake = { playoffs: number; title: number; clinch?: SimTeam['clinch'] }
+export type Stake = { playoffs: number; bye?: number; title: number; clinch?: SimTeam['clinch'] }
 export type Stakes = { win: Stake; loss: Stake }
 
 /**
- * What this week's result is worth: each team's playoff and title odds if it wins this week's game and if
- * it loses, the rest of the season simulated on the same draws both times, so the gap is the result and not
- * the dice. The week's other games stay simulated.
+ * What this week's result is worth: each team's odds if it wins this week's game and if it loses. Both are the
+ * forecast's own seasons with that one result locked (same model, inputs, seasons and draws), so they differ from the
+ * forecast only in the seasons where the game went the other way, and in every one of those a win can only help: the
+ * playoff and bye odds with a loss, as they are, and with a win always come in that order. The week's other games
+ * stay simulated. A week in play counts no result until it is settled, so the stakes are the week's from kickoff.
  */
-export const weekStakes = (input: ForecastInput, base: Forecast, sims = 1500): Record<number, Stakes> => {
+export const weekStakes = (_input: ForecastInput, base: Forecast): Record<number, Stakes> => {
   const out: Record<number, Stakes> = {}
-  const ids = input.teams.map((t) => t.rosterId)
-  const mean = persistMean(base.mean, ids)
-  const pick = (t: SimTeam | undefined): Stake => ({ playoffs: t?.playoffs ?? 0, title: t?.title ?? 0, clinch: t?.clinch ?? null })
+  const pick = (t: SimTeam | undefined): Stake => ({ playoffs: t?.playoffs ?? 0, bye: t?.bye ?? 0, title: t?.title ?? 0, clinch: t?.clinch ?? null })
   for (const g of base.nextWeek) {
-    const rest = input.schedule.filter((x) => !(x.week === g.week && ((x.a === g.a && x.b === g.b) || (x.a === g.b && x.b === g.a))))
-    const run = (aWins: boolean) => {
-      const record = { ...input.record }
-      const add = (t: number, won: boolean, pts: number) => {
-        const r = record[t] ?? { wins: 0, losses: 0, ties: 0, pf: 0 }
-        record[t] = { ...r, wins: r.wins + (won ? 1 : 0), losses: r.losses + (won ? 0 : 1), pf: r.pf + pts }
-      }
-      add(g.a, aWins, g.muA)
-      add(g.b, !aWins, g.muB)
-      return simulateSeason({ teams: ids, record, schedule: rest, playoffWeeks: input.playoffWeeks, playoffTeams: input.playoffTeams, mean, sigma: base.sigma, tau: base.tau, weeksLeft: input.weeksLeft, divisions: input.divisions, sims })
-    }
-    const aWon = run(true)
-    const bWon = run(false)
+    const k = lockKey(g)
+    const aWon = simulateSeason({ ...base.simInput, locks: { [k]: g.a } })
+    const bWon = simulateSeason({ ...base.simInput, locks: { [k]: g.b } })
     out[g.a] = { win: pick(aWon[g.a]), loss: pick(bWon[g.a]) }
     out[g.b] = { win: pick(bWon[g.b]), loss: pick(aWon[g.b]) }
   }
@@ -725,38 +907,18 @@ export const weekStakes = (input: ForecastInput, base: Forecast, sims = 1500): R
 }
 
 /**
- * What a trade does to both teams' seasons: the same simulation run twice on
- * the same random draws, before and after, so the difference is the trade and
- * not the dice.
+ * What a trade does to both teams' seasons: the forecast's own seasons played again with the two rosters swapped,
+ * on the same draws, so the difference from the current odds is the trade and not the dice.
  */
-const LEVERAGE_SIMS = 2000
-const leverageCache = new WeakMap<Forecast, { evalH: ReturnType<typeof makeHorizonEval>; before: Record<number, SimTeam> }>()
+const evalCache = new WeakMap<Forecast, ReturnType<typeof makeHorizonEval>>()
 
 export const tradeLeverage = (input: ForecastInput, base: Forecast, trade: { me: number; partner: number; myRoster: string[]; theirRoster: string[] }) => {
   if (!input.horizon.length) return null
-  const sims = LEVERAGE_SIMS
   const after: Record<number, Record<number, number>> = {}
   const afterRating: Record<number, number> = {}
-  const common = {
-    teams: input.teams.map((t) => t.rosterId),
-    record: input.record,
-    schedule: input.schedule,
-    playoffWeeks: input.playoffWeeks,
-    playoffTeams: input.playoffTeams,
-    sigma: base.sigma,
-    tau: base.tau,
-    weeksLeft: input.weeksLeft,
-    divisions: input.divisions,
-    sims,
-    seed: 777,
-  }
-  // The baseline and the lineup evaluator are the same for every trade; build them once per forecast.
-  let cached = leverageCache.get(base)
-  if (!cached) {
-    cached = { evalH: makeHorizonEval(input.slots, input.players, input.horizon, input.floor), before: simulateSeason({ ...common, mean: persistMean(base.mean, common.teams) }) }
-    leverageCache.set(base, cached)
-  }
-  const { evalH, before } = cached
+  // The lineup evaluator is the same for every trade; build it once per forecast.
+  let evalH = evalCache.get(base)
+  if (!evalH) evalCache.set(base, (evalH = makeHorizonEval(input.slots, input.players, input.horizon, input.floor)))
   for (const [rid, roster] of [
     [trade.me, trade.myRoster],
     [trade.partner, trade.theirRoster],
@@ -768,8 +930,9 @@ export const tradeLeverage = (input: ForecastInput, base: Forecast, trade: { me:
     const xs = Object.values(after[rid])
     afterRating[rid] = xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
   }
+  const before = base.sim
   // Weeks the horizon does not cover (the playoffs, in the shorter modes) use the post-trade rating too.
-  const post = simulateSeason({ ...common, mean: persistMean((t, w) => (after[t] ? (after[t][w] ?? afterRating[t]) : base.mean(t, w)), common.teams) })
+  const post = simulateSeason({ ...base.simInput, mean: persistMean((t, w) => (after[t] ? (after[t][w] ?? afterRating[t]) : base.mean(t, w)), base.simInput.teams) })
   const delta = (rid: number) => ({
     playoffs: round3(post[rid].playoffs - before[rid].playoffs),
     title: round3(post[rid].title - before[rid].title),

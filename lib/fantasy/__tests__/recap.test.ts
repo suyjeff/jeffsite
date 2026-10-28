@@ -205,12 +205,12 @@ describe('revealState', () => {
 describe('recapOdds', () => {
   it('moves playoff odds toward the week\'s winners, on the same draws', () => {
     const recap = buildRecap(base)
-    const forecast = { mean: () => 100, sigma: 20, tau: 8 } as unknown as Forecast
+    const forecast = { simInput: { teams: [1, 2, 3, 4], record: {}, schedule: [], mean: () => 100, sigma: 20, tau: 8, playoffWeeks: [6], playoffTeams: 2, sims: 800 }, sims: 800 } as unknown as Forecast
     const schedule = [3, 4, 5].flatMap((week) => [
       { week, a: 1, b: 2 },
       { week, a: 3, b: 4 },
     ])
-    const odds = recapOdds({ ...base, recap, forecast, schedule, playoffWeeks: [6], playoffTeams: 2, weeksLeft: 3, sims: 800 })
+    const odds = recapOdds({ ...base, recap, forecast, schedule, weeksLeft: 3 })
     expect(Object.keys(odds)).toHaveLength(4)
     // Team 4 won week 2, team 1 lost it.
     expect(odds[4].after.playoffs).toBeGreaterThan(odds[4].before.playoffs)
@@ -219,15 +219,16 @@ describe('recapOdds', () => {
 })
 
 describe('mergeSims', () => {
-  it('averages equal slices into one simulation', () => {
+  it('adds slices into exactly the whole run', () => {
     const recap = buildRecap(base)
-    const forecast = { mean: () => 100, sigma: 20, tau: 8 } as unknown as Forecast
+    const forecast = { simInput: { teams: [1, 2, 3, 4], record: {}, schedule: [], mean: () => 100, sigma: 20, tau: 8, playoffWeeks: [5], playoffTeams: 2, sims: 400 }, sims: 400 } as unknown as Forecast
     const schedule = [3, 4].flatMap((week) => [
       { week, a: 1, b: 2 },
       { week, a: 3, b: 4 },
     ])
-    const runs = recapOddsRuns({ ...base, recap, forecast, schedule, playoffWeeks: [5], playoffTeams: 2, weeksLeft: 2 })
+    const runs = recapOddsRuns({ ...base, recap, forecast, schedule, weeksLeft: 2 })
     const merged = mergeSims([runs.after(0, 200), runs.after(1, 200)])
+    expect(merged).toEqual(mergeSims([runs.after(0, 400)]))
     const p = Object.values(merged).reduce((a, t) => a + t.playoffs, 0)
     // Two of four teams make it in every season, so the odds sum to two.
     expect(p).toBeCloseTo(2, 6)

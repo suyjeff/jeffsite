@@ -2,7 +2,7 @@ import React, { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { lockKey, simulateSeason, winProb, type SimTeam } from '../../../lib/fantasy/forecast'
 import { seasonStories, simInputFor, simulateOnce, type Story, type Trace } from '../../../lib/fantasy/playoffSim'
 import { useFantasy } from '../FantasyContext'
-import { Bracket, CHAOS, Delta, Feed, Headline, LEVER_SIMS, SEED, SIMS, Standings, setupKey, type Chaos } from '../PlayoffLab'
+import { Bracket, CHAOS, Delta, Feed, Headline, Standings, setupKey, type Chaos } from '../PlayoffLab'
 import TeamName from '../TeamName'
 import { Avatar, Button, Empty, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone, type PageChange } from '../ui'
 import { Callout } from '../Callout'
@@ -36,11 +36,12 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
   const dChaos = useDeferredValue(chaos)
   const pending = dLocks !== locks || dChaos !== chaos
 
-  const baseline = useMemo(() => (f ? simulateSeason(simInputFor(input, f, { sims: SIMS, seed: SEED })) : {}), [input, f]) as Record<number, SimTeam>
+  // The baseline is the forecast's own odds, the ones every other page shows. A what-if replays the forecast's seasons
+  // on the same draws (simInputFor), so a pick moves the odds only where it changes a result.
+  const baseline = (f?.sim ?? {}) as Record<number, SimTeam>
   // Untouched, the scenario is the baseline: no second run of the same seasons.
   const scenario = useMemo(
-    () =>
-      f && (Object.keys(dLocks).length || dChaos !== 'normal') ? simulateSeason(simInputFor(input, f, { locks: dLocks, chaos: CHAOS[dChaos], sims: SIMS, seed: SEED })) : baseline,
+    () => (f && (Object.keys(dLocks).length || dChaos !== 'normal') ? simulateSeason(simInputFor(input, f, { locks: dLocks, chaos: CHAOS[dChaos] })) : baseline),
     [input, f, dLocks, dChaos, baseline],
   ) as Record<number, SimTeam>
   const nLocks = Object.keys(locks).length
@@ -60,7 +61,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
         await new Promise<void>((r) => window.setTimeout(r, 0))
         if (!live) return
         const k = lockKey(g)
-        const run = (w: number) => simulateSeason(simInputFor(input, f, { locks: { ...dLocks, [k]: w }, chaos: CHAOS[dChaos], sims: LEVER_SIMS, seed: SEED }))[me]?.playoffs ?? 0
+        const run = (w: number) => simulateSeason(simInputFor(input, f, { locks: { ...dLocks, [k]: w }, chaos: CHAOS[dChaos] }))[me]?.playoffs ?? 0
         out[k] = { a: run(g.a), b: run(g.b) }
         setLever({ ...out })
       }
@@ -132,7 +133,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
     <Panel
       title="The race"
       pad={false}
-      actions={<span className={cx(pending && 'ff-pulse')}>{pending ? 'simulating…' : tweaked ? 'change vs the model' : `${SIMS.toLocaleString()} seasons`}</span>}
+      actions={<span className={cx(pending && 'ff-pulse')}>{pending ? 'simulating…' : tweaked ? 'change vs the model' : `${f.sims.toLocaleString()} seasons`}</span>}
     >
       <p className="border-b border-ff-line px-3 py-2 text-[12.5px] leading-[1.5] text-ff-text2">
         {fav != null && (

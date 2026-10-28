@@ -17,8 +17,8 @@ const built = new WeakMap<LeagueData, Built>()
 const sameDeps = (a: unknown[], b: unknown[]) => a.length === b.length && a.every((x, i) => Object.is(x, b[i]))
 
 // The stakes simulation runs once per forecast, whichever view asks first: one shared run, a game at a time,
-// yielding to the page between games so a dozen matchups never lock the main thread in one long task.
-const STAKES_SIMS = 1000
+// yielding to the page between games so a dozen matchups never lock the main thread in one long task. Each side of
+// a game is the forecast's own seasons with that result locked, so a win and a loss bracket the odds shown everywhere.
 const stakesCache = new WeakMap<Forecast, Record<number, Stakes>>()
 const stakesRuns = new WeakMap<Forecast, Promise<Record<number, Stakes>>>()
 const pause = () => new Promise<void>((r) => window.setTimeout(r, 0))
@@ -29,7 +29,7 @@ const stakesFor = (input: ForecastInput, f: Forecast) => {
       const out: Record<number, Stakes> = {}
       for (const g of f.nextWeek) {
         await pause()
-        Object.assign(out, weekStakes(input, { ...f, nextWeek: [g] }, STAKES_SIMS))
+        Object.assign(out, weekStakes(input, { ...f, nextWeek: [g] }))
       }
       stakesCache.set(f, out)
       return out

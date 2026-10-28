@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { RECAP_SIMS, type Odds, type Part, type Reason, type Recap, type RecapGame, type RecapTeam } from '../../lib/fantasy/recap'
+import { SIM } from '../../lib/fantasy/forecast'
+import { type Odds, type Part, type Reason, type Recap, type RecapGame, type RecapTeam } from '../../lib/fantasy/recap'
 import { useFantasy } from './FantasyContext'
 import { Crown } from './RevealBanner'
 import { ShareButton } from './RevealShare'
@@ -451,7 +452,7 @@ const PlayoffPanel = ({ recap, odds, at }: { recap: Recap; odds: Record<number, 
   const swing = [...rows].sort((x, y) => Math.abs(y.o.after.playoffs - y.o.before.playoffs) - Math.abs(x.o.after.playoffs - x.o.before.playoffs))[0]
   const news = rows.filter((r) => r.o.after.clinch && r.o.after.clinch !== r.o.before.clinch)
   return (
-    <Section title="Playoff picture" aside={`top ${cut} · ${RECAP_SIMS.toLocaleString()} sims each side`} style={at(5)} className="ff-rv-rise">
+    <Section title="Playoff picture" aside={`top ${cut} · the forecast's ${SIM.sims.toLocaleString()} seasons`} style={at(5)} className="ff-rv-rise">
       {(swing || news.length > 0) && (
         <div className="mb-3 space-y-1 text-[12.5px] leading-snug text-ff-text2">
           {news.map((r) => (

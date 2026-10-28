@@ -6,10 +6,6 @@ import { useFantasy } from './FantasyContext'
 import TeamName from './TeamName'
 import { Avatar, cx, fmt } from './ui'
 
-export const SIMS = 2000
-/** The odds and every what-if share one stream of draws, so a difference is the pick and not the dice. */
-export const SEED = 11
-export const LEVER_SIMS = 600
 
 export type Chaos = 'calm' | 'normal' | 'chaos'
 export const CHAOS: Record<Chaos, number> = { calm: 0.7, normal: 1, chaos: 1.5 }
