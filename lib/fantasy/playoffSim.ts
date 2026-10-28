@@ -5,7 +5,7 @@
 // The odds are the average over thousands of these. A trace is one of them: any single season is unlikely, which is
 // the point. Locked results hold in both.
 
-import { playOne, type Forecast, type ForecastInput, type SimInput } from './forecast'
+import { isPlaceholderWeek, playOne, type Forecast, type ForecastInput, type SimInput } from './forecast'
 
 /**
  * The simulation's input for the simulator: the forecast's own (lib/fantasy/forecast Forecast.simInput: same model,
@@ -28,7 +28,14 @@ export type TraceRow = {
   /** Wins and losses before the simulated weeks. */ was: { wins: number; losses: number }
 }
 export type BracketGame = { a: number | null; b: number | null; seedA: number | null; seedB: number | null; sa: number | null; sb: number | null; winner: number | null }
-export type BracketRound = { week: number; name: string; games: BracketGame[] }
+export type BracketRound = {
+  /** The round's last calendar week; null when the calendar has none for it (a placeholder week in the simulation). */
+  week: number | null
+  /** Every calendar week the round is played over (two for a two-week round); empty for a placeholder. */
+  weeks: number[]
+  name: string
+  games: BracketGame[]
+}
 
 export type Trace = {
   seed: number
@@ -93,8 +100,8 @@ export const simulateOnce = (input: SimInput, seed: number): Trace => {
         games.push({ a, b, seedA: seedOf(a), seedB: seedOf(b), sa, sb, winner })
         next.push(winner)
       }
-      const ws = c.rounds[i] ?? []
-      rounds.push({ week: ws[ws.length - 1] ?? 0, name: roundName(alive.length), games })
+      const ws = (c.rounds[i] ?? []).filter((w) => !isPlaceholderWeek(w))
+      rounds.push({ week: ws[ws.length - 1] ?? null, weeks: ws, name: roundName(alive.length), games })
       if (alive.length === 2) {
         const g = games[0]
         champion = g.winner

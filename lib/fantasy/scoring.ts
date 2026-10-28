@@ -127,16 +127,12 @@ export const unscoredProjectionKeys = (line: StatLine, scoring: Record<string, n
     if (!line[k] || scoring[k]) continue
     const r = rangeOf(k)
     if (!r) continue
-    const missing = scoredKeys.filter((j) => {
+    // The league's buckets this one overlaps: it is covered if any of them was filled.
+    const overlapping = scoredKeys.filter((j) => {
       const q = rangeOf(j)
-      return q && q.family === r.family && q.lo <= r.hi && r.lo <= q.hi && d[j] == null
+      return !!q && q.family === r.family && q.lo <= r.hi && r.lo <= q.hi
     })
-    // Covered if some overlapping bucket the league scores was filled.
-    const filled = scoredKeys.some((j) => {
-      const q = rangeOf(j)
-      return q && q.family === r.family && q.lo <= r.hi && r.lo <= q.hi && d[j] != null
-    })
-    if (missing.length && !filled) out.push(k)
+    if (overlapping.length && !overlapping.some((j) => d[j] != null)) out.push(k)
   }
   if (d.pts_allow != null && PTS_ALLOW.some(([k]) => scoring[k]) && !PTS_ALLOW.some(([k]) => d[k] != null)) out.push('pts_allow')
   if (d.yds_allow != null && YDS_ALLOW.some(([k]) => scoring[k]) && !YDS_ALLOW.some(([k]) => d[k] != null)) out.push('yds_allow')

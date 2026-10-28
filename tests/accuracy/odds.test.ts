@@ -34,9 +34,14 @@ beforeAll(async () => {
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
 
+/** Out of season (Sleeper not in its regular season, or the league not this season's): no odds to check. */
+const offseason = (data: LeagueData) => data.state.season_type !== 'regular' || data.league.season !== data.state.season
+const OFF = 'out of season: no playoff race to check'
+
 describe.each(config.leagues)('$name', ({ id }) => {
-  it('counts the settled weeks and simulates exactly the rest', () => {
+  it('counts the settled weeks and simulates exactly the rest', (ctx) => {
     const { data, models } = loaded[id]
+    if (offseason(loaded[id].data)) return ctx.skip(OFF)
     const input = models.forecastInput
     const lastScored = data.league.settings?.last_scored_leg
     if (typeof lastScored === 'number' && data.state.season_type === 'regular') expect(Math.max(0, ...data.regularWeeks)).toBeLessThanOrEqual(lastScored)
@@ -57,8 +62,9 @@ describe.each(config.leagues)('$name', ({ id }) => {
     expect(input.divisions == null).toBe(!(divs >= 2))
   })
 
-  it('adds up, and reads settled races as settled', () => {
+  it('adds up, and reads settled races as settled', (ctx) => {
     const { data, models } = loaded[id]
+    if (offseason(loaded[id].data)) return ctx.skip(OFF)
     const f = models.forecast
     // In season with weeks left, the odds exist: every check below would otherwise pass on nothing.
     if (data.state.season_type === 'regular' && data.futureWeeks.length) expect(f).not.toBeNull()
@@ -78,8 +84,9 @@ describe.each(config.leagues)('$name', ({ id }) => {
     }
   })
 
-  it('shows one number everywhere: the simulator untouched and the reveal after the latest week are the forecast', () => {
+  it('shows one number everywhere: the simulator untouched and the reveal after the latest week are the forecast', (ctx) => {
     const { data, analysis, models } = loaded[id]
+    if (offseason(loaded[id].data)) return ctx.skip(OFF)
     const f = models.forecast
     if (!f) return
     expect(simulateSeason(simInputFor(models.forecastInput, f))).toEqual(f.sim)
@@ -105,8 +112,9 @@ describe.each(config.leagues)('$name', ({ id }) => {
     for (const t of analysis.teams) expect(odds[t.rosterId].after).toEqual(f.sim[t.rosterId])
   })
 
-  it("brackets the odds with this week's stakes: a loss, now, a win", () => {
+  it("brackets the odds with this week's stakes: a loss, now, a win", (ctx) => {
     const { models } = loaded[id]
+    if (offseason(loaded[id].data)) return ctx.skip(OFF)
     const f = models.forecast
     if (!f) return
     const stakes = weekStakes(models.forecastInput, f)

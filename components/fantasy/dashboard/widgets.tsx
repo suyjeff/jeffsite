@@ -282,7 +282,8 @@ const Matchup = ({ select }: WidgetProps) => {
     rows: (left ?? []).map((s, i) => {
       const them = right?.[i]
       const proj = (pts: number) => ({ value: pts, kind: 'proj' as const, expect: pts, proj: pts })
-      return { slot: s.slot, a: s.id, b: them?.id ?? null, sa: proj(s.pts), sb: proj(them?.pts ?? 0), edge: s.pts - (them?.pts ?? 0) }
+      // A waiver-filled slot has only the model's estimate, so it shows no projection.
+      return { slot: s.slot, a: s.id, b: them?.id ?? null, sa: s.id ? proj(s.pts) : null, sb: them?.id ? proj(them.pts) : null, edge: s.pts - (them?.pts ?? 0) }
     }),
   }
   // The slate whenever it covers the week: lineups as set at Sleeper's projections, and odds on those, the same
@@ -391,7 +392,16 @@ const Lineup = ({ sel, select }: WidgetProps) => {
         <Row key={i} onClick={r.id ? () => select({ player: r.id! }) : undefined} active={!!r.id && sel.player === r.id} label={r.id ? `Follow ${data.players[r.id]?.name ?? 'player'}` : undefined}>
           <span className="w-9 font-mono text-[10.5px] text-ff-muted">{r.slot}</span>
           <span className="min-w-0 flex-1">{r.id ? <PlayerName player={data.players[r.id]} id={r.id} size={18} avatar={false} /> : <FreeAgentPick eligible={r.eligible} week={week} size={18} avatar={false} />}</span>
-          <span className="w-12 text-right"><Pts value={r.pts} kind="proj" /></span>
+          {/* A waiver-filled slot's number is the model's replacement estimate, not anyone's Sleeper projection. */}
+          <span className="w-12 text-right">
+            {r.id ? (
+              <Pts value={r.pts} kind="proj" />
+            ) : (
+              <span className="num text-ff-muted" title="The model's estimate for a waiver pickup in this slot, not a Sleeper projection">
+                {fmt(r.pts)} <span className="font-mono text-[9.5px]">est</span>
+              </span>
+            )}
+          </span>
           <span className="num w-10 text-right text-ff-text2">{r.id ? pct(data.context[r.id]?.play) : ''}</span>
         </Row>
       ))}

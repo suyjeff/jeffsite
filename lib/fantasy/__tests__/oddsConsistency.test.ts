@@ -10,7 +10,7 @@ import {
   lockKey,
   phi,
   phiInv,
-  playoffRounds,
+  playoffRoundWeeks,
   rng,
   simNormal,
   simulateCounts,
@@ -93,7 +93,7 @@ const league = (opts: { teams: number; played: number; divisions?: boolean; play
     schedule,
     record,
     playoffWeeks,
-    playoffRounds: playoffRounds(playoffWeeks, playoffTeams, opts.roundType ?? 0),
+    playoffRounds: playoffRoundWeeks(15, playoffTeams, opts.roundType ?? 0),
     playoffTeams,
     elo: {},
     sigmaFallback: 22,
@@ -329,13 +329,19 @@ describe('the random stream', () => {
 
 describe('playoff rounds', () => {
   it('reads each round as one week, a two-week final, or two weeks a round', () => {
-    expect(playoffRounds([15, 16, 17], 6)).toEqual([[15], [16], [17]])
-    expect(playoffRounds([15, 16, 17, 18], 6, 1)).toEqual([[15], [16], [17, 18]])
-    expect(playoffRounds([15, 16, 17, 18], 4, 2)).toEqual([
+    expect(playoffRoundWeeks(15, 6)).toEqual([[15], [16], [17]])
+    expect(playoffRoundWeeks(15, 6, 1)).toEqual([[15], [16], [17, 18]])
+    expect(playoffRoundWeeks(15, 4, 2)).toEqual([
       [15, 16],
       [17, 18],
     ])
-    expect(playoffRounds([], 4)).toEqual([[100], [101]])
+    // Past the NFL's last week a round comes back empty; the simulation still plays it, on a placeholder week.
+    expect(playoffRoundWeeks(16, 6, 2, 18)).toEqual([[16, 17], [18], []])
+    const s = simulateSeason({ teams: [1, 2, 3, 4, 5, 6], record: {}, schedule: [], playoffWeeks: [16, 17, 18], playoffRounds: [[16, 17], [18], []], playoffTeams: 6, mean: (t) => 100 + t, sigma: 20, tau: 5, sims: 500 })
+    expect(Object.values(s).reduce((a, t) => a + t.title, 0)).toBeCloseTo(1, 2)
+    expect(s[6].title).toBeLessThan(0.9)
+    const trace = simulateOnce({ teams: [1, 2, 3, 4, 5, 6], record: {}, schedule: [], playoffWeeks: [16, 17, 18], playoffRounds: [[16, 17], [18], []], playoffTeams: 6, mean: (t) => 100 + t, sigma: 20, tau: 5, sims: 1 }, 3)
+    expect(trace.rounds.map((r) => r.week)).toEqual([17, 18, null])
   })
 
   it('a two-week round favours the stronger team more than a one-week one', () => {

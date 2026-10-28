@@ -214,7 +214,7 @@ export type ForecastInput = {
   schedule: { week: number; a: number; b: number }[]
   record: Record<number, { wins: number; losses: number; ties: number; pf: number }>
   playoffWeeks: number[]
-  /** The weeks each playoff round is scored over (see playoffRounds); one week a round when absent. */
+  /** The weeks each playoff round is scored over (see playoffRoundWeeks); one week a round when absent. */
   playoffRounds?: number[][]
   playoffTeams: number
   elo: Record<number, number>
@@ -481,7 +481,7 @@ export type SimInput = {
   record: Record<number, { wins: number; losses: number; ties: number; pf: number }>
   schedule: { week: number; a: number; b: number }[]
   playoffWeeks: number[]
-  /** The weeks each playoff round is scored over, in order (see playoffRounds); one week a round when absent. */
+  /** The weeks each playoff round is scored over, in order (see playoffRoundWeeks); one week a round when absent. */
   playoffRounds?: number[][]
   playoffTeams: number
   mean: (rosterId: number, week: number) => number
@@ -542,22 +542,29 @@ export const persistMean = (mean: (t: number, w: number) => number, teams: numbe
 }
 
 /**
- * The weeks each playoff round is scored over. One week a round unless the league plays a two-week final (round type
- * 1) or two weeks every round (type 2); a two-week round is decided on the two weeks' total. A round the calendar has
- * no week for (past the NFL's last) is scored as a week of its own at the team's rating.
+ * The weeks each playoff round is played over, from the league's settings: one week a round unless the league plays a
+ * two-week final (round type 1) or two weeks every round (type 2); a two-week round is decided on the two weeks'
+ * total. Weeks past `lastWeek` (the NFL's last) are dropped, so a round can come back empty. The one rule: the league
+ * loader (lib/fantasy/useLeagueData fantasyPlayoffRounds) builds the rounds with it and the weeks from the rounds.
  */
-export const playoffRounds = (playoffWeeks: number[], playoffTeams: number, roundType = 0): number[][] => {
+export const playoffRoundWeeks = (start: number, playoffTeams: number, roundType = 0, lastWeek = Infinity): number[][] => {
   const n = playoffTeams > 1 ? Math.ceil(Math.log2(playoffTeams)) : 0
   const out: number[][] = []
-  let i = 0
+  let w = start
   for (let r = 0; r < n; r++) {
     const len = roundType === 2 || (roundType === 1 && r === n - 1) ? 2 : 1
-    const ws = playoffWeeks.slice(i, i + len)
-    i += len
-    out.push(ws.length ? ws : [100 + r])
+    out.push(Array.from({ length: len }, (_, k) => w + k).filter((x) => x <= lastWeek))
+    w += len
   }
   return out
 }
+
+/**
+ * A round the calendar has no week for (past the NFL's last, or no playoff weeks known) is still played in the
+ * simulation, as a week of its own at the team's rating, numbered from here. Never a week to show anyone.
+ */
+export const PLACEHOLDER_WEEK = 100
+export const isPlaceholderWeek = (w: number) => w >= PLACEHOLDER_WEEK
 
 /** 32-bit integer hash (murmur3's finalizer). */
 const mix32 = (h: number) => {
@@ -640,8 +647,10 @@ const compile = (input: SimInput) => {
   const idx = new Map(teams.map((t, i) => [t, i]))
   const nPlayoff = Math.min(input.playoffTeams || 0, n)
   const size = nPlayoff > 1 ? 2 ** Math.ceil(Math.log2(nPlayoff)) : 0
-  const rounds = (input.playoffRounds ?? playoffRounds(input.playoffWeeks, nPlayoff)).slice()
-  for (let r = rounds.length; size && 2 ** r < size; r++) rounds.push([100 + r])
+  // Each round's weeks: the league's, else one playoff week a round; a round with none plays a placeholder week.
+  const given = input.playoffRounds ?? input.playoffWeeks.map((w) => [w])
+  const rounds: number[][] = []
+  for (let r = 0; size && 2 ** r < size; r++) rounds.push(given[r]?.length ? given[r] : [PLACEHOLDER_WEEK + r])
   const games: SimGame[] = []
   // Locked results count as played for the clinch arithmetic: a spot they settle reads as settled.
   const decidedRecord: SimInput['record'] = {}
@@ -894,15 +903,21 @@ export type Stakes = { win: Stake; loss: Stake }
  */
 export const weekStakes = (_input: ForecastInput, base: Forecast): Record<number, Stakes> => {
   const out: Record<number, Stakes> = {}
-  const pick = (t: SimTeam | undefined): Stake => ({ playoffs: t?.playoffs ?? 0, bye: t?.bye ?? 0, title: t?.title ?? 0, clinch: t?.clinch ?? null })
-  for (const g of base.nextWeek) {
-    const k = lockKey(g)
-    const aWon = simulateSeason({ ...base.simInput, locks: { [k]: g.a } })
-    const bWon = simulateSeason({ ...base.simInput, locks: { [k]: g.b } })
-    out[g.a] = { win: pick(aWon[g.a]), loss: pick(bWon[g.a]) }
-    out[g.b] = { win: pick(bWon[g.b]), loss: pick(aWon[g.b]) }
-  }
+  for (const r of stakesRuns(base)) Object.assign(out, stakesOf(r.game, simulateSeason(r.aWins), simulateSeason(r.bWins)))
   return out
+}
+
+/** The two runs behind each of this week's games' stakes, for a caller that runs them itself (lib/fantasy/simRunner). */
+export const stakesRuns = (base: Forecast) =>
+  base.nextWeek.map((game) => {
+    const k = lockKey(game)
+    return { game, aWins: { ...base.simInput, locks: { [k]: game.a } } as SimInput, bWins: { ...base.simInput, locks: { [k]: game.b } } as SimInput }
+  })
+
+/** A game's stakes from its two runs. */
+export const stakesOf = (g: { a: number; b: number }, aWon: Record<number, SimTeam>, bWon: Record<number, SimTeam>): Record<number, Stakes> => {
+  const pick = (t: SimTeam | undefined): Stake => ({ playoffs: t?.playoffs ?? 0, bye: t?.bye ?? 0, title: t?.title ?? 0, clinch: t?.clinch ?? null })
+  return { [g.a]: { win: pick(aWon[g.a]), loss: pick(bWon[g.a]) }, [g.b]: { win: pick(bWon[g.b]), loss: pick(aWon[g.b]) } }
 }
 
 /**
@@ -911,7 +926,11 @@ export const weekStakes = (_input: ForecastInput, base: Forecast): Record<number
  */
 const evalCache = new WeakMap<Forecast, ReturnType<typeof makeHorizonEval>>()
 
-export const tradeLeverage = (input: ForecastInput, base: Forecast, trade: { me: number; partner: number; myRoster: string[]; theirRoster: string[] }) => {
+export type TradeSides = { me: number; partner: number; myRoster: string[]; theirRoster: string[] }
+export type Leverage = { me: { playoffs: number; title: number; wins: number }; partner: { playoffs: number; title: number; wins: number }; after: { me: SimTeam; partner: SimTeam } }
+
+/** The run behind tradeLeverage: the forecast's simulation with both teams rated on their rosters after the trade. */
+export const leverageRun = (input: ForecastInput, base: Forecast, trade: TradeSides): SimInput | null => {
   if (!input.horizon.length) return null
   const after: Record<number, Record<number, number>> = {}
   const afterRating: Record<number, number> = {}
@@ -929,15 +948,24 @@ export const tradeLeverage = (input: ForecastInput, base: Forecast, trade: { me:
     const xs = Object.values(after[rid])
     afterRating[rid] = xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
   }
-  const before = base.sim
   // Weeks the horizon does not cover (the playoffs, in the shorter modes) use the post-trade rating too.
-  const post = simulateSeason({ ...base.simInput, mean: persistMean((t, w) => (after[t] ? (after[t][w] ?? afterRating[t]) : base.mean(t, w)), base.simInput.teams) })
+  return { ...base.simInput, mean: persistMean((t, w) => (after[t] ? (after[t][w] ?? afterRating[t]) : base.mean(t, w)), base.simInput.teams) }
+}
+
+/** A trade's effect from its run, against the current odds. */
+export const leverageOf = (base: Forecast, trade: TradeSides, post: Record<number, SimTeam>): Leverage => {
+  const before = base.sim
   const delta = (rid: number) => ({
     playoffs: round3(post[rid].playoffs - before[rid].playoffs),
     title: round3(post[rid].title - before[rid].title),
     wins: round2(post[rid].wins - before[rid].wins),
   })
   return { me: delta(trade.me), partner: delta(trade.partner), after: { me: post[trade.me], partner: post[trade.partner] } }
+}
+
+export const tradeLeverage = (input: ForecastInput, base: Forecast, trade: TradeSides): Leverage | null => {
+  const run = leverageRun(input, base, trade)
+  return run ? leverageOf(base, trade, simulateSeason(run)) : null
 }
 
 // ---------- Backtest ----------

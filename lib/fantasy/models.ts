@@ -6,7 +6,7 @@
 import type { Analysis } from './analysis'
 import { leagueBehavior, type LeagueBehavior } from './behavior'
 import { perceivedValues } from './consensus'
-import { backtest, buildForecast, divisionsOf, ELO, playoffRounds, gamesFrom, lineupEdge, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
+import { backtest, buildForecast, divisionsOf, ELO, gamesFrom, lineupEdge, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
 import { faabState, type Faab } from './faab'
 import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, type TeamWeek } from './power'
 import type { LeagueData } from './useLeagueData'
@@ -83,7 +83,7 @@ const forecastInputFor = (data: LeagueData, analysis: Analysis, elo: Record<numb
     schedule: remainingSchedule(data),
     record,
     playoffWeeks: data.playoffWeeks,
-    playoffRounds: playoffRounds(data.playoffWeeks, Number(data.league.settings?.playoff_teams ?? 6), Number(data.league.settings?.playoff_round_type ?? 0)),
+    playoffRounds: data.playoffRounds,
     playoffTeams: Number(data.league.settings?.playoff_teams ?? 6),
     elo,
     sigmaFallback: analysis.sigma * 0.9,

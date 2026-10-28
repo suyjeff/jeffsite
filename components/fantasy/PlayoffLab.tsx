@@ -145,7 +145,7 @@ export const Bracket = ({ t, run }: { t: Trace; run: number }) => {
           <div key={`${run}:${i}`} className="ff-rise flex w-[160px] flex-col" style={{ animationDelay: `${60 + i * 50}ms` }}>
             <div className="ff-label mb-1.5 flex justify-between">
               <span>{rd.name}</span>
-              <span className="num">wk {rd.week}</span>
+              {rd.weeks.length > 0 && <span className="num">wk {rd.weeks.join('–')}</span>}
             </div>
             <div className="flex flex-1 flex-col justify-around gap-2">
               {rd.games.map((g, j) => (
