@@ -1,5 +1,6 @@
 ---
 title: "Mental Models"
+date: "2026-03-03"
 ---
 
 Design can often feel like a journey through the abstract. On its surface, the many choices that amount to a design are fairly simple. By taking already expertly-defined source elements like typefaces (with their incredible depth of weights, sizes, and features), auto-adjusting divs, interface-ready color standards, and the foundations of layouts, it is not (and has never been) difficult to create something usable. 
