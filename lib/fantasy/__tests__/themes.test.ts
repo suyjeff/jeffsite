@@ -27,6 +27,16 @@ describe('themes', () => {
     // The Aqua capsule's label sits on accentDeep; the lighter accent only tints the top edge.
     expect(contrast(t.onAccent, t.accentDeep)).toBeGreaterThanOrEqual(4.5)
   })
+  const added = modes.filter(({ id }) => /^(catppuccin|gruvbox|monokai)\//.test(id))
+  it.each(added)('$id: the new themes keep every ink readable on its own 15% chip over any surface (panel, raised, sunken, page)', ({ t }) => {
+    for (const ink of [t.accent, t.pos, t.neg, t.warn]) for (const surface of [t.panel, t.raised, t.sunken, t.bg]) expect(contrast(ink, mix(surface, ink, 0.15))).toBeGreaterThanOrEqual(4.5)
+  })
+  it.each(modes)('$id: the crown\'s gold ink reads on the panel and on the No. 1 row\'s gold wash', ({ id, t }) => {
+    const dark = id.endsWith('/dark')
+    const ink = dark ? '#f6cd6e' : '#845c00'
+    const gold = dark ? '#f2c14e' : '#b68004'
+    for (const surface of [t.panel, t.raised]) for (const a of [0, 0.09]) expect(contrast(ink, mix(surface, gold, a))).toBeGreaterThanOrEqual(4.5)
+  })
   it('emits every token the stylesheet uses', () => {
     const v = themeVars(THEMES[0], 'light')
     for (const k of ['--ff-bg', '--ff-panel', '--ff-text', '--ff-accent', '--ff-accent-deep', '--ff-on-accent', '--ff-s5', '--ff-c4', '--ff-gold', '--ff-gold-ink']) expect(v[k]).toMatch(/^\d+ \d+ \d+$/)

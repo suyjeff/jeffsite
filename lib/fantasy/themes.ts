@@ -147,12 +147,12 @@ export const THEMES: Theme[] = [
       text: '#3d4058',
       text2: '#4c4f69',
       muted: '#5c5f77',
-      accent: '#7a33d7',
-      accentDeep: '#7a33d7',
+      accent: '#6c27c7',
+      accentDeep: '#6c27c7',
       onAccent: '#ffffff',
-      pos: '#276d1b',
-      neg: '#b80e33',
-      warn: '#8e5106',
+      pos: '#236118',
+      neg: '#a30c2d',
+      warn: '#7d4705',
       s: ['#1e66f5', '#ec5d0a', '#179299', '#df8e1d', '#ea76cb'],
       c: ['#1e66f5', '#ec5d0a', '#40a02b', '#8839ef'],
     },
@@ -171,7 +171,7 @@ export const THEMES: Theme[] = [
       accentDeep: '#b48ee8',
       onAccent: '#11111b',
       pos: '#a6e3a1',
-      neg: '#f38ba8',
+      neg: '#f59bb4',
       warn: '#fab387',
       s: ['#89b4fa', '#fab387', '#94e2d5', '#f9e2af', '#f5c2e7'],
       c: ['#89b4fa', '#fab387', '#a6e3a1', '#cba6f7'],
@@ -182,6 +182,7 @@ export const THEMES: Theme[] = [
     label: 'Gruvbox',
     family: 'Editor',
     // Light: bg0_s #f2e5bc, bg0 #fbf1c7, bg0_h #f9f5d7, bg1 #ebdbb2, bg2 #d5c4a1; faded inks.
+    // The accent is the faded blue, not the orange: orange here sits beside the loss red and the caution yellow, and "your team" would read as a loss.
     light: {
       bg: '#f2e5bc',
       panel: '#fbf1c7',
@@ -192,12 +193,12 @@ export const THEMES: Theme[] = [
       text: '#282828',
       text2: '#3c3836',
       muted: '#5a504a',
-      accent: '#aa3803',
-      accentDeep: '#aa3803',
+      accent: '#065a6a',
+      accentDeep: '#065a6a',
       onAccent: '#fbf1c7',
-      pos: '#676209',
+      pos: '#595508',
       neg: '#9d0006',
-      warn: '#855009',
+      warn: '#774708',
       s: ['#076678', '#d65d0e', '#427b58', '#b57614', '#8f3f71'],
       c: ['#076678', '#d65d0e', '#79740e', '#8f3f71'],
     },
@@ -212,11 +213,11 @@ export const THEMES: Theme[] = [
       text: '#ebdbb2',
       text2: '#d5c4a1',
       muted: '#bdae93',
-      accent: '#fe9640',
-      accentDeep: '#e06a0b',
+      accent: '#acc3ba',
+      accentDeep: '#689083',
       onAccent: '#1d2021',
-      pos: '#b8bb26',
-      neg: '#fd9487',
+      pos: '#c2c628',
+      neg: '#fda89e',
       warn: '#fabd2f',
       s: ['#83a598', '#fe8019', '#8ec07c', '#fabd2f', '#d3869b'],
       c: ['#83a598', '#fe8019', '#b8bb26', '#d3869b'],
@@ -241,7 +242,7 @@ export const THEMES: Theme[] = [
       accentDeep: '#3fb6d3',
       onAccent: '#1e1f1c',
       pos: '#a6e22e',
-      neg: '#ff9d84',
+      neg: '#ffb19e',
       warn: '#e6db74',
       s: ['#66d9ef', '#f92672', '#a6e22e', '#fd971f', '#ae81ff'],
       c: ['#66d9ef', '#f92672', '#a6e22e', '#ae81ff'],
@@ -459,7 +460,7 @@ const rgb = (h: string) => hex(h).join(' ')
 export const tokensFor = (theme: Theme, mode: Mode): Tokens => ((mode === 'dark' ? theme.dark : theme.light) ?? theme.dark ?? theme.light)!
 
 /** The crown's gold as RGB triplets: a fill, and a deeper ink for gold text that holds 4.5:1 on the panel. */
-const GOLD = { light: '182 128 4', lightInk: '140 98 0', dark: '242 193 78', darkInk: '246 205 110' }
+const GOLD = { light: '182 128 4', lightInk: '132 92 0', dark: '242 193 78', darkInk: '246 205 110' }
 
 /** CSS custom properties for a theme in a mode, ready for a style attribute. */
 export const themeVars = (theme: Theme, mode: Mode): Record<string, string> => {

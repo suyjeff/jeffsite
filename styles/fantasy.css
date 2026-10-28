@@ -219,6 +219,12 @@ html.ff-page body {
 .ff .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+/* Muted and secondary inks inside an inverted fill (the picked segment, a tooltip) would sit on the text colour itself
+   and vanish: there they take the fill's own ink, a little softer. */
+.ff :is([role='radio'][aria-checked='true'], .bg-ff-text) :is(.text-ff-muted, .text-ff-text2) {
+  color: inherit;
+  opacity: 0.8;
+}
 
 /* A sideways strip scrolls along one axis. Tailwind's overflow-x-auto leaves overflow-y visible, which the browser
    computes to auto: any child that pokes out of the strip by a pixel (a tab's underline, a focus ring, a badge) then
@@ -1038,7 +1044,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 .ff {
   --ff-gold: 182 128 4;
   /* Gold as text: deeper in light mode so it reads at 4.5:1 on the panel. */
-  --ff-gold-ink: 140 98 0;
+  --ff-gold-ink: 132 92 0;
   /* The reveal's two hues, from the active theme: its accent into the crown's gold. */
   --ff-rv-a: rgb(var(--ff-accent));
   --ff-rv-b: rgb(var(--ff-gold));
