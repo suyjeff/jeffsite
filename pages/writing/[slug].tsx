@@ -9,17 +9,26 @@ import Layout from "../../components/Layout";
 
 type Props = {
   title: string;
+  date: string;
   content: MDXRemoteSerializeResult;
 };
+
+const formatDate = (date: string) =>
+  new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 
 const components = {
   hr: () => <hr className="border-stone-200 dark:border-stone-800" />,
 };
 
-const WritingPiecePage = ({ title, content }: Props) => {
+const WritingPiecePage = ({ title, date, content }: Props) => {
   return (
     <Layout title={title}>
-      <div className="pb-24 md:pb-0">
+      <div className="pb-10">
         <div className="flex items-center">
           <Link href="/writing" className="group">
             <h1 className="relative inline-block text-lg tracking-tight font-lars font-medium italic text-stone-900 dark:text-stone-100 opacity-0 animate-reveal hover:cursor-pointer">
@@ -33,7 +42,10 @@ const WritingPiecePage = ({ title, content }: Props) => {
             </h1>
           </Link>
         </div>
-        <div className="mt-4 opacity-0 animate-reveal animation-delay-200">
+        <p className="mt-1 text-lg tracking-tight italic text-stone-400 dark:text-stone-400 opacity-0 animate-reveal animation-delay-200">
+          {formatDate(date)}
+        </p>
+        <div className="mt-4 opacity-0 animate-reveal animation-delay-400">
           <div className="space-y-4 text-lg tracking-tight">
             <MDXRemote {...content} components={components} />
           </div>
@@ -61,5 +73,5 @@ export async function getStaticProps({ params }: { params: { slug: string } }) {
   const { data, content } = matter(source);
   const mdxSource = await serialize(content, { mdxOptions: { format: "md" } });
 
-  return { props: { title: data.title as string, content: mdxSource } };
+  return { props: { title: data.title as string, date: data.date as string, content: mdxSource } };
 }

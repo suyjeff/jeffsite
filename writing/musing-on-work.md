@@ -1,5 +1,6 @@
 ---
 title: "Musing on Work"
+date: "2026-02-17"
 ---
 
 There's something about *doing* that has become foggy in my first few years in the workforce. In university, you learn through active listening, engaged problem solving, and endless assessments. The common thread is that these activities are always *assigned*. Someone with authority, be it an experienced professor or a seasoned teaching assistant, is trusted to know what the next best thing is for you to do. Follow this path and by the end of a semester, there's a pretty decent chance you'll become, at the very least, sufficient at Matrix Algebra or Fluid Dynamics. Under the careful watch of your advisors, professors, and classmates, a few years will pass and suddenly you're a reasonably capable mathematician or scientist.
