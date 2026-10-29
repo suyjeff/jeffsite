@@ -10,7 +10,7 @@ const LabPage = () => {
       <div className="pb-24 md:pb-0">
         <BackTitle href="/">Labs</BackTitle>
         <p className="mt-4 text-lg tracking-tight opacity-0 animate-reveal animation-delay-200">
-          <Link href="/fantasy" className={neutralLinkClasses}>
+          <Link href="https://ff.sujeff.com" className={neutralLinkClasses}>
             <NeutralLinkLabel underline>League analysis</NeutralLinkLabel>
           </Link>
           <span className="block text-stone-400 dark:text-stone-400">Power ranks, WAR-style player values and trade math for a Sleeper league.</span>

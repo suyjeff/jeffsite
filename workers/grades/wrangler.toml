@@ -1,7 +1,0 @@
-name = "ff-grades"
-main = "src/index.ts"
-compatibility_date = "2025-01-01"
-
-[[kv_namespaces]]
-binding = "GRADES"
-id = "bbfa6a461a7f4fb2806cf2092dd3063e"
