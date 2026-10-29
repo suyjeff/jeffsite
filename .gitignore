@@ -17,3 +17,6 @@ out/
 
 # Cursor IDE debug artifacts
 .cursor/debug-*.log
+
+# Local secrets
+.env*.local
