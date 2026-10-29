@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Analysis } from '../../lib/fantasy/analysis'
 import type { Models } from '../../lib/fantasy/models'
 import type { PowerWeights } from '../../lib/fantasy/power'
@@ -6,6 +6,7 @@ import { buildRecap, dropsLabel, revealSeenKey, revealStale, revealState, weeksB
 import type { SleeperMatchup } from '../../lib/fantasy/types'
 import type { LeagueData } from '../../lib/fantasy/useLeagueData'
 import { revealOdds } from './revealOdds'
+import { writeStored } from '../../lib/fantasy/storage'
 import { playerValues, replacementLevels, rosterStrength, type ModelConfig } from '../../lib/fantasy/war'
 
 /** What the reveal reads: the recap, and the weeks it was built from (the playoff odds rerun on them). */
@@ -93,13 +94,8 @@ const readSeen = (key: string) => {
     return true
   }
 }
-const writeSeen = (key: string) => {
-  try {
-    window.localStorage.setItem(key, String(Date.now()))
-  } catch {
-    // ignore
-  }
-}
+// Made room for if storage is full: a mark that fails to stick opens the reveal again on every load.
+const writeSeen = (key: string) => writeStored(key, String(Date.now()))
 
 /** The time, read again every `ms` while `on`: for a banner's countdown, so only the banner re-renders. */
 export const useNow = (ms = 30000, on = true) => {
@@ -215,14 +211,17 @@ export const useReveal = ({
   // On its own: the first load after the gate, once per league and week. Marked seen as it opens, so a reload
   // halfway through never plays it twice. With another reveal on screen (a week a link asked for) it waits, and opens
   // when that one closes.
+  // Also kept in memory: if storage will not take the mark, closing it must not open it again.
+  const opened = useRef(new Set<string>())
   useEffect(() => {
     if (!source || blocked || !leagueId || !season || week == null || !data || deep || open) return
     if (data.league.season !== data.state.season) return
     const key = revealSeenKey(leagueId, season, week)
-    if (readSeen(key)) return
+    if (opened.current.has(key) || readSeen(key)) return
     // A week whose successor has already kicked off is old news: no surprise for it, only the replay.
     const stale = revealStale(data.schedule?.games, week)
     if (stale && Date.now() >= stale.getTime()) return
+    opened.current.add(key)
     writeSeen(key)
     if (!quiet) setOpen((o) => o ?? { run: 1 })
   }, [source, blocked, quiet, leagueId, season, week, data, deep, open])

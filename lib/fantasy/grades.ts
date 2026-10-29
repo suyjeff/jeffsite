@@ -23,6 +23,7 @@ import type { AcceptRead } from './behavior'
 import { PRICING_VERSION } from './currency'
 import { blendGlobal, blendOffset, shareGrades, SHARED_DORMANT_MIN, type SharedPrior } from './sharedGrades'
 import type { TradeIdea } from './trades'
+import { writeStored } from './storage'
 
 export type Grade = 'yes' | 'maybe' | 'no'
 export type GradeWhy = 'untouchable' | 'lopsided' | 'dormant' | 'fit'
@@ -95,7 +96,7 @@ export const loadGrades = (leagueId: string): Grades => {
 
 export const saveGrades = (leagueId: string, g: Grades) => {
   try {
-    if (Object.keys(g).length) window.localStorage.setItem(KEY(leagueId), JSON.stringify(g))
+    if (Object.keys(g).length) writeStored(KEY(leagueId), JSON.stringify(g))
     else window.localStorage.removeItem(KEY(leagueId))
   } catch {
     // Private mode or full storage: the grades last for this visit.

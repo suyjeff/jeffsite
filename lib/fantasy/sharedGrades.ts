@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react'
 import { PRICING_VERSION } from './currency'
 import type { Grades } from './grades'
+import { writeStored } from './storage'
 
 /** What the worker returns: other browsers' grades, summed (workers/grades/src/aggregate.ts `Prior`). */
 export type SharedPrior = {
@@ -69,7 +70,7 @@ export const clientId = (): string => {
     let id = window.localStorage.getItem(CLIENT_KEY)
     if (id && /^[A-Za-z0-9-]{8,64}$/.test(id)) return id
     id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Array.from({ length: 4 }, () => Math.random().toString(36).slice(2, 10)).join('')
-    window.localStorage.setItem(CLIENT_KEY, id)
+    writeStored(CLIENT_KEY, id)
     return id
   } catch {
     return ''
@@ -99,13 +100,8 @@ const read = <T>(key: string, fallback: T): T => {
     return fallback
   }
 }
-const write = (key: string, v: unknown) => {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(v))
-  } catch {
-    // Storage full or blocked: the grades are simply sent again next time.
-  }
-}
+// Storage blocked: the grades are simply sent again next time.
+const write = (key: string, v: unknown) => writeStored(key, JSON.stringify(v))
 
 /** The grades not yet sent, and the hashes sent that are no longer graded. Pure. */
 export const pending = (grades: Grades, sent: Record<string, number>) => {

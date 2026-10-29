@@ -14,6 +14,7 @@ import type {
   TrimmedPlayer,
   WeekStats,
 } from './types'
+import { removeStored, trimCache, writeCached } from './storage'
 
 const BASE = 'https://api.sleeper.app/v1'
 // v3: trimmed players carry the news timestamp; v2 added depth-chart and injury fields.
@@ -55,27 +56,11 @@ const readCache = <T>(key: string, ttl: number): T | null => {
 const writeCache = <T>(key: string, data: T, persist = true) => {
   const entry: CacheEntry<T> = { t: Date.now(), data }
   memory.set(key, entry)
-  if (!persist || !hasStorage()) return
-  try {
-    window.localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(entry))
-  } catch {
-    // Quota exceeded or private mode: memory cache still works for this session.
-  }
+  // Within the cache's budget (lib/fantasy/storage); one that is not kept still serves this visit from memory.
+  if (persist) writeCached(CACHE_PREFIX + key, JSON.stringify(entry))
 }
 
-const removeKeys = (match: (key: string) => boolean) => {
-  if (!hasStorage()) return
-  try {
-    const keys: string[] = []
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const k = window.localStorage.key(i)
-      if (k && match(k)) keys.push(k)
-    }
-    keys.forEach((k) => window.localStorage.removeItem(k))
-  } catch {
-    // ignore
-  }
-}
+const removeKeys = removeStored
 
 export const clearFantasyCache = () => {
   memory.clear()
@@ -96,6 +81,8 @@ export const purgeStaleCache = () => {
   removeKeys((k) => k.startsWith(`${CACHE_PREFIX}scored-proj:`))
   // The player database moved to its own versioned key; the old copy is the biggest thing kept.
   removeKeys((k) => k === `${CACHE_PREFIX}${BASE}/players/nfl`)
+  // A cache that filled the quota before it had a budget leaves no room for settings: bring it back under.
+  trimCache()
 }
 
 export class SleeperError extends Error {
