@@ -14,6 +14,7 @@
 // the news itself, which is what this is for.
 
 import type { LeagueData } from './useLeagueData'
+import { writeStored } from './storage'
 
 export type Adjustment = {
   /** Multiplier minus one: −0.25 takes a quarter off. */
@@ -41,7 +42,7 @@ export const loadAdjustments = (leagueId: string): Adjustments => {
 export const saveAdjustments = (leagueId: string, adj: Adjustments) => {
   try {
     if (typeof window === 'undefined') return
-    if (Object.keys(adj).length) window.localStorage.setItem(KEY(leagueId), JSON.stringify(adj))
+    if (Object.keys(adj).length) writeStored(KEY(leagueId), JSON.stringify(adj))
     else window.localStorage.removeItem(KEY(leagueId))
   } catch {
     // Private mode or full storage: the nudge lasts for this visit only.

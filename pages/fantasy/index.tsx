@@ -24,6 +24,7 @@ import { analyze, withWeights } from '../../lib/fantasy/analysis'
 import { buildHistory, buildModels } from '../../lib/fantasy/models'
 import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../../lib/fantasy/power'
 import { purgeStaleCache } from '../../lib/fantasy/sleeper'
+import { writeStored } from '../../lib/fantasy/storage'
 import {
   DEFAULT_HORIZON_MODE,
   DEFAULT_PLAYOFF_WEIGHT,
@@ -149,11 +150,7 @@ const FantasyPage = () => {
   }, [])
   useEffect(() => {
     if (!prefs) return
-    try {
-      window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
-    } catch {
-      // ignore
-    }
+    writeStored(PREFS_KEY, JSON.stringify(prefs))
   }, [prefs])
 
   // Nothing loads until a username is confirmed. Once one has been this
@@ -294,11 +291,7 @@ const FantasyPage = () => {
   const reveal = useReveal({ data, analysis, models, prefs: revealPrefs, blocked: !appUp || tour || tourDue || (!!deepLink.link && !deepLink.ready), quiet: toured, deep })
   const endTour = useCallback(() => {
     setTour(false)
-    try {
-      window.localStorage.setItem(TOUR_KEY, '1')
-    } catch {
-      // ignore
-    }
+    writeStored(TOUR_KEY, '1')
   }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
