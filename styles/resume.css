@@ -146,7 +146,6 @@
   display: flex;
   align-items: center;
   height: 30px;
-  padding: 0 2px;
   border-radius: 999px;
   color: rgb(41 37 36);
   background: rgb(255 255 255 / 0.86);
@@ -158,11 +157,17 @@
   position: relative;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 26px;
-  border-radius: 999px;
+  width: 38px;
+  height: 30px;
   color: inherit;
   transition: background-color 150ms ease-out;
+}
+/* Each button is one half of the bar's pill: round on the outer end, square where the two meet. */
+.rs-btn:first-child {
+  border-radius: 999px 0 0 999px;
+}
+.rs-btn:last-child {
+  border-radius: 0 999px 999px 0;
 }
 /* A taller target than it looks, for fingers. Only taller: sideways the two buttons meet at the divider. */
 .rs-btn::after {
