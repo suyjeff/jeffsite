@@ -71,7 +71,7 @@ struct PlanDots: View {
     let plans: [Plan]
     @Binding var frontID: UUID?
 
-    private let slot: CGFloat = 20
+    private let slot: CGFloat = 18
     private let inset: CGFloat = 8
 
     var body: some View {

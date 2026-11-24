@@ -12,6 +12,10 @@ struct PageDeck<Card: View>: View {
 
     @State private var pull: CGFloat = 0
     @State private var armed = false
+    /// Only a finger can arm the pull; a fling that bounces off the top shouldn't.
+    @State private var interacting = false
+    /// After switching, ignore the bounce-back until the page is at rest again.
+    @State private var waitingForRest = false
 
     private let pullDistance: CGFloat = 84
 
@@ -50,16 +54,22 @@ struct PageDeck<Card: View>: View {
             max(0, -(geometry.contentOffset.y + geometry.contentInsets.top))
         } action: { _, newValue in
             pull = newValue
-            let isArmed = canCycle && newValue >= pullDistance
+            if waitingForRest {
+                if newValue < 1 { waitingForRest = false }
+                return
+            }
+            let isArmed = canCycle && interacting && newValue >= pullDistance
             if isArmed != armed {
                 armed = isArmed
                 Feedback.play(isArmed ? .armed : .disarmed)
             }
         }
         .onScrollPhaseChange { oldPhase, newPhase in
+            interacting = newPhase == .interacting
             // Commit when the finger lifts while armed.
             if oldPhase == .interacting, newPhase != .interacting, armed {
                 armed = false
+                waitingForRest = true
                 cycle(plans: plans)
             }
         }
