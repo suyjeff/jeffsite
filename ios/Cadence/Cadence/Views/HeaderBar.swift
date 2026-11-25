@@ -1,6 +1,7 @@
 import SwiftUI
 
 enum ViewMode: String, CaseIterable, Identifiable {
+    // Raw values are persisted; "scrolling" keeps its old key and is shown as "All".
     case today, week, month, scrolling
 
     var id: String { rawValue }
@@ -10,108 +11,168 @@ enum ViewMode: String, CaseIterable, Identifiable {
         case .today: "Today"
         case .week: "Week"
         case .month: "Month"
-        case .scrolling: "Scrolling"
+        case .scrolling: "All"
         }
     }
+
+    var order: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 }
 
-/// "Today ⌄" on the left (a Liquid Glass menu, as in the design), plan dots in the middle,
-/// the edit button on the right.
+/// Top of the screen: what you're looking at. Each plan is a tab named in full, so switching
+/// is one tap and you can always see where you are. The row scrolls sideways when the names
+/// don't fit, and the next name fades out past the edge to show there's more.
 struct HeaderBar: View {
-    @Binding var mode: ViewMode
     let plans: [Plan]
-    @Binding var frontID: UUID?
+    var frontID: UUID?
+    var onSelectPlan: (UUID) -> Void
     var onEdit: () -> Void
 
+    @Namespace private var selection
+
     var body: some View {
-        HStack(spacing: 0) {
-            Menu {
-                Picker("View", selection: $mode.animation(Motion.standard)) {
-                    ForEach(ViewMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
+        HStack(spacing: 8) {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    HStack(spacing: 2) {
+                        ForEach(plans) { plan in
+                            tab(plan)
+                                .id(plan.id)
+                        }
+                    }
+                    // The first tab's text sits on the same 24pt edge as the cards below.
+                    .padding(.leading, Metrics.gutter - 12)
+                    .padding(.trailing, 16)
+                }
+                .scrollIndicators(.hidden)
+                .mask {
+                    HStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: 24)
                     }
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(mode.title)
-                        .font(.cadenceTitle)
-                        .tracking(-0.2)
-                        .foregroundStyle(Color.ink)
-                        .contentTransition(.interpolate)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.inkSecondary)
+                .onChange(of: frontID) { _, id in
+                    guard let id else { return }
+                    withAnimation(Motion.standard) { proxy.scrollTo(id, anchor: .center) }
                 }
-                .padding(.vertical, 10)
-                .padding(.trailing, 20)
-                .contentShape(.rect)
+                .onAppear {
+                    if let frontID { proxy.scrollTo(frontID, anchor: .center) }
+                }
             }
-            .accessibilityLabel("View: \(mode.title)")
-            .accessibilityHint("Choose Today, Week, Month or Scrolling")
-
-            Spacer(minLength: 8)
 
             GlassIconButton(systemName: "square.and.pencil", voiceOverLabel: "Edit plans", action: onEdit)
         }
-        .overlay {
-            if plans.count > 1 {
-                PlanDots(plans: plans, frontID: $frontID)
-            }
-        }
-        .padding(.horizontal, Metrics.gutter - 2)
+        .padding(.trailing, Metrics.gutter - 2)
         .padding(.top, 13)
-        .sensoryFeedback(.selection, trigger: mode)
+        .animation(Motion.snappy, value: frontID)
+    }
+
+    private func tab(_ plan: Plan) -> some View {
+        let active = plan.id == frontID
+        return Button {
+            guard !active else { return }
+            onSelectPlan(plan.id)
+        } label: {
+            Text(plan.name.isEmpty ? "Untitled" : plan.name)
+                .font(.cadenceTitle)
+                .tracking(-0.2)
+                .foregroundStyle(active ? Color.ink : Color.inkMuted)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .background {
+                    if active {
+                        Capsule()
+                            .fill(Color.plum.opacity(0.1))
+                            .matchedGeometryEffect(id: "selection", in: selection)
+                    }
+                }
+                .frame(height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityAddTraits(active ? [.isSelected] : [])
+        .accessibilityHint(active ? "" : "Shows \(plan.name)")
     }
 }
 
-/// Which plan is at the front of the deck. Behaves like a page control: tap a dot, or
-/// slide a finger along the capsule to scrub through plans with a detent per plan.
-/// Each dot owns a fixed-width slot, so the active dot growing never shifts the others.
-struct PlanDots: View {
-    let plans: [Plan]
-    @Binding var frontID: UUID?
+/// Bottom of the screen: how much time you're looking at. A floating Liquid Glass bar in the
+/// thumb zone. The plum lens follows your finger the moment you touch, so you can slide
+/// across modes with a detent on each, and the view changes when you let go.
+struct ModeBar: View {
+    var mode: ViewMode
+    var onSelect: (ViewMode) -> Void
 
-    private let slot: CGFloat = 18
-    private let inset: CGFloat = 8
+    @State private var hover: ViewMode?
+    /// Each segment's frame in the bar's own space. Hit-testing against measured frames
+    /// stays correct in right-to-left layouts, where the segments run the other way.
+    @State private var frames: [ViewMode: CGRect] = [:]
+    @Namespace private var lens
+
+    private let inset: CGFloat = 4
+    private let space = "modeBar"
 
     var body: some View {
-        let activeIndex = plans.firstIndex { $0.id == frontID } ?? 0
+        let shown = hover ?? mode
 
         HStack(spacing: 0) {
-            ForEach(Array(plans.enumerated()), id: \.element.id) { index, plan in
-                Capsule()
-                    .fill(index == activeIndex ? Color.plum : Color.inkFaint)
-                    .frame(width: index == activeIndex ? 14 : 6, height: 6)
-                    .frame(width: slot)
+            ForEach(ViewMode.allCases) { item in
+                Text(item.title)
+                    .font(.cadenceCallout)
+                    .foregroundStyle(item == shown ? Color.onPlum : Color.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .background {
+                        if item == shown {
+                            Capsule()
+                                .fill(Color.plum)
+                                .matchedGeometryEffect(id: "lens", in: lens)
+                        }
+                    }
+                    .onGeometryChange(for: CGRect.self) { proxy in
+                        proxy.frame(in: .named("modeBar"))
+                    } action: { frame in
+                        frames[item] = frame
+                    }
+                    .accessibilityElement()
+                    .accessibilityLabel(item.title)
+                    .accessibilityAddTraits(item == mode ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityAction { onSelect(item) }
             }
         }
-        .padding(.horizontal, inset)
-        .frame(height: 26)
+        .padding(inset)
+        .frame(maxWidth: 320)
         .glassEffect(.regular, in: .capsule)
-        .frame(height: 44)
-        .contentShape(.rect)
+        .contentShape(.capsule)
+        .coordinateSpace(.named(space))
         .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in select(at: value.location.x) }
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(space))
+                .onChanged { value in
+                    let target = segment(at: value.location.x)
+                    if target != shown { Haptics.shared.tick() }
+                    hover = target
+                }
+                .onEnded { value in
+                    let target = segment(at: value.location.x)
+                    hover = nil
+                    if target != mode { onSelect(target) }
+                }
         )
-        .animation(Motion.snappy, value: activeIndex)
-        .accessibilityElement()
-        .accessibilityLabel("Plan")
-        .accessibilityValue(plans.indices.contains(activeIndex) ? "\(plans[activeIndex].name), \(activeIndex + 1) of \(plans.count)" : "")
-        .accessibilityAdjustableAction { direction in
-            let step = direction == .increment ? 1 : -1
-            let next = (activeIndex + step + plans.count) % plans.count
-            withAnimation(Motion.deck) { frontID = plans[next].id }
-        }
+        .animation(Motion.snappy, value: shown)
+        .padding(.horizontal, Metrics.gutter)
+        .padding(.bottom, 4)
     }
 
-    private func select(at x: CGFloat) {
-        guard !plans.isEmpty else { return }
-        let index = Int(((x - inset) / slot).rounded(.down)).clamped(0, plans.count - 1)
-        let id = plans[index].id
-        guard id != frontID else { return }
-        Feedback.play(.cycle)
-        withAnimation(Motion.deck) { frontID = id }
+    /// The segment under the finger, or the nearest one when the finger slides past the ends.
+    private func segment(at x: CGFloat) -> ViewMode {
+        guard !frames.isEmpty else { return mode }
+        if let hit = frames.first(where: { x >= $0.value.minX && x < $0.value.maxX }) {
+            return hit.key
+        }
+        return frames.min { abs($0.value.midX - x) < abs($1.value.midX - x) }?.key ?? mode
     }
 }
 

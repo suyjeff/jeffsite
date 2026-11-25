@@ -10,6 +10,9 @@ import os
 final class Store {
     private(set) var plans: [Plan] = []
     private(set) var today: Day = .today
+    /// Bumped on every change to any plan. Views that hold a `Plan` snapshot compare this
+    /// instead of whole plans (with all their history) to decide whether to re-render.
+    private(set) var revision = 0
 
     /// Unsaved ruler positions for metric plans, keyed by plan. Not persisted.
     private var drafts: [UUID: Double] = [:]
@@ -47,22 +50,26 @@ final class Store {
     func update(_ id: UUID, _ change: (inout Plan) -> Void) {
         guard let index = index(of: id) else { return }
         change(&plans[index])
+        revision &+= 1
         scheduleSave()
     }
 
     func add(_ plan: Plan) {
         plans.append(plan)
+        revision &+= 1
         scheduleSave()
     }
 
     func delete(_ id: UUID) {
         plans.removeAll { $0.id == id }
+        revision &+= 1
         drafts[id] = nil
         scheduleSave()
     }
 
     func move(fromOffsets source: IndexSet, toOffset destination: Int) {
         plans.move(fromOffsets: source, toOffset: destination)
+        revision &+= 1
         scheduleSave()
     }
 

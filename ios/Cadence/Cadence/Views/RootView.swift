@@ -17,10 +17,12 @@ struct RootView: View {
     @State private var dayEdit: DayTarget?
     @State private var valueEdit: DayTarget?
     @State private var celebrating = false
+    /// +1 when moving right along Today → Week → Month → All, −1 when moving left.
+    @State private var modeDirection = 1
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderBar(mode: $mode, plans: store.plans, frontID: $frontID) {
+            HeaderBar(plans: store.plans, frontID: frontID, onSelectPlan: selectPlan) {
                 showingPlans = true
             }
 
@@ -37,6 +39,9 @@ struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color.canvas.ignoresSafeArea())
+        .safeAreaBar(edge: .bottom) {
+            ModeBar(mode: mode, onSelect: selectMode)
+        }
         .overlay(alignment: .top) {
             if celebrating {
                 AllDoneToast()
@@ -113,7 +118,20 @@ struct RootView: View {
     }
 
     private var modeTransition: AnyTransition {
-        reduceMotion ? .opacity : AnyTransition(.blurReplace)
+        Motion.slide(modeDirection, reduceMotion: reduceMotion)
+    }
+
+    private func selectMode(_ newMode: ViewMode) {
+        guard newMode != mode else { return }
+        // The mode bar already ticked on touch-down; no second haptic here.
+        modeDirection = newMode.order > mode.order ? 1 : -1
+        withAnimation(Motion.page) { mode = newMode }
+    }
+
+    private func selectPlan(_ id: UUID) {
+        guard id != frontID else { return }
+        Feedback.play(.cycle)
+        withAnimation(Motion.deck) { frontID = id }
     }
 
     /// Scrolling mode: one tall card with the next one peeking above, like the deck.
@@ -130,7 +148,7 @@ struct RootView: View {
             if let plan = store.plan(frontID) ?? store.plans.first {
                 ScrollingCard(plan: plan, onEditDay: editDay, onEditValue: editValue)
                     .id(plan.id)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+                    .transition(Motion.deckForward(reduceMotion: reduceMotion))
             } else {
                 EmptyDeck { showingPlans = true }
             }

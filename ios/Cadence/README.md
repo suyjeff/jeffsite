@@ -12,16 +12,18 @@ The project uses a synchronized folder, so any file added under `Cadence/` is pi
 
 ## Using it
 
-**Views** (tap the title, "Today ⌄"): Today, Week, Month, Scrolling.
+**Plans** are named across the top. Tap one to bring its card forward; the row scrolls sideways if they don't all fit.
+
+**Views** live in the glass bar at the bottom: Today, Week, Month, All. Tap one, or slide your finger along the bar and let go on the one you want.
 
 **Today** is a deck, one card per plan.
 - Swipe a card right to mark the day done, left for "not today". Past the commit point you feel a detent; let go and the card is thrown with your finger's speed and tucks in at the back.
-- Pull a card down to bring the next one forward; push up to go back. The dots at the top also switch plans, and you can slide along them.
+- Pull a card down to bring the next one forward; push up to go back.
 - The glass check button does the same as a right swipe. On AM/PM plans it checks off the next half, and each half can be tapped on its own.
 - Long-press a card for Mark done, Not today, and Edit today.
 - Number plans (Weight) show a ruler. Scrub it, then swipe right or tap the check to log.
 
-**Week / Month / Scrolling**: swipe any row right for done, left for not today (on AM/PM plans, each column swipes separately). Long-press a row to edit just that day. Pull the page down to bring the next plan forward. Month shows each day's state in the calendar; tap a day to see the rest of its week below.
+**Week / Month / All**: swipe any row right for done, left for not today (on AM/PM plans, each column swipes separately). Long-press a row to edit just that day. Pull the page down to bring the next plan forward. Month shows each day's state in the calendar; tap a day to see the rest of its week below.
 
 **Editing** (pencil button): opens the plan at the front of the deck as a sheet-style grid, one row per day and one column per slot. Each week can have its own plan. A week you haven't written repeats the most recent one before it, so a training block carries forward until you change it, and writing a new week never rewrites history. Use **Copy last week**, **Repeat previous**, **Clear week**, and **Same every day** (in the keyboard bar) for habits. Back in that sheet you can add, reorder, or delete plans and turn sounds or haptics off.
 

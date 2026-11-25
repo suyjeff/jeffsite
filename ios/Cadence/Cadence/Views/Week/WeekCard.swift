@@ -8,6 +8,7 @@ struct WeekCard: View {
     var onEditValue: (UUID, Day) -> Void
 
     @Environment(Store.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var direction = 1
 
     var body: some View {
@@ -28,44 +29,53 @@ struct WeekCard: View {
                 onReset: { jump(to: store.today.weekStart) }
             )
 
-            VStack(spacing: 0) {
-                if plan.isMetric {
-                    let points = plan.points(in: days)
-                    if !points.isEmpty {
-                        MetricChart(
-                            points: points,
-                            domain: MetricChart.domain(from: days[0], to: days[6]),
-                            showsAxis: true,
-                            highlight: store.today
-                        )
-                        .frame(height: 110)
-                        .padding(.horizontal, Metrics.cardPadding)
-                        .padding(.vertical, 16)
-                        Hairline()
-                    }
-                }
-                ForEach(Array(days.enumerated()), id: \.element) { index, day in
-                    Group {
-                        if plan.isMetric {
-                            MetricRow(plan: plan, day: day, isToday: day == store.today, onEdit: onEditValue)
-                        } else {
-                            DayRow(plan: plan, day: day, isToday: day == store.today, onEditDay: onEditDay)
-                        }
-                    }
-                    if index < days.count - 1 {
-                        Hairline()
-                    }
-                }
+            // A ZStack, not the card's VStack: during the transition the outgoing and
+            // incoming weeks overlap instead of stacking (which doubled the card's height).
+            ZStack(alignment: .top) {
+                weekBody(days)
+                    .id(weekStart)
+                    .transition(Motion.slide(direction, reduceMotion: reduceMotion))
             }
-            .id(weekStart)
-            .transition(.push(from: direction > 0 ? .trailing : .leading))
         }
         .cardSurface()
     }
 
+    private func weekBody(_ days: [Day]) -> some View {
+        VStack(spacing: 0) {
+            if plan.isMetric {
+                let points = plan.points(in: days)
+                if !points.isEmpty {
+                    MetricChart(
+                        points: points,
+                        domain: MetricChart.domain(from: days[0], to: days[6]),
+                        showsAxis: true,
+                        highlight: store.today
+                    )
+                    .frame(height: 110)
+                    .padding(.horizontal, Metrics.cardPadding)
+                    .padding(.vertical, 16)
+                    Hairline()
+                }
+            }
+            ForEach(Array(days.enumerated()), id: \.element) { index, day in
+                Group {
+                    if plan.isMetric {
+                        MetricRow(plan: plan, day: day, isToday: day == store.today, onEdit: onEditValue)
+                    } else {
+                        DayRow(plan: plan, day: day, isToday: day == store.today, onEditDay: onEditDay)
+                    }
+                }
+                if index < days.count - 1 {
+                    Hairline()
+                }
+            }
+        }
+        .background(Color.surface)
+    }
+
     private func step(by delta: Int) {
         direction = delta
-        withAnimation(Motion.standard) {
+        withAnimation(Motion.page) {
             weekStart = weekStart.adding(7 * delta)
         }
     }
@@ -73,7 +83,7 @@ struct WeekCard: View {
     private func jump(to target: Day) {
         direction = target > weekStart ? 1 : -1
         Feedback.play(.cycle)
-        withAnimation(Motion.standard) {
+        withAnimation(Motion.page) {
             weekStart = target
         }
     }

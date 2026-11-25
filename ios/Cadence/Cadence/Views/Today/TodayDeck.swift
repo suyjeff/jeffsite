@@ -68,8 +68,11 @@ struct TodayDeck: View {
         let visibleDepth = min(effective, 2)
         let isReentering = reentering == plan.id
 
+        // Equatable on the store revision: while the front card is dragged, the cards behind
+        // only move; their content isn't rebuilt on every frame.
         TodayCard(
             plan: plan,
+            revision: store.revision,
             day: store.today,
             isFront: isFront,
             swipe: isFront ? swipeProgress : 0,
@@ -189,7 +192,7 @@ struct TodayDeck: View {
         let target = direction * (width + 140)
         let animation: Animation = reduceMotion
             ? .easeOut(duration: 0.2)
-            : Motion.release(velocity: velocity, distance: target - drag.width, duration: 0.48)
+            : Motion.release(velocity: velocity, distance: target - drag.width, duration: 0.4)
         withAnimation(animation, completionCriteria: .logicallyComplete) {
             drag = CGSize(width: target, height: drag.height + 36)
             promote = 1
@@ -212,7 +215,7 @@ struct TodayDeck: View {
         }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(24))
-            withAnimation(.easeOut(duration: 0.3)) { reentering = nil }
+            withAnimation(.easeOut(duration: 0.22)) { reentering = nil }
             flying = false
         }
     }
@@ -224,7 +227,7 @@ struct TodayDeck: View {
             : Motion.release(
                 velocity: horizontal ? velocity.width : velocity.height,
                 distance: horizontal ? -drag.width : -drag.height,
-                duration: 0.36,
+                duration: 0.32,
                 bounce: bounce
             )
         withAnimation(animation) {
@@ -252,13 +255,16 @@ struct TodayDeck: View {
 /// observation.
 struct TodayCard: View, Equatable {
     let plan: Plan
+    /// The store's revision when `plan` was read; equal revisions mean an identical plan.
+    let revision: Int
     let day: Day
     var isFront: Bool
     var swipe: CGFloat
     var onEditDay: (UUID, Day) -> Void
 
     static func == (lhs: TodayCard, rhs: TodayCard) -> Bool {
-        lhs.plan == rhs.plan && lhs.day == rhs.day && lhs.isFront == rhs.isFront && lhs.swipe == rhs.swipe
+        lhs.plan.id == rhs.plan.id && lhs.revision == rhs.revision && lhs.day == rhs.day
+            && lhs.isFront == rhs.isFront && lhs.swipe == rhs.swipe
     }
 
     var body: some View {

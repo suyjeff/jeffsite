@@ -76,13 +76,7 @@ struct PageDeck<Card: View>: View {
     }
 
     private var deckTransition: AnyTransition {
-        if reduceMotion { return .opacity }
-        return .asymmetric(
-            insertion: .scale(scale: 1 - Metrics.deckScaleStep, anchor: .top)
-                .combined(with: .offset(y: -Metrics.deckPeek))
-                .combined(with: .opacity),
-            removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
-        )
+        Motion.deckForward(reduceMotion: reduceMotion)
     }
 
     private func cycle(plans: [Plan]) {
@@ -105,7 +99,7 @@ struct PeriodBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            stepButton("chevron.left", label: "Previous", delta: -1)
+            stepButton("chevron.backward", label: "Previous", delta: -1)
             Spacer(minLength: 0)
             Text(title)
                 .font(.cadenceLabel)
@@ -128,7 +122,7 @@ struct PeriodBar: View {
                 .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
             Spacer(minLength: 0)
-            stepButton("chevron.right", label: "Next", delta: 1)
+            stepButton("chevron.forward", label: "Next", delta: 1)
         }
         .padding(.horizontal, 8)
         .frame(height: 44)

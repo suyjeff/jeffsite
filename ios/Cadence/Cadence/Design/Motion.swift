@@ -1,18 +1,50 @@
 import SwiftUI
 
 /// Motion vocabulary for the app. Springs everywhere something can be touched,
-/// critically damped unless a gesture threw it (then a little bounce is earned).
+/// with no overshoot unless a gesture threw it (then a little bounce is earned).
+///
+/// Durations are perceptual: `spring(duration:)` sets how long the motion reads, so a
+/// 0.28s spring is visually done in 0.28s instead of creeping through a long tail the way
+/// a critically damped `response:` spring does.
 enum Motion {
     /// Default UI change: no overshoot.
-    static let standard = Animation.spring(response: 0.38, dampingFraction: 1)
-    /// Snappy state change for small elements (pills, icons).
-    static let snappy = Animation.spring(response: 0.28, dampingFraction: 1)
+    static let standard = Animation.spring(duration: 0.3, bounce: 0)
+    /// Small elements (pills, icons, selection capsules).
+    static let snappy = Animation.spring(duration: 0.22, bounce: 0)
     /// Deck reshuffles: one card moving forward, another tucking behind.
-    static let deck = Animation.spring(response: 0.42, dampingFraction: 0.88)
+    static let deck = Animation.spring(duration: 0.34, bounce: 0.08)
+    /// Moving between views and periods (Today ↔ Week, this week ↔ next).
+    static let page = Animation.spring(duration: 0.26, bounce: 0)
     /// Text and color settling after a check.
-    static let settle = Animation.easeOut(duration: 0.22)
+    static let settle = Animation.easeOut(duration: 0.2)
     /// Contextual icon swap: spring 0.3s, no bounce.
     static let icon = Animation.spring(duration: 0.3, bounce: 0)
+
+    /// What arrives slides 20pt in from the side it's coming from and fades up; what leaves
+    /// fades out in place, faster. Only transform and opacity animate (no blur on large
+    /// views), so it stays on the compositor.
+    static func slide(_ direction: Int, reduceMotion: Bool = false) -> AnyTransition {
+        let exit = AnyTransition.opacity.animation(.easeOut(duration: 0.12))
+        guard !reduceMotion else { return .asymmetric(insertion: .opacity, removal: exit) }
+        let edge: CGFloat = direction >= 0 ? 20 : -20
+        return .asymmetric(
+            insertion: .offset(x: edge).combined(with: .opacity),
+            removal: exit
+        )
+    }
+
+    /// A card being drawn forward from the deck: it starts at the peeking position behind
+    /// (narrower and 10pt higher) and comes to the front. The old card drops 12pt and fades.
+    static func deckForward(reduceMotion: Bool = false) -> AnyTransition {
+        let exit = AnyTransition.opacity.combined(with: .offset(y: 12)).animation(.easeOut(duration: 0.16))
+        guard !reduceMotion else { return .asymmetric(insertion: .opacity, removal: .opacity) }
+        return .asymmetric(
+            insertion: .scale(scale: 1 - Metrics.deckScaleStep, anchor: .top)
+                .combined(with: .offset(y: -Metrics.deckPeek))
+                .combined(with: .opacity),
+            removal: exit
+        )
+    }
 
     /// Release of a drag: hands the finger's velocity to the spring so there is no seam.
     /// `velocity` is in points per second along the axis; `distance` is what's left to travel.

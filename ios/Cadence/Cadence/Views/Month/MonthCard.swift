@@ -10,6 +10,8 @@ struct MonthCard: View {
     var onEditValue: (UUID, Day) -> Void
 
     @Environment(Store.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.layoutDirection) private var layoutDirection
     @State private var direction = 1
 
     var body: some View {
@@ -44,15 +46,21 @@ struct MonthCard: View {
             .padding(.bottom, 8)
             .accessibilityHidden(true)
 
-            CalendarGrid(plan: plan, month: month, selected: $selected, today: store.today)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 16)
-                .id(month)
-                .transition(.push(from: direction > 0 ? .trailing : .leading))
+            // Overlap the outgoing and incoming months instead of stacking them.
+            ZStack(alignment: .top) {
+                CalendarGrid(plan: plan, month: month, selected: $selected, today: store.today)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 16)
+                    .background(Color.surface)
+                    .id(month)
+                    .transition(Motion.slide(direction, reduceMotion: reduceMotion))
+            }
                 .gesture(HorizontalPan { phase in
                     if case .ended(let translation, let velocity) = phase,
                        abs(translation) > 60 || abs(velocity) > 600 {
-                        step(by: translation < 0 ? 1 : -1)
+                        // Swiping toward the leading edge goes forward in time (mirrors in RTL).
+                        let forward = (translation < 0) == (layoutDirection == .leftToRight)
+                        step(by: forward ? 1 : -1)
                     }
                 })
 
@@ -87,14 +95,14 @@ struct MonthCard: View {
                     }
                 }
             }
-            .animation(Motion.standard, value: selected)
+            .animation(Motion.page, value: selected)
         }
         .cardSurface()
     }
 
     private func step(by delta: Int) {
         direction = delta
-        withAnimation(Motion.standard) {
+        withAnimation(Motion.page) {
             month = month.addingMonths(delta)
             selected = month == store.today.monthStart ? store.today : month
         }
@@ -103,7 +111,7 @@ struct MonthCard: View {
     private func jumpToToday() {
         direction = store.today.monthStart > month ? 1 : -1
         Feedback.play(.cycle)
-        withAnimation(Motion.standard) {
+        withAnimation(Motion.page) {
             month = store.today.monthStart
             selected = store.today
         }

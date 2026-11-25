@@ -60,9 +60,12 @@ struct RoutineEditor: View {
                     )
                     .background(Color.canvas)
 
-                    grid(resolved.plan)
-                        .id(weekStart)
-                        .transition(.push(from: direction > 0 ? .trailing : .leading))
+                    ZStack(alignment: .top) {
+                        grid(resolved.plan)
+                            .background(Color.surface)
+                            .id(weekStart)
+                            .transition(Motion.slide(direction))
+                    }
                 }
                 .cardSurface()
 
@@ -318,13 +321,13 @@ struct RoutineEditor: View {
     private func step(_ delta: Int) {
         focus = nil
         direction = delta
-        withAnimation(Motion.standard) { weekStart = weekStart.adding(7 * delta) }
+        withAnimation(Motion.page) { weekStart = weekStart.adding(7 * delta) }
     }
 
     private func jump(to target: Day) {
         focus = nil
         direction = target > weekStart ? 1 : -1
-        withAnimation(Motion.standard) { weekStart = target }
+        withAnimation(Motion.page) { weekStart = target }
     }
 
     private func move(_ delta: Int) {

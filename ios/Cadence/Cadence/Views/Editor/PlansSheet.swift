@@ -41,7 +41,7 @@ struct PlansSheet: View {
                 } header: {
                     SheetSectionHeader(text: "Plans")
                 } footer: {
-                    Text("Pull a card down, or tap the dots at the top, to move between plans.")
+                    Text("Tap a plan's name at the top, or pull its card down, to move between plans.")
                         .font(.cadenceSubhead)
                         .foregroundStyle(Color.inkMuted)
                 }
