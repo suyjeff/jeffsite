@@ -219,8 +219,11 @@ final class Store {
     func setColumns(_ id: UUID, _ columns: [String]) {
         update(id) { plan in
             plan.columns = columns.isEmpty ? [""] : columns
-            for key in plan.weeks.keys {
-                plan.weeks[key]?.resize(columns: plan.columnCount)
+            // Read the count before mutating: reading `plan` while writing `plan.weeks`
+            // is an overlapping access.
+            let count = plan.columnCount
+            for key in Array(plan.weeks.keys) {
+                plan.weeks[key]?.resize(columns: count)
             }
         }
     }
