@@ -12,20 +12,22 @@ The project uses a synchronized folder, so any file added under `Cadence/` is pi
 
 ## Using it
 
-**Plans** are named across the top, each with a dot for today (ring: to do, half: partly done, solid: done). Tap one to bring its card forward. The card peeking behind the deck shows the next plan's name; pull down and it reads "Release for …".
+**Views**: tap the title ("Today ⌄") to switch between Today, Week, Month and Scrolling, as in the design.
 
-**Views** live in the glass bar at the bottom: Today, Week, Month, All. Tap one, or slide along the bar and let go on the one you want. The **+** beside it creates a plan.
+**Moving between plans** happens on the deck: pull a card down to bring the next plan forward, push it up to go back, or tap the card peeking behind it. The ⋯ menu also lists every plan.
 
 **Today** is a deck, one card per plan.
 - Swipe a card right to mark the day done, left for "not today". The check button fills and draws its check as you drag; past the commit point it pops with a detent, and on release the card is thrown and tucks in at the back.
 - The check button does the same as a right swipe ("da-ding"). On AM/PM plans it checks off the next half; each half can also be tapped.
 - Number plans (Weight) show a ruler. Scrub it, then swipe right or tap the check to log.
 
-**Holding things.** Hold the top of any card (or tap its ⋯) to lift the plan: the screen dims and an options pill appears with Edit, done today, Delete (confirmed in a small popover) and more under ⋯. Hold a day, in Today or in any row, to lift just that day: Done, Not today, Edit this day.
+**Holding things.** Hold a card (on Today, anywhere on it; elsewhere, its top strip) and the whole card lifts while everything around it blurs. The options pill rises from the bottom of the screen: Edit, done or not today, Delete (confirmed in a small popover), and more under ⋯. Hold a row in Week, Month or Scrolling to lift just that day.
 
-**Week / Month / All**: swipe a row right for done, left for not today (on AM/PM plans, each column swipes separately). Pull the page down for the next plan. Month shows each day's state in the calendar; tap a day for the rest of its week.
+**Create**: the plum + floating bottom right starts a new plan.
 
-**⋯ menu** (top right): edit this plan, all plans, select plans (bulk mark done or delete), jump to today, and sound and haptic switches.
+**Week / Month / Scrolling**: swipe a row right for done, left for not today (on AM/PM plans, each column swipes separately). Pull the page down for the next plan. Month shows each day's state in the calendar; tap a day for the rest of its week.
+
+**⋯ menu** (top right): edit this plan, all plans, select plans (bulk mark done or delete), show a plan, jump to today, and sound and haptic switches.
 
 **Editing**: each plan is a sheet-style grid, one row per day and one column per slot. A week you haven't written repeats the most recent one before it, so a training block carries forward until you change it, and writing a new week never rewrites history. Use **Copy last week**, **Repeat previous**, **Clear week**, and **Same every day** (in the keyboard bar) for habits.
 

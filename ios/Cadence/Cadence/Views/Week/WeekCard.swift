@@ -16,10 +16,12 @@ struct WeekCard: View {
         let isCurrent = weekStart == store.today.weekStart
 
         VStack(spacing: 0) {
-            CardHeaderStrip(title: plan.name, planID: plan.id) {
+            CardHeaderStrip(title: plan.name) {
                 CountPill(done: progress.done, total: progress.planned)
                     .animation(Motion.snappy, value: progress.done)
             }
+            // Hold the top of the card to lift the whole card.
+            .liftsCardOnHold(inScrollView: true)
 
             PeriodBar(
                 title: isCurrent ? "THIS WEEK" : DayText.weekRange(weekStart),
@@ -37,6 +39,7 @@ struct WeekCard: View {
             }
         }
         .cardSurface()
+        .focusableCard(plan.id)
     }
 
     private func weekBody(_ days: [Day]) -> some View {
@@ -163,7 +166,12 @@ struct DayRow: View {
             if new > old { flash += 1 }
         }
         // Hold a row to lift it with its options (done, not today, edit this day).
-        .liftOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), inScrollView: true)
+        .liftsOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), inScrollView: true) {
+            [planID = plan.id, day, isToday, showsWeekday] in
+            LivePlan(id: planID) { plan in
+                DayRow(plan: plan, day: day, isToday: isToday, showsWeekday: showsWeekday)
+            }
+        }
         .id(day.key)
     }
 
@@ -259,6 +267,20 @@ struct StatusGlyph: View {
     }
 }
 
+/// Renders `content` with the plan as it is in the store right now (nothing once deleted),
+/// so a lifted copy of a row changes the moment it's acted on.
+struct LivePlan<Content: View>: View {
+    let id: UUID
+    @ViewBuilder var content: (Plan) -> Content
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        if let plan = store.plan(id) {
+            content(plan)
+        }
+    }
+}
+
 /// A soft plum wash across a row the moment something in it is completed.
 struct RowFlash: View {
     var trigger: Int
@@ -333,7 +355,12 @@ struct MetricRow: View {
             onEdit(plan.id, day)
         }
         // Hold to lift it with its options (log, not today, clear).
-        .liftOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), isEnabled: !isFuture, inScrollView: true)
+        .liftsOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), isEnabled: !isFuture, inScrollView: true) {
+            [planID = plan.id, day, isToday, showsWeekday] in
+            LivePlan(id: planID) { plan in
+                MetricRow(plan: plan, day: day, isToday: isToday, showsWeekday: showsWeekday, onEdit: { _, _ in })
+            }
+        }
         .accessibilityAddTraits(isFuture ? [] : .isButton)
         .id(day.key)
         .accessibilityLabel("\(DayText.long(day)), \(value.map { "\(plan.format($0)) \(plan.unit)" } ?? "not logged")")

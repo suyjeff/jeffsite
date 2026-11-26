@@ -21,6 +21,12 @@ final class Sounds {
     }
 
     private var pools: [Effect: [AVAudioPlayer]] = [:]
+    /// The ruler's tick fires dozens of times a second while scrubbing. It plays from a
+    /// buffer scheduled on an audio-engine node: cheap, never blocking the main thread the
+    /// way `AVAudioPlayer.play()` can, and at media volume like every other sound.
+    private let engine = AVAudioEngine()
+    private let tickNode = AVAudioPlayerNode()
+    private var tickBuffer: AVAudioPCMBuffer?
     private var cursors: [Effect: Int] = [:]
     private var lastTick: CFTimeInterval = 0
 
@@ -29,10 +35,19 @@ final class Sounds {
         try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
         try? session.setActive(true)
 
-        for effect in Effect.allCases {
+        if let url = Bundle.main.url(forResource: Effect.tick.rawValue, withExtension: "wav"),
+           let file = try? AVAudioFile(forReading: url),
+           let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)),
+           (try? file.read(into: buffer)) != nil {
+            tickBuffer = buffer
+            engine.attach(tickNode)
+            engine.connect(tickNode, to: engine.mainMixerNode, format: buffer.format)
+            startTickEngine()
+        }
+
+        for effect in Effect.allCases where effect != .tick {
             guard let url = Bundle.main.url(forResource: effect.rawValue, withExtension: "wav") else { continue }
-            // Ticks overlap during a fast fling, so they get more voices.
-            let voices = effect == .tick ? 5 : 2
+            let voices = 2
             pools[effect] = (0..<voices).compactMap { _ in
                 let player = try? AVAudioPlayer(contentsOf: url)
                 player?.enableRate = true
@@ -48,12 +63,17 @@ final class Sounds {
     ///   - volume: 0…1 on top of the file's own (already quiet) level.
     ///   - pitch: playback rate; 1 is the recorded pitch. Small variations keep repeats organic.
     func play(_ effect: Effect, volume: Float = 1, pitch: Float = 1) {
-        guard isEnabled, let pool = pools[effect], !pool.isEmpty else { return }
+        guard isEnabled else { return }
         if effect == .tick {
             let now = CACurrentMediaTime()
-            guard now - lastTick > 0.035 else { return }
+            guard now - lastTick > 0.035, let tickBuffer else { return }
             lastTick = now
+            if !engine.isRunning { startTickEngine() }
+            tickNode.volume = volume
+            tickNode.scheduleBuffer(tickBuffer, at: nil, options: .interrupts, completionHandler: nil)
+            return
         }
+        guard let pool = pools[effect], !pool.isEmpty else { return }
         let index = (cursors[effect] ?? 0) % pool.count
         cursors[effect] = index + 1
         let player = pool[index]
@@ -63,5 +83,15 @@ final class Sounds {
         player.volume = volume
         player.rate = pitch
         player.play()
+    }
+
+    /// (Re)starts the tick engine; the system stops it on interruptions and route changes.
+    private func startTickEngine() {
+        do {
+            try engine.start()
+            tickNode.play()
+        } catch {
+            // No ticks this time; the next tick tries again.
+        }
     }
 }

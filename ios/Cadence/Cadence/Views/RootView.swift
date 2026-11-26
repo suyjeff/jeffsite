@@ -18,11 +18,15 @@ struct RootView: View {
     /// Set when a new plan is created, so its editor opens once the template sheet is gone.
     @State private var createdPlan: UUID?
     @State private var focus: FocusItem?
+    /// Closing has begun: a card lifted in place starts settling home right away.
+    @State private var focusReleased = false
+    /// Where the views sit below the header, in window coordinates (for the focus cut).
+    @State private var contentArea: CGRect = .infinite
     @Namespace private var createTransition
     @State private var dayEdit: DayTarget?
     @State private var valueEdit: DayTarget?
     @State private var celebrating = false
-    /// +1 when moving right along Today → Week → Month → All, −1 when moving left.
+    /// +1 when moving down the view menu (Today → Week → Month → Scrolling), −1 when moving up.
     @State private var modeDirection = 1
 
     // The body is assembled in stages. As one long modifier chain it outgrew what the Swift
@@ -35,8 +39,9 @@ struct RootView: View {
     private var screen: some View {
         VStack(spacing: 0) {
             HeaderBar(
+                mode: mode,
+                onSelectMode: selectMode,
                 plans: store.plans,
-                today: store.today,
                 frontID: frontID,
                 onSelectPlan: selectPlan,
                 onOpenPlans: { plansRoute = $0 },
@@ -46,6 +51,7 @@ struct RootView: View {
             ZStack {
                 if store.plans.isEmpty {
                     EmptyDeck { creating = true }
+                        .matchedTransitionSource(id: "create", in: createTransition)
                         .padding(.horizontal, Metrics.gutter)
                         .padding(.vertical, 14)
                         .transition(modeTransition)
@@ -54,26 +60,34 @@ struct RootView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .global)
+            } action: { frame in
+                contentArea = frame
+            }
         }
         .background(Color.canvas.ignoresSafeArea())
-        .safeAreaBar(edge: .bottom) {
-            bottomBar
-        }
-        .environment(\.focusedKey, focus?.key)
+        .environment(\.focusedKey, liftedKey)
         .environment(\.requestFocus, FocusRequest { item in
-            withAnimation(nil) { focus = item }
+            focusReleased = false
+            focus = item
         })
     }
 
-    /// Views on the left, the one primary action (Create) floating on the right.
-    private var bottomBar: some View {
-        HStack(spacing: 12) {
-            ModeBar(mode: mode, onSelect: selectMode)
-            CreateButton { creating = true }
-                .matchedTransitionSource(id: "create", in: createTransition)
-        }
-        .padding(.horizontal, Metrics.gutter - 4)
-        .padding(.bottom, 4)
+    /// The key views see as lifted. A card lifted in place lets go as soon as closing starts,
+    /// so it settles while the blur clears; a row's copy hides the original until it's gone.
+    private var liftedKey: String? {
+        guard let focus else { return nil }
+        if focus.liftsInPlace && focusReleased { return nil }
+        return focus.key
+    }
+
+    /// Create floats bottom right, over the page.
+    private var createButton: some View {
+        CreateButton { creating = true }
+            .matchedTransitionSource(id: "create", in: createTransition)
+            .padding(.trailing, Metrics.gutter - 4)
+            .padding(.bottom, 6)
     }
 
     /// "Jump to today" only where it changes something: Week and Month.
@@ -90,16 +104,26 @@ struct RootView: View {
     /// The focus layer (held items and their options) and the "All done" toast.
     private func withOverlays(_ base: some View) -> some View {
         base
+            .overlay(alignment: .bottomTrailing) {
+                if !store.plans.isEmpty {
+                    createButton
+                }
+            }
             .overlay {
                 if let focus {
                     FocusLayer(
                         item: focus,
+                        contentArea: contentArea,
                         actions: FocusActions(
                             editPlan: { plansRoute = .edit($0) },
                             editDay: editDay,
                             editValue: editValue
                         ),
-                        onDismiss: { self.focus = nil }
+                        onRelease: { focusReleased = true },
+                        onDismiss: {
+                            self.focus = nil
+                            focusReleased = false
+                        }
                     )
                     .id(focus.key)
                 }
@@ -203,8 +227,8 @@ struct RootView: View {
 
     private func selectMode(_ newMode: ViewMode) {
         guard newMode != mode else { return }
-        // The mode bar already ticked on touch-down; no second haptic here.
         modeDirection = newMode.order > mode.order ? 1 : -1
+        Haptics.shared.tick()
         withAnimation(Motion.page) { mode = newMode }
     }
 
@@ -218,16 +242,10 @@ struct RootView: View {
     private var scrollingDeck: some View {
         ZStack(alignment: .top) {
             if store.plans.count > 1 {
-                let next = store.plans[((store.index(of: frontID) ?? 0) + 1) % store.plans.count]
-                RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous)
-                    .fill(Color.surface)
-                    .frame(height: 120)
-                    .overlay(alignment: .top) {
-                        PeekLabel(name: next.name)
-                    }
-                    .cardSurface()
-                    .scaleEffect(1 - Metrics.deckScaleStep, anchor: .top)
-                    .offset(y: -Metrics.deckPeek)
+                DeckPeek {
+                    let next = store.plans[((store.index(of: frontID) ?? 0) + 1) % store.plans.count]
+                    selectPlan(next.id)
+                }
             }
             if let plan = store.plan(frontID) ?? store.plans.first {
                 ScrollingCard(plan: plan, onEditValue: editValue)
@@ -239,7 +257,7 @@ struct RootView: View {
         }
         .padding(.horizontal, Metrics.gutter)
         .padding(.top, 14 + Metrics.deckPeek)
-        .padding(.bottom, 14)
+        .padding(.bottom, Metrics.createClearance)
     }
 
     /// After creating, bring the new plan to the front and open its sheet to write it.

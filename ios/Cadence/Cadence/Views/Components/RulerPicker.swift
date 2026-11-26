@@ -12,6 +12,8 @@ struct RulerPicker: View {
     var spacing: CGFloat = 9
     /// What the ruler sets, for VoiceOver ("Weight").
     var label = "Value"
+    /// Called with true when the ruler starts moving (finger or momentum), false once it rests.
+    var onScrubbing: (Bool) -> Void = { _ in }
 
     private enum Phase { case idle, dragging, coasting, settling }
 
@@ -60,6 +62,9 @@ struct RulerPicker: View {
         }
         .contentShape(.rect)
         .gesture(scrub)
+        .onChange(of: phase == .idle) { _, isIdle in
+            onScrubbing(!isIdle)
+        }
         .onAppear {
             guard !didSetUp else { return }
             didSetUp = true
@@ -140,19 +145,20 @@ struct RulerPicker: View {
 
         switch phase {
         case .coasting:
-            // UIScrollView's normal deceleration: 0.998 per millisecond.
-            velocity *= pow(0.998, dt * 1000)
+            // Between UIScrollView's normal (0.998) and fast (0.99) deceleration: a fling
+            // still travels, but the ruler comes to rest quickly enough to read.
+            velocity *= pow(0.995, dt * 1000)
             position += velocity * dt
             if position <= lowerIndex || position >= upperIndex {
                 position = position.clamped(lowerIndex...upperIndex)
                 velocity = 0
                 beginSettling()
-            } else if abs(velocity) < 6 {
+            } else if abs(velocity) < 10 {
                 beginSettling()
             }
         case .settling:
-            // Critically damped spring, response 0.28s.
-            let omega = 2 * Double.pi / 0.28
+            // Critically damped spring, response 0.2s: a quick, firm click into the step.
+            let omega = 2 * Double.pi / 0.2
             let acceleration = -omega * omega * (position - settleTarget) - 2 * omega * velocity
             velocity += acceleration * dt
             position += velocity * dt

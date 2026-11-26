@@ -73,7 +73,7 @@ struct PlansSheet: View {
                 } footer: {
                     Text(selecting
                          ? "Select plans to mark today done or delete them together. Drag to reorder."
-                         : "Tap a plan's name at the top of the screen to bring it forward. Hold the top of a card for its options.")
+                         : "Pull a card down, or tap the card behind it, to bring the next plan forward. Hold a card for its options.")
                         .font(.cadenceSubhead)
                         .foregroundStyle(Color.inkSecondary)
                 }

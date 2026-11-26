@@ -9,27 +9,16 @@ struct RoutineTodayCard: View {
     var swipe: CGFloat
 
     @Environment(Store.self) private var store
+    @Environment(\.focusedKey) private var focusedKey
     @State private var ripple = 0
-    /// Successful card swipes so far. The swipe hint retires after three.
-    @AppStorage("swipeLessons") private var swipeLessons = 0
 
     private var isMulti: Bool { plan.columnCount > 1 }
 
     var body: some View {
         let items = plan.items(on: day)
         let status = plan.status(on: day)
-        let week = plan.progress(in: day.weekDays)
 
         VStack(spacing: 0) {
-            // The top of the card is its handle: hold it (or tap ⋯) for the plan's options.
-            FocusableHeader(planID: plan.id) {
-                MonoLabel(text: plan.name.uppercased())
-                Spacer(minLength: 12)
-                if week.planned > 0 {
-                    CountPill(done: week.done, total: week.planned)
-                }
-            }
-
             ForEach(0..<plan.columnCount, id: \.self) { column in
                 section(column: column, text: items.indices.contains(column) ? items[column] : "", status: status)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -58,45 +47,49 @@ struct RoutineTodayCard: View {
 
     // MARK: Sections
 
+    /// As in the design: the plan's label above the first section's text, 24pt padding,
+    /// a 12pt gap. With AM / PM columns, each half carries its column's name in the corner,
+    /// with a ✓ beside it once done.
     @ViewBuilder
     private func section(column: Int, text: String, status: DayStatus) -> some View {
         let mark = plan.mark(on: day, column: column)
         let isPlanned = !text.isEmpty
         let finished = isPlanned && (mark == .done || status == .done || status == .skipped)
 
-        Text(isPlanned ? text : "Nothing planned")
-            .font(.cadenceBody)
-            .tracking(-0.2)
-            .foregroundStyle(finished || !isPlanned ? Color.inkSecondary : Color.ink)
-            .minimumScaleFactor(0.8)
-            .padding(.horizontal, Metrics.cardPadding)
-            .padding(.top, column == 0 ? 4 : Metrics.cardPadding)
-            .padding(.bottom, Metrics.cardPadding)
-            .padding(.trailing, isMulti ? 36 : 0)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .overlay(alignment: .topTrailing) {
-                if isMulti {
-                    ColumnTag(title: plan.columns[column], mark: mark)
-                        .padding(.top, column == 0 ? 4 : Metrics.cardPadding)
-                        .padding(.trailing, Metrics.cardPadding)
-                }
+        VStack(alignment: .leading, spacing: Metrics.labelGap) {
+            if column == 0 {
+                MonoLabel(text: plan.name.uppercased())
             }
-            .contentShape(.rect)
-            .onTapGesture {
-                guard isMulti, isPlanned else { return }
-                let change = withAnimation(Motion.settle) {
-                    store.toggleColumn(plan.id, on: day, column: column)
-                }
-                Feedback.play(for: change, step: column)
-                if change == .completed { ripple += 1 }
+            Text(isPlanned ? text : "Nothing planned")
+                .font(.cadenceBody)
+                .tracking(-0.2)
+                .foregroundStyle(finished || !isPlanned ? Color.inkSecondary : Color.ink)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(Metrics.cardPadding)
+        .padding(.trailing, isMulti ? 20 : 0)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .overlay(alignment: .topTrailing) {
+            if isMulti {
+                ColumnCheck(title: plan.columns[column], mark: mark)
+                    .padding(.top, Metrics.cardPadding + 2)
+                    .padding(.trailing, Metrics.cardPadding)
             }
-            // Hold the day itself for done / not today / edit, lifted in place.
-            .liftOnHold(
-                .day(plan.id, day, column: isMulti ? column : nil),
-                key: FocusItem.dayKey(plan.id, day, isMulti ? column : nil)
-            )
-            .accessibilityElement(children: .combine)
-            .accessibilityHint(isMulti && isPlanned ? "Double tap to check off \(plan.columns[column])" : "")
+        }
+        .contentShape(.rect)
+        // Simultaneous, so a still finger on a half can still grow into the card's hold.
+        .simultaneousGesture(TapGesture().onEnded {
+            // The release that ends a hold isn't a tap.
+            guard isMulti, isPlanned, focusedKey == nil else { return }
+            let change = withAnimation(Motion.settle) {
+                store.toggleColumn(plan.id, on: day, column: column)
+            }
+            Feedback.play(for: change, step: column)
+            if change == .completed { ripple += 1 }
+        })
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(mark == .done ? "Done" : mark == .skipped ? "Not today" : "")
+        .accessibilityHint(isMulti && isPlanned ? "Double tap to check off \(plan.columns[column].isEmpty ? "this half" : plan.columns[column])" : "")
     }
 
     // MARK: Footer
@@ -130,8 +123,7 @@ struct RoutineTodayCard: View {
             return "\(done) OF \(total)"
         case .pending:
             let streak = plan.streak(asOf: day)
-            if streak >= 2 { return "\(streak) DAY STREAK" }
-            return swipeLessons < 3 ? "SWIPE → WHEN DONE" : ""
+            return streak >= 2 ? "\(streak) DAY STREAK" : ""
         case .empty:
             return ""
         }
@@ -157,8 +149,8 @@ struct RoutineTodayCard: View {
     }
 }
 
-/// "AM ✓" in the corner of a multi-column section.
-private struct ColumnTag: View {
+/// "AM ✓" in the corner of a half: the column's name, and its mark once it has one.
+private struct ColumnCheck: View {
     let title: String
     let mark: Mark?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -168,21 +160,26 @@ private struct ColumnTag: View {
             if !title.isEmpty {
                 MonoLabel(text: title.uppercased())
             }
-            ZStack {
-                Image(systemName: "checkmark")
-                    .opacity(mark == .done ? 1 : 0)
-                    .scaleEffect(mark == .done ? 1 : 0.25)
-                    .blur(radius: mark == .done ? 0 : 4)
-                Image(systemName: "xmark")
-                    .opacity(mark == .skipped ? 1 : 0)
-                    .scaleEffect(mark == .skipped ? 1 : 0.25)
-                    .blur(radius: mark == .skipped ? 0 : 4)
-            }
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Color.inkMuted)
-            .frame(width: 14)
-            .animation(mark == .done ? Motion.pop(reduceMotion: reduceMotion) : Motion.icon, value: mark)
+            glyph
         }
+    }
+
+    private var glyph: some View {
+        ZStack {
+            Image(systemName: "checkmark")
+                .opacity(mark == .done ? 1 : 0)
+                .scaleEffect(mark == .done ? 1 : 0.25)
+                .blur(radius: mark == .done ? 0 : 4)
+            Image(systemName: "xmark")
+                .opacity(mark == .skipped ? 1 : 0)
+                .scaleEffect(mark == .skipped ? 1 : 0.25)
+                .blur(radius: mark == .skipped ? 0 : 4)
+        }
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(Color.inkMuted)
+        .frame(width: 16, height: 16)
+        .animation(mark == .done ? Motion.pop(reduceMotion: reduceMotion) : Motion.icon, value: mark)
+        .accessibilityHidden(true)
     }
 }
 

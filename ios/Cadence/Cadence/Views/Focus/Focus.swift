@@ -2,8 +2,7 @@ import SwiftUI
 
 // MARK: - Model
 
-/// Something a long-press lifted into focus: a whole plan (from the top of its card) or one
-/// day of a plan (a row, or one column of a row).
+/// Something a long-press lifted into focus: a whole plan's card, or one day of a plan (a row).
 struct FocusItem: Equatable {
     enum Kind: Equatable {
         case plan(UUID)
@@ -13,13 +12,22 @@ struct FocusItem: Equatable {
     let kind: Kind
     /// Where the original sits on screen, in window coordinates.
     let frame: CGRect
-    /// Identifies the original so it can hide while its lifted copy is on screen.
+    /// Identifies the original so it can react while lifted.
     let key: String
+    /// A row is drawn again on top of the backdrop (it can't rise out of its card). Nil for a
+    /// whole card, which stays where it is, lifts itself, and shows through a cut in the backdrop.
+    var preview: AnyView?
+
+    var liftsInPlace: Bool { preview == nil }
 
     var planID: UUID {
         switch kind {
         case .plan(let id), .day(let id, _, _): id
         }
+    }
+
+    static func == (lhs: FocusItem, rhs: FocusItem) -> Bool {
+        lhs.key == rhs.key && lhs.kind == rhs.kind && lhs.frame == rhs.frame
     }
 
     static func planKey(_ id: UUID) -> String { "plan:\(id.uuidString)" }
@@ -34,31 +42,17 @@ struct FocusRequest {
     func callAsFunction(_ item: FocusItem) { handler(item) }
 }
 
-/// Lifts the enclosing `liftOnHold` view now, without the hold: for a visible ⋯ inside it.
-struct LiftNow {
-    var handler: () -> Void = {}
-    func callAsFunction() { handler() }
+/// What a card hands down to the part of it that can be held (its header strip, or all of it).
+struct CardLift {
+    var press: (Bool) -> Void = { _ in }
+    var lift: () -> Void = {}
 }
 
 extension EnvironmentValues {
-    /// The key of the item currently lifted, so the original can step aside.
+    /// The key of the item currently lifted.
     @Entry var focusedKey: String? = nil
     @Entry var requestFocus = FocusRequest()
-    @Entry var liftNow = LiftNow()
-}
-
-// MARK: - Holding to lift
-
-extension View {
-    /// Long-press lifts this view into the focus layer with an options pill.
-    ///
-    /// While the finger holds, the region takes a soft ink wash (touch-down feedback that
-    /// stays put, so nothing inside a card shifts on its own); a detent marks the lift.
-    /// Pass `inScrollView` for views inside a ScrollView: the hold is then recognized
-    /// alongside the scroll instead of competing with it.
-    func liftOnHold(_ kind: FocusItem.Kind, key: String, isEnabled: Bool = true, inScrollView: Bool = false) -> some View {
-        modifier(LiftOnHold(kind: kind, key: key, isEnabled: isEnabled, inScrollView: inScrollView))
-    }
+    @Entry var cardLift = CardLift()
 }
 
 /// Holds the latest on-screen frame without making the view re-render when it changes,
@@ -67,11 +61,125 @@ private final class FrameBox {
     var frame: CGRect = .zero
 }
 
-private struct LiftOnHold: ViewModifier {
+/// How long a hold takes to lift. Short enough to feel immediate, long enough not to fire
+/// while someone is just resting a thumb.
+private let holdDuration = 0.3
+
+// MARK: - Whole cards
+
+extension View {
+    /// Makes this card liftable as a whole. While held it eases down a touch (anticipation);
+    /// when the hold completes it pops up past full size with a deeper shadow, and stays
+    /// there, sharp, while everything around it blurs.
+    func focusableCard(_ planID: UUID) -> some View {
+        modifier(FocusableCard(planID: planID))
+    }
+
+    /// The part of a card that answers a long-press by lifting the whole card.
+    /// Pass `inScrollView` when the card scrolls, so the hold never fights the scroll.
+    func liftsCardOnHold(inScrollView: Bool = false) -> some View {
+        modifier(LiftsCardOnHold(inScrollView: inScrollView))
+    }
+}
+
+private struct FocusableCard: ViewModifier {
+    let planID: UUID
+
+    @Environment(\.focusedKey) private var focusedKey
+    @Environment(\.requestFocus) private var requestFocus
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var box = FrameBox()
+    @State private var pressing = false
+
+    func body(content: Content) -> some View {
+        let key = FocusItem.planKey(planID)
+        let focused = focusedKey == key
+        let scale: CGFloat = reduceMotion ? 1 : focused ? 1.025 : pressing ? 0.975 : 1
+
+        content
+            .environment(\.cardLift, CardLift(
+                press: { isPressing in pressing = isPressing },
+                lift: { lift(key: key) }
+            ))
+            .background {
+                // The lifted shadow lives on its own shape, so the card's contents aren't shadowed.
+                RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous)
+                    .fill(Color.surface)
+                    .shadow(color: Color.cardShadow.opacity(0.32), radius: 26, x: 0, y: 18)
+                    .opacity(focused ? 1 : 0)
+            }
+            .scaleEffect(scale)
+            // Pressing eases down over the rest of the hold, after a short beat so a tap or the
+            // start of a swipe never dips the card; lifting pops past full size; letting go settles.
+            .animation(
+                pressing && !focused
+                    ? .easeOut(duration: holdDuration - 0.12).delay(0.12)
+                    : .spring(duration: 0.26, bounce: focused ? 0.32 : 0),
+                value: scale
+            )
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .global)
+            } action: { [box] frame in
+                box.frame = frame
+            }
+            .accessibilityAction(named: "Options") { lift(key: key) }
+    }
+
+    private func lift(key: String) {
+        pressing = false
+        Haptics.shared.lift()
+        requestFocus(FocusItem(kind: .plan(planID), frame: box.frame, key: key))
+    }
+}
+
+private struct LiftsCardOnHold: ViewModifier {
+    var inScrollView: Bool
+
+    @Environment(\.cardLift) private var cardLift
+    @GestureState private var holding = false
+
+    func body(content: Content) -> some View {
+        if inScrollView {
+            content
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: holdDuration, maximumDistance: 10)
+                        .updating($holding) { value, state, _ in state = value }
+                        .onEnded { _ in cardLift.lift() }
+                )
+                .onChange(of: holding) { _, isHolding in cardLift.press(isHolding) }
+        } else {
+            content
+                .onLongPressGesture(minimumDuration: holdDuration, maximumDistance: 10) {
+                    cardLift.lift()
+                } onPressingChanged: { isPressing in
+                    cardLift.press(isPressing)
+                }
+        }
+    }
+}
+
+// MARK: - Rows
+
+extension View {
+    /// Long-press lifts a copy of this row above the blurred page, with its options below.
+    /// While held, the row takes a soft wash in place (it can't move inside its card).
+    func liftsOnHold<Preview: View>(
+        _ kind: FocusItem.Kind,
+        key: String,
+        isEnabled: Bool = true,
+        inScrollView: Bool = false,
+        @ViewBuilder preview: @escaping () -> Preview
+    ) -> some View {
+        modifier(LiftsRowOnHold(kind: kind, key: key, isEnabled: isEnabled, inScrollView: inScrollView, preview: { AnyView(preview()) }))
+    }
+}
+
+private struct LiftsRowOnHold: ViewModifier {
     let kind: FocusItem.Kind
     let key: String
     var isEnabled: Bool
     var inScrollView: Bool
+    var preview: () -> AnyView
 
     @Environment(\.focusedKey) private var focusedKey
     @Environment(\.requestFocus) private var requestFocus
@@ -81,22 +189,18 @@ private struct LiftOnHold: ViewModifier {
 
     func body(content: Content) -> some View {
         let lifted = content
-            .environment(\.liftNow, LiftNow {
-                Haptics.shared.detent(intensity: 0.6)
-                lift()
-            })
             .overlay {
-                // Fades in after a beat, so a scroll that merely starts here never flickers.
                 Color.ink
-                    .opacity(pressing || holding ? 0.05 : 0)
-                    .animation(pressing || holding ? .easeOut(duration: 0.25).delay(0.08) : .easeOut(duration: 0.15), value: pressing || holding)
+                    .opacity(pressing || holding ? 0.06 : 0)
+                    .animation(pressing || holding ? .easeOut(duration: holdDuration) : .easeOut(duration: 0.12), value: pressing || holding)
                     .allowsHitTesting(false)
             }
+            // The copy on top stands in for it while lifted.
             .opacity(focusedKey == key ? 0 : 1)
             .onGeometryChange(for: CGRect.self) { proxy in
                 proxy.frame(in: .global)
-            } action: { [box] newFrame in
-                box.frame = newFrame
+            } action: { [box] frame in
+                box.frame = frame
             }
             .accessibilityAction(named: "Options") {
                 if isEnabled { lift() }
@@ -104,20 +208,18 @@ private struct LiftOnHold: ViewModifier {
 
         if inScrollView {
             lifted.simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.4, maximumDistance: 10)
+                LongPressGesture(minimumDuration: holdDuration, maximumDistance: 10)
                     .updating($holding) { value, state, _ in state = value }
                     .onEnded { _ in
                         guard isEnabled else { return }
-                        Haptics.shared.detent(intensity: 0.75)
                         lift()
                     },
                 isEnabled: isEnabled
             )
         } else {
-            lifted.onLongPressGesture(minimumDuration: 0.4, maximumDistance: 10) {
+            lifted.onLongPressGesture(minimumDuration: holdDuration, maximumDistance: 10) {
                 guard isEnabled else { return }
                 pressing = false
-                Haptics.shared.detent(intensity: 0.75)
                 lift()
             } onPressingChanged: { isPressing in
                 pressing = isEnabled && isPressing
@@ -126,52 +228,8 @@ private struct LiftOnHold: ViewModifier {
     }
 
     private func lift() {
-        requestFocus(FocusItem(kind: kind, frame: box.frame, key: key))
-    }
-}
-
-// MARK: - Card headers
-
-/// The top of a card as a handle: content on the left, a quiet ⋯ on the right. Holding
-/// anywhere on it, or tapping ⋯, lifts the plan with its options pill. The ⋯ is the visible
-/// cue that the long-press exists.
-struct FocusableHeader<Content: View>: View {
-    let planID: UUID
-    var minHeight: CGFloat = 60
-    var background: Color = .clear
-    var inScrollView = false
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        HStack(spacing: 8) {
-            content
-            FocusMoreButton()
-        }
-        .padding(.leading, Metrics.cardPadding)
-        // The ⋯ hit area is 44pt wide; this lands its glyph on the 24pt content edge.
-        .padding(.trailing, Metrics.cardPadding - 16)
-        .frame(minHeight: minHeight)
-        .background(background)
-        .contentShape(.rect)
-        .liftOnHold(.plan(planID), key: FocusItem.planKey(planID), inScrollView: inScrollView)
-    }
-}
-
-struct FocusMoreButton: View {
-    @Environment(\.liftNow) private var liftNow
-
-    var body: some View {
-        Button {
-            liftNow()
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.inkMuted)
-                .frame(width: 44, height: 44)
-                .contentShape(.rect)
-        }
-        .buttonStyle(PressableStyle())
-        .accessibilityLabel("Plan options")
+        Haptics.shared.lift()
+        requestFocus(FocusItem(kind: kind, frame: box.frame, key: key, preview: preview()))
     }
 }
 
@@ -184,189 +242,145 @@ struct FocusActions {
     var editValue: (UUID, Day) -> Void
 }
 
-/// Dims the screen, lifts a copy of the held item where it was, and floats the options
-/// pill beneath it (or above, if there's no room).
+/// The focus view. Everything except the held item blurs and dims (a cut in the backdrop for a
+/// whole card, which lifts in place; a lifted copy for a row), and the options pill rises from
+/// the bottom of the screen, always in the same place.
 ///
-/// Choreography, one motion: the dim fades in while the item lifts (scale 1 → 1.03, shadow
-/// deepens); 50 ms later the pill scales in from the item's edge. Dismissal reverses it,
-/// shorter: pill first, then the item settles home and the dim clears.
+/// Choreography: the backdrop fades in over 0.18s as the item pops (it starts on the same frame
+/// as the haptic); the pill follows 40ms later, rising 24pt with a little bounce. Closing runs
+/// faster: pill out in 0.12s, backdrop in 0.16s, the item settles home at once.
 struct FocusLayer: View {
     let item: FocusItem
+    /// The part of the screen cards scroll within (below the header), in window coordinates.
+    /// A card's cut in the backdrop never extends past it.
+    var contentArea: CGRect = .infinite
     let actions: FocusActions
+    /// The held item can start settling home (called as closing begins).
+    var onRelease: () -> Void
+    /// The layer can be removed (called once closing has finished).
     var onDismiss: () -> Void
 
     @Environment(Store.self) private var store
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var lifted = false
+    @State private var shown = false
     @State private var pillShown = false
-    /// The plan as it was when lifted, so the copy and pill can fade out with the dim
-    /// even after the plan is deleted from the pill.
+    @State private var closing = false
+    /// The plan as it was when lifted, so the pill can fade out even after a delete.
     @State private var snapshot: Plan?
-    @State private var pillSize: CGSize = CGSize(width: 260, height: 56)
 
-    private let gap: CGFloat = 12
-    private let previewMaxHeight: CGFloat = 280
+    private let pillHeight: CGFloat = 56
 
     var body: some View {
         GeometryReader { proxy in
-            let safe = proxy.safeAreaInsets
             let size = proxy.size
-            let layout = placement(in: size, safe: safe)
+            let pillY = size.height - proxy.safeAreaInsets.bottom - 14 - pillHeight / 2
+            let pillTop = pillY - pillHeight / 2
 
             ZStack(alignment: .topLeading) {
-                Color.black
-                    .opacity(lifted ? (colorScheme == .dark ? 0.45 : 0.2) : 0)
-                    .animation(.easeOut(duration: lifted ? 0.2 : 0.16), value: lifted)
+                // Tap anywhere outside the pill to close.
+                Color.clear
                     .contentShape(.rect)
-                    .onTapGesture { dismiss() }
+                    .onTapGesture { close() }
                     .accessibilityLabel("Close options")
                     .accessibilityAddTraits(.isButton)
 
-                FocusPreview(item: item, fallback: snapshot)
-                    .frame(width: item.frame.width, height: layout.previewHeight, alignment: .top)
-                    .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous))
-                    .background {
-                        RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous)
-                            .fill(Color.surface)
-                            .shadow(color: Color.cardShadow.opacity(lifted ? 0.28 : 0.12), radius: lifted ? 18 : 7, y: lifted ? 14 : 7)
-                    }
-                    .scaleEffect(lifted && !reduceMotion ? 1.03 : 1)
-                    .offset(x: item.frame.minX, y: lifted ? layout.previewY : item.frame.minY)
+                backdrop(size: size)
+                    .opacity(shown ? 1 : 0)
                     .allowsHitTesting(false)
 
-                FocusPill(item: item, fallback: snapshot, actions: actions, onDone: dismiss)
-                    .onGeometryChange(for: CGSize.self) { $0.size } action: { pillSize = $0 }
-                    .scaleEffect(pillShown ? 1 : (reduceMotion ? 1 : 0.8), anchor: layout.pillBelow ? .top : .bottom)
+                if let preview = item.preview {
+                    let offset = previewOffset(pillTop: pillTop, top: proxy.safeAreaInsets.top + 8)
+                    preview
+                        .environment(\.focusedKey, nil)
+                        .frame(width: item.frame.width, height: item.frame.height)
+                        .background(Color.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .background {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color.surface)
+                                .shadow(color: Color.cardShadow.opacity(shown ? 0.3 : 0), radius: 22, x: 0, y: 14)
+                        }
+                        .scaleEffect(shown && !reduceMotion ? 1.04 : 1)
+                        .offset(x: item.frame.minX, y: item.frame.minY + (shown ? offset : 0))
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+
+                FocusPill(item: item, fallback: snapshot, actions: actions, onDone: close)
+                    .scaleEffect(pillShown || reduceMotion ? 1 : 0.92)
                     .opacity(pillShown ? 1 : 0)
-                    .offset(x: layout.pillX, y: layout.pillY + (pillShown || reduceMotion ? 0 : (layout.pillBelow ? -8 : 8)))
+                    .position(x: size.width / 2, y: pillY + (pillShown || reduceMotion ? 0 : 24))
             }
         }
         .ignoresSafeArea()
-        // VoiceOver stays inside the lifted item and its options until they close.
         .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape) { close() }
         .onAppear {
             snapshot = store.plan(item.planID)
-            withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.34, bounce: 0.22)) {
-                lifted = true
-            }
-            withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.32, bounce: 0.28).delay(0.05)) {
+            withAnimation(.easeOut(duration: 0.18)) { shown = true }
+            withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.3, bounce: 0.22).delay(0.04)) {
                 pillShown = true
             }
         }
     }
 
-    private struct Placement {
-        var previewY: CGFloat
-        var previewHeight: CGFloat
-        var pillX: CGFloat
-        var pillY: CGFloat
-        var pillBelow: Bool
-    }
-
-    /// Below the item if it fits; otherwise lift the item up until it does; for an item at
-    /// the very top with no room either way, the pill goes above.
-    private func placement(in size: CGSize, safe: EdgeInsets) -> Placement {
-        let height = min(item.frame.height, previewMaxHeight)
-        let top = safe.top + 8
-        let bottom = size.height - safe.bottom - 8
-        var y = item.frame.minY
-        let needed = height + gap + pillSize.height
-        if y + needed > bottom {
-            y = max(top, bottom - needed)
+    /// Blur and dim over the whole screen, with a card-shaped cut where a card lifts in place.
+    private func backdrop(size: CGSize) -> some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+            Color.black.opacity(colorScheme == .dark ? 0.34 : 0.1)
         }
-        let below = y + needed <= bottom
-        let pillY = below ? y + height + gap : max(top, y - gap - pillSize.height)
-        let centered = item.frame.midX - pillSize.width / 2
-        let pillX = min(max(centered, Metrics.gutter - 8), size.width - pillSize.width - (Metrics.gutter - 8))
-        return Placement(previewY: y, previewHeight: height, pillX: pillX, pillY: pillY, pillBelow: below)
+        .mask {
+            if item.liftsInPlace {
+                // Cut out the card at its lifted size (it doesn't grow under Reduce Motion),
+                // clipped to the content area so a card scrolled under the header doesn't
+                // leave the header sharp.
+                let grow: CGFloat = reduceMotion ? 1 : 1.025
+                let card = CGRect(
+                    x: item.frame.midX - item.frame.width * grow / 2 - 1,
+                    y: item.frame.midY - item.frame.height * grow / 2 - 1,
+                    width: item.frame.width * grow + 2,
+                    height: item.frame.height * grow + 2
+                )
+                let visible = card.intersection(contentArea.isInfinite ? card : contentArea)
+                Rectangle()
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Metrics.cardRadius * grow, style: .continuous)
+                            .frame(width: card.width, height: card.height)
+                            .position(x: card.midX, y: card.midY)
+                            .mask {
+                                Rectangle()
+                                    .frame(width: visible.width, height: visible.height)
+                                    .position(x: visible.midX, y: visible.midY)
+                            }
+                            .blendMode(.destinationOut)
+                    }
+                    .compositingGroup()
+            } else {
+                Rectangle()
+            }
+        }
     }
 
-    private func dismiss() {
-        withAnimation(.easeOut(duration: 0.12)) { pillShown = false }
-        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.26, bounce: 0)) { lifted = false }
+    /// Rows near the bottom move up just enough to clear the pill.
+    private func previewOffset(pillTop: CGFloat, top: CGFloat) -> CGFloat {
+        let bottom = item.frame.maxY + item.frame.height * 0.02
+        let overflow = bottom - (pillTop - 16)
+        guard overflow > 0 else { return 0 }
+        return -min(overflow, max(0, item.frame.minY - top))
+    }
+
+    private func close() {
+        guard !closing else { return }
+        closing = true
+        onRelease()
+        withAnimation(.easeIn(duration: 0.12)) { pillShown = false }
+        withAnimation(.easeOut(duration: 0.16)) { shown = false }
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(240))
+            try? await Task.sleep(for: .milliseconds(170))
             onDismiss()
         }
-    }
-}
-
-// MARK: - Lifted copies
-
-/// The lifted copy of the held item: the same type, set and spacing as where it came from.
-private struct FocusPreview: View {
-    let item: FocusItem
-    let fallback: Plan?
-    @Environment(Store.self) private var store
-
-    var body: some View {
-        if let plan = store.plan(item.planID) ?? fallback {
-            switch item.kind {
-            case .plan:
-                let progress = plan.progress(in: store.today.weekDays)
-                HStack {
-                    MonoLabel(text: plan.name.uppercased())
-                    Spacer(minLength: 12)
-                    if !plan.isMetric {
-                        CountPill(done: progress.done, total: progress.planned)
-                    }
-                }
-                .padding(.horizontal, Metrics.cardPadding)
-                .frame(maxHeight: .infinity)
-            case .day(_, let day, let column):
-                DayPreview(plan: plan, day: day, column: column, today: store.today)
-            }
-        }
-    }
-}
-
-private struct DayPreview: View {
-    let plan: Plan
-    let day: Day
-    let column: Int?
-    let today: Day
-
-    var body: some View {
-        let items = plan.items(on: day)
-        let status = plan.status(on: day)
-        VStack(alignment: .leading, spacing: Metrics.labelGap) {
-            HStack(spacing: 8) {
-                if day == today {
-                    Circle().fill(Color.plum).frame(width: 6, height: 6)
-                }
-                MonoLabel(text: label(items: items))
-                Spacer(minLength: 8)
-                StatusGlyph(status: status)
-            }
-            if plan.isMetric {
-                Text(plan.value(on: day).map { "\(plan.format($0)) \(plan.unit)" } ?? "Not logged")
-                    .font(.cadenceBody)
-                    .foregroundStyle(Color.ink)
-            } else {
-                Text(text(items: items).isEmpty ? "Nothing planned" : text(items: items))
-                    .font(.cadenceBody)
-                    .tracking(-0.2)
-                    .foregroundStyle(Color.ink)
-                    .lineLimit(6)
-            }
-        }
-        .padding(.horizontal, Metrics.cardPadding)
-        .padding(.vertical, Metrics.rowVertical)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private func label(items: [String]) -> String {
-        var parts = [day == today ? "TODAY" : DayText.weekdays[day.weekdayIndex]]
-        if let column, plan.columns.indices.contains(column), !plan.columns[column].isEmpty {
-            parts.append(plan.columns[column].uppercased())
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private func text(items: [String]) -> String {
-        if let column { return items.indices.contains(column) ? items[column] : "" }
-        return items.filter { !$0.isEmpty }.joined(separator: "\n")
     }
 }
 
@@ -428,16 +442,20 @@ private struct FocusPill: View {
             }
         }
 
+        if plan.isMetric || plan.isPlanned(today) {
+            PillButton(
+                systemImage: status == .skipped ? "arrow.uturn.backward" : "xmark",
+                label: status == .skipped ? "Undo not today" : "Not today"
+            ) {
+                let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: today) }
+                Feedback.play(for: change)
+                onDone()
+            }
+        }
+
         deleteButton(plan)
 
         Menu {
-            if plan.isMetric || plan.isPlanned(today) {
-                Button(status == .skipped ? "Undo not today" : "Not today", systemImage: status == .skipped ? "arrow.uturn.backward" : "xmark") {
-                    let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: today) }
-                    Feedback.play(for: change)
-                    onDone()
-                }
-            }
             Button(plan.isMetric ? "Edit today's value…" : "Edit today…", systemImage: "pencil") {
                 onDone()
                 plan.isMetric ? actions.editValue(plan.id, today) : actions.editDay(plan.id, today)

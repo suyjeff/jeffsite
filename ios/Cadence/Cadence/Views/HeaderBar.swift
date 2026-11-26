@@ -1,173 +1,84 @@
 import SwiftUI
 
 enum ViewMode: String, CaseIterable, Identifiable {
-    // Raw values are persisted; "scrolling" keeps its old key and is shown as "All".
     case today, week, month, scrolling
 
     var id: String { rawValue }
 
+    /// The names from the design's view menu.
     var title: String {
         switch self {
         case .today: "Today"
         case .week: "Week"
         case .month: "Month"
-        case .scrolling: "All"
+        case .scrolling: "Scrolling"
         }
     }
 
     var order: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 }
 
-/// Top of the screen: what you're looking at. Each plan is a tab named in full, so switching
-/// is one tap and you can always see where you are. The row scrolls sideways when the names
-/// don't fit, and the next name fades out past the edge to show there's more.
+/// The header from the design: "Today ⌄" opens the view menu on the left; the round glass
+/// button on the right holds everything else. Plans aren't listed here: you move between
+/// them on the deck itself.
 struct HeaderBar: View {
+    let mode: ViewMode
+    var onSelectMode: (ViewMode) -> Void
     let plans: [Plan]
-    let today: Day
     var frontID: UUID?
     var onSelectPlan: (UUID) -> Void
     var onOpenPlans: (PlansRoute) -> Void
-    /// Nil hides "Jump to today", for views already pinned to today.
     var onJumpToToday: (() -> Void)?
 
-    @Namespace private var selection
-
     var body: some View {
-        HStack(spacing: 8) {
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal) {
-                    HStack(spacing: 2) {
-                        ForEach(plans) { plan in
-                            tab(plan)
-                                .id(plan.id)
-                        }
-                    }
-                    // The first tab's text sits on the same 24pt edge as the cards below.
-                    .padding(.leading, Metrics.gutter - 12)
-                    .padding(.trailing, 16)
-                }
-                .scrollIndicators(.hidden)
-                .mask {
-                    HStack(spacing: 0) {
-                        Color.black
-                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: 24)
+        HStack(spacing: 0) {
+            Menu {
+                Picker("View", selection: Binding(get: { mode }, set: onSelectMode)) {
+                    ForEach(ViewMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
                     }
                 }
-                .onChange(of: frontID) { _, id in
-                    guard let id else { return }
-                    withAnimation(Motion.standard) { proxy.scrollTo(id, anchor: .center) }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(mode.title)
+                        .font(.cadenceTitle)
+                        .tracking(-0.2)
+                        .foregroundStyle(Color.ink)
+                        .contentTransition(.interpolate)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.inkSecondary)
                 }
-                .onAppear {
-                    if let frontID { proxy.scrollTo(frontID, anchor: .center) }
-                }
+                .padding(.vertical, 10)
+                .padding(.trailing, 20)
+                .contentShape(.rect)
             }
+            .accessibilityLabel("View: \(mode.title)")
+            .accessibilityHint("Choose Today, Week, Month or Scrolling")
+
+            Spacer(minLength: 8)
 
             MoreMenu(
+                plans: plans,
                 frontID: frontID,
+                onSelectPlan: onSelectPlan,
                 onOpenPlans: onOpenPlans,
                 onJumpToToday: onJumpToToday
             )
         }
-        .padding(.trailing, Metrics.gutter - 2)
+        .padding(.horizontal, Metrics.gutter - 2)
         .padding(.top, 13)
-        .animation(Motion.snappy, value: frontID)
-    }
-
-    private func tab(_ plan: Plan) -> some View {
-        let active = plan.id == frontID
-        return Button {
-            guard !active else { return }
-            onSelectPlan(plan.id)
-        } label: {
-            HStack(spacing: 7) {
-                StatusDot(status: plan.status(on: today))
-                Text(plan.name.isEmpty ? "Untitled" : plan.name)
-                    .font(.cadenceTitle)
-                    .tracking(-0.2)
-                    .foregroundStyle(active ? Color.ink : Color.inkSecondary)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 36)
-            .background {
-                if active {
-                    Capsule()
-                        .fill(Color.plum.opacity(0.1))
-                        .matchedGeometryEffect(id: "selection", in: selection)
-                }
-            }
-            .frame(height: 44)
-            .contentShape(.rect)
-        }
-        .buttonStyle(PressableStyle())
-        .accessibilityAddTraits(active ? [.isSelected] : [])
-        .accessibilityValue(statusText(plan.status(on: today)))
-        .accessibilityHint(active ? "" : "Shows \(plan.name)")
-    }
-
-    private func statusText(_ status: DayStatus) -> String {
-        switch status {
-        case .done: "Done today"
-        case .skipped: "Not today"
-        case .partial(let done, let total): "\(done) of \(total) done today"
-        case .pending: "To do today"
-        case .empty: "Nothing today"
-        }
     }
 }
 
-/// Today's state of a plan, at tab size: a ring still to do, half-filled when partly done,
-/// solid plum when done (it pops in), faint when skipped or nothing is planned.
-struct StatusDot: View {
-    let status: DayStatus
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        let fraction: CGFloat = {
-            switch status {
-            case .done: return 1
-            case .partial(let done, let total): return total > 0 ? CGFloat(done) / CGFloat(total) : 0
-            default: return 0
-            }
-        }()
-        ZStack {
-            Circle()
-                .strokeBorder(ringColor, lineWidth: 1.5)
-            Circle()
-                .trim(from: 0, to: fraction)
-                .stroke(Color.plum, style: StrokeStyle(lineWidth: 3.5))
-                .rotationEffect(.degrees(-90))
-                .padding(1.75)
-            Circle()
-                .fill(Color.plum)
-                .scaleEffect(status == .done ? 1 : 0.2)
-                .opacity(status == .done ? 1 : 0)
-            Circle()
-                .fill(Color.inkFaint)
-                .opacity(status == .skipped ? 1 : 0)
-        }
-        .frame(width: 8, height: 8)
-        .animation(status == .done ? Motion.pop(reduceMotion: reduceMotion) : Motion.snappy, value: status)
-        .accessibilityHidden(true)
-    }
-
-    private var ringColor: Color {
-        switch status {
-        case .pending, .partial, .empty: .inkMuted
-        case .done: .plum
-        case .skipped: .inkFaint
-        }
-    }
-}
-
-/// The ⋯ in the top corner: secondary actions and settings, in a Liquid Glass menu that
-/// grows out of the button. Neutral glass on purpose: the one colored button on screen is
-/// Create, so the primary action is never in doubt.
+/// The round button where the design's edit button sat: neutral glass (the one colored button
+/// on screen is Create), opening a Liquid Glass menu that grows out of it.
 struct MoreMenu: View {
+    let plans: [Plan]
     var frontID: UUID?
+    var onSelectPlan: (UUID) -> Void
     var onOpenPlans: (PlansRoute) -> Void
+    /// Nil hides "Jump to today", for views already pinned to today.
     var onJumpToToday: (() -> Void)?
 
     @AppStorage(Prefs.soundsKey) private var soundsOn = true
@@ -176,9 +87,18 @@ struct MoreMenu: View {
     var body: some View {
         Menu {
             Section {
-                Button("Edit this plan", systemImage: "square.and.pencil") { onOpenPlans(.edit(frontID)) }
+                Button("Edit plan", systemImage: "square.and.pencil") { onOpenPlans(.edit(frontID)) }
                 Button("All plans", systemImage: "list.bullet") { onOpenPlans(.edit(nil)) }
                 Button("Select plans", systemImage: "checkmark.circle") { onOpenPlans(.select) }
+            }
+            if plans.count > 1 {
+                // A way to any plan without the deck gestures (and for VoiceOver).
+                Picker("Show plan", selection: Binding(get: { frontID }, set: { if let id = $0 { onSelectPlan(id) } })) {
+                    ForEach(plans) { plan in
+                        Text(plan.name.isEmpty ? "Untitled" : plan.name).tag(Optional(plan.id))
+                    }
+                }
+                .pickerStyle(.menu)
             }
             if let onJumpToToday {
                 Section {
@@ -202,98 +122,25 @@ struct MoreMenu: View {
     }
 }
 
-/// The floating Create button, bottom right. The only strongly colored control in the app.
+/// Create, floating bottom right. The one strongly colored control in the app: prominent
+/// Liquid Glass in deep plum, a little larger than the other round buttons, with a soft
+/// plum glow underneath so it sits above the page rather than on it.
 struct CreateButton: View {
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: "plus")
-                .font(.system(size: 21, weight: .semibold))
+                .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(Color.onPlumStrong)
-                .frame(width: 48, height: 48)
-                .glassEffect(.regular.tint(Color.plumStrong).interactive(), in: .circle)
-                .contentShape(.circle)
+                .frame(width: 36, height: 36)
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .tint(Color.plumStrong)
+        .shadow(color: Color.plumStrong.opacity(0.35), radius: 14, x: 0, y: 8)
         .accessibilityLabel("New plan")
-    }
-}
-
-/// Bottom of the screen: how much time you're looking at. A floating Liquid Glass bar in the
-/// thumb zone. The plum lens follows your finger the moment you touch, so you can slide
-/// across modes with a detent on each, and the view changes when you let go.
-struct ModeBar: View {
-    var mode: ViewMode
-    var onSelect: (ViewMode) -> Void
-
-    @State private var hover: ViewMode?
-    /// Each segment's frame in the bar's own space. Hit-testing against measured frames
-    /// stays correct in right-to-left layouts, where the segments run the other way.
-    @State private var frames: [ViewMode: CGRect] = [:]
-    @Namespace private var lens
-
-    private let inset: CGFloat = 4
-    private let space = "modeBar"
-
-    var body: some View {
-        let shown = hover ?? mode
-
-        HStack(spacing: 0) {
-            ForEach(ViewMode.allCases) { item in
-                Text(item.title)
-                    .font(.cadenceCallout)
-                    .foregroundStyle(item == shown ? Color.onPlumText : Color.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 40)
-                    .background {
-                        if item == shown {
-                            Capsule()
-                                .fill(Color.plum)
-                                .matchedGeometryEffect(id: "lens", in: lens)
-                        }
-                    }
-                    .onGeometryChange(for: CGRect.self) { proxy in
-                        proxy.frame(in: .named("modeBar"))
-                    } action: { frame in
-                        frames[item] = frame
-                    }
-                    .accessibilityElement()
-                    .accessibilityLabel(item.title)
-                    .accessibilityAddTraits(item == mode ? [.isButton, .isSelected] : .isButton)
-                    .accessibilityAction { onSelect(item) }
-            }
-        }
-        .padding(inset)
-        .frame(maxWidth: .infinity)
-        .glassEffect(.regular, in: .capsule)
-        .contentShape(.capsule)
-        .coordinateSpace(.named(space))
-        .gesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .named(space))
-                .onChanged { value in
-                    let target = segment(at: value.location.x)
-                    if target != shown { Haptics.shared.tick() }
-                    hover = target
-                }
-                .onEnded { value in
-                    let target = segment(at: value.location.x)
-                    hover = nil
-                    if target != mode { onSelect(target) }
-                }
-        )
-        .animation(Motion.snappy, value: shown)
-    }
-
-    /// The segment under the finger, or the nearest one when the finger slides past the ends.
-    private func segment(at x: CGFloat) -> ViewMode {
-        guard !frames.isEmpty else { return mode }
-        if let hit = frames.first(where: { x >= $0.value.minX && x < $0.value.maxX }) {
-            return hit.key
-        }
-        return frames.min { abs($0.value.midX - x) < abs($1.value.midX - x) }?.key ?? mode
     }
 }
 

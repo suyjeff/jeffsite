@@ -20,10 +20,12 @@ struct MonthCard: View {
         let restOfWeek = (selected.weekdayIndex...6).map { selected.weekStart.adding($0) }
 
         VStack(spacing: 0) {
-            CardHeaderStrip(title: plan.name, planID: plan.id) {
+            CardHeaderStrip(title: plan.name) {
                 CountPill(done: progress.done, total: progress.planned)
                     .animation(Motion.snappy, value: progress.done)
             }
+            // Hold the top of the card to lift the whole card.
+            .liftsCardOnHold(inScrollView: true)
 
             PeriodBar(
                 title: DayText.monthTitle(month),
@@ -98,6 +100,7 @@ struct MonthCard: View {
             .animation(Motion.page, value: selected)
         }
         .cardSurface()
+        .focusableCard(plan.id)
     }
 
     private func step(by delta: Int) {

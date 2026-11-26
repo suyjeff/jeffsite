@@ -9,6 +9,9 @@ struct MetricTodayCard: View {
 
     @Environment(Store.self) private var store
     @State private var ripple = 0
+    /// The ruler is moving. Its readout then tracks the finger directly, without per-step
+    /// animation; rolling digits only play for a change that arrives at rest.
+    @State private var scrubbing = false
 
     var body: some View {
         let logged = plan.value(on: day)
@@ -19,14 +22,7 @@ struct MetricTodayCard: View {
         let recent = plan.points(in: (0..<14).map { day.adding($0 - 13) })
 
         VStack(alignment: .leading, spacing: 0) {
-            // The card's handle: hold it (or tap ⋯) for the plan's options. It spans the full
-            // card width, so it steps out of the card's padding.
-            FocusableHeader(planID: plan.id) {
-                MonoLabel(text: plan.name.uppercased())
-                Spacer(minLength: 12)
-            }
-            .padding(.horizontal, -Metrics.cardPadding)
-            .padding(.top, -Metrics.cardPadding)
+            MonoLabel(text: plan.name.uppercased())
 
             Spacer(minLength: 12)
 
@@ -37,8 +33,8 @@ struct MetricTodayCard: View {
                         .tracking(-2)
                         .monospacedDigit()
                         .foregroundStyle(isLogged ? Color.ink : Color.inkSecondary)
-                        .contentTransition(.numericText(value: draft))
-                        .animation(.easeOut(duration: 0.14), value: draft)
+                        .contentTransition(scrubbing ? .identity : .numericText(value: draft))
+                        .animation(scrubbing ? nil : .easeOut(duration: 0.14), value: draft)
                     if !plan.unit.isEmpty {
                         Text(plan.unit)
                             .font(.cadenceLabel)
@@ -61,6 +57,7 @@ struct MetricTodayCard: View {
                     domain: MetricChart.domain(from: day.adding(-13), to: day),
                     highlight: logged == nil ? nil : day
                 )
+                .equatable()
                 .frame(height: 64)
                 .padding(.bottom, 16)
                 .transition(.opacity)
@@ -73,7 +70,8 @@ struct MetricTodayCard: View {
                 ),
                 step: plan.step,
                 range: 0...max(1000, draft * 3),
-                label: plan.name
+                label: plan.name,
+                onScrubbing: { scrubbing = $0 }
             )
             .padding(.horizontal, -Metrics.cardPadding)
 

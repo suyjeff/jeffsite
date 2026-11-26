@@ -13,6 +13,7 @@ final class Haptics {
     private let selection = UISelectionFeedbackGenerator()
     private let rigid = UIImpactFeedbackGenerator(style: .rigid)
     private let soft = UIImpactFeedbackGenerator(style: .soft)
+    private let medium = UIImpactFeedbackGenerator(style: .medium)
     private let light = UIImpactFeedbackGenerator(style: .light)
     private let notification = UINotificationFeedbackGenerator()
 
@@ -31,6 +32,7 @@ final class Haptics {
         rigid.prepare()
         soft.prepare()
         light.prepare()
+        medium.prepare()
     }
 
     // MARK: Simple detents
@@ -51,6 +53,13 @@ final class Haptics {
         guard isEnabled else { return }
         rigid.impactOccurred(intensity: intensity)
         rigid.prepare()
+    }
+
+    /// A held card or row lifting into focus: one crisp, solid tap on the frame it pops.
+    func lift() {
+        guard isEnabled else { return }
+        medium.impactOccurred(intensity: 0.9)
+        medium.prepare()
     }
 
     /// Backing out of a commit point: lighter than arming it.

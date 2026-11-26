@@ -3,7 +3,7 @@ import SwiftUI
 
 /// A quiet line chart for metric plans: plum line, soft fill, no grid.
 /// Optional x labels for week and month cards; none for the Today sparkline.
-struct MetricChart: View {
+struct MetricChart: View, Equatable {
     let points: [MetricPoint]
     /// The days the x axis should span, so a sparse week still spreads Sun…Sat.
     var domain: ClosedRange<Date>?

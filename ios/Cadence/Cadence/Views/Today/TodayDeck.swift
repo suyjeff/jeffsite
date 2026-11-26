@@ -20,7 +20,6 @@ struct TodayDeck: View {
     @State private var armed = false
     @State private var flying = false
     @State private var reentering: UUID?
-    @AppStorage("swipeLessons") private var swipeLessons = 0
 
     private let commitDistance: CGFloat = 110
     private let pullDistance: CGFloat = 96
@@ -39,6 +38,17 @@ struct TodayDeck: View {
                             let depth = (index - frontIndex + plans.count) % plans.count
                             deckCard(plan, depth: depth, count: plans.count, width: width)
                         }
+                        if plans.count > 1 {
+                            // The card peeking behind can be tapped to bring it forward,
+                            // like reaching for the next card in a stack.
+                            Color.clear
+                                .frame(height: Metrics.deckPeek + 14)
+                                .contentShape(.rect)
+                                .offset(y: -(Metrics.deckPeek + 14))
+                                .onTapGesture { cycle(by: 1, count: plans.count) }
+                                .zIndex(Double(plans.count + 1))
+                                .accessibilityHidden(true)
+                        }
                     }
                     .padding(.top, Metrics.deckPeek)
                     .contentShape(.rect)
@@ -48,7 +58,8 @@ struct TodayDeck: View {
         }
         .padding(.horizontal, Metrics.gutter)
         .padding(.top, 14)
-        .padding(.bottom, 20)
+        // The card ends just above the floating Create button.
+        .padding(.bottom, Metrics.createClearance)
     }
 
     /// Signed swipe progress for the front card: −1 (skip armed) … 0 … 1 (done armed).
@@ -87,17 +98,13 @@ struct TodayDeck: View {
                 .opacity(Double(min(effective, 1)))
                 .allowsHitTesting(false)
         }
-        .overlay(alignment: .top) {
-            // The card behind names itself on its peeking strip.
-            if depth == 1 {
-                PeekLabel(name: plan.name, armed: armed && axis == .vertical && drag.height > 0)
-                    .opacity(Double(min(effective, 1)))
-            }
-        }
         .cardSurface(elevated: depth <= 1)
+        // Hold anywhere on the card to lift the whole card into focus.
+        .liftsCardOnHold()
+        .focusableCard(plan.id)
         .scaleEffect(1 - Metrics.deckScaleStep * visibleDepth, anchor: .top)
         // Only one card peeks: deeper cards sit behind it, fading up as they come forward,
-        // instead of rising above the deck into the plan tabs.
+        // instead of rising above the deck into the header.
         .offset(y: -Metrics.deckPeek * min(visibleDepth, 1))
         .opacity(effective > 1 ? Double(max(0, 2 - effective)) : 1)
         .scaleEffect(isReentering ? 0.97 : 1, anchor: .top)
@@ -197,7 +204,6 @@ struct TodayDeck: View {
         }
 
         flying = true
-        if swipeLessons < 3 { swipeLessons += 1 }
         let target = direction * (width + 140)
         let animation: Animation = reduceMotion
             ? .easeOut(duration: 0.2)
@@ -246,7 +252,7 @@ struct TodayDeck: View {
     }
 
     private func cycle(by step: Int, count: Int) {
-        guard count > 1 else { return }
+        guard count > 1, !flying else { return }
         let index = store.index(of: frontID) ?? 0
         Feedback.play(.cycle)
         withAnimation(reduceMotion ? Motion.standard : Motion.deck) {

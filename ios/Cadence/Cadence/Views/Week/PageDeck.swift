@@ -28,18 +28,9 @@ struct PageDeck<Card: View>: View {
         ScrollView {
             ZStack(alignment: .top) {
                 if canCycle {
-                    // The next card, peeking above with its name. It rises out from behind
-                    // as the page is pulled down.
-                    let next = plans[((store.index(of: front?.id) ?? 0) + 1) % plans.count]
-                    RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous)
-                        .fill(Color.surface)
-                        .frame(height: 160)
-                        .overlay(alignment: .top) {
-                            PeekLabel(name: next.name, armed: armed)
-                        }
-                        .cardSurface()
-                        .scaleEffect(1 - Metrics.deckScaleStep * (1 - progress * 0.7), anchor: .top)
-                        .offset(y: -Metrics.deckPeek - pull * 0.42)
+                    // The next card, peeking above. It rises out from behind as the page is
+                    // pulled down, and comes forward when tapped.
+                    DeckPeek(rise: progress, pull: pull, height: 160 + pull * 0.42) { cycle(plans: plans) }
                 }
                 if let front {
                     card(front)
@@ -50,7 +41,8 @@ struct PageDeck<Card: View>: View {
             }
             .padding(.horizontal, Metrics.gutter)
             .padding(.top, 14 + Metrics.deckPeek)
-            .padding(.bottom, 40)
+            // The last row scrolls clear of the floating Create button.
+            .padding(.bottom, Metrics.createClearance + 16)
         }
         .scrollIndicators(.hidden)
         .scrollEdgeEffectStyle(.soft, for: .top)
@@ -90,6 +82,33 @@ struct PageDeck<Card: View>: View {
         withAnimation(Motion.deck) {
             frontID = plans[(index + 1) % plans.count].id
         }
+    }
+}
+
+/// The blank card peeking 10pt above the front card, as in the design. Tapping it (or the
+/// gap just above it) brings it forward; a pull draws it out by `rise` / `pull`.
+struct DeckPeek: View {
+    var rise: CGFloat = 0
+    var pull: CGFloat = 0
+    /// Tall enough that a long pull never lifts its bottom past the front card's top.
+    var height: CGFloat = 120
+    var onTap: () -> Void
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous)
+            .fill(Color.surface)
+            .frame(height: height)
+            .cardSurface()
+            .scaleEffect(1 - Metrics.deckScaleStep * (1 - rise * 0.7), anchor: .top)
+            .offset(y: -Metrics.deckPeek - pull * 0.42)
+            .overlay(alignment: .top) {
+                Color.clear
+                    .frame(height: Metrics.deckPeek + 14)
+                    .contentShape(.rect)
+                    .offset(y: -(Metrics.deckPeek + 14) - pull * 0.42)
+                    .onTapGesture(perform: onTap)
+            }
+            .accessibilityHidden(true)
     }
 }
 
