@@ -19,6 +19,10 @@ enum Feedback {
         case log
         /// Cycled to another plan without marking anything.
         case cycle
+        /// The front card popped out of the stack and went to the back (a pull).
+        case pop
+        /// The front card was thrown sideways to another plan.
+        case toss
         /// Everything planned today is done.
         case allDone
     }
@@ -51,6 +55,12 @@ enum Feedback {
         case .cycle:
             haptics.thud(intensity: 0.55)
             sounds.play(.card, volume: 0.9, pitch: Float.random(in: 0.97...1.03))
+        case .pop:
+            haptics.pop()
+            sounds.play(.card, volume: 0.95, pitch: Float.random(in: 1.02...1.06))
+        case .toss:
+            haptics.toss()
+            sounds.play(.card, volume: 0.85, pitch: Float.random(in: 0.96...1.0))
         case .allDone:
             haptics.celebrate()
             sounds.play(.complete)

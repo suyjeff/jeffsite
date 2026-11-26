@@ -11,7 +11,6 @@ struct MonthCard: View {
 
     @Environment(Store.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.focusedKey) private var focusedKey
     @State private var direction = 1
 
@@ -22,7 +21,7 @@ struct MonthCard: View {
         let restOfWeek = (selected.weekdayIndex...6).map { selected.weekStart.adding($0) }
 
         VStack(spacing: 0) {
-            CardHeaderStrip(title: plan.name, symbol: plan.symbol) {
+            CardHeaderStrip(title: plan.name) {
                 CountPill(done: progress.done, total: progress.planned)
                     .animation(Motion.snappy, value: progress.done)
             }
@@ -32,9 +31,7 @@ struct MonthCard: View {
             PeriodBar(
                 title: DayText.monthTitle(month),
                 unit: "month",
-                isCurrent: isCurrent,
-                onStep: { step(by: $0) },
-                onReset: { jumpToToday() }
+                onStep: { step(by: $0) }
             )
 
             HStack(spacing: 0) {
@@ -56,9 +53,18 @@ struct MonthCard: View {
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.basedOnSize)
             .scrollDisabled(focusedKey != nil)
+            .safeAreaPadding(.bottom, isCurrent ? 0 : 64)
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color.surface)
+        .overlay(alignment: .bottom) {
+            if !isCurrent {
+                BackToToday(title: "Back to this month") { jumpToToday() }
+                    .padding(.bottom, 14)
+                    .transition(BackToToday.transition(reduceMotion: reduceMotion))
+            }
+        }
+        .animation(Motion.snappy, value: isCurrent)
     }
 
     @ViewBuilder
@@ -73,14 +79,6 @@ struct MonthCard: View {
                     .id(month)
                     .transition(Motion.slide(direction, reduceMotion: reduceMotion))
             }
-            .gesture(HorizontalPan { phase in
-                if case .ended(let translation, let velocity) = phase,
-                   abs(translation) > 60 || abs(velocity) > 600 {
-                    // Swiping toward the leading edge goes forward in time (mirrors in RTL).
-                    let forward = (translation < 0) == (layoutDirection == .leftToRight)
-                    step(by: forward ? 1 : -1)
-                }
-            })
 
             if plan.isMetric {
                 let points = plan.points(in: days)
@@ -186,16 +184,17 @@ private struct DayCell: View {
 
         ZStack {
             Circle()
-                .fill(isSelected && !done ? Color.canvas : Color.clear)
+                // Selection is its own faint ink, never the settled wash that means finished.
+                .fill(isSelected && !done ? Color.ink.opacity(0.08) : Color.clear)
             Circle()
-                .fill(Color.plum)
+                .fill(Color.success)
                 .scaleEffect(done ? 1 : 0.5)
                 .opacity(done ? 1 : 0)
             Circle()
                 .strokeBorder(ringColor(status), lineWidth: isToday ? 1.5 : 1)
             Circle()
                 .trim(from: 0, to: fraction)
-                .stroke(Color.plum, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .stroke(Color.success, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .padding(1)
             Text("\(day.day)")
@@ -203,15 +202,16 @@ private struct DayCell: View {
                 .monospacedDigit()
                 .foregroundStyle(numberColor(status))
             if status == .skipped {
+                // Skipped: a red stroke through the day.
                 Capsule()
-                    .fill(Color.inkMuted)
-                    .frame(width: 18, height: 1.5)
+                    .fill(Color.danger)
+                    .frame(width: 20, height: 1.75)
                     .rotationEffect(.degrees(-45))
             }
             // Today is marked by shape, not only by the ring's color.
             if isToday {
                 Circle()
-                    .fill(done ? Color.onPlum : Color.plum)
+                    .fill(done ? Color.onSuccess : Color.plum)
                     .frame(width: 4, height: 4)
                     .offset(y: 12)
             }
@@ -238,7 +238,7 @@ private struct DayCell: View {
 
     private func numberColor(_ status: DayStatus) -> Color {
         switch status {
-        case .done: return .onPlumText
+        case .done: return .onSuccess
         case .empty, .skipped: return .inkSecondary
         default: return isFuture ? .inkSecondary : .ink
         }

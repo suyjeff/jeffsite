@@ -31,7 +31,6 @@ struct RoutineEditor: View {
     @Environment(Store.self) private var store
     @State private var weekStart: Day = .today.weekStart
     @State private var direction = 1
-    @State private var confirmingDelete = false
     @State private var pendingWeekAction: WeekAction?
 
     /// Week edits that throw away what's written, so they confirm first.
@@ -58,9 +57,7 @@ struct RoutineEditor: View {
                 VStack(spacing: 0) {
                     PeriodBar(
                         title: weekStart == store.today.weekStart ? "THIS WEEK · \(DayText.weekRange(weekStart))" : DayText.weekRange(weekStart),
-                        isCurrent: weekStart == store.today.weekStart,
-                        onStep: { step($0) },
-                        onReset: { jump(to: store.today.weekStart) }
+                        onStep: { step($0) }
                     )
                     .background(Color.wash)
 
@@ -79,25 +76,8 @@ struct RoutineEditor: View {
 
                 columnsEditor
 
-                Button(role: .destructive) {
-                    confirmingDelete = true
-                } label: {
-                    Label("Delete plan", systemImage: "trash")
-                        .font(.cadenceCallout)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                }
-                .buttonStyle(.glass)
-                .tint(.red)
-                .padding(.top, 8)
-                .confirmationDialog("Delete \(plan.name)?", isPresented: $confirmingDelete, titleVisibility: .visible) {
-                    Button("Delete plan and its history", role: .destructive) {
-                        store.delete(plan.id)
-                        onDelete()
-                    }
-                } message: {
-                    Text("Every week and every check mark in this plan will be removed.")
-                }
+                DeletePlanButton(plan: plan, onDelete: onDelete)
+                    .padding(.top, 8)
             }
             .padding(.horizontal, Metrics.gutter - 4)
             .padding(.vertical, 16)
@@ -254,6 +234,11 @@ struct RoutineEditor: View {
     private func actions(isOwn: Bool, hasEarlier: Bool) -> some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
+                if weekStart != store.today.weekStart {
+                    ActionChip(title: "Back to this week", symbol: "arrow.uturn.backward") {
+                        jump(to: store.today.weekStart)
+                    }
+                }
                 ActionChip(title: "Copy last week", symbol: "doc.on.doc") {
                     store.copyPreviousWeek(plan.id, into: weekStart)
                     Feedback.play(.check(step: 0))

@@ -195,11 +195,8 @@ private struct PlanListRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: plan.symbol)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Color.plum)
-                .frame(width: 30, height: 30)
-                .background(Color.plum.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            IconWell(symbol: plan.symbol, size: 32)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(plan.name)
                     .font(.cadenceBody)

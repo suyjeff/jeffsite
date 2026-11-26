@@ -14,14 +14,10 @@ struct PlanTitleField: View {
                 Haptics.shared.tick()
                 choosingIcon = true
             } label: {
-                Image(systemName: plan.symbol)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(Color.ink)
+                IconWell(symbol: plan.symbol)
                     .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 48, height: 48)
-                    .glassEffect(.regular.interactive(), in: .circle)
             }
-            .buttonStyle(BareButtonStyle())
+            .buttonStyle(PressableStyle())
             .accessibilityLabel("Icon: \(PlanIcons.name(plan.symbol))")
             .accessibilityHint("Choose an icon for this plan")
             .popover(isPresented: $choosingIcon, arrowEdge: .top) {
@@ -76,5 +72,51 @@ struct IconGrid: View {
             }
         }
         .padding(14)
+    }
+}
+
+/// "Delete plan", the same in every editor: a full-width Liquid Glass button in red, asking
+/// first, since a plan takes its whole history with it.
+struct DeletePlanButton: View {
+    let plan: Plan
+    var onDelete: () -> Void
+
+    @Environment(Store.self) private var store
+    @State private var confirming = false
+
+    var body: some View {
+        Button(role: .destructive) {
+            confirming = true
+        } label: {
+            Label("Delete plan", systemImage: "trash")
+                .font(.cadenceCallout)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+        }
+        .buttonStyle(.glass)
+        .tint(Color.danger)
+        .confirmationDialog("Delete \(plan.name.isEmpty ? "this plan" : plan.name)?", isPresented: $confirming, titleVisibility: .visible) {
+            Button("Delete plan and its history", role: .destructive) {
+                store.delete(plan.id)
+                onDelete()
+            }
+        } message: {
+            Text("Every day logged or checked off in this plan will be removed.")
+        }
+    }
+}
+
+/// The plan's icon on a flat well: a lighter step of the theme behind a darker glyph (the
+/// other way round in dark mode).
+struct IconWell: View {
+    let symbol: String
+    var size: CGFloat = 48
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.4, weight: .medium))
+            .foregroundStyle(Color.iconInk)
+            .frame(width: size, height: size)
+            .background(Color.iconWell, in: RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
     }
 }

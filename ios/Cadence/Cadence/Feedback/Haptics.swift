@@ -19,6 +19,7 @@ final class Haptics {
 
     private var lastSelection: CFTimeInterval = 0
     private var holdPlayer: (any CHHapticAdvancedPatternPlayer)?
+    private var tensionPlayer: (any CHHapticAdvancedPatternPlayer)?
 
     private init() {
         makeEngine()
@@ -107,6 +108,66 @@ final class Haptics {
     func endHoldBuild() {
         try? holdPlayer?.stop(atTime: CHHapticTimeImmediate)
         holdPlayer = nil
+    }
+
+    /// A drag loading up toward a commit (pulling a card down): a low hum whose strength
+    /// follows `progress` 0…1, set every frame by `setTension`. Silent until the first update.
+    func beginTension() {
+        endTension()
+        guard isEnabled, let engine else { return }
+        let event = CHHapticEvent(
+            eventType: .hapticContinuous,
+            parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.6),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.18),
+            ],
+            relativeTime: 0,
+            duration: 30
+        )
+        do {
+            try engine.start()
+            let player = try engine.makeAdvancedPlayer(with: CHHapticPattern(events: [event], parameters: []))
+            try player.sendParameters([CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: 0, relativeTime: 0)], atTime: CHHapticTimeImmediate)
+            try player.start(atTime: CHHapticTimeImmediate)
+            tensionPlayer = player
+        } catch {
+            tensionPlayer = nil
+        }
+    }
+
+    /// 0…1. Eased in, so the first stretch of a pull is barely felt and the last is firm.
+    func setTension(_ progress: Double) {
+        guard let tensionPlayer else { return }
+        let p = min(max(progress, 0), 1)
+        let value = Float(0.04 + 0.6 * p * p)
+        try? tensionPlayer.sendParameters(
+            [CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: value, relativeTime: 0)],
+            atTime: CHHapticTimeImmediate
+        )
+    }
+
+    func endTension() {
+        try? tensionPlayer?.stop(atTime: CHHapticTimeImmediate)
+        tensionPlayer = nil
+    }
+
+    /// A card popping out of the stack and the next one opening: a crisp lift, then the
+    /// weight of the new card landing.
+    func pop() {
+        endTension()
+        play([
+            transient(at: 0, intensity: 0.75, sharpness: 0.7),
+            transient(at: 0.07, intensity: 0.9, sharpness: 0.3),
+            continuous(at: 0.075, duration: 0.06, intensity: 0.3, sharpness: 0.15),
+        ], fallback: { self.medium.impactOccurred(intensity: 0.9) })
+    }
+
+    /// A card thrown sideways landing in the stack.
+    func toss() {
+        play([
+            transient(at: 0, intensity: 0.7, sharpness: 0.35),
+            continuous(at: 0.005, duration: 0.05, intensity: 0.25, sharpness: 0.15),
+        ], fallback: { self.soft.impactOccurred(intensity: 0.8) })
     }
 
     /// A menu opening under the finger: the hold lets go in one solid, round thunk.

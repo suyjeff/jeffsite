@@ -1,11 +1,10 @@
 import SwiftUI
 
 /// A daily number on the Today deck: a big reading, a two-week sparkline, and a ruler to
-/// scrub. Swipe right (or tap the check) to log what the ruler says; swipe left to skip today.
+/// scrub. Tap the check to log what the ruler says.
 struct MetricTodayCard: View {
     let plan: Plan
     let day: Day
-    var swipe: CGFloat
 
     @Environment(Store.self) private var store
     @Environment(\.focusedKey) private var focusedKey
@@ -23,7 +22,11 @@ struct MetricTodayCard: View {
         let recent = plan.points(in: (0..<14).map { day.adding($0 - 13) })
 
         VStack(alignment: .leading, spacing: 0) {
-            PlanLabel(plan: plan)
+            HStack {
+                MonoLabel(text: plan.name.uppercased())
+                Spacer()
+                StatusBadge(mark: isLogged ? .done : status == .skipped ? .skipped : nil)
+            }
 
             Spacer(minLength: 12)
 
@@ -82,7 +85,6 @@ struct MetricTodayCard: View {
                 Spacer()
                 CheckButton(
                     look: isLogged ? .done : status == .skipped ? .skipped : .open,
-                    swipe: swipe,
                     voiceOverLabel: isLogged ? "Clear today's \(plan.name)" : "Log \(plan.format(draft)) \(plan.unit)",
                     action: logTapped
                 )
@@ -91,16 +93,16 @@ struct MetricTodayCard: View {
             .padding(.bottom, -2)
         }
         .padding(Metrics.cardPadding)
-        .opacity(1 - 0.28 * Double(max(0, -swipe).clamped(0, 1)))
+        // Logged or skipped: the card settles a step darker.
+        .background {
+            Color.settled
+                .opacity(isLogged || status == .skipped ? 1 : 0)
+                .animation(Motion.settle, value: isLogged || status == .skipped)
+        }
         .overlay(alignment: .bottomTrailing) {
             InkRipple(trigger: ripple)
                 .padding(.trailing, Metrics.cardPadding)
                 .padding(.bottom, Metrics.cardPadding - 2)
-        }
-        .overlay {
-            Color.plum
-                .opacity(0.06 * Double(abs(swipe).clamped(0, 1)))
-                .allowsHitTesting(false)
         }
         .animation(Motion.standard, value: recent.count >= 2)
     }

@@ -16,16 +16,18 @@ The project uses a synchronized folder, so any file added under `Cadence/` is pi
 
 **Adding a plan**: + offers three kinds. A **schedule** is a week written like a sheet (training, skincare, habits). A **scale** logs one number a day (weight, sleep). A **streak** is one yes-or-no a day. Each opens straight into its editor, where you name it and choose its icon.
 
-**Moving between plans** works the same in every view: pull the card down to bring the next plan forward, push it up to go back, or tap the card peeking behind. On Week and Month, the card scrolls first; once it's at its top (or bottom) the same pull moves the deck.
+**Moving between plans** works the same in every view, and the dots under the cards show where you are (tap one to jump there):
+- **Sideways**: drag the card left for the next plan, right for the previous one. It stays under your finger as long as you hold it, getting heavier the further it goes, with that plan rising behind it. Let go past about a third of the way (or flick) and it's thrown into the stack with one solid tap; otherwise it springs back.
+- **Pull down**: a longer pull. The card fades a little as the one behind rises, with a hum that tightens as you pull and a click once it's far enough. Let go and the card pops up out of the stack and drops to the back as the next one opens. Push up to bring the previous plan back.
+- On Week and Month the card scrolls first; once it's at its top (or bottom) the same pull moves the deck.
 
-**Today** is a deck, one card per plan.
-- Swipe a card right to mark the day done, left to skip it. The check fills green and draws itself as you drag; past the commit point it pops with a detent, and on release the card is thrown and tucks in at the back.
-- The check does the same as a right swipe ("da-ding"). On AM/PM plans it checks off the next half; each half can also be tapped.
-- Scales show a ruler: scrub it, then swipe right or tap the check to log. Streaks show the current run and the last two weeks.
+**Status** reads the same everywhere: a finished part of a card, a row or a calendar day settles a step darker, with a green ✓ when done or a red ✕ when skipped.
 
-**Holding things.** Hold a card (on Today, anywhere on it; on Week and Month, its top strip) and the whole card lifts while everything around it blurs. A pill rises near the bottom: Done in green, Delete in red (confirmed in a bubble pointing at it), and ⋯ for the rest (undo, skip, edit, duplicate). Hold a row in Week or Month to lift just that day.
+**Today** is a deck, one card per plan. Tap the check to mark the day done ("da-ding"); on AM/PM plans it checks off the next half, and each half can be tapped on its own. Scales show a ruler: scrub it, then tap the check to log. Streaks show the current run and the last two weeks.
 
-**Week / Month**: each card keeps its header (name, period, weekday names) fixed and scrolls its days inside. Swipe a row right for done, left to skip. Month shows each day's state in the calendar; tap a day for the rest of its week.
+**Holding things.** Hold a card (on Today, anywhere on it; on Week and Month, its top strip) and it lifts while everything around it blurs. On a two-part Today card, the part you hold lifts on its own. A pill rises near the bottom: **Mark as Done** (a solid green **Done** once it is), Delete in red (confirmed in a bubble pointing at it), and ⋯ for the rest (undo, skip, edit, duplicate). Hold a row in Week or Month to lift just that day.
+
+**Week / Month**: each card keeps its header (name, period, weekday names) fixed and scrolls its days inside. Tap a day to check it off (with AM/PM, tap each column). Move to another week or month with the arrows; **Back to this week** appears at the bottom of the card when you've moved away. Month shows each day's state in the calendar; tap a day for the rest of its week.
 
 **Settings** (from ⋯) is a full page: the theme (five Tailwind neutrals: Mauve, the design's own, plus Taupe, Olive, Mist and Zinc), sounds and haptics.
 

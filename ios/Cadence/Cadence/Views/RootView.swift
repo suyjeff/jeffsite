@@ -285,21 +285,22 @@ struct RootView: View {
     private var content: some View {
         switch mode {
         case .today:
-            PlanDeck(frontID: $frontID, swipesToMark: true) { plan, slot in
-                TodayCard(plan: plan, revision: store.revision, day: store.today, isFront: slot.isFront, swipe: slot.swipe)
+            PlanDeck(frontID: $frontID, cardsScroll: false) { plan, slot in
+                TodayCard(plan: plan, revision: store.revision, day: store.today, isFront: slot.isFront)
                     .equatable()
-                    // Hold anywhere on the card to lift the whole card into focus.
-                    .liftsCardOnHold()
+                    // Hold anywhere on the card to lift it into focus; a two-part card lifts
+                    // the part you're holding instead.
+                    .liftsCardOnHold(isEnabled: plan.kind != .routine || plan.columnCount <= 1)
             }
             .transition(modeTransition)
         case .week:
-            PlanDeck(frontID: $frontID, swipesToMark: false) { plan, _ in
+            PlanDeck(frontID: $frontID, cardsScroll: true) { plan, _ in
                 WeekCard(plan: plan, weekStart: $weekStart, onEditValue: editValue)
                     .equatable()
             }
             .transition(modeTransition)
         case .month:
-            PlanDeck(frontID: $frontID, swipesToMark: false) { plan, _ in
+            PlanDeck(frontID: $frontID, cardsScroll: true) { plan, _ in
                 MonthCard(plan: plan, month: $month, selected: $selectedDay, onEditValue: editValue)
                     .equatable()
             }

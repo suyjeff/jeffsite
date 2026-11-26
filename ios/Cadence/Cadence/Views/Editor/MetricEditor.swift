@@ -7,7 +7,6 @@ struct MetricEditor: View {
     var onDelete: () -> Void
 
     @Environment(Store.self) private var store
-    @State private var confirmingDelete = false
 
     var body: some View {
         let entries = plan.records
@@ -92,24 +91,16 @@ struct MetricEditor: View {
             .listRowBackground(Color.surface)
 
             Section {
-                Button("Delete plan", systemImage: "trash", role: .destructive) {
-                    confirmingDelete = true
-                }
-                .font(.cadenceCallout)
+                DeletePlanButton(plan: plan, onDelete: onDelete)
             }
-            .listRowBackground(Color.surface)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.immediately)
         .background(Color.canvas)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Delete \(plan.name)?", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("Delete plan and its history", role: .destructive) {
-                store.delete(plan.id)
-                onDelete()
-            }
-        }
     }
 
     private func binding<Value>(_ keyPath: WritableKeyPath<Plan, Value>) -> Binding<Value> {
@@ -161,7 +152,6 @@ struct StreakEditor: View {
     var onDelete: () -> Void
 
     @Environment(Store.self) private var store
-    @State private var confirmingDelete = false
 
     var body: some View {
         let today = store.today
@@ -185,24 +175,16 @@ struct StreakEditor: View {
             .listRowBackground(Color.surface)
 
             Section {
-                Button("Delete plan", systemImage: "trash", role: .destructive) {
-                    confirmingDelete = true
-                }
-                .font(.cadenceCallout)
+                DeletePlanButton(plan: plan, onDelete: onDelete)
             }
-            .listRowBackground(Color.surface)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.immediately)
         .background(Color.canvas)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Delete \(plan.name)?", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("Delete plan and its history", role: .destructive) {
-                store.delete(plan.id)
-                onDelete()
-            }
-        }
     }
 }
 

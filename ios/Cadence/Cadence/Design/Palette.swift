@@ -23,6 +23,8 @@ enum Palette: String, CaseIterable, Identifiable, Sendable {
         case secondary
         /// Between 400 and 500: the lightest that still reads at 3:1 on a card (glyphs).
         case muted
+        /// Halfway between two steps.
+        case between(Int, Int)
     }
 
     func hex(_ tone: Tone) -> UInt32 {
@@ -30,7 +32,18 @@ enum Palette: String, CaseIterable, Identifiable, Sendable {
         case .shade(let step): shades[step] ?? 0x808080
         case .secondary: derived.secondary
         case .muted: derived.muted
+        case .between(let a, let b): Self.mix(shades[a] ?? 0x808080, shades[b] ?? 0x808080)
         }
+    }
+
+    private static func mix(_ a: UInt32, _ b: UInt32) -> UInt32 {
+        // Shifts bind tighter than division in Swift, so each step is spelled out.
+        var result: UInt32 = 0
+        for shift: UInt32 in [16, 8, 0] {
+            let average = (((a >> shift) & 0xFF) + ((b >> shift) & 0xFF)) / 2
+            result |= average << shift
+        }
+        return result
     }
 
     private var derived: (secondary: UInt32, muted: UInt32) {

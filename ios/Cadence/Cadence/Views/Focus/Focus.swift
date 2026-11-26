@@ -78,8 +78,8 @@ extension View {
     }
 
     /// The part of a card that answers a long-press by lifting the whole card.
-    func liftsCardOnHold() -> some View {
-        modifier(LiftsCardOnHold())
+    func liftsCardOnHold(isEnabled: Bool = true) -> some View {
+        modifier(LiftsCardOnHold(isEnabled: isEnabled))
     }
 }
 
@@ -135,10 +135,12 @@ private struct FocusableCard: ViewModifier {
 }
 
 private struct LiftsCardOnHold: ViewModifier {
+    var isEnabled: Bool
     @Environment(\.cardLift) private var cardLift
 
     func body(content: Content) -> some View {
         content.gesture(HoldGesture(
+            isEnabled: isEnabled,
             onPress: { cardLift.press($0) },
             onHold: { cardLift.lift() }
         ))
@@ -177,8 +179,10 @@ struct HoldGesture: UIGestureRecognizerRepresentable {
     func handleUIGestureRecognizerAction(_ recognizer: TouchHoldRecognizer, context: Context) {}
 }
 
-/// Times a still finger. Stays `.possible` for the whole touch and fails at the end, so no
-/// other gesture ever waits on it or is excluded by it.
+/// Times a still finger. It never recognizes, and it fails the moment it's no longer needed:
+/// as soon as the finger moves, once the hold has fired, or when the touch ends. That matters:
+/// SwiftUI makes a parent's drag wait for gestures inside it to fail, so a recognizer that
+/// stayed undecided until the finger lifted would freeze the deck's drag for the whole touch.
 final class TouchHoldRecognizer: UIGestureRecognizer {
     var onPress: (Bool) -> Void = { _ in }
     var onHold: () -> Void = {}
@@ -193,6 +197,7 @@ final class TouchHoldRecognizer: UIGestureRecognizer {
         super.touchesBegan(touches, with: event)
         guard !tracking, touches.count == 1, let touch = touches.first, event.allTouches?.count == 1 else {
             cancelHold()
+            state = .failed
             return
         }
         tracking = true
@@ -209,13 +214,18 @@ final class TouchHoldRecognizer: UIGestureRecognizer {
             self.endPress()
             self.tracking = false
             self.onHold()
+            self.state = .failed
         }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesMoved(touches, with: event)
         guard tracking, let point = touches.first?.location(in: nil) else { return }
-        if hypot(point.x - start.x, point.y - start.y) > 10 { cancelHold() }
+        if hypot(point.x - start.x, point.y - start.y) > 10 {
+            cancelHold()
+            // Moving means it isn't a hold: step aside at once so drags and scrolls proceed.
+            state = .failed
+        }
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
@@ -506,7 +516,7 @@ private struct FocusPill: View {
 
         if plan.isMetric {
             let changed = store.hasDraftChange(plan)
-            DoneButton(title: done ? (changed ? "Update" : "Logged") : "Log", isDone: done && !changed) {
+            DoneButton(title: done ? (changed ? "Update" : "Logged") : "Log Today", isDone: done && !changed) {
                 if plan.value(on: today) == nil {
                     onDone()
                     actions.editValue(plan.id, today)
@@ -518,7 +528,7 @@ private struct FocusPill: View {
             }
             .disabled(done && !changed)
         } else {
-            DoneButton(title: "Done", isDone: done) {
+            DoneButton(title: done ? "Done" : "Mark as Done", isDone: done) {
                 let change = withAnimation(Motion.settle) { store.toggleDone(plan.id, on: today) }
                 Feedback.play(for: change)
                 onDone()
@@ -621,7 +631,7 @@ private struct FocusPill: View {
             .disabled(isFuture)
         } else {
             let mark: Mark? = column.map { plan.mark(on: day, column: $0) } ?? (status == .done ? .done : nil)
-            DoneButton(title: "Done", isDone: mark == .done) {
+            DoneButton(title: mark == .done ? "Done" : "Mark as Done", isDone: mark == .done) {
                 let change = withAnimation(Motion.settle) {
                     if let column { return store.toggleColumn(plan.id, on: day, column: column) }
                     return store.toggleDone(plan.id, on: day)
@@ -637,22 +647,39 @@ private struct FocusPill: View {
                 MenuRequest(
                     anchor: box.frame,
                     placement: .aboveCenter,
-                    sections: dayMenu(plan, day: day, status: status),
+                    sections: dayMenu(plan, day: day, status: status, column: column),
                     tailX: frame.midX
                 )
             }
     }
 
-    private func dayMenu(_ plan: Plan, day: Day, status: DayStatus) -> [[MenuItem]] {
+    private func dayMenu(_ plan: Plan, day: Day, status: DayStatus, column: Int?) -> [[MenuItem]] {
         var marking: [MenuItem] = []
-        if !plan.record(on: day).isEmpty {
+        // A held part of a two-part day (AM or PM) is undone and skipped on its own.
+        if let column, plan.columnCount > 1 {
+            let mark = plan.mark(on: day, column: column)
+            if let mark {
+                marking.append(MenuItem(id: "undo", title: "Undo", systemImage: "arrow.uturn.backward") {
+                    let change = withAnimation(Motion.settle) { store.toggleColumn(plan.id, on: day, column: column, mark: mark) }
+                    Feedback.play(for: change)
+                    onDone()
+                })
+            }
+            if mark != .skipped && plan.plannedColumns(on: day).contains(column) {
+                marking.append(MenuItem(id: "skip", title: "Skip", systemImage: "xmark") {
+                    let change = withAnimation(Motion.settle) { store.toggleColumn(plan.id, on: day, column: column, mark: .skipped) }
+                    Feedback.play(for: change)
+                    onDone()
+                })
+            }
+        } else if !plan.record(on: day).isEmpty {
             marking.append(MenuItem(id: "undo", title: plan.isMetric ? "Clear value" : "Undo", systemImage: "arrow.uturn.backward") {
                 let change = withAnimation(Motion.settle) { store.clearDay(plan.id, on: day) }
                 Feedback.play(for: change)
                 onDone()
             })
         }
-        if status != .skipped && (plan.isMetric ? day <= store.today : plan.isPlanned(day)) {
+        if column == nil || plan.columnCount <= 1, status != .skipped && (plan.isMetric ? day <= store.today : plan.isPlanned(day)) {
             marking.append(MenuItem(id: "skip", title: "Skip", systemImage: "xmark") {
                 let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: day) }
                 Feedback.play(for: change)
@@ -687,8 +714,8 @@ private final class PillFrameBox {
     var trash: CGRect = .zero
 }
 
-/// The pill's main action, in green. Once done it shows that, quietly, instead of offering
-/// to undo (Undo lives under ⋯).
+/// The pill's main action. Open: "Mark as Done", ink on a green-tinted capsule with a green ✓.
+/// Done: a solid green capsule, white ✓ and "Done", unmistakably finished (Undo is under ⋯).
 private struct DoneButton: View {
     let title: String
     var isDone: Bool
@@ -699,21 +726,27 @@ private struct DoneButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: isDone ? "checkmark.circle.fill" : "checkmark")
-                    .font(.system(size: 17, weight: .semibold))
+                Image(systemName: isDone ? "checkmark.circle.fill" : "checkmark.circle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isDone ? Color.onSuccess : isEnabled ? Color.success : Color.inkFaint)
                     .contentTransition(.symbolEffect(.replace))
                 Text(title)
                     .font(.cadenceBody)
+                    .foregroundStyle(isDone ? Color.onSuccess : isEnabled ? Color.ink : Color.inkFaint)
                     .lineLimit(1)
             }
-            .foregroundStyle(isEnabled || isDone ? Color.success : Color.inkFaint)
             .padding(.horizontal, 16)
             .frame(height: 44)
-            .background(Color.success.opacity(isEnabled ? 0.14 : 0.07), in: Capsule())
+            .background(
+                isDone ? Color.success : Color.success.opacity(isEnabled ? 0.14 : 0.06),
+                in: Capsule()
+            )
             .contentShape(.capsule)
+            .animation(Motion.settle, value: isDone)
         }
         .buttonStyle(PressableStyle())
-        .accessibilityLabel(isDone ? "\(title), done" : title)
+        .accessibilityLabel(title)
+        .accessibilityValue(isDone ? "Done" : "")
     }
 }
 

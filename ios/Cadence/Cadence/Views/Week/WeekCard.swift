@@ -18,7 +18,7 @@ struct WeekCard: View {
         let isCurrent = weekStart == store.today.weekStart
 
         VStack(spacing: 0) {
-            CardHeaderStrip(title: plan.name, symbol: plan.symbol) {
+            CardHeaderStrip(title: plan.name) {
                 CountPill(done: progress.done, total: progress.planned)
                     .animation(Motion.snappy, value: progress.done)
             }
@@ -27,9 +27,7 @@ struct WeekCard: View {
 
             PeriodBar(
                 title: isCurrent ? "THIS WEEK" : DayText.weekRange(weekStart),
-                isCurrent: isCurrent,
-                onStep: { step(by: $0) },
-                onReset: { jump(to: store.today.weekStart) }
+                onStep: { step(by: $0) }
             )
 
             // The header stays put; the days scroll inside the card. Pulling down at the top
@@ -46,9 +44,19 @@ struct WeekCard: View {
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.basedOnSize)
             .scrollDisabled(focusedKey != nil)
+            // Room for "Back to this week" under the last day.
+            .safeAreaPadding(.bottom, isCurrent ? 0 : 64)
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color.surface)
+        .overlay(alignment: .bottom) {
+            if !isCurrent {
+                BackToToday(title: "Back to this week") { jump(to: store.today.weekStart) }
+                    .padding(.bottom, 14)
+                    .transition(BackToToday.transition(reduceMotion: reduceMotion))
+            }
+        }
+        .animation(Motion.snappy, value: isCurrent)
     }
 
     private func weekBody(_ days: [Day]) -> some View {
@@ -102,8 +110,9 @@ struct WeekCard: View {
 
 // MARK: - Routine row
 
-/// One day of a routine. A single column swipes as a whole row; with AM / PM columns,
-/// each column is its own swipe target, side by side with a hairline between them.
+/// One day of a schedule. Tap it to check it off (with AM / PM columns, tap each column);
+/// hold it for the rest (skip, undo, edit this day). Sideways drags belong to the deck, which
+/// moves between plans. A finished day settles a step darker, with its ✓ or ✕ by the weekday.
 struct DayRow: View {
     let plan: Plan
     let day: Day
@@ -120,12 +129,7 @@ struct DayRow: View {
 
         Group {
             if plan.columnCount <= 1 {
-                SwipeCell(
-                    isDone: status == .done,
-                    isSkipped: status == .skipped,
-                    isEnabled: !items[0].isEmpty,
-                    onCommit: { commit($0, column: nil) }
-                ) {
+                MarkCell(mark: plan.mark(on: day, section: nil), isEnabled: !items[0].isEmpty, onTap: { toggle(column: nil) }) {
                     VStack(alignment: .leading, spacing: Metrics.labelGap) {
                         weekdayLabel(status: status)
                         // A streak has nothing written: the day and its mark say it all.
@@ -136,39 +140,36 @@ struct DayRow: View {
                     .padding(.horizontal, Metrics.cardPadding)
                     .padding(.vertical, Metrics.rowVertical)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.surface)
                 }
             } else {
-                VStack(alignment: .leading, spacing: Metrics.labelGap) {
+                VStack(alignment: .leading, spacing: 0) {
                     weekdayLabel(status: status)
                         .padding(.horizontal, Metrics.cardPadding)
                         .padding(.top, Metrics.rowVertical)
+                        .padding(.bottom, Metrics.labelGap)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(status == .done || status == .skipped ? Color.settled : Color.surface)
                     HStack(alignment: .top, spacing: 0) {
                         ForEach(0..<plan.columnCount, id: \.self) { column in
-                            let mark = plan.mark(on: day, column: column)
+                            let mark = plan.mark(on: day, section: column)
                             let text = items.indices.contains(column) ? items[column] : ""
-                            SwipeCell(
-                                isDone: mark == .done,
-                                isSkipped: mark == .skipped,
-                                isEnabled: !text.isEmpty,
-                                onCommit: { commit($0, column: column) }
-                            ) {
-                                itemText(text, finished: mark != nil || status == .skipped)
+                            MarkCell(mark: text.isEmpty ? nil : mark, isEnabled: !text.isEmpty, onTap: { toggle(column: column) }) {
+                                itemText(text, finished: mark != nil)
                                     .padding(.leading, column == 0 ? Metrics.cardPadding : 16)
                                     .padding(.trailing, column == plan.columnCount - 1 ? Metrics.cardPadding : 16)
                                     .padding(.bottom, Metrics.rowVertical)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                                    .background(Color.surface)
                             }
+                            .accessibilityLabel("\(plan.columns[column].isEmpty ? "Column \(column + 1)" : plan.columns[column]), \(text.isEmpty ? "nothing planned" : text)")
                             if column < plan.columnCount - 1 {
                                 Hairline(axis: .vertical)
-                                    .padding(.bottom, Metrics.rowVertical)
                             }
                         }
                     }
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 .background(Color.surface)
+                .animation(Motion.settle, value: status)
             }
         }
         .overlay {
@@ -182,6 +183,11 @@ struct DayRow: View {
             [planID = plan.id, day, isToday, showsWeekday] in
             LivePlan(id: planID) { plan in
                 DayRow(plan: plan, day: day, isToday: isToday, showsWeekday: showsWeekday)
+            }
+        }
+        .accessibilityActions {
+            if plan.isPlanned(day) {
+                Button(status == .skipped ? "Undo skip" : "Skip") { skip() }
             }
         }
         .id(day.key)
@@ -224,14 +230,18 @@ struct DayRow: View {
             .animation(Motion.settle, value: finished)
     }
 
-    private func commit(_ direction: SwipeDirection, column: Int?) {
+    private func toggle(column: Int?) {
         let change = withAnimation(Motion.settle) {
-            if let column {
-                return store.toggleColumn(plan.id, on: day, column: column, mark: direction == .done ? .done : .skipped)
-            }
-            return direction == .done ? store.toggleDone(plan.id, on: day) : store.toggleSkipped(plan.id, on: day)
+            if let column { return store.toggleColumn(plan.id, on: day, column: column) }
+            if plan.status(on: day) == .skipped { return store.toggleSkipped(plan.id, on: day) }
+            return store.toggleDone(plan.id, on: day)
         }
         Feedback.play(for: change, step: column ?? 0)
+    }
+
+    private func skip() {
+        let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: day) }
+        Feedback.play(for: change)
     }
 
     private func accessibilityText(status: DayStatus) -> String {
@@ -246,22 +256,24 @@ struct DayRow: View {
     }
 }
 
-/// ✓ for done, ✕ for skipped, a half-filled circle for partly done. Contextual icon swap:
-/// scale 0.25 → 1, opacity, 4px blur, spring 0.3s with no bounce.
+/// A day's mark beside its weekday: the green ✓ or red ✕ badge when finished, a half-filled
+/// circle when partly done, nothing while open.
 struct StatusGlyph: View {
     let status: DayStatus
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
-            glyph("checkmark", visible: status == .done)
-            glyph("xmark", visible: status == .skipped)
-            glyph("circle.lefthalf.filled", visible: isPartial, size: 12)
+            StatusBadge(mark: status == .done ? .done : status == .skipped ? .skipped : nil, size: 18)
+            Image(systemName: "circle.lefthalf.filled")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.inkMuted)
+                .opacity(isPartial ? 1 : 0)
+                .scaleEffect(isPartial || reduceMotion ? 1 : 0.25)
+                .blur(radius: isPartial || reduceMotion ? 0 : 4)
+                .animation(Motion.icon, value: isPartial)
         }
-        .foregroundStyle(Color.inkMuted)
-        .frame(width: 16, height: 16)
-        // Completing pops the check in past full size; other changes cross-fade without bounce.
-        .animation(status == .done ? Motion.pop(reduceMotion: reduceMotion) : Motion.icon, value: status)
+        .frame(width: 18, height: 18)
         .accessibilityHidden(true)
     }
 
@@ -269,13 +281,31 @@ struct StatusGlyph: View {
         if case .partial = status { return true }
         return false
     }
+}
 
-    private func glyph(_ name: String, visible: Bool, size: CGFloat = 14) -> some View {
-        Image(systemName: name)
-            .font(.system(size: size, weight: .medium))
-            .opacity(visible ? 1 : 0)
-            .scaleEffect(visible ? 1 : 0.25)
-            .blur(radius: visible ? 0 : 4)
+/// A tappable part of a row: highlights on touch-down, settles a step darker once marked.
+struct MarkCell<Content: View>: View {
+    var mark: Mark?
+    var isEnabled: Bool
+    var onTap: () -> Void
+    @ViewBuilder var content: Content
+
+    @Environment(\.focusedKey) private var focusedKey
+
+    var body: some View {
+        Button {
+            // The release that ends a hold isn't a tap.
+            guard isEnabled, focusedKey == nil else { return }
+            onTap()
+        } label: {
+            content
+                .background(mark != nil ? Color.settled : Color.surface)
+                .animation(Motion.settle, value: mark)
+                .contentShape(.rect)
+        }
+        .buttonStyle(RowPressStyle())
+        .disabled(!isEnabled)
+        .accessibilityValue(mark == .done ? "Done" : mark == .skipped ? "Skipped" : "Not done")
     }
 }
 
@@ -293,13 +323,13 @@ struct LivePlan<Content: View>: View {
     }
 }
 
-/// A soft plum wash across a row the moment something in it is completed.
+/// A soft green wash across a row the moment something in it is completed.
 struct RowFlash: View {
     var trigger: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Color.plum
+        Color.success
             .keyframeAnimator(initialValue: 0.0, trigger: trigger) { [reduceMotion] view, opacity in
                 view.opacity(reduceMotion ? 0 : opacity)
             } keyframes: { _ in
@@ -342,7 +372,7 @@ struct MetricRow: View {
             }
             Spacer()
             if let value {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                HStack(alignment: .center, spacing: 4) {
                     Text(plan.format(value))
                         .font(.cadenceBody)
                         .monospacedDigit()
@@ -351,16 +381,20 @@ struct MetricRow: View {
                     Text(plan.unit)
                         .font(.cadenceCaption)
                         .foregroundStyle(Color.inkSecondary)
+                    StatusBadge(mark: .done, size: 18)
+                        .padding(.leading, 6)
                 }
-            } else {
-                Text(status == .skipped ? "Skipped" : isFuture ? "" : "Log")
+            } else if status == .skipped {
+                StatusBadge(mark: .skipped, size: 18)
+            } else if !isFuture {
+                Text("Log")
                     .font(.cadenceSubhead)
-                    .foregroundStyle(status == .skipped ? Color.inkSecondary : Color.plum)
+                    .foregroundStyle(Color.ink)
             }
         }
         .padding(.horizontal, Metrics.cardPadding)
         .padding(.vertical, Metrics.rowVertical)
-        .background(Color.surface)
+        .background(value != nil || status == .skipped ? Color.settled : Color.surface)
         .contentShape(.rect)
         .onTapGesture {
             // The release that ends a hold isn't a tap.

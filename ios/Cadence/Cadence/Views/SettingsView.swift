@@ -32,11 +32,16 @@ struct SettingsView: View {
                     .accessibilityAddTraits(option == palette ? .isSelected : [])
                 }
             } header: {
-                SheetSectionHeader(text: "Theme")
-            } footer: {
-                Text("Neutrals from Tailwind CSS.")
-                    .font(.cadenceSubhead)
-                    .foregroundStyle(Color.inkSecondary)
+                // The page's title, in the app's own type, like every editor's.
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("Settings")
+                        .font(.cadenceNumber(28))
+                        .tracking(-0.6)
+                        .foregroundStyle(Color.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    SheetSectionHeader(text: "Theme")
+                }
+                .textCase(nil)
             }
             .listRowBackground(Color.surface)
 
@@ -63,8 +68,8 @@ struct SettingsView: View {
         // Rows resolve their colors when drawn; a new theme redraws them.
         .id(palette)
         .background(Color.canvas)
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         // Turning one on plays it, so you know what you've turned on.
         .onChange(of: soundsOn) { _, isOn in
             if isOn { Sounds.shared.play(.check) }

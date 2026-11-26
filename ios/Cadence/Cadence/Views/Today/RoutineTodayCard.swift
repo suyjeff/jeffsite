@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// A routine on the Today deck. One column fills the card (Training); several split it
-/// evenly with a hairline (Skincare AM / PM), and each half can be tapped on its own.
+/// A schedule on the Today deck. One column fills the card (Training); several split it
+/// evenly with a hairline (Skincare AM / PM). Each part shows its state plainly: settled (a
+/// step darker) with a green ✓ when done or a red ✕ when skipped. With two parts, each is
+/// tapped to check it off and held to lift just that part.
 struct RoutineTodayCard: View {
     let plan: Plan
     let day: Day
-    /// −1…1 from the deck's horizontal drag.
-    var swipe: CGFloat
 
     @Environment(Store.self) private var store
     @Environment(\.focusedKey) private var focusedKey
@@ -20,14 +20,29 @@ struct RoutineTodayCard: View {
 
         VStack(spacing: 0) {
             ForEach(0..<plan.columnCount, id: \.self) { column in
-                section(column: column, text: items.indices.contains(column) ? items[column] : "", status: status)
+                let text = items.indices.contains(column) ? items[column] : ""
+                TodaySection(plan: plan, day: day, column: column, text: text)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .contentShape(.rect)
+                    // Simultaneous, so a still finger on a part can still grow into its hold.
+                    .simultaneousGesture(TapGesture().onEnded {
+                        // The release that ends a hold isn't a tap.
+                        guard isMulti, !text.isEmpty, focusedKey == nil else { return }
+                        let change = withAnimation(Motion.settle) {
+                            store.toggleColumn(plan.id, on: day, column: column)
+                        }
+                        Feedback.play(for: change, step: column)
+                        if change == .completed { ripple += 1 }
+                    })
+                    .modifier(SectionLift(isEnabled: isMulti && !text.isEmpty, planID: plan.id, day: day, column: column, text: text))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(isMulti && !text.isEmpty ? .isButton : [])
+                    .accessibilityHint(isMulti && !text.isEmpty ? "Double tap to check off \(plan.columns[column].isEmpty ? "this part" : plan.columns[column])" : "")
                 if column < plan.columnCount - 1 {
                     Hairline()
                 }
             }
         }
-        .opacity(1 - 0.28 * Double(max(0, -swipe).clamped(0, 1)))
         .overlay(alignment: .bottom) {
             footer(status: status)
                 .padding(.horizontal, Metrics.cardPadding)
@@ -38,74 +53,19 @@ struct RoutineTodayCard: View {
                 .padding(.trailing, Metrics.cardPadding)
                 .padding(.bottom, Metrics.cardPadding - 2)
         }
-        .overlay {
-            // The card warms toward plum as a swipe approaches its commit point.
-            Color.plum
-                .opacity(0.06 * Double(abs(swipe).clamped(0, 1)))
-                .allowsHitTesting(false)
-        }
-    }
-
-    // MARK: Sections
-
-    /// As in the design: the plan's label above the first section's text, 24pt padding,
-    /// a 12pt gap. With AM / PM columns, each half carries its column's name in the corner,
-    /// with a ✓ beside it once done.
-    @ViewBuilder
-    private func section(column: Int, text: String, status: DayStatus) -> some View {
-        let mark = plan.mark(on: day, column: column)
-        let isPlanned = !text.isEmpty
-        let finished = isPlanned && (mark == .done || status == .done || status == .skipped)
-
-        VStack(alignment: .leading, spacing: Metrics.labelGap) {
-            if column == 0 {
-                PlanLabel(plan: plan)
-            }
-            Text(isPlanned ? text : "Nothing planned")
-                .font(.cadenceToday)
-                .tracking(-0.5)
-                .lineSpacing(4)
-                .foregroundStyle(finished || !isPlanned ? Color.inkSecondary : Color.ink)
-                .minimumScaleFactor(0.8)
-        }
-        .padding(Metrics.cardPadding)
-        .padding(.trailing, isMulti ? 20 : 0)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .overlay(alignment: .topTrailing) {
-            if isMulti {
-                ColumnCheck(title: plan.columns[column], mark: mark)
-                    .padding(.top, Metrics.cardPadding + 2)
-                    .padding(.trailing, Metrics.cardPadding)
-            }
-        }
-        .contentShape(.rect)
-        // Simultaneous, so a still finger on a half can still grow into the card's hold.
-        .simultaneousGesture(TapGesture().onEnded {
-            // The release that ends a hold isn't a tap.
-            guard isMulti, isPlanned, focusedKey == nil else { return }
-            let change = withAnimation(Motion.settle) {
-                store.toggleColumn(plan.id, on: day, column: column)
-            }
-            Feedback.play(for: change, step: column)
-            if change == .completed { ripple += 1 }
-        })
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(mark == .done ? "Done" : mark == .skipped ? "Skipped" : "")
-        .accessibilityHint(isMulti && isPlanned ? "Double tap to check off \(plan.columns[column].isEmpty ? "this half" : plan.columns[column])" : "")
     }
 
     // MARK: Footer
 
     private func footer(status: DayStatus) -> some View {
         HStack(alignment: .center) {
-            MonoLabel(text: footerText(status))
+            MonoLabel(text: footerText(status), color: status == .done ? .ink : .inkSecondary)
                 .contentTransition(.opacity)
                 .animation(Motion.settle, value: footerText(status))
             Spacer()
             if plan.isPlanned(day) {
                 CheckButton(
                     look: status == .done ? .done : status == .skipped ? .skipped : .open,
-                    swipe: swipe,
                     fraction: progressFraction(status),
                     voiceOverLabel: "Check off \(plan.name)",
                     action: checkTapped
@@ -120,7 +80,7 @@ struct RoutineTodayCard: View {
             if let at = plan.record(on: day).completedAt { return "DONE · \(DayText.time(at))" }
             return "DONE"
         case .skipped:
-            // The ✕ in the check already says it.
+            // The red ✕ in the corner says it.
             return ""
         case .partial(let done, let total):
             return "\(done) OF \(total)"
@@ -154,37 +114,73 @@ struct RoutineTodayCard: View {
     }
 }
 
-/// "AM ✓" in the corner of a half: the column's name, and its mark once it has one.
-private struct ColumnCheck: View {
-    let title: String
-    let mark: Mark?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+/// One part of a Today card: the plan's name over the first part, what's planned in large
+/// type, and in the corner the part's name (AM, PM) with its ✓ or ✕. Settled parts sit a step
+/// darker. Also drawn on its own when the part is held and lifted.
+struct TodaySection: View {
+    let plan: Plan
+    let day: Day
+    let column: Int
+    let text: String
 
     var body: some View {
-        HStack(spacing: 6) {
-            if !title.isEmpty {
-                MonoLabel(text: title.uppercased())
-            }
-            glyph
-        }
-    }
+        let mark = plan.mark(on: day, section: column)
+        let isPlanned = !text.isEmpty
+        let isMulti = plan.columnCount > 1
 
-    private var glyph: some View {
-        ZStack {
-            Image(systemName: "checkmark")
-                .opacity(mark == .done ? 1 : 0)
-                .scaleEffect(mark == .done ? 1 : 0.25)
-                .blur(radius: mark == .done ? 0 : 4)
-            Image(systemName: "xmark")
-                .opacity(mark == .skipped ? 1 : 0)
-                .scaleEffect(mark == .skipped ? 1 : 0.25)
-                .blur(radius: mark == .skipped ? 0 : 4)
+        VStack(alignment: .leading, spacing: Metrics.labelGap) {
+            if column == 0 {
+                MonoLabel(text: plan.name.uppercased())
+            }
+            Text(isPlanned ? text : "Nothing planned")
+                .font(.cadenceToday)
+                .tracking(-0.5)
+                .lineSpacing(4)
+                .foregroundStyle(mark != nil || !isPlanned ? Color.inkSecondary : Color.ink)
+                .minimumScaleFactor(0.8)
+                .animation(Motion.settle, value: mark)
         }
-        .font(.system(size: 13, weight: .medium))
-        .foregroundStyle(Color.inkMuted)
-        .frame(width: 16, height: 16)
-        .animation(mark == .done ? Motion.pop(reduceMotion: reduceMotion) : Motion.icon, value: mark)
-        .accessibilityHidden(true)
+        .padding(Metrics.cardPadding)
+        .padding(.trailing, 36)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 8) {
+                if isMulti, !plan.columns[column].isEmpty {
+                    MonoLabel(text: plan.columns[column].uppercased())
+                }
+                StatusBadge(mark: isPlanned ? mark : nil)
+            }
+            .padding(.top, Metrics.cardPadding - 2)
+            .padding(.trailing, Metrics.cardPadding - 2)
+        }
+        .background {
+            Color.settled
+                .opacity(mark != nil && isPlanned ? 1 : 0)
+                .animation(Motion.settle, value: mark)
+        }
+        .accessibilityValue(mark == .done ? "Done" : mark == .skipped ? "Skipped" : "")
+    }
+}
+
+/// Holding one part of a two-part Today card lifts just that part, with options for it.
+private struct SectionLift: ViewModifier {
+    var isEnabled: Bool
+    let planID: UUID
+    let day: Day
+    let column: Int
+    let text: String
+
+    func body(content: Content) -> some View {
+        content.liftsOnHold(
+            .day(planID, day, column: column),
+            key: FocusItem.dayKey(planID, day, column),
+            isEnabled: isEnabled
+        ) { [planID, day, column, text] in
+            LivePlan(id: planID) { plan in
+                TodaySection(plan: plan, day: day, column: column, text: text)
+                    .background(Color.surface)
+            }
+        }
     }
 }
 

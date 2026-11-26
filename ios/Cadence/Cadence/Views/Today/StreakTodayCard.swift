@@ -1,26 +1,10 @@
 import SwiftUI
 
-/// A plan's icon and name, as the label at the top of its Today card.
-struct PlanLabel: View {
-    let plan: Plan
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: plan.symbol)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.inkSecondary)
-                .accessibilityHidden(true)
-            MonoLabel(text: plan.name.uppercased())
-        }
-    }
-}
-
 /// A streak on the Today deck: one question a day, so the card is the answer so far. The
 /// current run, big; the last two weeks as a row of days; the check to say yes for today.
 struct StreakTodayCard: View {
     let plan: Plan
     let day: Day
-    var swipe: CGFloat
 
     @Environment(Store.self) private var store
     @Environment(\.focusedKey) private var focusedKey
@@ -32,7 +16,11 @@ struct StreakTodayCard: View {
         let recent = (0..<14).map { day.adding($0 - 13) }
 
         VStack(alignment: .leading, spacing: 0) {
-            PlanLabel(plan: plan)
+            HStack {
+                MonoLabel(text: plan.name.uppercased())
+                Spacer()
+                StatusBadge(mark: status == .done ? .done : status == .skipped ? .skipped : nil)
+            }
 
             Spacer(minLength: 12)
 
@@ -67,7 +55,6 @@ struct StreakTodayCard: View {
                 Spacer()
                 CheckButton(
                     look: status == .done ? .done : status == .skipped ? .skipped : .open,
-                    swipe: swipe,
                     voiceOverLabel: "Check off \(plan.name)",
                     action: checkTapped
                 )
@@ -75,21 +62,21 @@ struct StreakTodayCard: View {
             .padding(.bottom, -2)
         }
         .padding(Metrics.cardPadding)
-        .opacity(1 - 0.28 * Double(max(0, -swipe).clamped(0, 1)))
+        .background {
+            Color.settled
+                .opacity(status == .done || status == .skipped ? 1 : 0)
+                .animation(Motion.settle, value: status)
+        }
         .overlay(alignment: .bottomTrailing) {
             InkRipple(trigger: ripple)
                 .padding(.trailing, Metrics.cardPadding)
                 .padding(.bottom, Metrics.cardPadding - 2)
         }
-        .overlay {
-            Color.plum
-                .opacity(0.06 * Double(abs(swipe).clamped(0, 1)))
-                .allowsHitTesting(false)
-        }
     }
 
     private func footerText(_ status: DayStatus) -> String {
         guard status == .done else { return "" }
+        // The green ✓ above says done; this says when.
         if let at = plan.record(on: day).completedAt { return "DONE · \(DayText.time(at))" }
         return "DONE"
     }

@@ -11,6 +11,12 @@ extension Color {
     static var surface: Color { .palette(.shade(50), dark: .shade(900)) }
     /// The grey strip at the top of Week and Month cards (the design's canvas, Mauve 100).
     static var wash: Color { .palette(.shade(100), dark: .shade(950)) }
+    /// A finished part of a card (a done or skipped section, row or day): a step darker than
+    /// the card, so what's settled recedes and what's left stands out.
+    static var settled: Color { .palette(.between(100, 200), dark: .between(900, 950)) }
+    /// The flat well behind a plan's icon: lighter than the glyph, darker than the page.
+    static var iconWell: Color { .palette(.shade(300), dark: .shade(800)) }
+    static var iconInk: Color { .palette(.shade(700), dark: .shade(200)) }
     /// Dividers and outlines. Figma #E7E4E7 (Mauve 200).
     static var hairline: Color { .palette(.shade(200), dark: .shade(800)) }
     /// Primary text. Figma #463947 (Mauve 700).
@@ -28,8 +34,9 @@ extension Color {
     static let onPlum = Color.white
     /// Text on a plum fill. White fails 4.5:1 on dark mode's lighter plum, so text flips dark.
     static var onPlumText: Color { .palette(.shade(50), dark: .shade(950)) }
-    /// Done. A muted, slightly cool green that sits with the neutrals; white glyphs on it clear 3:1.
-    static let success = Color(light: 0x3B8A5A, dark: 0x6DC08C)
+    /// Done. A muted, slightly cool green that sits with the neutrals; white text on it reads at
+    /// 4.8:1, and it clears 3:1 as a glyph on cards and settled parts.
+    static let success = Color(light: 0x33804F, dark: 0x6DC08C)
     static let onSuccess = Color(light: 0xFFFFFF, dark: 0x0F2417)
     /// Delete. Text-safe on both backgrounds.
     static let danger = Color(light: 0xC93C38, dark: 0xFF6E66)
@@ -115,8 +122,8 @@ struct CardSurface: ViewModifier {
             .background {
                 shape
                     .fill(Color.surface)
-                    .shadow(color: Color.cardShadow.opacity(elevated ? 0.16 : 0.08), radius: 0.5, x: 0, y: 1)
-                    .shadow(color: Color.cardShadow.opacity(elevated ? 0.13 : 0.05), radius: 7, x: 0, y: 7)
+                    .shadow(color: Color.cardShadow.opacity(elevated ? 0.11 : 0.05), radius: 0.5, x: 0, y: 1)
+                    .shadow(color: Color.cardShadow.opacity(elevated ? 0.07 : 0.03), radius: 6, x: 0, y: 4)
             }
             .overlay {
                 shape.strokeBorder(Color.cardRing, lineWidth: 1)
@@ -178,17 +185,10 @@ struct CountPill: View {
 /// The grey strip at the top of week and month cards: plan name and progress.
 struct CardHeaderStrip<Trailing: View>: View {
     let title: String
-    var symbol: String?
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
         HStack(spacing: 8) {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.inkSecondary)
-                    .accessibilityHidden(true)
-            }
             MonoLabel(text: title.uppercased())
             Spacer(minLength: 12)
             trailing
