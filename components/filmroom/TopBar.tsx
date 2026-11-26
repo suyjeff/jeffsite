@@ -177,6 +177,7 @@ const QueryBar = React.forwardRef<{ focus: () => void; blur: () => void }, { onC
           setFocused(false);
           setOpen(false);
           setSel(-1);
+          onClose(); // focus left by mouse: hand the keyboard back to the film
         }}
         onChange={(e) => {
           setText(e.target.value);
