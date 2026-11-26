@@ -11,14 +11,26 @@ struct RoutineTodayCard: View {
 
     @Environment(Store.self) private var store
     @State private var ripple = 0
+    /// Successful card swipes so far. The swipe hint retires after three.
+    @AppStorage("swipeLessons") private var swipeLessons = 0
 
     private var isMulti: Bool { plan.columnCount > 1 }
 
     var body: some View {
         let items = plan.items(on: day)
         let status = plan.status(on: day)
+        let week = plan.progress(in: day.weekDays)
 
         VStack(spacing: 0) {
+            // The top of the card is its handle: hold it (or tap ⋯) for the plan's options.
+            FocusableHeader(planID: plan.id) {
+                MonoLabel(text: plan.name.uppercased(), color: status.isComplete ? .inkMuted : .inkSecondary)
+                Spacer(minLength: 12)
+                if week.planned > 0 {
+                    CountPill(done: week.done, total: week.planned)
+                }
+            }
+
             ForEach(0..<plan.columnCount, id: \.self) { column in
                 section(column: column, text: items.indices.contains(column) ? items[column] : "", status: status)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -53,59 +65,39 @@ struct RoutineTodayCard: View {
         let isPlanned = !text.isEmpty
         let finished = isPlanned && (mark == .done || status == .done || status == .skipped)
 
-        VStack(alignment: .leading, spacing: Metrics.labelGap) {
-            if column == 0 {
-                MonoLabel(text: plan.name.uppercased(), color: finished ? .inkMuted : .inkSecondary)
+        Text(isPlanned ? text : "Nothing planned")
+            .font(.cadenceBody)
+            .tracking(-0.2)
+            .foregroundStyle(finished || !isPlanned ? Color.inkFaint : Color.ink)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, Metrics.cardPadding)
+            .padding(.top, column == 0 ? 4 : Metrics.cardPadding)
+            .padding(.bottom, Metrics.cardPadding)
+            .padding(.trailing, isMulti ? 36 : 0)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay(alignment: .topTrailing) {
+                if isMulti {
+                    ColumnTag(title: plan.columns[column], mark: mark)
+                        .padding(.top, column == 0 ? 4 : Metrics.cardPadding)
+                        .padding(.trailing, Metrics.cardPadding)
+                }
             }
-            Text(isPlanned ? text : "Nothing planned")
-                .font(.cadenceBody)
-                .tracking(-0.2)
-                .foregroundStyle(finished || !isPlanned ? Color.inkFaint : Color.ink)
-                .minimumScaleFactor(0.8)
-        }
-        .padding(Metrics.cardPadding)
-        .padding(.trailing, isMulti ? 36 : 0)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .overlay(alignment: .topTrailing) {
-            if isMulti {
-                ColumnTag(title: plan.columns[column], mark: mark)
-                    .padding(.top, Metrics.cardPadding)
-                    .padding(.trailing, Metrics.cardPadding)
-            }
-        }
-        .contentShape(.rect)
-        .onTapGesture {
-            guard isMulti, isPlanned else { return }
-            let change = withAnimation(Motion.settle) {
-                store.toggleColumn(plan.id, on: day, column: column)
-            }
-            Feedback.play(for: change, step: column)
-            if change == .completed { ripple += 1 }
-        }
-        .contextMenu {
-            dayMenu(column: column, isPlanned: isPlanned)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(isMulti && isPlanned ? "Double tap to check off \(plan.columns[column])" : "")
-    }
-
-    @ViewBuilder
-    private func dayMenu(column: Int, isPlanned: Bool) -> some View {
-        let status = plan.status(on: day)
-        if plan.isPlanned(day) {
-            Button(status == .done ? "Mark not done" : "Mark done", systemImage: status == .done ? "arrow.uturn.backward" : "checkmark") {
-                let change = withAnimation(Motion.settle) { store.toggleDone(plan.id, on: day) }
-                Feedback.play(for: change)
+            .contentShape(.rect)
+            .onTapGesture {
+                guard isMulti, isPlanned else { return }
+                let change = withAnimation(Motion.settle) {
+                    store.toggleColumn(plan.id, on: day, column: column)
+                }
+                Feedback.play(for: change, step: column)
                 if change == .completed { ripple += 1 }
             }
-            Button(status == .skipped ? "Undo skip" : "Not today", systemImage: status == .skipped ? "arrow.uturn.backward" : "xmark") {
-                let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: day) }
-                Feedback.play(for: change)
-            }
-        }
-        Button("Edit today…", systemImage: "pencil") {
-            onEditDay(plan.id, day)
-        }
+            // Hold the day itself for done / not today / edit, lifted in place.
+            .liftOnHold(
+                .day(plan.id, day, column: isMulti ? column : nil),
+                key: FocusItem.dayKey(plan.id, day, isMulti ? column : nil)
+            )
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(isMulti && isPlanned ? "Double tap to check off \(plan.columns[column])" : "")
     }
 
     // MARK: Footer
@@ -139,7 +131,8 @@ struct RoutineTodayCard: View {
             return "\(done) OF \(total)"
         case .pending:
             let streak = plan.streak(asOf: day)
-            return streak >= 2 ? "\(streak) DAY STREAK" : ""
+            if streak >= 2 { return "\(streak) DAY STREAK" }
+            return swipeLessons < 3 ? "SWIPE → WHEN DONE" : ""
         case .empty:
             return ""
         }
@@ -188,7 +181,7 @@ private struct ColumnTag: View {
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(Color.inkMuted)
             .frame(width: 14)
-            .animation(Motion.icon, value: mark)
+            .animation(mark == .done ? .spring(duration: 0.4, bounce: 0.55) : Motion.icon, value: mark)
         }
     }
 }

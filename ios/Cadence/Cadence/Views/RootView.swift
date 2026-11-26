@@ -13,7 +13,12 @@ struct RootView: View {
     @State private var month: Day = .today.monthStart
     @State private var selectedDay: Day = .today
 
-    @State private var showingPlans = false
+    @State private var plansRoute: PlansRoute?
+    @State private var creating = false
+    /// Set when a new plan is created, so its editor opens once the template sheet is gone.
+    @State private var createdPlan: UUID?
+    @State private var focus: FocusItem?
+    @Namespace private var createTransition
     @State private var dayEdit: DayTarget?
     @State private var valueEdit: DayTarget?
     @State private var celebrating = false
@@ -22,13 +27,18 @@ struct RootView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderBar(plans: store.plans, frontID: frontID, onSelectPlan: selectPlan) {
-                showingPlans = true
-            }
+            HeaderBar(
+                plans: store.plans,
+                today: store.today,
+                frontID: frontID,
+                onSelectPlan: selectPlan,
+                onOpenPlans: { plansRoute = $0 },
+                onJumpToToday: jumpToToday
+            )
 
             ZStack {
                 if store.plans.isEmpty {
-                    EmptyDeck { showingPlans = true }
+                    EmptyDeck { creating = true }
                         .padding(.horizontal, Metrics.gutter)
                         .padding(.vertical, 14)
                         .transition(modeTransition)
@@ -40,7 +50,32 @@ struct RootView: View {
         }
         .background(Color.canvas.ignoresSafeArea())
         .safeAreaBar(edge: .bottom) {
-            ModeBar(mode: mode, onSelect: selectMode)
+            // Views on the left, the one primary action (Create) floating on the right.
+            HStack(spacing: 12) {
+                ModeBar(mode: mode, onSelect: selectMode)
+                CreateButton { creating = true }
+                    .matchedTransitionSource(id: "create", in: createTransition)
+            }
+            .padding(.horizontal, Metrics.gutter - 4)
+            .padding(.bottom, 4)
+        }
+        .environment(\.focusedKey, focus?.key)
+        .environment(\.requestFocus, FocusRequest { item in
+            withAnimation(nil) { focus = item }
+        })
+        .overlay {
+            if let focus {
+                FocusLayer(
+                    item: focus,
+                    actions: FocusActions(
+                        editPlan: { plansRoute = .edit($0) },
+                        editDay: editDay,
+                        editValue: editValue
+                    ),
+                    onDismiss: { self.focus = nil }
+                )
+                .id(focus.key)
+            }
         }
         .overlay(alignment: .top) {
             if celebrating {
@@ -53,8 +88,19 @@ struct RootView: View {
                     )
             }
         }
-        .sheet(isPresented: $showingPlans) {
-            PlansSheet(startingAt: store.plans.isEmpty ? nil : frontID)
+        .sheet(item: $plansRoute) { route in
+            PlansSheet(route: route)
+        }
+        .sheet(isPresented: $creating, onDismiss: openCreatedPlan) {
+            TemplatePicker { template in
+                let plan = SeedData.template(template, today: store.today)
+                store.add(plan)
+                Feedback.play(.check(step: 0))
+                createdPlan = plan.id
+                creating = false
+            }
+            .presentationDetents([.medium, .large])
+            .navigationTransition(.zoom(sourceID: "create", in: createTransition))
         }
         .sheet(item: $dayEdit) { target in
             DayEditSheet(planID: target.planID, day: target.day)
@@ -98,7 +144,7 @@ struct RootView: View {
             TodayDeck(
                 frontID: $frontID,
                 onEditDay: editDay,
-                onCreatePlan: { showingPlans = true }
+                onCreatePlan: { creating = true }
             )
             .transition(modeTransition)
         case .week:
@@ -138,9 +184,13 @@ struct RootView: View {
     private var scrollingDeck: some View {
         ZStack(alignment: .top) {
             if store.plans.count > 1 {
+                let next = store.plans[((store.index(of: frontID) ?? 0) + 1) % store.plans.count]
                 RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous)
                     .fill(Color.surface)
                     .frame(height: 120)
+                    .overlay(alignment: .top) {
+                        PeekLabel(name: next.name)
+                    }
                     .cardSurface()
                     .scaleEffect(1 - Metrics.deckScaleStep, anchor: .top)
                     .offset(y: -Metrics.deckPeek)
@@ -150,12 +200,30 @@ struct RootView: View {
                     .id(plan.id)
                     .transition(Motion.deckForward(reduceMotion: reduceMotion))
             } else {
-                EmptyDeck { showingPlans = true }
+                EmptyDeck { creating = true }
             }
         }
         .padding(.horizontal, Metrics.gutter)
         .padding(.top, 14 + Metrics.deckPeek)
         .padding(.bottom, 14)
+    }
+
+    /// After creating, bring the new plan to the front and open its sheet to write it.
+    private func openCreatedPlan() {
+        guard let id = createdPlan else { return }
+        createdPlan = nil
+        withAnimation(Motion.deck) { frontID = id }
+        plansRoute = .edit(id)
+    }
+
+    private func jumpToToday() {
+        let today = store.today
+        withAnimation(Motion.page) {
+            weekStart = today.weekStart
+            month = today.monthStart
+            selectedDay = today
+        }
+        Feedback.play(.cycle)
     }
 
     private func editDay(_ planID: UUID, _ day: Day) {

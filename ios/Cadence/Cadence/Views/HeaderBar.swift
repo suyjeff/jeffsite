@@ -23,9 +23,11 @@ enum ViewMode: String, CaseIterable, Identifiable {
 /// don't fit, and the next name fades out past the edge to show there's more.
 struct HeaderBar: View {
     let plans: [Plan]
+    let today: Day
     var frontID: UUID?
     var onSelectPlan: (UUID) -> Void
-    var onEdit: () -> Void
+    var onOpenPlans: (PlansRoute) -> Void
+    var onJumpToToday: () -> Void
 
     @Namespace private var selection
 
@@ -60,7 +62,11 @@ struct HeaderBar: View {
                 }
             }
 
-            GlassIconButton(systemName: "square.and.pencil", voiceOverLabel: "Edit plans", action: onEdit)
+            MoreMenu(
+                frontID: frontID,
+                onOpenPlans: onOpenPlans,
+                onJumpToToday: onJumpToToday
+            )
         }
         .padding(.trailing, Metrics.gutter - 2)
         .padding(.top, 13)
@@ -73,27 +79,140 @@ struct HeaderBar: View {
             guard !active else { return }
             onSelectPlan(plan.id)
         } label: {
-            Text(plan.name.isEmpty ? "Untitled" : plan.name)
-                .font(.cadenceTitle)
-                .tracking(-0.2)
-                .foregroundStyle(active ? Color.ink : Color.inkMuted)
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.horizontal, 12)
-                .frame(height: 36)
-                .background {
-                    if active {
-                        Capsule()
-                            .fill(Color.plum.opacity(0.1))
-                            .matchedGeometryEffect(id: "selection", in: selection)
-                    }
+            HStack(spacing: 7) {
+                StatusDot(status: plan.status(on: today))
+                Text(plan.name.isEmpty ? "Untitled" : plan.name)
+                    .font(.cadenceTitle)
+                    .tracking(-0.2)
+                    .foregroundStyle(active ? Color.ink : Color.inkMuted)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background {
+                if active {
+                    Capsule()
+                        .fill(Color.plum.opacity(0.1))
+                        .matchedGeometryEffect(id: "selection", in: selection)
                 }
-                .frame(height: 44)
-                .contentShape(.rect)
+            }
+            .frame(height: 44)
+            .contentShape(.rect)
         }
         .buttonStyle(PressableStyle())
         .accessibilityAddTraits(active ? [.isSelected] : [])
+        .accessibilityValue(statusText(plan.status(on: today)))
         .accessibilityHint(active ? "" : "Shows \(plan.name)")
+    }
+
+    private func statusText(_ status: DayStatus) -> String {
+        switch status {
+        case .done: "Done today"
+        case .skipped: "Not today"
+        case .partial(let done, let total): "\(done) of \(total) done today"
+        case .pending: "To do today"
+        case .empty: "Nothing today"
+        }
+    }
+}
+
+/// Today's state of a plan, at tab size: a ring still to do, half-filled when partly done,
+/// solid plum when done (it pops in), faint when skipped or nothing is planned.
+struct StatusDot: View {
+    let status: DayStatus
+
+    var body: some View {
+        let fraction: CGFloat = {
+            switch status {
+            case .done: return 1
+            case .partial(let done, let total): return total > 0 ? CGFloat(done) / CGFloat(total) : 0
+            default: return 0
+            }
+        }()
+        ZStack {
+            Circle()
+                .strokeBorder(ringColor, lineWidth: 1.5)
+            Circle()
+                .trim(from: 0, to: fraction)
+                .stroke(Color.plum, style: StrokeStyle(lineWidth: 3.5))
+                .rotationEffect(.degrees(-90))
+                .padding(1.75)
+            Circle()
+                .fill(Color.plum)
+                .scaleEffect(status == .done ? 1 : 0.2)
+                .opacity(status == .done ? 1 : 0)
+            Circle()
+                .fill(Color.inkFaint)
+                .opacity(status == .skipped ? 1 : 0)
+        }
+        .frame(width: 8, height: 8)
+        .animation(status == .done ? .spring(duration: 0.4, bounce: 0.55) : Motion.snappy, value: status)
+        .accessibilityHidden(true)
+    }
+
+    private var ringColor: Color {
+        switch status {
+        case .pending, .partial: .inkMuted
+        case .done: .plum
+        case .skipped, .empty: .inkFaint
+        }
+    }
+}
+
+/// The ⋯ in the top corner: secondary actions and settings, in a Liquid Glass menu that
+/// grows out of the button. Neutral glass on purpose: the one colored button on screen is
+/// Create, so the primary action is never in doubt.
+struct MoreMenu: View {
+    var frontID: UUID?
+    var onOpenPlans: (PlansRoute) -> Void
+    var onJumpToToday: () -> Void
+
+    @AppStorage(Prefs.soundsKey) private var soundsOn = true
+    @AppStorage(Prefs.hapticsKey) private var hapticsOn = true
+
+    var body: some View {
+        Menu {
+            Section {
+                Button("Edit this plan", systemImage: "square.and.pencil") { onOpenPlans(.edit(frontID)) }
+                Button("All plans", systemImage: "list.bullet") { onOpenPlans(.edit(nil)) }
+                Button("Select plans", systemImage: "checkmark.circle") { onOpenPlans(.select) }
+            }
+            Section {
+                Button("Jump to today", systemImage: "calendar") { onJumpToToday() }
+            }
+            Section {
+                Toggle(isOn: $soundsOn) { Label("Sounds", systemImage: "speaker.wave.2") }
+                Toggle(isOn: $hapticsOn) { Label("Haptics", systemImage: "hand.tap") }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.ink)
+                .frame(width: 40, height: 40)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .frame(width: 44, height: 44)
+                .contentShape(.circle)
+        }
+        .accessibilityLabel("More")
+    }
+}
+
+/// The floating Create button, bottom right. The only strongly colored control in the app.
+struct CreateButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 21, weight: .semibold))
+                .foregroundStyle(Color.onPlumStrong)
+                .frame(width: 48, height: 48)
+                .glassEffect(.regular.tint(Color.plumStrong).interactive(), in: .circle)
+                .contentShape(.circle)
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityLabel("New plan")
     }
 }
 
@@ -144,7 +263,7 @@ struct ModeBar: View {
             }
         }
         .padding(inset)
-        .frame(maxWidth: 320)
+        .frame(maxWidth: .infinity)
         .glassEffect(.regular, in: .capsule)
         .contentShape(.capsule)
         .coordinateSpace(.named(space))
@@ -162,8 +281,6 @@ struct ModeBar: View {
                 }
         )
         .animation(Motion.snappy, value: shown)
-        .padding(.horizontal, Metrics.gutter)
-        .padding(.bottom, 4)
     }
 
     /// The segment under the finger, or the nearest one when the finger slides past the ends.

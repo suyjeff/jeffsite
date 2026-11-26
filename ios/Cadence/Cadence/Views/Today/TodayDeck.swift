@@ -21,6 +21,7 @@ struct TodayDeck: View {
     @State private var armed = false
     @State private var flying = false
     @State private var reentering: UUID?
+    @AppStorage("swipeLessons") private var swipeLessons = 0
 
     private let commitDistance: CGFloat = 110
     private let pullDistance: CGFloat = 96
@@ -87,6 +88,13 @@ struct TodayDeck: View {
                 .fill(Color.surface)
                 .opacity(Double(min(effective, 1)))
                 .allowsHitTesting(false)
+        }
+        .overlay(alignment: .top) {
+            // The card behind names itself on its peeking strip.
+            if depth == 1 {
+                PeekLabel(name: plan.name, armed: armed && axis == .vertical && drag.height > 0)
+                    .opacity(Double(min(effective, 1)))
+            }
         }
         .cardSurface(elevated: depth <= 1)
         .scaleEffect(1 - Metrics.deckScaleStep * visibleDepth, anchor: .top)
@@ -189,6 +197,7 @@ struct TodayDeck: View {
         }
 
         flying = true
+        if swipeLessons < 3 { swipeLessons += 1 }
         let target = direction * (width + 140)
         let animation: Animation = reduceMotion
             ? .easeOut(duration: 0.2)

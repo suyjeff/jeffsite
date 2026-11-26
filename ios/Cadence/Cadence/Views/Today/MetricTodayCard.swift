@@ -19,7 +19,14 @@ struct MetricTodayCard: View {
         let recent = plan.points(in: (0..<14).map { day.adding($0 - 13) })
 
         VStack(alignment: .leading, spacing: 0) {
-            MonoLabel(text: plan.name.uppercased(), color: isLogged ? .inkMuted : .inkSecondary)
+            // The card's handle: hold it (or tap ⋯) for the plan's options. It spans the full
+            // card width, so it steps out of the card's padding.
+            FocusableHeader(planID: plan.id) {
+                MonoLabel(text: plan.name.uppercased(), color: isLogged ? .inkMuted : .inkSecondary)
+                Spacer(minLength: 12)
+            }
+            .padding(.horizontal, -Metrics.cardPadding)
+            .padding(.top, -Metrics.cardPadding)
 
             Spacer(minLength: 12)
 

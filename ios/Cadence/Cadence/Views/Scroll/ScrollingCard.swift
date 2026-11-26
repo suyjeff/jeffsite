@@ -17,7 +17,7 @@ struct ScrollingCard: View {
         let weeks = (-weeksBack...weeksAhead).map { today.weekStart.adding($0 * 7) }
 
         VStack(spacing: 0) {
-            CardHeaderStrip(title: plan.name) {
+            CardHeaderStrip(title: plan.name, planID: plan.id) {
                 let progress = plan.progress(in: today.weekDays)
                 CountPill(done: progress.done, total: progress.planned)
             }

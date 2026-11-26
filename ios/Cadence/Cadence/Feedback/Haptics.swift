@@ -68,24 +68,38 @@ final class Haptics {
 
     // MARK: Shaped patterns
 
-    /// A crisp tap followed by a softer settle: "click… set".
+    /// "Da-ding", felt: a lighter tap, then the main hit 85 ms later on the second note,
+    /// with a short ring under it. Lands on the same beats as check.wav.
     func check() {
         play([
-            transient(at: 0, intensity: 1.0, sharpness: 0.65),
-            transient(at: 0.075, intensity: 0.45, sharpness: 0.2),
+            transient(at: 0, intensity: 0.6, sharpness: 0.5),
+            transient(at: 0.085, intensity: 1.0, sharpness: 0.8),
+            continuous(at: 0.09, duration: 0.11, intensity: 0.28, sharpness: 0.35),
         ], fallback: { self.rigid.impactOccurred(intensity: 1) })
     }
 
+    /// "Ding-da", the reverse: stronger first, softer and duller second, no ring.
     func uncheck() {
-        play([transient(at: 0, intensity: 0.5, sharpness: 0.35)],
-             fallback: { self.light.impactOccurred(intensity: 0.6) })
+        play([
+            transient(at: 0, intensity: 0.7, sharpness: 0.6),
+            transient(at: 0.075, intensity: 0.38, sharpness: 0.25),
+        ], fallback: { self.light.impactOccurred(intensity: 0.6) })
     }
 
+    /// "Not today": two soft, dull thuds falling away. Never sharp, so it never reads as an error.
     func skip() {
         play([
-            transient(at: 0, intensity: 0.6, sharpness: 0.1),
-            continuous(at: 0, duration: 0.09, intensity: 0.25, sharpness: 0.05),
+            transient(at: 0, intensity: 0.62, sharpness: 0.12),
+            transient(at: 0.09, intensity: 0.42, sharpness: 0.05),
+            continuous(at: 0.09, duration: 0.07, intensity: 0.18, sharpness: 0.02),
         ], fallback: { self.soft.impactOccurred(intensity: 0.8) })
+    }
+
+    /// The anticipation tap at touch-down on a check button, before it fills.
+    func press() {
+        guard isEnabled else { return }
+        light.impactOccurred(intensity: 0.5)
+        light.prepare()
     }
 
     /// Three rising taps and a swell: reserved for finishing everything today.

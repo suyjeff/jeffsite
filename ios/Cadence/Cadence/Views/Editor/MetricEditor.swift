@@ -17,10 +17,6 @@ struct MetricEditor: View {
 
         List {
             Section {
-                LabeledContent("Name") {
-                    TextField("Weight", text: binding(\.name))
-                        .multilineTextAlignment(.trailing)
-                }
                 LabeledContent("Unit") {
                     TextField("lb", text: binding(\.unit))
                         .multilineTextAlignment(.trailing)
@@ -34,7 +30,16 @@ struct MetricEditor: View {
                 .pickerStyle(.segmented)
                 .listRowSeparator(.hidden)
             } header: {
-                SheetSectionHeader(text: "Setup")
+                // The name is the page's one title, editable in place like the routine editor.
+                VStack(alignment: .leading, spacing: 20) {
+                    TextField("Name", text: binding(\.name))
+                        .font(.cadenceNumber(28))
+                        .tracking(-0.6)
+                        .foregroundStyle(Color.ink)
+                        .submitLabel(.done)
+                    SheetSectionHeader(text: "Setup")
+                }
+                .textCase(nil)
             }
             .font(.cadenceBodyMedium)
             .foregroundStyle(Color.ink)
@@ -89,7 +94,7 @@ struct MetricEditor: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color.canvas)
-        .navigationTitle(plan.name.isEmpty ? "Plan" : plan.name)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Delete \(plan.name)?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete plan and its history", role: .destructive) {
@@ -164,7 +169,7 @@ struct DayEditSheet: View {
                     .padding(Metrics.gutter)
                 }
                 .background(Color.canvas)
-                .navigationTitle("Edit day")
+                // The date above is the title; the bar only holds Cancel and Save.
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {

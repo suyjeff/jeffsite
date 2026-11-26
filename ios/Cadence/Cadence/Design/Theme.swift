@@ -22,6 +22,11 @@ extension Color {
     static let plum = Color(light: 0x79697B, dark: 0x9A87A0)
     /// Text sitting on a plum fill.
     static let onPlum = Color.white
+    /// The one strong accent: the create button. Deeper and more saturated than `plum` so the
+    /// primary action stands apart from the quieter plum controls, without shouting.
+    static let plumStrong = Color(light: 0x5A3F5F, dark: 0xB79BBD)
+    /// The glyph on `plumStrong`.
+    static let onPlumStrong = Color(light: 0xFFFFFF, dark: 0x1D1520)
     /// The 1px ring in the card shadow stack.
     static let cardRing = Color(light: 0x26262B, lightAlpha: 0.05, dark: 0xFFFFFF, darkAlpha: 0.06)
     static let cardShadow = Color(red: 38 / 255, green: 38 / 255, blue: 43 / 255)
@@ -77,8 +82,10 @@ enum Metrics {
     static let rowVertical: CGFloat = 20
     /// Gap between a label and its text. Figma: 12.
     static let labelGap: CGFloat = 12
-    /// How far the next card in the deck peeks above the front one. Figma: 10.
-    static let deckPeek: CGFloat = 10
+    /// How far the next card in the deck peeks above the front one. The Figma used 10; it's
+    /// 22 here so the peeking card can carry the next plan's name, which makes "pull down for
+    /// the next plan" something you can read rather than guess.
+    static let deckPeek: CGFloat = 22
     /// Back card width ÷ front card width. Figma: 348 / 372.
     static let deckScaleStep: CGFloat = 1 - 348.0 / 372.0
 }
@@ -159,22 +166,54 @@ struct CountPill: View {
     }
 }
 
-/// The grey strip at the top of week and month cards: plan name and progress.
+/// The grey strip at the top of week and month cards: plan name and progress. With a
+/// `planID` it is also the card's handle (hold it, or tap ⋯, for the plan's options).
 struct CardHeaderStrip<Trailing: View>: View {
     let title: String
+    var planID: UUID?
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack {
-            MonoLabel(text: title.uppercased())
-            Spacer(minLength: 12)
-            trailing
+        Group {
+            if let planID {
+                FocusableHeader(planID: planID, minHeight: 48, background: Color.canvas) {
+                    MonoLabel(text: title.uppercased())
+                    Spacer(minLength: 12)
+                    trailing
+                }
+            } else {
+                HStack {
+                    MonoLabel(text: title.uppercased())
+                    Spacer(minLength: 12)
+                    trailing
+                }
+                .padding(.horizontal, Metrics.cardPadding)
+                .padding(.vertical, 8)
+                .frame(minHeight: 41)
+                .background(Color.canvas)
+            }
         }
-        .padding(.horizontal, Metrics.cardPadding)
-        .padding(.vertical, 8)
-        .frame(minHeight: 41)
-        .background(Color.canvas)
         .overlay(alignment: .bottom) { Hairline() }
+    }
+}
+
+/// The next plan's name on the strip of the card peeking behind the deck, so pulling down
+/// says where it goes. Armed, it reads "Release for …".
+struct PeekLabel: View {
+    let name: String
+    var armed = false
+
+    var body: some View {
+        Text(armed ? "RELEASE FOR \(name.uppercased())" : name.uppercased())
+            .font(.cadenceCaption)
+            .foregroundStyle(armed ? Color.plum : Color.inkMuted)
+            .lineLimit(1)
+            .contentTransition(.opacity)
+            .padding(.top, 5)
+            .padding(.horizontal, Metrics.cardPadding)
+            .frame(maxWidth: .infinity)
+            .animation(Motion.snappy, value: armed)
+            .accessibilityHidden(true)
     }
 }
 

@@ -21,7 +21,7 @@ struct MonthCard: View {
         let restOfWeek = (selected.weekdayIndex...6).map { selected.weekStart.adding($0) }
 
         VStack(spacing: 0) {
-            CardHeaderStrip(title: plan.name) {
+            CardHeaderStrip(title: plan.name, planID: plan.id) {
                 CountPill(done: progress.done, total: progress.planned)
                     .animation(Motion.snappy, value: progress.done)
             }

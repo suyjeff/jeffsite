@@ -169,7 +169,8 @@ private struct ActionGlyph: View {
             }
             .scaleEffect(0.6 + 0.4 * p + (armed ? 0.08 : 0))
             .opacity(Double(p))
-            .animation(Motion.snappy, value: armed)
+            // Pops at the commit point, on the same frame as the detent.
+            .animation(.spring(duration: 0.3, bounce: 0.5), value: armed)
             .accessibilityHidden(true)
     }
 }

@@ -100,7 +100,8 @@ struct RoutineEditor: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Color.canvas)
-        .navigationTitle(plan.name.isEmpty ? "Plan" : plan.name)
+        // The editable name above is the page's title; a second one in the bar would repeat it.
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {

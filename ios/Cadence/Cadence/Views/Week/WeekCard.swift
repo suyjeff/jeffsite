@@ -17,7 +17,7 @@ struct WeekCard: View {
         let isCurrent = weekStart == store.today.weekStart
 
         VStack(spacing: 0) {
-            CardHeaderStrip(title: plan.name) {
+            CardHeaderStrip(title: plan.name, planID: plan.id) {
                 CountPill(done: progress.done, total: progress.planned)
                     .animation(Motion.snappy, value: progress.done)
             }
@@ -101,10 +101,12 @@ struct DayRow: View {
     var onEditDay: (UUID, Day) -> Void
 
     @Environment(Store.self) private var store
+    @State private var flash = 0
 
     var body: some View {
         let items = plan.items(on: day)
         let status = plan.status(on: day)
+        let doneCount = plan.plannedColumns(on: day).filter { plan.mark(on: day, column: $0) == .done }.count
 
         Group {
             if plan.columnCount <= 1 {
@@ -156,9 +158,14 @@ struct DayRow: View {
                 .background(Color.surface)
             }
         }
-        .contextMenu {
-            menu(status: status)
+        .overlay {
+            RowFlash(trigger: flash)
         }
+        .onChange(of: doneCount) { old, new in
+            if new > old { flash += 1 }
+        }
+        // Hold a row to lift it with its options (done, not today, edit this day).
+        .liftOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil))
         .id(day.key)
     }
 
@@ -199,21 +206,6 @@ struct DayRow: View {
             .animation(Motion.settle, value: finished)
     }
 
-    @ViewBuilder
-    private func menu(status: DayStatus) -> some View {
-        if plan.isPlanned(day) {
-            Button(status == .done ? "Mark not done" : "Mark done", systemImage: status == .done ? "arrow.uturn.backward" : "checkmark") {
-                commit(.done, column: nil)
-            }
-            Button(status == .skipped ? "Undo not today" : "Not today", systemImage: status == .skipped ? "arrow.uturn.backward" : "xmark") {
-                commit(.skip, column: nil)
-            }
-        }
-        Button("Edit \(isToday ? "today" : DayText.weekdays[day.weekdayIndex].capitalized)…", systemImage: "pencil") {
-            onEditDay(plan.id, day)
-        }
-    }
-
     private func commit(_ direction: SwipeDirection, column: Int?) {
         let change = withAnimation(Motion.settle) {
             if let column {
@@ -249,7 +241,8 @@ struct StatusGlyph: View {
         }
         .foregroundStyle(Color.inkMuted)
         .frame(width: 16, height: 16)
-        .animation(Motion.icon, value: status)
+        // Completing pops the check in past full size; other changes cross-fade without bounce.
+        .animation(status == .done ? .spring(duration: 0.4, bounce: 0.55) : Motion.icon, value: status)
         .accessibilityHidden(true)
     }
 
@@ -264,6 +257,26 @@ struct StatusGlyph: View {
             .opacity(visible ? 1 : 0)
             .scaleEffect(visible ? 1 : 0.25)
             .blur(radius: visible ? 0 : 4)
+    }
+}
+
+/// A soft plum wash across a row the moment something in it is completed.
+struct RowFlash: View {
+    var trigger: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Color.plum
+            .keyframeAnimator(initialValue: 0.0, trigger: trigger) { view, opacity in
+                view.opacity(reduceMotion ? 0 : opacity)
+            } keyframes: { _ in
+                KeyframeTrack {
+                    LinearKeyframe(0.1, duration: 0.08)
+                    CubicKeyframe(0, duration: 0.5)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
@@ -283,60 +296,46 @@ struct MetricRow: View {
         let status = plan.status(on: day)
         let isFuture = day > store.today
 
-        Button {
+        HStack(alignment: .firstTextBaseline) {
+            HStack(spacing: 8) {
+                if isToday {
+                    Circle().fill(Color.plum).frame(width: 6, height: 6)
+                }
+                MonoLabel(
+                    text: showsWeekday ? DayText.weekdays[day.weekdayIndex] : "\(DayText.shortWeekdays[day.weekdayIndex]) \(day.day)",
+                    color: isToday ? .ink : .inkSecondary
+                )
+            }
+            Spacer()
+            if let value {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(plan.format(value))
+                        .font(.cadenceBody)
+                        .monospacedDigit()
+                        .foregroundStyle(Color.ink)
+                        .contentTransition(.numericText(value: value))
+                    Text(plan.unit)
+                        .font(.cadenceCaption)
+                        .foregroundStyle(Color.inkSecondary)
+                }
+            } else {
+                Text(status == .skipped ? "Not today" : isFuture ? "" : "Log")
+                    .font(.cadenceSubhead)
+                    .foregroundStyle(status == .skipped ? Color.inkFaint : Color.plum)
+            }
+        }
+        .padding(.horizontal, Metrics.cardPadding)
+        .padding(.vertical, Metrics.rowVertical)
+        .background(Color.surface)
+        .contentShape(.rect)
+        .onTapGesture {
             guard !isFuture else { return }
             Haptics.shared.tick()
             onEdit(plan.id, day)
-        } label: {
-            HStack(alignment: .firstTextBaseline) {
-                HStack(spacing: 8) {
-                    if isToday {
-                        Circle().fill(Color.plum).frame(width: 6, height: 6)
-                    }
-                    MonoLabel(
-                        text: showsWeekday ? DayText.weekdays[day.weekdayIndex] : "\(DayText.shortWeekdays[day.weekdayIndex]) \(day.day)",
-                        color: isToday ? .ink : .inkSecondary
-                    )
-                }
-                Spacer()
-                if let value {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(plan.format(value))
-                            .font(.cadenceBody)
-                            .monospacedDigit()
-                            .foregroundStyle(Color.ink)
-                            .contentTransition(.numericText(value: value))
-                        Text(plan.unit)
-                            .font(.cadenceCaption)
-                            .foregroundStyle(Color.inkSecondary)
-                    }
-                } else {
-                    Text(status == .skipped ? "Not today" : isFuture ? "" : "Log")
-                        .font(.cadenceSubhead)
-                        .foregroundStyle(status == .skipped ? Color.inkFaint : Color.plum)
-                }
-            }
-            .padding(.horizontal, Metrics.cardPadding)
-            .padding(.vertical, Metrics.rowVertical)
-            .background(Color.surface)
-            .contentShape(.rect)
         }
-        .buttonStyle(RowPressStyle())
-        .disabled(isFuture)
-        .contextMenu {
-            if value != nil {
-                Button("Clear", systemImage: "trash", role: .destructive) {
-                    withAnimation(Motion.settle) { store.setValue(plan.id, on: day, value: nil) }
-                    Feedback.play(.uncheck)
-                }
-            }
-            if !isFuture {
-                Button(status == .skipped ? "Undo not today" : "Not today", systemImage: "xmark") {
-                    let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: day) }
-                    Feedback.play(for: change)
-                }
-            }
-        }
+        // Hold to lift it with its options (log, not today, clear).
+        .liftOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), isEnabled: !isFuture)
+        .accessibilityAddTraits(isFuture ? [] : .isButton)
         .id(day.key)
         .accessibilityLabel("\(DayText.long(day)), \(value.map { "\(plan.format($0)) \(plan.unit)" } ?? "not logged")")
     }

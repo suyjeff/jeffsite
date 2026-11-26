@@ -28,11 +28,15 @@ struct PageDeck<Card: View>: View {
         ScrollView {
             ZStack(alignment: .top) {
                 if canCycle {
-                    // The next card: blank paper, peeking 10pt above. It rises out from
-                    // behind as the page is pulled down.
+                    // The next card, peeking above with its name. It rises out from behind
+                    // as the page is pulled down.
+                    let next = plans[((store.index(of: front?.id) ?? 0) + 1) % plans.count]
                     RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous)
                         .fill(Color.surface)
                         .frame(height: 160)
+                        .overlay(alignment: .top) {
+                            PeekLabel(name: next.name, armed: armed)
+                        }
                         .cardSurface()
                         .scaleEffect(1 - Metrics.deckScaleStep * (1 - progress * 0.7), anchor: .top)
                         .offset(y: -Metrics.deckPeek - pull * 0.42)
