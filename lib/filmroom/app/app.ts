@@ -408,7 +408,7 @@ export class FilmroomApp {
   openFilm(file: File, game: string) {
     const url = URL.createObjectURL(file);
     const prev = this.films.get(game);
-    this.films.set(game, { game, url, name: file.name, fps: 30000 / 1001, anchors: prev?.anchors ?? this.savedAnchors.get(game) ?? [] });
+    this.films.set(game, { game, url, name: file.name, fps: 30000 / 1001, anchors: prev?.anchors ?? this.savedAnchors.get(game) ?? [{ wall: 0, media: 0, provisional: true }] });
     this.persistFilms();
     this.set({ films: this.state.films + 1 });
     this.reel?.refresh();
@@ -426,7 +426,8 @@ export class FilmroomApp {
       const film = this.films.get(g);
       if (!film) return null;
       const wall = this.store.p.wall[row];
-      film.anchors = [...film.anchors.filter((a) => a.wall !== wall), { wall, media }];
+      // The presented frame becomes this play's t₀; the provisional tip-off guess gives way to it.
+      film.anchors = [...film.anchors.filter((a) => a.wall !== wall && !a.provisional), { wall, media }];
       this.persistFilms();
       this.reel.refresh();
       void this.reel.goto(this.state.cursor, { rel: 0 });

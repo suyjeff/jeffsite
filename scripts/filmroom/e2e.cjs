@@ -191,7 +191,25 @@ const settle = (page, ms = 250) => page.waitForTimeout(ms);
   const viewThere = await p2.isVisible("[data-testid=tape]");
   check("URL restores query, clip, exact frame and view", frameHere === frameThere && clipHere === clipThere && viewThere, `${url.split("?")[1]} · frame ${frameHere}→${frameThere} · clip ${clipHere}→${clipThere}`);
 
-  // 8 · layout stability
+  // 8 · local game film: open a file for this game, sync t₀ with Shift+A, and t₀ now lands on that frame
+  const film = require("path").join(__dirname, "../../public/filmroom-assets/proxy/p3.webm");
+  await page.setInputFiles('input[type=file][accept="video/*"]', film);
+  await settle(page, 1200);
+  const badge = await page.textContent("[data-testid=viewport]");
+  for (let i = 0; i < 5; i++) await page.keyboard.press(">");
+  await settle(page, 300);
+  const anchorFrame = await hudFrame(page);
+  await page.keyboard.press("Shift+A");
+  await settle(page, 800);
+  await page.keyboard.press(">");
+  await settle(page, 300);
+  await page.keyboard.press("0");
+  await settle(page, 400);
+  const backAt = await hudFrame(page);
+  const bar = await readBarcode(page);
+  check("local film: GAME FILM source, Shift+A anchors t₀ to the frame on screen", /GAME FILM/.test(badge) && backAt === anchorFrame && bar === anchorFrame, `anchor ${anchorFrame} · t₀ now ${backAt} · decoded ${bar}`);
+
+  // 9 · layout stability
   const cls = await page.evaluate(() => window.__cls);
   check("CLS = 0", cls === 0, cls === 0 ? "0" : `${cls} · ${(await page.evaluate(() => window.__shifts)).join(" ;; ")}`);
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

@@ -21,6 +21,8 @@ export const NBA_T0_DEFAULT = 9.0;
 export interface FilmAnchor {
   wall: number; // tenths of a second since the game's first action
   media: number; // seconds in the film
+  /** The default "film starts at tip-off" guess; the first real anchor replaces it. */
+  provisional?: boolean;
 }
 
 export interface LocalFilm {
