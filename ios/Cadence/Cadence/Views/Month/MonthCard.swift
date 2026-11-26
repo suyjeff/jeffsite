@@ -6,7 +6,6 @@ struct MonthCard: View {
     let plan: Plan
     @Binding var month: Day
     @Binding var selected: Day
-    var onEditDay: (UUID, Day) -> Void
     var onEditValue: (UUID, Day) -> Void
 
     @Environment(Store.self) private var store
@@ -28,6 +27,7 @@ struct MonthCard: View {
 
             PeriodBar(
                 title: DayText.monthTitle(month),
+                unit: "month",
                 isCurrent: isCurrent,
                 onStep: { step(by: $0) },
                 onReset: { jumpToToday() }
@@ -87,7 +87,7 @@ struct MonthCard: View {
                         if plan.isMetric {
                             MetricRow(plan: plan, day: day, isToday: day == store.today, onEdit: onEditValue)
                         } else {
-                            DayRow(plan: plan, day: day, isToday: day == store.today, onEditDay: onEditDay)
+                            DayRow(plan: plan, day: day, isToday: day == store.today)
                         }
                     }
                     if index < restOfWeek.count - 1 {
@@ -191,6 +191,13 @@ private struct DayCell: View {
                     .frame(width: 18, height: 1.5)
                     .rotationEffect(.degrees(-45))
             }
+            // Today is marked by shape, not only by the ring's color.
+            if isToday {
+                Circle()
+                    .fill(done ? Color.onPlum : Color.plum)
+                    .frame(width: 4, height: 4)
+                    .offset(y: 12)
+            }
         }
         .frame(width: 38, height: 38)
         .frame(maxWidth: .infinity)
@@ -199,7 +206,7 @@ private struct DayCell: View {
         .animation(Motion.snappy, value: status)
         .animation(Motion.snappy, value: isSelected)
         .accessibilityElement()
-        .accessibilityLabel(DayText.long(day))
+        .accessibilityLabel(isToday ? "Today, \(DayText.long(day))" : DayText.long(day))
         .accessibilityValue(statusText(status))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
@@ -214,9 +221,9 @@ private struct DayCell: View {
 
     private func numberColor(_ status: DayStatus) -> Color {
         switch status {
-        case .done: return .onPlum
-        case .empty, .skipped: return .inkFaint
-        default: return isFuture ? .inkMuted : .ink
+        case .done: return .onPlumText
+        case .empty, .skipped: return .inkSecondary
+        default: return isFuture ? .inkSecondary : .ink
         }
     }
 

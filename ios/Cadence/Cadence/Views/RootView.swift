@@ -33,7 +33,7 @@ struct RootView: View {
                 frontID: frontID,
                 onSelectPlan: selectPlan,
                 onOpenPlans: { plansRoute = $0 },
-                onJumpToToday: jumpToToday
+                onJumpToToday: mode == .week || mode == .month ? jumpToToday : nil
             )
 
             ZStack {
@@ -143,18 +143,17 @@ struct RootView: View {
         case .today:
             TodayDeck(
                 frontID: $frontID,
-                onEditDay: editDay,
                 onCreatePlan: { creating = true }
             )
             .transition(modeTransition)
         case .week:
             PageDeck(frontID: $frontID) { plan in
-                WeekCard(plan: plan, weekStart: $weekStart, onEditDay: editDay, onEditValue: editValue)
+                WeekCard(plan: plan, weekStart: $weekStart, onEditValue: editValue)
             }
             .transition(modeTransition)
         case .month:
             PageDeck(frontID: $frontID) { plan in
-                MonthCard(plan: plan, month: $month, selected: $selectedDay, onEditDay: editDay, onEditValue: editValue)
+                MonthCard(plan: plan, month: $month, selected: $selectedDay, onEditValue: editValue)
             }
             .transition(modeTransition)
         case .scrolling:
@@ -196,7 +195,7 @@ struct RootView: View {
                     .offset(y: -Metrics.deckPeek)
             }
             if let plan = store.plan(frontID) ?? store.plans.first {
-                ScrollingCard(plan: plan, onEditDay: editDay, onEditValue: editValue)
+                ScrollingCard(plan: plan, onEditValue: editValue)
                     .id(plan.id)
                     .transition(Motion.deckForward(reduceMotion: reduceMotion))
             } else {

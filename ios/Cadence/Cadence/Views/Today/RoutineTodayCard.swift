@@ -7,7 +7,6 @@ struct RoutineTodayCard: View {
     let day: Day
     /// −1…1 from the deck's horizontal drag.
     var swipe: CGFloat
-    var onEditDay: (UUID, Day) -> Void
 
     @Environment(Store.self) private var store
     @State private var ripple = 0
@@ -24,7 +23,7 @@ struct RoutineTodayCard: View {
         VStack(spacing: 0) {
             // The top of the card is its handle: hold it (or tap ⋯) for the plan's options.
             FocusableHeader(planID: plan.id) {
-                MonoLabel(text: plan.name.uppercased(), color: status.isComplete ? .inkMuted : .inkSecondary)
+                MonoLabel(text: plan.name.uppercased())
                 Spacer(minLength: 12)
                 if week.planned > 0 {
                     CountPill(done: week.done, total: week.planned)
@@ -68,7 +67,7 @@ struct RoutineTodayCard: View {
         Text(isPlanned ? text : "Nothing planned")
             .font(.cadenceBody)
             .tracking(-0.2)
-            .foregroundStyle(finished || !isPlanned ? Color.inkFaint : Color.ink)
+            .foregroundStyle(finished || !isPlanned ? Color.inkSecondary : Color.ink)
             .minimumScaleFactor(0.8)
             .padding(.horizontal, Metrics.cardPadding)
             .padding(.top, column == 0 ? 4 : Metrics.cardPadding)
@@ -104,7 +103,7 @@ struct RoutineTodayCard: View {
 
     private func footer(status: DayStatus) -> some View {
         HStack(alignment: .center) {
-            MonoLabel(text: footerText(status), color: .inkMuted)
+            MonoLabel(text: footerText(status))
                 .contentTransition(.opacity)
                 .animation(Motion.settle, value: footerText(status))
             Spacer()
@@ -162,11 +161,12 @@ struct RoutineTodayCard: View {
 private struct ColumnTag: View {
     let title: String
     let mark: Mark?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 6) {
             if !title.isEmpty {
-                MonoLabel(text: title.uppercased(), color: .inkMuted)
+                MonoLabel(text: title.uppercased())
             }
             ZStack {
                 Image(systemName: "checkmark")
@@ -181,7 +181,7 @@ private struct ColumnTag: View {
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(Color.inkMuted)
             .frame(width: 14)
-            .animation(mark == .done ? .spring(duration: 0.4, bounce: 0.55) : Motion.icon, value: mark)
+            .animation(mark == .done ? Motion.pop(reduceMotion: reduceMotion) : Motion.icon, value: mark)
         }
     }
 }

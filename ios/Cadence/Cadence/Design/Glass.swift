@@ -36,30 +36,35 @@ struct CheckButton: View {
     private var towardSkip: CGFloat { max(0, -swipe).clamped(0, 1) }
     private var armed: Bool { abs(swipe) >= 1 }
 
+    // What each swipe will do on release, previewed as it travels:
+    //   open:    right → done (fill + check draw in)   left → not today (✕ draws in)
+    //   done:    right → undo (fill drains, check undraws)   left → not today (same, ✕ draws in)
+    //   skipped: right → done (fill + check in, ✕ out)   left → undo (✕ undraws)
+
     /// 0…1: how much of the plum fill shows.
     private var fill: CGFloat {
         switch look {
-        case .done: 1 - towardSkip
-        case .skipped: 0
         case .open: towardDone
+        case .done: 1 - max(towardDone, towardSkip)
+        case .skipped: towardDone
         }
     }
 
     /// 0…1: how much of the check is drawn.
     private var checkDrawn: CGFloat {
         switch look {
-        case .done: towardSkip > 0.3 ? 0 : 1
-        case .skipped: 0
         case .open: towardDone
+        case .done: 1 - max(towardDone, towardSkip)
+        case .skipped: towardDone
         }
     }
 
     /// 0…1: how much of the ✕ is drawn.
     private var crossDrawn: CGFloat {
         switch look {
-        case .skipped: towardDone > 0.3 ? 0 : 1
-        case .done: 0
         case .open: towardSkip
+        case .done: towardSkip
+        case .skipped: 1 - max(towardDone, towardSkip)
         }
     }
 

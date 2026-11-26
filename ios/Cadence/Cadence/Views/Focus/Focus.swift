@@ -51,49 +51,82 @@ extension EnvironmentValues {
 
 extension View {
     /// Long-press lifts this view into the focus layer with an options pill.
-    /// While the finger holds, it eases down to 0.97 (anticipation); a detent marks the lift.
-    func liftOnHold(_ kind: FocusItem.Kind, key: String, isEnabled: Bool = true) -> some View {
-        modifier(LiftOnHold(kind: kind, key: key, isEnabled: isEnabled))
+    ///
+    /// While the finger holds, the region takes a soft ink wash (touch-down feedback that
+    /// stays put, so nothing inside a card shifts on its own); a detent marks the lift.
+    /// Pass `inScrollView` for views inside a ScrollView: the hold is then recognized
+    /// alongside the scroll instead of competing with it.
+    func liftOnHold(_ kind: FocusItem.Kind, key: String, isEnabled: Bool = true, inScrollView: Bool = false) -> some View {
+        modifier(LiftOnHold(kind: kind, key: key, isEnabled: isEnabled, inScrollView: inScrollView))
     }
+}
+
+/// Holds the latest on-screen frame without making the view re-render when it changes,
+/// which happens on every frame while a list scrolls or a card is dragged.
+private final class FrameBox {
+    var frame: CGRect = .zero
 }
 
 private struct LiftOnHold: ViewModifier {
     let kind: FocusItem.Kind
     let key: String
     var isEnabled: Bool
+    var inScrollView: Bool
 
     @Environment(\.focusedKey) private var focusedKey
     @Environment(\.requestFocus) private var requestFocus
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var frame: CGRect = .zero
+    @State private var box = FrameBox()
     @State private var pressing = false
+    @GestureState private var holding = false
 
     func body(content: Content) -> some View {
-        content
+        let lifted = content
             .environment(\.liftNow, LiftNow {
                 Haptics.shared.detent(intensity: 0.6)
-                requestFocus(FocusItem(kind: kind, frame: frame, key: key))
+                lift()
             })
-            // The squash starts after a beat, so a scroll that merely begins here never flickers.
-            .scaleEffect(pressing && !reduceMotion ? 0.97 : 1)
-            .animation(pressing ? .easeOut(duration: 0.3).delay(0.1) : .spring(duration: 0.25, bounce: 0), value: pressing)
+            .overlay {
+                // Fades in after a beat, so a scroll that merely starts here never flickers.
+                Color.ink
+                    .opacity(pressing || holding ? 0.05 : 0)
+                    .animation(pressing || holding ? .easeOut(duration: 0.25).delay(0.08) : .easeOut(duration: 0.15), value: pressing || holding)
+                    .allowsHitTesting(false)
+            }
             .opacity(focusedKey == key ? 0 : 1)
             .onGeometryChange(for: CGRect.self) { proxy in
                 proxy.frame(in: .global)
-            } action: { newFrame in
-                frame = newFrame
+            } action: { [box] newFrame in
+                box.frame = newFrame
             }
-            .onLongPressGesture(minimumDuration: 0.4, maximumDistance: 10) {
+            .accessibilityAction(named: "Options") {
+                if isEnabled { lift() }
+            }
+
+        if inScrollView {
+            lifted.simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.4, maximumDistance: 10)
+                    .updating($holding) { value, state, _ in state = value }
+                    .onEnded { _ in
+                        guard isEnabled else { return }
+                        Haptics.shared.detent(intensity: 0.75)
+                        lift()
+                    },
+                isEnabled: isEnabled
+            )
+        } else {
+            lifted.onLongPressGesture(minimumDuration: 0.4, maximumDistance: 10) {
                 guard isEnabled else { return }
                 pressing = false
                 Haptics.shared.detent(intensity: 0.75)
-                requestFocus(FocusItem(kind: kind, frame: frame, key: key))
+                lift()
             } onPressingChanged: { isPressing in
                 pressing = isEnabled && isPressing
             }
-            .accessibilityAction(named: "Options") {
-                requestFocus(FocusItem(kind: kind, frame: frame, key: key))
-            }
+        }
+    }
+
+    private func lift() {
+        requestFocus(FocusItem(kind: kind, frame: box.frame, key: key))
     }
 }
 
@@ -106,6 +139,7 @@ struct FocusableHeader<Content: View>: View {
     let planID: UUID
     var minHeight: CGFloat = 60
     var background: Color = .clear
+    var inScrollView = false
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -119,7 +153,7 @@ struct FocusableHeader<Content: View>: View {
         .frame(minHeight: minHeight)
         .background(background)
         .contentShape(.rect)
-        .liftOnHold(.plan(planID), key: FocusItem.planKey(planID))
+        .liftOnHold(.plan(planID), key: FocusItem.planKey(planID), inScrollView: inScrollView)
     }
 }
 
@@ -166,6 +200,9 @@ struct FocusLayer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var lifted = false
     @State private var pillShown = false
+    /// The plan as it was when lifted, so the copy and pill can fade out with the dim
+    /// even after the plan is deleted from the pill.
+    @State private var snapshot: Plan?
     @State private var pillSize: CGSize = CGSize(width: 260, height: 56)
 
     private let gap: CGFloat = 12
@@ -180,12 +217,13 @@ struct FocusLayer: View {
             ZStack(alignment: .topLeading) {
                 Color.black
                     .opacity(lifted ? (colorScheme == .dark ? 0.45 : 0.2) : 0)
+                    .animation(.easeOut(duration: lifted ? 0.2 : 0.16), value: lifted)
                     .contentShape(.rect)
                     .onTapGesture { dismiss() }
                     .accessibilityLabel("Close options")
                     .accessibilityAddTraits(.isButton)
 
-                FocusPreview(item: item)
+                FocusPreview(item: item, fallback: snapshot)
                     .frame(width: item.frame.width, height: layout.previewHeight, alignment: .top)
                     .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous))
                     .background {
@@ -197,7 +235,7 @@ struct FocusLayer: View {
                     .offset(x: item.frame.minX, y: lifted ? layout.previewY : item.frame.minY)
                     .allowsHitTesting(false)
 
-                FocusPill(item: item, actions: actions, onDone: dismiss)
+                FocusPill(item: item, fallback: snapshot, actions: actions, onDone: dismiss)
                     .onGeometryChange(for: CGSize.self) { $0.size } action: { pillSize = $0 }
                     .scaleEffect(pillShown ? 1 : (reduceMotion ? 1 : 0.8), anchor: layout.pillBelow ? .top : .bottom)
                     .opacity(pillShown ? 1 : 0)
@@ -205,7 +243,10 @@ struct FocusLayer: View {
             }
         }
         .ignoresSafeArea()
+        // VoiceOver stays inside the lifted item and its options until they close.
+        .accessibilityAddTraits(.isModal)
         .onAppear {
+            snapshot = store.plan(item.planID)
             withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.34, bounce: 0.22)) {
                 lifted = true
             }
@@ -256,10 +297,11 @@ struct FocusLayer: View {
 /// The lifted copy of the held item: the same type, set and spacing as where it came from.
 private struct FocusPreview: View {
     let item: FocusItem
+    let fallback: Plan?
     @Environment(Store.self) private var store
 
     var body: some View {
-        if let plan = store.plan(item.planID) {
+        if let plan = store.plan(item.planID) ?? fallback {
             switch item.kind {
             case .plan:
                 let progress = plan.progress(in: store.today.weekDays)
@@ -334,6 +376,7 @@ private struct DayPreview: View {
 /// behind a confirmation popover and anything else under ⋯.
 private struct FocusPill: View {
     let item: FocusItem
+    let fallback: Plan?
     let actions: FocusActions
     var onDone: () -> Void
 
@@ -341,7 +384,7 @@ private struct FocusPill: View {
     @State private var confirmingDelete = false
 
     var body: some View {
-        if let plan = store.plan(item.planID) {
+        if let plan = store.plan(item.planID) ?? fallback {
             HStack(spacing: 2) {
                 switch item.kind {
                 case .plan:
@@ -520,7 +563,7 @@ private struct DeleteConfirmation: View {
                     .foregroundStyle(Color.inkSecondary)
             }
             Button(role: .destructive, action: onDelete) {
-                Text("Delete")
+                Text("Delete plan")
                     .font(.cadenceCallout)
                     .frame(maxWidth: .infinity)
                     .frame(height: 40)
@@ -564,6 +607,8 @@ private struct PillButton: View {
                         .font(.system(size: 17, weight: .semibold))
                     Text(title)
                         .font(.cadenceBody)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
                 .foregroundStyle(isEnabled ? Color.ink : Color.inkFaint)
                 .padding(.horizontal, 14)

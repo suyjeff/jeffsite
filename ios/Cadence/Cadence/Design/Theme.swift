@@ -14,14 +14,19 @@ extension Color {
     static let ink = Color(light: 0x463947, dark: 0xF1ECF2)
     /// Labels. Figma #79697B.
     static let inkSecondary = Color(light: 0x79697B, dark: 0xA797A9)
-    /// Labels on finished rows. Figma #A89EA9.
-    static let inkMuted = Color(light: 0xA89EA9, dark: 0x7B6E7D)
-    /// Text on finished rows. Figma #D7D0D7.
+    /// Icons and other glyphs that carry state (✓, ✕, ⋯, rings). Graphics only, never text:
+    /// it clears the 3:1 that meaningful graphics need on both backgrounds, not the 4.5:1
+    /// text needs. (The Figma's #A89EA9 read at 2.5:1, too faint for its finished-row labels;
+    /// text now steps down to `inkSecondary` instead.)
+    static let inkMuted = Color(light: 0x908292, dark: 0x7B6E7D)
+    /// Ruler ticks, disabled controls and decorative marks only. Figma #D7D0D7.
     static let inkFaint = Color(light: 0xD7D0D7, dark: 0x4B414C)
     /// The glass tint on buttons. Figma #79697B.
     static let plum = Color(light: 0x79697B, dark: 0x9A87A0)
-    /// Text sitting on a plum fill.
+    /// Glyphs sitting on a plum fill (white clears 3:1 in both appearances).
     static let onPlum = Color.white
+    /// Text on a plum fill. White fails 4.5:1 on dark mode's lighter plum, so text flips dark.
+    static let onPlumText = Color(light: 0xFFFFFF, dark: 0x1D1520)
     /// The one strong accent: the create button. Deeper and more saturated than `plum` so the
     /// primary action stands apart from the quieter plum controls, without shouting.
     static let plumStrong = Color(light: 0x5A3F5F, dark: 0xB79BBD)
@@ -176,7 +181,8 @@ struct CardHeaderStrip<Trailing: View>: View {
     var body: some View {
         Group {
             if let planID {
-                FocusableHeader(planID: planID, minHeight: 48, background: Color.canvas) {
+                // Week and month cards live in a scroll view.
+                FocusableHeader(planID: planID, minHeight: 48, background: Color.canvas, inScrollView: true) {
                     MonoLabel(text: title.uppercased())
                     Spacer(minLength: 12)
                     trailing
@@ -206,7 +212,7 @@ struct PeekLabel: View {
     var body: some View {
         Text(armed ? "RELEASE FOR \(name.uppercased())" : name.uppercased())
             .font(.cadenceCaption)
-            .foregroundStyle(armed ? Color.plum : Color.inkMuted)
+            .foregroundStyle(armed ? Color.plum : Color.inkSecondary)
             .lineLimit(1)
             .contentTransition(.opacity)
             .padding(.top, 5)

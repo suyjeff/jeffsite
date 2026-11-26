@@ -25,6 +25,8 @@ struct PlansSheet: View {
     @State private var selection: Set<UUID> = []
     @State private var showingTemplates = false
     @State private var confirmingBulkDelete = false
+    /// A plan swiped to delete, waiting for confirmation (it takes its history with it).
+    @State private var pendingDelete: Plan?
     @AppStorage(Prefs.soundsKey) private var soundsOn = true
     @AppStorage(Prefs.hapticsKey) private var hapticsOn = true
 
@@ -52,8 +54,9 @@ struct PlansSheet: View {
                     }
                     .onMove { store.move(fromOffsets: $0, toOffset: $1) }
                     .onDelete { offsets in
-                        let ids = offsets.compactMap { store.plans.indices.contains($0) ? store.plans[$0].id : nil }
-                        ids.forEach(store.delete)
+                        if let index = offsets.first, store.plans.indices.contains(index) {
+                            pendingDelete = store.plans[index]
+                        }
                     }
 
                     if !selecting {
@@ -72,7 +75,7 @@ struct PlansSheet: View {
                          ? "Select plans to mark today done or delete them together. Drag to reorder."
                          : "Tap a plan's name at the top of the screen to bring it forward. Hold the top of a card for its options.")
                         .font(.cadenceSubhead)
-                        .foregroundStyle(Color.inkMuted)
+                        .foregroundStyle(Color.inkSecondary)
                 }
                 .listRowBackground(Color.surface)
 
@@ -89,7 +92,7 @@ struct PlansSheet: View {
                     } footer: {
                         Text("Sounds follow the silent switch.")
                             .font(.cadenceSubhead)
-                            .foregroundStyle(Color.inkMuted)
+                            .foregroundStyle(Color.inkSecondary)
                     }
                     .font(.cadenceBodyMedium)
                     .tint(Color.plum)
@@ -127,16 +130,30 @@ struct PlansSheet: View {
                         }
                         .disabled(selection.isEmpty)
                         .confirmationDialog(
-                            "Delete \(selection.count) \(selection.count == 1 ? "plan" : "plans")?",
+                            "Delete ^[\(selection.count) plan](inflect: true)?",
                             isPresented: $confirmingBulkDelete,
                             titleVisibility: .visible
                         ) {
-                            Button("Delete with history", role: .destructive) { deleteSelected() }
+                            Button("Delete ^[\(selection.count) plan](inflect: true)", role: .destructive) { deleteSelected() }
                         } message: {
-                            Text("Every week and check mark in them is removed.")
+                            Text("Their weeks and check marks are deleted too.")
                         }
                     }
                 }
+            }
+            .confirmationDialog(
+                "Delete \(pendingDelete?.name ?? "plan")?",
+                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                titleVisibility: .visible,
+                presenting: pendingDelete
+            ) { plan in
+                Button("Delete plan", role: .destructive) {
+                    withAnimation(Motion.standard) { store.delete(plan.id) }
+                    Feedback.play(.skip)
+                    pendingDelete = nil
+                }
+            } message: { _ in
+                Text("Its weeks and check marks are deleted too.")
             }
             .navigationDestination(for: UUID.self) { id in
                 PlanEditor(planID: id, onDelete: {
@@ -174,7 +191,7 @@ struct PlansSheet: View {
     private func deleteSelected() {
         let ids = selection
         withAnimation(Motion.standard) {
-            ids.forEach(store.delete)
+            for id in ids { store.delete(id) }
             selection.removeAll()
             editMode = .inactive
         }
@@ -209,7 +226,7 @@ private struct PlanListRow: View {
                     .foregroundStyle(Color.ink)
                 Text(subtitle)
                     .font(.cadenceCaption)
-                    .foregroundStyle(Color.inkMuted)
+                    .foregroundStyle(Color.inkSecondary)
             }
         }
         .padding(.vertical, 4)

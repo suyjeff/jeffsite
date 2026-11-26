@@ -22,7 +22,7 @@ struct MetricTodayCard: View {
             // The card's handle: hold it (or tap ⋯) for the plan's options. It spans the full
             // card width, so it steps out of the card's padding.
             FocusableHeader(planID: plan.id) {
-                MonoLabel(text: plan.name.uppercased(), color: isLogged ? .inkMuted : .inkSecondary)
+                MonoLabel(text: plan.name.uppercased())
                 Spacer(minLength: 12)
             }
             .padding(.horizontal, -Metrics.cardPadding)
@@ -48,7 +48,7 @@ struct MetricTodayCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
 
-                MonoLabel(text: TrendText.delta(plan, value: draft, before: day) ?? "FIRST ENTRY", color: .inkMuted, style: .cadenceCaption)
+                MonoLabel(text: TrendText.delta(plan, value: draft, before: day) ?? "FIRST ENTRY", style: .cadenceCaption)
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
@@ -72,12 +72,13 @@ struct MetricTodayCard: View {
                     set: { store.setDraft($0, for: plan.id) }
                 ),
                 step: plan.step,
-                range: 0...max(1000, draft * 3)
+                range: 0...max(1000, draft * 3),
+                label: plan.name
             )
             .padding(.horizontal, -Metrics.cardPadding)
 
             HStack(alignment: .center) {
-                MonoLabel(text: footerText(status: status, changed: changed), color: .inkMuted)
+                MonoLabel(text: footerText(status: status, changed: changed))
                     .contentTransition(.opacity)
                 Spacer()
                 CheckButton(

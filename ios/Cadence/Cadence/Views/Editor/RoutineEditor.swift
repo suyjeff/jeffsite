@@ -31,6 +31,13 @@ struct RoutineEditor: View {
     @State private var weekStart: Day = .today.weekStart
     @State private var direction = 1
     @State private var confirmingDelete = false
+    @State private var pendingWeekAction: WeekAction?
+
+    /// Week edits that throw away what's written, so they confirm first.
+    enum WeekAction: Identifiable {
+        case clear, repeatPrevious
+        var id: Self { self }
+    }
     @FocusState private var focus: Cell?
 
     struct Cell: Hashable {
@@ -98,6 +105,29 @@ struct RoutineEditor: View {
             .padding(.horizontal, Metrics.gutter - 4)
             .padding(.vertical, 16)
         }
+        .confirmationDialog(
+            pendingWeekAction == .clear ? "Clear this week?" : "Repeat the previous week?",
+            isPresented: Binding(get: { pendingWeekAction != nil }, set: { if !$0 { pendingWeekAction = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingWeekAction
+        ) { action in
+            switch action {
+            case .clear:
+                Button("Clear week", role: .destructive) {
+                    withAnimation(Motion.standard) { store.clearWeek(plan.id, week: weekStart) }
+                    Feedback.play(.skip)
+                }
+            case .repeatPrevious:
+                Button("Replace with previous week", role: .destructive) {
+                    withAnimation(Motion.standard) { store.revertWeek(plan.id, week: weekStart) }
+                    Feedback.play(.uncheck)
+                }
+            }
+        } message: { action in
+            Text(action == .clear
+                 ? "Everything written for this week is erased."
+                 : "What's written for this week is replaced by the week before it.")
+        }
         .scrollDismissesKeyboard(.interactively)
         .background(Color.canvas)
         // The editable name above is the page's title; a second one in the bar would repeat it.
@@ -155,7 +185,7 @@ struct RoutineEditor: View {
                             .foregroundStyle(day == store.today ? Color.ink : Color.inkSecondary)
                         Text("\(day.day)")
                             .font(.cadenceMicro)
-                            .foregroundStyle(Color.inkMuted)
+                            .foregroundStyle(Color.inkSecondary)
                     }
                     .frame(width: 64, alignment: .leading)
                     .padding(.leading, 16)
@@ -233,13 +263,11 @@ struct RoutineEditor: View {
                 }
                 if isOwn && hasEarlier {
                     ActionChip(title: "Repeat previous", symbol: "arrow.uturn.backward") {
-                        store.revertWeek(plan.id, week: weekStart)
-                        Feedback.play(.uncheck)
+                        pendingWeekAction = .repeatPrevious
                     }
                 }
                 ActionChip(title: "Clear week", symbol: "eraser") {
-                    store.clearWeek(plan.id, week: weekStart)
-                    Feedback.play(.skip)
+                    pendingWeekAction = .clear
                 }
             }
             .padding(.horizontal, 4)

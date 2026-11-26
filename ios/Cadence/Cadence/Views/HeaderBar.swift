@@ -27,7 +27,8 @@ struct HeaderBar: View {
     var frontID: UUID?
     var onSelectPlan: (UUID) -> Void
     var onOpenPlans: (PlansRoute) -> Void
-    var onJumpToToday: () -> Void
+    /// Nil hides "Jump to today", for views already pinned to today.
+    var onJumpToToday: (() -> Void)?
 
     @Namespace private var selection
 
@@ -84,7 +85,7 @@ struct HeaderBar: View {
                 Text(plan.name.isEmpty ? "Untitled" : plan.name)
                     .font(.cadenceTitle)
                     .tracking(-0.2)
-                    .foregroundStyle(active ? Color.ink : Color.inkMuted)
+                    .foregroundStyle(active ? Color.ink : Color.inkSecondary)
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -121,6 +122,7 @@ struct HeaderBar: View {
 /// solid plum when done (it pops in), faint when skipped or nothing is planned.
 struct StatusDot: View {
     let status: DayStatus
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let fraction: CGFloat = {
@@ -147,15 +149,15 @@ struct StatusDot: View {
                 .opacity(status == .skipped ? 1 : 0)
         }
         .frame(width: 8, height: 8)
-        .animation(status == .done ? .spring(duration: 0.4, bounce: 0.55) : Motion.snappy, value: status)
+        .animation(status == .done ? Motion.pop(reduceMotion: reduceMotion) : Motion.snappy, value: status)
         .accessibilityHidden(true)
     }
 
     private var ringColor: Color {
         switch status {
-        case .pending, .partial: .inkMuted
+        case .pending, .partial, .empty: .inkMuted
         case .done: .plum
-        case .skipped, .empty: .inkFaint
+        case .skipped: .inkFaint
         }
     }
 }
@@ -166,7 +168,7 @@ struct StatusDot: View {
 struct MoreMenu: View {
     var frontID: UUID?
     var onOpenPlans: (PlansRoute) -> Void
-    var onJumpToToday: () -> Void
+    var onJumpToToday: (() -> Void)?
 
     @AppStorage(Prefs.soundsKey) private var soundsOn = true
     @AppStorage(Prefs.hapticsKey) private var hapticsOn = true
@@ -178,8 +180,10 @@ struct MoreMenu: View {
                 Button("All plans", systemImage: "list.bullet") { onOpenPlans(.edit(nil)) }
                 Button("Select plans", systemImage: "checkmark.circle") { onOpenPlans(.select) }
             }
-            Section {
-                Button("Jump to today", systemImage: "calendar") { onJumpToToday() }
+            if let onJumpToToday {
+                Section {
+                    Button("Jump to today", systemImage: "calendar") { onJumpToToday() }
+                }
             }
             Section {
                 Toggle(isOn: $soundsOn) { Label("Sounds", systemImage: "speaker.wave.2") }
@@ -239,7 +243,7 @@ struct ModeBar: View {
             ForEach(ViewMode.allCases) { item in
                 Text(item.title)
                     .font(.cadenceCallout)
-                    .foregroundStyle(item == shown ? Color.onPlum : Color.ink)
+                    .foregroundStyle(item == shown ? Color.onPlumText : Color.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity)

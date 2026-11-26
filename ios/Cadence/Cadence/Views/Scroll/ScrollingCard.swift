@@ -4,7 +4,6 @@ import SwiftUI
 /// Week strips pin to the top while their days scroll beneath; opens on today.
 struct ScrollingCard: View {
     let plan: Plan
-    var onEditDay: (UUID, Day) -> Void
     var onEditValue: (UUID, Day) -> Void
 
     @Environment(Store.self) private var store
@@ -73,7 +72,7 @@ struct ScrollingCard: View {
         if plan.isMetric {
             MetricRow(plan: plan, day: day, isToday: day == store.today, showsWeekday: false, onEdit: onEditValue)
         } else {
-            DayRow(plan: plan, day: day, isToday: day == store.today, showsWeekday: false, onEditDay: onEditDay)
+            DayRow(plan: plan, day: day, isToday: day == store.today, showsWeekday: false)
         }
     }
 }

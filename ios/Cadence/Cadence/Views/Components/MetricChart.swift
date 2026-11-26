@@ -60,7 +60,7 @@ struct MetricChart: View {
             AxisMarks(values: .stride(by: .day)) { _ in
                 AxisValueLabel(format: .dateTime.weekday(.narrow))
                     .font(.cadenceMicro)
-                    .foregroundStyle(Color.inkMuted)
+                    .foregroundStyle(Color.inkSecondary)
             }
         }
         .accessibilityElement(children: .combine)

@@ -20,6 +20,11 @@ enum Motion {
     /// Contextual icon swap: spring 0.3s, no bounce.
     static let icon = Animation.spring(duration: 0.3, bounce: 0)
 
+    /// A completion mark popping in past full size. Reduce Motion gets a short fade instead.
+    static func pop(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.4, bounce: 0.55)
+    }
+
     /// What arrives slides 20pt in from the side it's coming from and fades up; what leaves
     /// fades out in place, faster. Only transform and opacity animate (no blur on large
     /// views), so it stays on the compositor.

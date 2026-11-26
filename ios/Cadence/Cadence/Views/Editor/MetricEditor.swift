@@ -231,7 +231,7 @@ struct MetricEntrySheet: View {
                 .padding(.top, 28)
 
                 if loaded {
-                    RulerPicker(value: $value, step: plan.step, range: 0...max(1000, value * 3))
+                    RulerPicker(value: $value, step: plan.step, range: 0...max(1000, value * 3), label: plan.name)
                 }
 
                 HStack(spacing: 12) {

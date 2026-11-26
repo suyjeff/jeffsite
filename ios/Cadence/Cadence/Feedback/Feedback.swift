@@ -36,8 +36,9 @@ enum Feedback {
         case .disarmed:
             haptics.release()
         case .check(let step):
-            haptics.check()
-            sounds.play(.check, pitch: 1 + Float(min(step, 3)) * 0.12)
+            let rate = 1 + Float(min(step, 3)) * 0.12
+            haptics.check(rate: Double(rate))
+            sounds.play(.check, pitch: rate)
         case .uncheck:
             haptics.uncheck()
             sounds.play(.uncheck, volume: 0.8)

@@ -97,13 +97,15 @@ struct PageDeck<Card: View>: View {
 /// wandered off the current period.
 struct PeriodBar: View {
     let title: String
+    /// "week" or "month", for the step buttons' names.
+    var unit = "week"
     var isCurrent: Bool
     var onStep: (Int) -> Void
     var onReset: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
-            stepButton("chevron.backward", label: "Previous", delta: -1)
+            stepButton("chevron.backward", label: "Previous \(unit)", delta: -1)
             Spacer(minLength: 0)
             Text(title)
                 .font(.cadenceLabel)
@@ -126,7 +128,7 @@ struct PeriodBar: View {
                 .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
             Spacer(minLength: 0)
-            stepButton("chevron.forward", label: "Next", delta: 1)
+            stepButton("chevron.forward", label: "Next \(unit)", delta: 1)
         }
         .padding(.horizontal, 8)
         .frame(height: 44)

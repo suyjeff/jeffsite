@@ -11,7 +11,6 @@ struct TodayDeck: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Binding var frontID: UUID?
-    var onEditDay: (UUID, Day) -> Void
     var onCreatePlan: () -> Void
 
     @State private var drag: CGSize = .zero
@@ -49,7 +48,7 @@ struct TodayDeck: View {
         }
         .padding(.horizontal, Metrics.gutter)
         .padding(.top, 14)
-        .padding(.bottom, 14)
+        .padding(.bottom, 20)
     }
 
     /// Signed swipe progress for the front card: −1 (skip armed) … 0 … 1 (done armed).
@@ -76,8 +75,7 @@ struct TodayDeck: View {
             revision: store.revision,
             day: store.today,
             isFront: isFront,
-            swipe: isFront ? swipeProgress : 0,
-            onEditDay: onEditDay
+            swipe: isFront ? swipeProgress : 0
         )
         .equatable()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -98,7 +96,9 @@ struct TodayDeck: View {
         }
         .cardSurface(elevated: depth <= 1)
         .scaleEffect(1 - Metrics.deckScaleStep * visibleDepth, anchor: .top)
-        .offset(y: -Metrics.deckPeek * visibleDepth)
+        // Only one card peeks: deeper cards sit behind it, fading up as they come forward,
+        // instead of rising above the deck into the plan tabs.
+        .offset(y: -Metrics.deckPeek * min(visibleDepth, 1))
         .opacity(effective > 1 ? Double(max(0, 2 - effective)) : 1)
         .scaleEffect(isReentering ? 0.97 : 1, anchor: .top)
         .opacity(isReentering ? 0 : 1)
@@ -269,7 +269,6 @@ struct TodayCard: View, Equatable {
     let day: Day
     var isFront: Bool
     var swipe: CGFloat
-    var onEditDay: (UUID, Day) -> Void
 
     static func == (lhs: TodayCard, rhs: TodayCard) -> Bool {
         lhs.plan.id == rhs.plan.id && lhs.revision == rhs.revision && lhs.day == rhs.day
@@ -279,7 +278,7 @@ struct TodayCard: View, Equatable {
     var body: some View {
         switch plan.kind {
         case .routine:
-            RoutineTodayCard(plan: plan, day: day, swipe: swipe, onEditDay: onEditDay)
+            RoutineTodayCard(plan: plan, day: day, swipe: swipe)
         case .metric:
             MetricTodayCard(plan: plan, day: day, swipe: swipe)
         }

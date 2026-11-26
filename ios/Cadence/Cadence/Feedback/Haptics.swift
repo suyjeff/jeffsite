@@ -70,11 +70,14 @@ final class Haptics {
 
     /// "Da-ding", felt: a lighter tap, then the main hit 85 ms later on the second note,
     /// with a short ring under it. Lands on the same beats as check.wav.
-    func check() {
+    /// `rate` is the sound's playback rate: a pitched-up check plays faster, so its second
+    /// strike comes sooner and the second tap moves with it.
+    func check(rate: Double = 1) {
+        let beat = 0.085 / max(rate, 0.5)
         play([
             transient(at: 0, intensity: 0.6, sharpness: 0.5),
-            transient(at: 0.085, intensity: 1.0, sharpness: 0.8),
-            continuous(at: 0.09, duration: 0.11, intensity: 0.28, sharpness: 0.35),
+            transient(at: beat, intensity: 1.0, sharpness: 0.8),
+            continuous(at: beat + 0.005, duration: 0.11, intensity: 0.28, sharpness: 0.35),
         ], fallback: { self.rigid.impactOccurred(intensity: 1) })
     }
 
@@ -93,13 +96,6 @@ final class Haptics {
             transient(at: 0.09, intensity: 0.42, sharpness: 0.05),
             continuous(at: 0.09, duration: 0.07, intensity: 0.18, sharpness: 0.02),
         ], fallback: { self.soft.impactOccurred(intensity: 0.8) })
-    }
-
-    /// The anticipation tap at touch-down on a check button, before it fills.
-    func press() {
-        guard isEnabled else { return }
-        light.impactOccurred(intensity: 0.5)
-        light.prepare()
     }
 
     /// Three rising taps and a swell: reserved for finishing everything today.

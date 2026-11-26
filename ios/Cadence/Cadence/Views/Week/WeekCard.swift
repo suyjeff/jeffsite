@@ -4,7 +4,6 @@ import SwiftUI
 struct WeekCard: View {
     let plan: Plan
     @Binding var weekStart: Day
-    var onEditDay: (UUID, Day) -> Void
     var onEditValue: (UUID, Day) -> Void
 
     @Environment(Store.self) private var store
@@ -62,7 +61,7 @@ struct WeekCard: View {
                     if plan.isMetric {
                         MetricRow(plan: plan, day: day, isToday: day == store.today, onEdit: onEditValue)
                     } else {
-                        DayRow(plan: plan, day: day, isToday: day == store.today, onEditDay: onEditDay)
+                        DayRow(plan: plan, day: day, isToday: day == store.today)
                     }
                 }
                 if index < days.count - 1 {
@@ -98,7 +97,6 @@ struct DayRow: View {
     let day: Day
     var isToday: Bool
     var showsWeekday = true
-    var onEditDay: (UUID, Day) -> Void
 
     @Environment(Store.self) private var store
     @State private var flash = 0
@@ -165,7 +163,7 @@ struct DayRow: View {
             if new > old { flash += 1 }
         }
         // Hold a row to lift it with its options (done, not today, edit this day).
-        .liftOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil))
+        .liftOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), inScrollView: true)
         .id(day.key)
     }
 
@@ -181,12 +179,12 @@ struct DayRow: View {
             if showsWeekday {
                 MonoLabel(
                     text: DayText.weekdays[day.weekdayIndex],
-                    color: isToday && !finished ? .ink : finished ? .inkMuted : .inkSecondary
+                    color: isToday && !finished ? .ink : .inkSecondary
                 )
             } else {
                 MonoLabel(
                     text: "\(DayText.shortWeekdays[day.weekdayIndex]) \(day.day)",
-                    color: isToday && !finished ? .ink : finished ? .inkMuted : .inkSecondary
+                    color: isToday && !finished ? .ink : .inkSecondary
                 )
             }
             Spacer(minLength: 8)
@@ -200,7 +198,7 @@ struct DayRow: View {
         Text(text.isEmpty ? "—" : text)
             .font(.cadenceBody)
             .tracking(-0.2)
-            .foregroundStyle(finished || text.isEmpty ? Color.inkFaint : Color.ink)
+            .foregroundStyle(finished || text.isEmpty ? Color.inkSecondary : Color.ink)
             .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .animation(Motion.settle, value: finished)
@@ -232,6 +230,7 @@ struct DayRow: View {
 /// scale 0.25 → 1, opacity, 4px blur, spring 0.3s with no bounce.
 struct StatusGlyph: View {
     let status: DayStatus
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -242,7 +241,7 @@ struct StatusGlyph: View {
         .foregroundStyle(Color.inkMuted)
         .frame(width: 16, height: 16)
         // Completing pops the check in past full size; other changes cross-fade without bounce.
-        .animation(status == .done ? .spring(duration: 0.4, bounce: 0.55) : Motion.icon, value: status)
+        .animation(status == .done ? Motion.pop(reduceMotion: reduceMotion) : Motion.icon, value: status)
         .accessibilityHidden(true)
     }
 
@@ -321,7 +320,7 @@ struct MetricRow: View {
             } else {
                 Text(status == .skipped ? "Not today" : isFuture ? "" : "Log")
                     .font(.cadenceSubhead)
-                    .foregroundStyle(status == .skipped ? Color.inkFaint : Color.plum)
+                    .foregroundStyle(status == .skipped ? Color.inkSecondary : Color.plum)
             }
         }
         .padding(.horizontal, Metrics.cardPadding)
@@ -334,7 +333,7 @@ struct MetricRow: View {
             onEdit(plan.id, day)
         }
         // Hold to lift it with its options (log, not today, clear).
-        .liftOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), isEnabled: !isFuture)
+        .liftOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), isEnabled: !isFuture, inScrollView: true)
         .accessibilityAddTraits(isFuture ? [] : .isButton)
         .id(day.key)
         .accessibilityLabel("\(DayText.long(day)), \(value.map { "\(plan.format($0)) \(plan.unit)" } ?? "not logged")")

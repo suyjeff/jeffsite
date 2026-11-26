@@ -10,6 +10,8 @@ struct RulerPicker: View {
     var range: ClosedRange<Double>
     /// Points between two steps.
     var spacing: CGFloat = 9
+    /// What the ruler sets, for VoiceOver ("Weight").
+    var label = "Value"
 
     private enum Phase { case idle, dragging, coasting, settling }
 
@@ -74,7 +76,7 @@ struct RulerPicker: View {
             }
         }
         .accessibilityElement()
-        .accessibilityLabel("Value")
+        .accessibilityLabel(label)
         .accessibilityValue(value.formatted(.number.precision(.fractionLength(0...3))))
         .accessibilityAdjustableAction { direction in
             let delta: Double = direction == .increment ? 1 : -1
@@ -196,6 +198,7 @@ struct RulerPicker: View {
         let majorEvery = 10
         let minorColor = Color.inkFaint
         let majorColor = Color.inkMuted
+        let labelColor = Color.inkSecondary
 
         for index in first...last {
             guard Double(index) >= lowerIndex, Double(index) <= upperIndex else { continue }
@@ -209,7 +212,7 @@ struct RulerPicker: View {
             if isMajor {
                 let label = (Double(index) * step).formatted(.number.precision(.fractionLength(0)))
                 context.draw(
-                    Text(label).font(.cadenceMicro).foregroundStyle(majorColor),
+                    Text(label).font(.cadenceMicro).foregroundStyle(labelColor),
                     at: CGPoint(x: x, y: 44),
                     anchor: .top
                 )
