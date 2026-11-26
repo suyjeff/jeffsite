@@ -29,13 +29,31 @@ const urlKeys = {
 
 export default function Workbench() {
   const app = useMemo(() => new FilmroomApp(""), []);
-  const [url, setUrl] = useQueryStates(urlKeys, { history: "replace", throttleMs: 120 });
+  const [, setUrl] = useQueryStates(urlKeys, { history: "replace", throttleMs: 120 });
   const booted = useRef(false);
 
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
-    void app.load({ query: url.q, view: url.v as View, overlays: url.ov, pre: url.pre, post: url.post, game: url.g, action: url.a, frame: url.f });
+    // Read the shared state straight from location: on a statically exported page the router's query is empty
+    // until after hydration, and booting on defaults would overwrite the link being opened.
+    const sp = new URLSearchParams(window.location.search);
+    const get = <T,>(k: keyof typeof urlKeys, fallback: T): T => {
+      const raw = sp.get(k);
+      if (raw === null) return fallback;
+      const v = (urlKeys[k] as { parse: (s: string) => unknown }).parse(raw);
+      return (v ?? fallback) as T;
+    };
+    void app.load({
+      query: get("q", DEFAULT_QUERY),
+      view: get<View>("v", "tl"),
+      overlays: get("ov", OV.hud | OV.telemetry | OV.tags),
+      pre: get("pre", 6),
+      post: get("post", 4),
+      game: get<string | null>("g", null),
+      action: get<number | null>("a", null),
+      frame: get<number | null>("f", null),
+    });
     return () => app.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app]);
@@ -136,9 +154,17 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
         e.preventDefault();
         return;
       }
+      if (mode === "browse" && e.key === "R" && e.shiftKey) {
+        e.preventDefault();
+        setPanel("report");
+        return;
+      }
       if (mode === "query" || mode === "palette") return; // their inputs own the keyboard
       if (mode === "help") {
-        if (e.key === "Escape" || e.key === "?") send({ type: "CLOSE" });
+        const el = document.querySelector<HTMLElement>("[data-scroll=help]");
+        const by = { ArrowDown: 40, ArrowUp: -40, j: 40, k: -40, PageDown: 400, PageUp: -400, " ": 400 }[e.key];
+        if (by && el) el.scrollBy({ top: by });
+        else if (e.key === "Escape" || e.key === "?" || e.key === "q") send({ type: "CLOSE" });
         e.preventDefault();
         return;
       }

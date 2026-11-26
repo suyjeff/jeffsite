@@ -137,9 +137,9 @@ export class FilmroomApp {
     const t0 = performance.now();
     try {
       const [meta, bin, fixture] = await Promise.all([
-        fetch(`${this.base}/filmroom/data/meta.json`).then((r) => r.json() as Promise<BundleMeta>),
-        fetch(`${this.base}/filmroom/data/plays.bin.gz`).then((r) => r.arrayBuffer()).then(gunzipIfNeeded),
-        fetch(`${this.base}/filmroom/data/annotations.fixture.json`).then((r) => (r.ok ? (r.json() as Promise<FixtureFile>) : null)).catch(() => null),
+        fetch(`${this.base}/filmroom-assets/data/meta.json`).then((r) => r.json() as Promise<BundleMeta>),
+        fetch(`${this.base}/filmroom-assets/data/plays.bin.gz`).then((r) => r.arrayBuffer()).then(gunzipIfNeeded),
+        fetch(`${this.base}/filmroom-assets/data/annotations.fixture.json`).then((r) => (r.ok ? (r.json() as Promise<FixtureFile>) : null)).catch(() => null),
       ]);
       this.store = decodeBundle(bin, meta);
       this.engine = new Engine(this.store);
@@ -290,7 +290,7 @@ export class FilmroomApp {
     if (have) return Promise.resolve(have);
     let p = this.pendingDetails.get(id);
     if (!p) {
-      p = fetch(`${this.base}/filmroom/data/games/${id}.json`)
+      p = fetch(`${this.base}/filmroom-assets/data/games/${id}.json`)
         .then((r) => (r.ok ? (r.json() as Promise<GameDetail>) : null))
         .then((d) => {
           if (d) {

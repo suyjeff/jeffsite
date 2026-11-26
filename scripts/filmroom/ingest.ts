@@ -4,7 +4,7 @@
 //   npx tsx scripts/filmroom/ingest.ts --source live --games 0022300062,0022300077
 //   npx tsx scripts/filmroom/ingest.ts --reconcile-only
 //
-// Mirror files are downloaded into .cache/filmroom (gitignored). The bundle lands in public/filmroom/data.
+// Mirror files are downloaded into .cache/filmroom (gitignored). The bundle lands in public/filmroom-assets/data.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "fs";
 import { execFileSync } from "child_process";
@@ -19,7 +19,7 @@ import { probeVideo } from "../../lib/filmroom/ingest/video";
 const ROOT = join(__dirname, "../..");
 const CACHE = join(ROOT, ".cache/filmroom");
 const RAW = join(CACHE, "raw");
-const OUT = join(ROOT, "public/filmroom/data");
+const OUT = join(ROOT, "public/filmroom-assets/data");
 const TEAM = "GSW";
 
 const MIRROR = {

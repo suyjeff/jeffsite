@@ -16,7 +16,7 @@ import { Bitset } from "./engine/bitset";
 import type { RawGame } from "./ingest/raw";
 
 const FIX = join(__dirname, "__fixtures__");
-const DATA = join(__dirname, "../../public/filmroom/data");
+const DATA = join(__dirname, "../../public/filmroom-assets/data");
 const gz = (p: string) => gunzipSync(readFileSync(p));
 
 function loadStore(): Store {

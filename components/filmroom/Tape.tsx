@@ -28,7 +28,7 @@ export function Tape() {
           <span>Opp</span>
           <span>Q</span>
           <span>Clock</span>
-          <span>Score</span>
+          <span>Off</span>
           <span>Mrg</span>
           <span>Player</span>
           <span>Play</span>

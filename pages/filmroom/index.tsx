@@ -19,11 +19,11 @@ export default function FilmRoomPage() {
         <meta name="description" content="Keyboard-first NBA possession film room: query 19,059 Warriors plays, review frame-accurate reels, stamp tactical tags." />
         <meta name="theme-color" content="#090A0C" />
         <meta name="referrer" content="no-referrer" />
-        <link rel="preload" href="/filmroom/fonts/FiraCode-Variable.woff2" as="font" type="font/woff2" crossOrigin="" />
-        <link rel="preload" href="/filmroom/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossOrigin="" />
-        <link rel="preload" href="/filmroom/fonts/GeistSerifVF.woff2" as="font" type="font/woff2" crossOrigin="" />
-        <link rel="preload" href="/filmroom/data/plays.bin.gz" as="fetch" crossOrigin="" />
-        <link rel="preload" href="/filmroom/data/meta.json" as="fetch" crossOrigin="" />
+        <link rel="preload" href="/filmroom-assets/fonts/FiraCode-Variable.woff2" as="font" type="font/woff2" crossOrigin="" />
+        <link rel="preload" href="/filmroom-assets/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossOrigin="" />
+        <link rel="preload" href="/filmroom-assets/fonts/GeistSerifVF.woff2" as="font" type="font/woff2" crossOrigin="" />
+        <link rel="preload" href="/filmroom-assets/data/plays.bin.gz" as="fetch" crossOrigin="" />
+        <link rel="preload" href="/filmroom-assets/data/meta.json" as="fetch" crossOrigin="" />
         <style>{"html,body{background:#090A0C;margin:0;overflow:hidden}html{scrollbar-gutter:auto}"}</style>
       </Head>
       <NuqsAdapter>

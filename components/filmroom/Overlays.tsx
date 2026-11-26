@@ -44,6 +44,7 @@ const KEYS: [string, [string, string][]][] = [
       ["H", "toggle HUD"],
       ["M", "toggle telemetry overlay"],
       ["Y", "copy link (query · play · frame)"],
+      ["⇧R", "integrity report"],
       ["?", "this sheet"],
     ],
   ],
@@ -52,7 +53,7 @@ const KEYS: [string, [string, string][]][] = [
 export function Help({ onClose }: { onClose: () => void }) {
   return (
     <div className={s.scrim} onMouseDown={onClose} data-testid="help">
-      <div className={s.help} onMouseDown={(e) => e.stopPropagation()}>
+      <div className={s.help} data-scroll="help" onMouseDown={(e) => e.stopPropagation()}>
         <div className={s.helpTitle}>Keys</div>
         <div className={s.helpCols}>
           {KEYS.map(([title, rows]) => (
@@ -76,12 +77,12 @@ export function Help({ onClose }: { onClose: () => void }) {
         <div className="label" style={{ margin: "20px 0 8px" }}>
           Query fields
         </div>
-        <div className={s.helpCols}>
+        <div className={s.helpCols} style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0 24px" }}>
           {FIELDS.map((f) => (
-            <div key={f.name} className={s.helpRow} style={{ gridTemplateColumns: "88px 1fr" }}>
+            <div key={f.name} className={s.helpRow} style={{ gridTemplateColumns: "88px 1fr", minHeight: 24 }}>
               <span className="mono acc">{f.name}</span>
-              <span>
-                {f.doc} <span className="mono faint">{f.example}</span>
+              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={f.doc}>
+                <span className="mono">{f.example}</span> <span className="faint">{f.doc}</span>
               </span>
             </div>
           ))}

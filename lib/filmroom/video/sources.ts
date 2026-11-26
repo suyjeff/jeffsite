@@ -70,7 +70,7 @@ export function clipFor(ctx: SourceContext, row: number): Clip {
   }
   return {
     key: `${key}@proxy`,
-    src: `${ctx.base}/filmroom/proxy/p${row % PROXY_COUNT}.webm`,
+    src: `${ctx.base}/filmroom-assets/proxy/p${row % PROXY_COUNT}.webm`,
     kind: "proxy",
     fps: PROXY_FPS,
     t0: PROXY_T0,

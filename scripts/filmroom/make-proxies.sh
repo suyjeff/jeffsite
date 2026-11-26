@@ -4,7 +4,7 @@
 # the bottom edge (lit = 1, MSB first, framed by two always-lit guard blocks). The e2e suite reads the barcode
 # back from pixels to prove frame-accurate stepping. t₀ (the play's sync anchor) sits at 12.012 s = frame 360.
 set -euo pipefail
-out="${1:-public/filmroom/proxy}"
+out="${1:-public/filmroom-assets/proxy}"
 mkdir -p "$out"
 font=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf
 tints=("0x0f1216" "0x10140f" "0x14100f" "0x0f1014" "0x13120e" "0x0e1313")

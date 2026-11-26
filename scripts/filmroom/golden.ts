@@ -16,7 +16,7 @@ import { gunzipSync } from "zlib";
 import { decodeBundle } from "../../lib/filmroom/engine/store";
 import type { Tag } from "../../lib/filmroom/tags/ontology";
 
-const DATA = join(__dirname, "../../public/filmroom/data");
+const DATA = join(__dirname, "../../public/filmroom-assets/data");
 const FPS = 30000 / 1001;
 const f = (s: number) => Math.round(s * FPS) / FPS; // frame-quantised seconds from t₀
 

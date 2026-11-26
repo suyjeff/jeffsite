@@ -15,6 +15,14 @@ const LabPage = () => {
           </Link>
           <span className="block text-stone-400 dark:text-stone-400">Power ranks, WAR-style player values and trade math for a Sleeper league.</span>
         </p>
+        <p className="mt-4 text-lg tracking-tight opacity-0 animate-reveal animation-delay-300">
+          <Link href="/filmroom" className={neutralLinkClasses}>
+            <NeutralLinkLabel underline>Film room</NeutralLinkLabel>
+          </Link>
+          <span className="block text-stone-400 dark:text-stone-400">
+            A keyboard-first possession film room for the 2023-24 Warriors: query 19,059 plays, scrub frame by frame, tag the reads.
+          </span>
+        </p>
       </div>
     </Layout>
   );
