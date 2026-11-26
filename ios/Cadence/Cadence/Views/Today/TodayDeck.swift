@@ -1,17 +1,33 @@
 import SwiftUI
+import UIKit
 
-/// The Today view: one card per plan, stacked like a deck with the next card peeking above.
+/// Where a card sits in the deck, for the view drawing it.
+struct DeckSlot {
+    var isFront: Bool
+    /// −1…1 from the front card's sideways drag (Today only).
+    var swipe: CGFloat
+}
+
+/// The deck every view is built on: one card per plan, stacked, with the next card peeking
+/// above. The same physical gestures move between plans everywhere:
+/// - Pull the card down: the peeking card comes forward. Push it up: the previous one returns.
+///   The card follows the finger 1:1 (rubber-banding where it leads nowhere), the card behind
+///   rises with it, and on release the motion carries the finger's velocity.
+/// - Tap the peek to bring it forward.
 ///
-/// Gestures (one axis is chosen after ~12pt of movement, then the card tracks the finger 1:1):
-/// - Swipe right: done. Swipe left: skip. Past the commit point the card arms
-///   with a detent; on release it's thrown off with the finger's velocity and tucks behind the deck.
-/// - Pull down: the peeking card comes forward. Push up: the previous card comes back.
-struct TodayDeck: View {
+/// On Today the cards also swipe sideways: right for done, left to skip, thrown off with the
+/// finger's velocity and tucked in at the back. On Week and Month the cards scroll inside;
+/// the deck takes the drag only once the card's own scroll is at its top (pulling down) or
+/// bottom (pushing up), so scrolling and switching never fight.
+struct PlanDeck<Card: View>: View {
     @Environment(Store.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.focusedKey) private var focusedKey
 
     @Binding var frontID: UUID?
+    /// Sideways swipes mark the day (Today). Otherwise the deck only moves vertically.
+    var swipesToMark: Bool
+    @ViewBuilder var card: (Plan, DeckSlot) -> Card
 
     @State private var drag: CGSize = .zero
     /// 0…1: how far the card behind has been drawn forward by the current gesture.
@@ -22,7 +38,7 @@ struct TodayDeck: View {
     @State private var reentering: UUID?
 
     private let commitDistance: CGFloat = 110
-    private let pullDistance: CGFloat = 96
+    private let pullDistance: CGFloat = 88
 
     var body: some View {
         let plans = store.plans
@@ -50,13 +66,16 @@ struct TodayDeck: View {
                     }
                     .padding(.top, Metrics.deckPeek)
                     .contentShape(.rect)
-                    .gesture(dragGesture(width: width, count: plans.count))
+                    .modifier(DeckGesture(
+                        swipesToMark: swipesToMark,
+                        onChanged: { changed($0, count: plans.count) },
+                        onEnded: { ended($0, velocity: $1, width: width, count: plans.count) }
+                    ))
                 }
             }
         }
         .padding(.horizontal, Metrics.gutter)
         .padding(.top, 14)
-        // The card runs nearly to the bottom; Create floats over its corner, level with the check.
         .padding(.bottom, Metrics.deckBottom)
     }
 
@@ -77,16 +96,15 @@ struct TodayDeck: View {
         let visibleDepth = min(effective, 2)
         let isReentering = reentering == plan.id
 
-        // Equatable on the store revision: while the front card is dragged, the cards behind
-        // only move; their content isn't rebuilt on every frame.
-        TodayCard(
-            plan: plan,
-            revision: store.revision,
-            day: store.today,
-            isFront: isFront,
-            swipe: isFront ? swipeProgress : 0
-        )
-        .equatable()
+        Group {
+            // Only the front card and the one about to come forward are drawn in full; the
+            // rest of the stack is blank paper, so a deep deck costs nothing.
+            if depth <= 1 {
+                card(plan, DeckSlot(isFront: isFront, swipe: isFront ? swipeProgress : 0))
+            } else {
+                Color.surface
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
             // Back cards read as blank paper, as in the design; their content fades up
@@ -97,8 +115,6 @@ struct TodayDeck: View {
                 .allowsHitTesting(false)
         }
         .cardSurface(elevated: depth <= 1)
-        // Hold anywhere on the card to lift the whole card into focus.
-        .liftsCardOnHold()
         .focusableCard(plan.id)
         .scaleEffect(1 - Metrics.deckScaleStep * visibleDepth, anchor: .top)
         // Only one card peeks: deeper cards sit behind it, fading up as they come forward,
@@ -122,73 +138,68 @@ struct TodayDeck: View {
 
     // MARK: Gesture
 
-    private func dragGesture(width: CGFloat, count: Int) -> some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { value in
-                guard !flying else { return }
-                // A hold lifted the card before the finger moved: leave it where it is.
-                guard focusedKey == nil else {
-                    if drag != .zero { settle(velocity: .zero) }
-                    return
-                }
-                let t = value.translation
-                if axis == nil {
-                    axis = abs(t.width) > abs(t.height) ? .horizontal : .vertical
-                    Haptics.shared.prepare()
-                }
-                switch axis {
-                case .horizontal?:
-                    drag = CGSize(width: t.width, height: Motion.resist(t.height, dimension: 300) * 0.35)
-                    promote = min(1, abs(t.width) / commitDistance)
-                    setArmed(abs(t.width) >= commitDistance)
-                case .vertical?:
-                    if count > 1 && t.height > 0 {
-                        // Pulling down draws the peeking card forward.
-                        drag = CGSize(width: 0, height: Motion.rubberband(t.height * 0.55, limit: 36))
-                        promote = min(1, t.height / pullDistance)
-                    } else {
-                        drag = CGSize(width: 0, height: Motion.resist(t.height, dimension: 420))
-                        promote = 0
-                    }
-                    setArmed(count > 1 && abs(t.height) >= pullDistance)
-                case nil:
-                    break
-                }
+    private func changed(_ t: CGSize, count: Int) {
+        guard !flying else { return }
+        // A hold lifted the card before the finger moved: leave it where it is.
+        guard focusedKey == nil else {
+            if drag != .zero { settle(velocity: .zero) }
+            return
+        }
+        if axis == nil {
+            axis = swipesToMark && abs(t.width) > abs(t.height) ? .horizontal : .vertical
+            Haptics.shared.prepare()
+        }
+        switch axis {
+        case .horizontal?:
+            drag = CGSize(width: t.width, height: Motion.resist(t.height, dimension: 300) * 0.35)
+            promote = min(1, abs(t.width) / commitDistance)
+            setArmed(abs(t.width) >= commitDistance)
+        case .vertical?:
+            if count > 1 && t.height > 0 {
+                // Pulling down draws the peeking card forward.
+                drag = CGSize(width: 0, height: Motion.rubberband(t.height * 0.55, limit: 40))
+                promote = min(1, t.height / pullDistance)
+            } else if count > 1 {
+                // Pushing up lifts the card away toward the previous one.
+                drag = CGSize(width: 0, height: Motion.rubberband(t.height * 0.55, limit: 40))
+                promote = 0
+            } else {
+                drag = CGSize(width: 0, height: Motion.resist(t.height, dimension: 420))
+                promote = 0
             }
-            .onEnded { value in
-                guard !flying else { return }
-                guard focusedKey == nil else {
-                    axis = nil
-                    armed = false
-                    return
-                }
-                let t = value.translation
-                let v = value.velocity
-                let current = axis
-                axis = nil
-                armed = false
-                switch current {
-                case .horizontal?:
-                    // Distance or a flick in the same direction both commit.
-                    let flick = abs(v.width) > 650 && abs(t.width) > 28 && (v.width > 0) == (t.width > 0)
-                    let projected = abs(t.width + Motion.project(v.width))
-                    if abs(t.width) >= commitDistance || flick || (projected >= commitDistance * 1.6 && abs(t.width) > 40) {
-                        commitSwipe(direction: t.width > 0 ? 1 : -1, velocity: v.width, width: width, count: count)
-                    } else {
-                        settle(velocity: v)
-                    }
-                case .vertical? where count > 1:
-                    if t.height > pullDistance || (v.height > 700 && t.height > 24) {
-                        cycle(by: 1, count: count)
-                    } else if t.height < -pullDistance || (v.height < -700 && t.height < -24) {
-                        cycle(by: -1, count: count)
-                    } else {
-                        settle(velocity: v)
-                    }
-                default:
-                    settle(velocity: v)
-                }
+            setArmed(count > 1 && abs(t.height) >= pullDistance)
+        case nil:
+            break
+        }
+    }
+
+    private func ended(_ t: CGSize, velocity v: CGSize, width: CGFloat, count: Int) {
+        guard !flying else { return }
+        let current = axis
+        axis = nil
+        armed = false
+        guard focusedKey == nil else { return }
+        switch current {
+        case .horizontal?:
+            // Distance or a flick in the same direction both commit.
+            let flick = abs(v.width) > 650 && abs(t.width) > 28 && (v.width > 0) == (t.width > 0)
+            let projected = abs(t.width + Motion.project(v.width))
+            if abs(t.width) >= commitDistance || flick || (projected >= commitDistance * 1.6 && abs(t.width) > 40) {
+                commitSwipe(direction: t.width > 0 ? 1 : -1, velocity: v.width, width: width, count: count)
+            } else {
+                settle(velocity: v)
             }
+        case .vertical? where count > 1:
+            if t.height > pullDistance || (v.height > 650 && t.height > 24) {
+                cycle(by: 1, count: count, velocity: v.height)
+            } else if t.height < -pullDistance || (v.height < -650 && t.height < -24) {
+                cycle(by: -1, count: count, velocity: v.height)
+            } else {
+                settle(velocity: v)
+            }
+        default:
+            settle(velocity: v)
+        }
     }
 
     private func setArmed(_ value: Bool) {
@@ -215,7 +226,7 @@ struct TodayDeck: View {
         let target = direction * (width + 140)
         let animation: Animation = reduceMotion
             ? .easeOut(duration: 0.2)
-            : Motion.release(velocity: velocity, distance: target - drag.width, duration: 0.4)
+            : Motion.release(velocity: velocity, distance: target - drag.width, duration: 0.36)
         withAnimation(animation, completionCriteria: .logicallyComplete) {
             drag = CGSize(width: target, height: drag.height + 36)
             promote = 1
@@ -238,7 +249,7 @@ struct TodayDeck: View {
         }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(24))
-            withAnimation(.easeOut(duration: 0.22)) { reentering = nil }
+            withAnimation(.easeOut(duration: 0.2)) { reentering = nil }
             flying = false
         }
     }
@@ -250,7 +261,7 @@ struct TodayDeck: View {
             : Motion.release(
                 velocity: horizontal ? velocity.width : velocity.height,
                 distance: horizontal ? -drag.width : -drag.height,
-                duration: 0.32,
+                duration: 0.3,
                 bounce: bounce
             )
         withAnimation(animation) {
@@ -259,14 +270,108 @@ struct TodayDeck: View {
         }
     }
 
-    private func cycle(by step: Int, count: Int) {
+    /// Brings the next (+1) or previous (−1) plan to the front, carrying the finger's
+    /// velocity into the settle so the release has no seam.
+    private func cycle(by step: Int, count: Int, velocity: CGFloat = 0) {
         guard count > 1, !flying else { return }
         let index = store.index(of: frontID) ?? 0
         Feedback.play(.cycle)
-        withAnimation(reduceMotion ? Motion.standard : Motion.deck) {
+        let animation = reduceMotion
+            ? Motion.standard
+            : Motion.release(velocity: velocity, distance: -drag.height, duration: 0.32, bounce: 0.1)
+        withAnimation(animation) {
             frontID = store.plans[(index + step + count) % count].id
             drag = .zero
             promote = 0
+        }
+    }
+}
+
+/// The deck's drag. Today uses SwiftUI's drag on the whole card (both axes). Week and Month
+/// use a UIKit pan that only begins vertically, and only when the card's own scroll is at the
+/// edge the finger is pulling away from; until then the card's scroll view has the touch.
+private struct DeckGesture: ViewModifier {
+    var swipesToMark: Bool
+    var onChanged: (CGSize) -> Void
+    var onEnded: (CGSize, CGSize) -> Void
+
+    func body(content: Content) -> some View {
+        if swipesToMark {
+            content.gesture(
+                DragGesture(minimumDistance: 12)
+                    .onChanged { onChanged($0.translation) }
+                    .onEnded { onEnded($0.translation, $0.velocity) }
+            )
+        } else {
+            content.gesture(DeckPan(onChanged: onChanged, onEnded: onEnded))
+        }
+    }
+}
+
+/// A vertical pan for decks whose cards scroll. It wins over the card's scroll view only at
+/// the scroll's edges: pulling down when scrolled to the top, pushing up at the bottom (or
+/// either way when the content fits). Anywhere else it fails at once and the card scrolls.
+struct DeckPan: UIGestureRecognizerRepresentable {
+    var onChanged: (CGSize) -> Void
+    var onEnded: (CGSize, CGSize) -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.maximumNumberOfTouches = 1
+        pan.delegate = context.coordinator
+        return pan
+    }
+
+    func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
+        let translation = CGSize(width: 0, height: pan.translation(in: pan.view).y)
+        switch pan.state {
+        case .began, .changed:
+            onChanged(translation)
+        case .ended:
+            onEnded(translation, CGSize(width: 0, height: pan.velocity(in: pan.view).y))
+        case .cancelled, .failed:
+            onEnded(.zero, .zero)
+        default:
+            break
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer, let view = pan.view else { return false }
+            let velocity = pan.velocity(in: view)
+            guard abs(velocity.y) > abs(velocity.x) * 1.2 else { return false }
+            guard let scroll = scrollView(at: pan.location(in: view), in: view) else { return true }
+            let top = -scroll.adjustedContentInset.top
+            let bottom = max(top, scroll.contentSize.height + scroll.adjustedContentInset.bottom - scroll.bounds.height)
+            let offset = scroll.contentOffset.y
+            return velocity.y > 0 ? offset <= top + 1 : offset >= bottom - 1
+        }
+
+        /// The card's scroll view waits for this pan to decide, so a pull at the edge never
+        /// starts a scroll first.
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            otherGestureRecognizer.view is UIScrollView && otherGestureRecognizer is UIPanGestureRecognizer
+        }
+
+        /// The vertically scrolling scroll view under the finger, if any.
+        private func scrollView(at point: CGPoint, in view: UIView) -> UIScrollView? {
+            var candidate = view.hitTest(point, with: nil)
+            while let current = candidate, current !== view {
+                if let scroll = current as? UIScrollView, scroll.contentSize.height > 0, !(scroll.contentSize.width > scroll.bounds.width + 1) {
+                    return scroll
+                }
+                candidate = current.superview
+            }
+            return nil
         }
     }
 }
@@ -295,18 +400,32 @@ struct TodayCard: View, Equatable {
             RoutineTodayCard(plan: plan, day: day, swipe: swipe)
         case .metric:
             MetricTodayCard(plan: plan, day: day, swipe: swipe)
+        case .streak:
+            StreakTodayCard(plan: plan, day: day, swipe: swipe)
         }
     }
 }
 
-/// What Today shows before there are any plans. Create, floating just below, is the way in.
+/// What Today shows before there are any plans: what goes here, and the way to add one.
 struct EmptyDeck: View {
+    var addMenu: (CGRect) -> MenuRequest
+
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.labelGap) {
             MonoLabel(text: "NO PLANS YET")
-            Text("Write your first week: a training block, a skincare routine, a habit, or a number to log each day.")
-                .font(.cadenceBody)
+            Text("A schedule to write each week, a scale to log a number, or a streak to keep.")
+                .font(.cadenceToday)
+                .tracking(-0.5)
+                .lineSpacing(4)
                 .foregroundStyle(Color.ink)
+            Spacer(minLength: 24)
+            Label("Add a plan", systemImage: "plus")
+                .font(.cadenceCallout)
+                .foregroundStyle(Color.ink)
+                .padding(.horizontal, 18)
+                .frame(height: 44)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .pressMenu(label: "Add a plan", addMenu)
         }
         .padding(Metrics.cardPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

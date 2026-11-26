@@ -30,8 +30,10 @@ struct MenuRequest {
         case belowLeading
         /// Hangs below the anchor, trailing edges aligned (⋯).
         case belowTrailing
-        /// Rises above the anchor, trailing edges aligned (Create).
+        /// Rises above the anchor, trailing edges aligned.
         case aboveTrailing
+        /// Rises above the anchor, leading edges aligned (a button at the bottom of a card).
+        case aboveLeading
         /// Rises above the anchor, centered on it (the focus pill).
         case aboveCenter
     }
@@ -42,8 +44,11 @@ struct MenuRequest {
     var title: String?
     var message: String?
     var sections: [[MenuItem]]
-    /// Where a tail points, in window coordinates (an x for menus above the anchor).
+    /// The x (in window coordinates) of the button that opened it: the panel grows from
+    /// there, and a confirmation points its tail at it.
     var tailX: CGFloat?
+    /// A small tail pointing at the button, for a confirmation tied to one button (Delete).
+    var showsTail = false
     /// Whether sliding onto a row and letting go chooses it. Off for confirmations, so a
     /// destructive row always takes a separate, deliberate tap.
     var choosesOnRelease = true
@@ -156,11 +161,10 @@ private struct PressMenuTrigger: ViewModifier {
             } action: { [box] frame in
                 box.frame = frame
             }
-            .scaleEffect(pressed && !reduceMotion ? 0.92 : 1)
-            .animation(pressed ? .easeOut(duration: 0.1) : .spring(duration: 0.3, bounce: 0.35), value: pressed)
+            .scaleEffect(pressed && !reduceMotion ? 0.86 : 1)
             .gesture(PressGesture(
                 isEnabled: isEnabled,
-                onPress: { pressed = $0 },
+                onPress: press,
                 onOpen: open,
                 onTrack: { menu?.track($0, fromTrigger: true) },
                 onRelease: { menu?.release(fromTrigger: true) }
@@ -171,8 +175,23 @@ private struct PressMenuTrigger: ViewModifier {
             .accessibilityAction { open() }
     }
 
+    /// Pressing loads the control like a spring: it sinks slowly at first, then faster as
+    /// the hold nears the point where the menu opens. Letting go early springs it back.
+    private func press(_ isPressing: Bool) {
+        if isPressing {
+            withAnimation(.timingCurve(0.55, 0, 0.85, 0.4, duration: PressGesture.holdToOpen)) { pressed = true }
+        } else if pressed {
+            withAnimation(.spring(duration: 0.3, bounce: 0.3)) { pressed = false }
+        }
+    }
+
+    /// The menu opens as the control pops back past its size, releasing the tension.
     private func open() {
-        guard isEnabled, let menu else { return }
+        guard isEnabled, let menu else {
+            withAnimation(.spring(duration: 0.3, bounce: 0.3)) { pressed = false }
+            return
+        }
+        withAnimation(.spring(duration: 0.42, bounce: 0.5)) { pressed = false }
         menu.open(makeRequest(box.frame), reduceMotion: reduceMotion)
     }
 }
@@ -191,8 +210,9 @@ private struct PressGesture: UIGestureRecognizerRepresentable {
     var onTrack: (CGPoint) -> Void
     var onRelease: () -> Void
 
-    /// Long enough that a tap reads as a tap; short enough that a hold feels immediate.
-    static let holdToOpen: Duration = .milliseconds(160)
+    /// Long enough to feel the press load up and to tell a hold from a tap; short enough
+    /// that holding never feels like waiting.
+    static let holdToOpen: TimeInterval = 0.3
 
     func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
         Coordinator()
@@ -219,6 +239,7 @@ private struct PressGesture: UIGestureRecognizerRepresentable {
             coordinator.opened = false
             onPress(true)
             Haptics.shared.press()
+            Haptics.shared.holdBuild(duration: Self.holdToOpen)
             coordinator.scheduleOpen(after: Self.holdToOpen)
         case .changed:
             if coordinator.opened {
@@ -229,7 +250,6 @@ private struct PressGesture: UIGestureRecognizerRepresentable {
                 onTrack(point)
             }
         case .ended:
-            onPress(false)
             if coordinator.opened {
                 onRelease()
             } else {
@@ -237,6 +257,7 @@ private struct PressGesture: UIGestureRecognizerRepresentable {
             }
             coordinator.reset()
         case .cancelled, .failed:
+            Haptics.shared.endHoldBuild()
             onPress(false)
             coordinator.reset()
         default:
@@ -251,10 +272,10 @@ private struct PressGesture: UIGestureRecognizerRepresentable {
         var onOpen: () -> Void = {}
         private var pending: Task<Void, Never>?
 
-        func scheduleOpen(after delay: Duration) {
+        func scheduleOpen(after delay: TimeInterval) {
             pending?.cancel()
             pending = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: delay)
+                try? await Task.sleep(for: .seconds(delay))
                 guard !Task.isCancelled else { return }
                 self?.openNow()
             }
@@ -311,7 +332,7 @@ struct MenuLayer: View {
     private func originX(_ request: MenuRequest, width: CGFloat) -> CGFloat {
         let anchor = request.anchor
         let x: CGFloat = switch request.placement {
-        case .belowLeading: anchor.minX - 6
+        case .belowLeading, .aboveLeading: anchor.minX
         case .belowTrailing, .aboveTrailing: anchor.maxX - Self.width
         case .aboveCenter: anchor.midX - Self.width / 2
         }
@@ -324,6 +345,7 @@ struct MenuLayer: View {
         case .belowLeading: .topLeading
         case .belowTrailing: .topTrailing
         case .aboveTrailing: .bottomTrailing
+        case .aboveLeading: .bottomLeading
         case .aboveCenter:
             UnitPoint(x: ((request.tailX ?? request.anchor.midX) - panelMinX) / Self.width, y: 1)
         }
@@ -346,7 +368,7 @@ struct MenuLayer: View {
             switch request.placement {
             case .belowLeading, .belowTrailing:
                 content.offset(x: x, y: request.anchor.maxY + gap)
-            case .aboveTrailing, .aboveCenter:
+            case .aboveTrailing, .aboveLeading, .aboveCenter:
                 content
                     .frame(height: max(0, request.anchor.minY - gap), alignment: .bottom)
                     .offset(x: x)
@@ -366,7 +388,7 @@ private struct MenuPanel: View {
     private let radius: CGFloat = 22
     private let tail: CGFloat = 9
 
-    private var hasTail: Bool { request.tailX != nil && request.placement == .aboveCenter }
+    private var hasTail: Bool { request.showsTail && request.tailX != nil && request.placement == .aboveCenter }
     private var isConfirmation: Bool { request.title != nil }
 
     var body: some View {
@@ -460,7 +482,8 @@ private struct MenuPanel: View {
                     .brightness(highlighted ? -0.08 : 0)
                     .padding(.horizontal, 10)
             } else {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                // Concentric with the panel: its radius less the inset.
+                RoundedRectangle(cornerRadius: radius - 6, style: .continuous)
                     .fill(Color.ink.opacity(highlighted ? 0.08 : 0))
                     .padding(.horizontal, 6)
             }
@@ -483,8 +506,9 @@ private struct MenuPanel: View {
     }
 }
 
-/// A rounded rectangle with an optional tail on its bottom edge, so a panel rising from the
-/// focus pill points at the button that opened it. One path, so the glass covers both.
+/// A rounded rectangle with an optional tail on its bottom edge, so a confirmation rising from
+/// the focus pill points at the button that opened it. Drawn as one outline (the tail is part
+/// of the bottom edge, not a second shape laid over it), so the glass has no seam.
 struct BubbleShape: Shape {
     var radius: CGFloat
     var tail: CGFloat
@@ -493,15 +517,36 @@ struct BubbleShape: Shape {
 
     func path(in rect: CGRect) -> Path {
         let body = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height - tail)
-        var path = Path(roundedRect: body, cornerRadius: radius, style: .continuous)
-        guard tail > 0 else { return path }
-        let x = rect.minX + tailX
-        var point = Path()
-        point.move(to: CGPoint(x: x - tail * 1.3, y: body.maxY - 0.5))
-        point.addQuadCurve(to: CGPoint(x: x, y: rect.maxY), control: CGPoint(x: x - tail * 0.35, y: body.maxY + tail * 0.2))
-        point.addQuadCurve(to: CGPoint(x: x + tail * 1.3, y: body.maxY - 0.5), control: CGPoint(x: x + tail * 0.35, y: body.maxY + tail * 0.2))
-        point.closeSubpath()
-        path.addPath(point)
+        guard tail > 0 else {
+            return Path(roundedRect: body, cornerRadius: radius, style: .continuous)
+        }
+        let r = min(radius, body.height / 2, body.width / 2)
+        let x = (rect.minX + tailX).clamped(body.minX + r + tail * 1.6, body.maxX - r - tail * 1.6)
+        let base = tail * 1.5
+        var path = Path()
+        path.move(to: CGPoint(x: body.minX + r, y: body.minY))
+        path.addLine(to: CGPoint(x: body.maxX - r, y: body.minY))
+        path.addArc(tangent1End: CGPoint(x: body.maxX, y: body.minY), tangent2End: CGPoint(x: body.maxX, y: body.minY + r), radius: r)
+        path.addLine(to: CGPoint(x: body.maxX, y: body.maxY - r))
+        path.addArc(tangent1End: CGPoint(x: body.maxX, y: body.maxY), tangent2End: CGPoint(x: body.maxX - r, y: body.maxY), radius: r)
+        // The tail, folded into the bottom edge with soft shoulders and a rounded tip.
+        path.addLine(to: CGPoint(x: x + base, y: body.maxY))
+        path.addCurve(
+            to: CGPoint(x: x + tail * 0.25, y: rect.maxY - 1),
+            control1: CGPoint(x: x + base * 0.55, y: body.maxY),
+            control2: CGPoint(x: x + tail * 0.5, y: rect.maxY - 2)
+        )
+        path.addQuadCurve(to: CGPoint(x: x - tail * 0.25, y: rect.maxY - 1), control: CGPoint(x: x, y: rect.maxY + 0.5))
+        path.addCurve(
+            to: CGPoint(x: x - base, y: body.maxY),
+            control1: CGPoint(x: x - tail * 0.5, y: rect.maxY - 2),
+            control2: CGPoint(x: x - base * 0.55, y: body.maxY)
+        )
+        path.addLine(to: CGPoint(x: body.minX + r, y: body.maxY))
+        path.addArc(tangent1End: CGPoint(x: body.minX, y: body.maxY), tangent2End: CGPoint(x: body.minX, y: body.maxY - r), radius: r)
+        path.addLine(to: CGPoint(x: body.minX, y: body.minY + r))
+        path.addArc(tangent1End: CGPoint(x: body.minX, y: body.minY), tangent2End: CGPoint(x: body.minX + r, y: body.minY), radius: r)
+        path.closeSubpath()
         return path
     }
 }

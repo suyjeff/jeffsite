@@ -36,62 +36,65 @@ enum SeedData {
     }
 
     static func template(_ template: PlanTemplate, today: Day = .today) -> Plan {
-        let start = today.weekStart
         switch template {
-        case .training:
-            var plan = Plan(name: "Training", kind: .routine)
-            plan.weeks[start.key] = WeekPlan(columns: 1)
+        case .schedule:
+            var plan = Plan(name: "New schedule", kind: .routine)
+            plan.weeks[today.weekStart.key] = WeekPlan(columns: 1)
             return plan
-        case .skincare:
-            var plan = Plan(name: "Skincare", kind: .routine, columns: ["AM", "PM"])
-            plan.weeks[start.key] = WeekPlan(columns: 2)
-            return plan
-        case .habit:
-            var plan = Plan(name: "New habit", kind: .routine)
-            plan.weeks[start.key] = WeekPlan(columns: 1)
-            return plan
-        case .number:
-            return Plan(name: "Weight", kind: .metric, unit: "lb", step: 0.1)
-        case .blank:
-            var plan = Plan(name: "Untitled", kind: .routine)
-            plan.weeks[start.key] = WeekPlan(columns: 1)
-            return plan
+        case .scale:
+            return Plan(name: "New scale", kind: .metric, unit: "", step: 1)
+        case .streak:
+            return Plan(name: "New streak", kind: .streak)
         }
     }
 }
 
+/// The three kinds of plan you can add. Training, skincare and habits are all schedules:
+/// a week written like a sheet. What differs is only how a day is recorded.
 enum PlanTemplate: String, CaseIterable, Identifiable {
-    case training, skincare, habit, number, blank
+    case schedule, scale, streak
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .training: "Training"
-        case .skincare: "Skincare"
-        case .habit: "Habit"
-        case .number: "Daily number"
-        case .blank: "Blank sheet"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .training: "A different session each day of the week"
-        case .skincare: "Morning and evening columns"
-        case .habit: "The same thing, every day"
-        case .number: "Log one value a day, like weight"
-        case .blank: "Start from an empty week"
+        case .schedule: "Schedule"
+        case .scale: "Scale"
+        case .streak: "Streak"
         }
     }
 
     var symbol: String {
         switch self {
-        case .training: "figure.run"
-        case .skincare: "drop"
-        case .habit: "repeat"
-        case .number: "number"
-        case .blank: "tablecells"
+        case .schedule: "tablecells"
+        case .scale: "number"
+        case .streak: "flame"
         }
     }
+}
+
+/// Icons a plan can wear: the set the app started with, plus more in the same style.
+enum PlanIcons {
+    /// What VoiceOver calls each icon.
+    static func name(_ symbol: String) -> String {
+        names[symbol] ?? symbol.replacingOccurrences(of: ".", with: " ")
+    }
+
+    private static let names = [
+        "tablecells": "Sheet", "list.bullet": "List", "square.split.2x1": "Two columns", "number": "Number",
+        "repeat": "Repeat", "flame": "Flame", "figure.run": "Running", "figure.walk": "Walking",
+        "figure.strengthtraining.traditional": "Weights", "figure.yoga": "Yoga", "bicycle": "Cycling",
+        "dumbbell": "Dumbbell", "drop": "Drop", "sparkles": "Sparkles", "sun.max": "Sun", "moon": "Moon",
+        "bed.double": "Bed", "heart": "Heart", "book": "Book", "pencil": "Pencil", "brain.head.profile": "Mind",
+        "leaf": "Leaf", "cup.and.saucer": "Cup", "fork.knife": "Meal", "pills": "Pills", "scalemass": "Scale",
+        "timer": "Timer", "music.note": "Music", "paintbrush": "Paintbrush", "checkmark.seal": "Seal",
+    ]
+
+    static let all = [
+        "tablecells", "list.bullet", "square.split.2x1", "number", "repeat", "flame",
+        "figure.run", "figure.walk", "figure.strengthtraining.traditional", "figure.yoga", "bicycle", "dumbbell",
+        "drop", "sparkles", "sun.max", "moon", "bed.double", "heart",
+        "book", "pencil", "brain.head.profile", "leaf", "cup.and.saucer", "fork.knife",
+        "pills", "scalemass", "timer", "music.note", "paintbrush", "checkmark.seal",
+    ]
 }

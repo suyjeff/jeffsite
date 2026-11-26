@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The Week card: header strip with progress and the week navigator (both pinned while the
-/// page scrolls), then one row per day.
+/// The Week card: header strip with progress and the week navigator, fixed at the top, then
+/// one row per day, scrolling inside the card.
 struct WeekCard: View {
     let plan: Plan
     @Binding var weekStart: Day
@@ -9,6 +9,7 @@ struct WeekCard: View {
 
     @Environment(Store.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.focusedKey) private var focusedKey
     @State private var direction = 1
 
     var body: some View {
@@ -16,8 +17,8 @@ struct WeekCard: View {
         let progress = plan.progress(in: days)
         let isCurrent = weekStart == store.today.weekStart
 
-        StickyCard {
-            CardHeaderStrip(title: plan.name) {
+        VStack(spacing: 0) {
+            CardHeaderStrip(title: plan.name, symbol: plan.symbol) {
                 CountPill(done: progress.done, total: progress.planned)
                     .animation(Motion.snappy, value: progress.done)
             }
@@ -30,16 +31,24 @@ struct WeekCard: View {
                 onStep: { step(by: $0) },
                 onReset: { jump(to: store.today.weekStart) }
             )
-        } content: {
-            // A ZStack, not the card's stack: during the transition the outgoing and
-            // incoming weeks overlap instead of stacking (which doubled the card's height).
-            ZStack(alignment: .top) {
-                weekBody(days)
-                    .id(weekStart)
-                    .transition(Motion.slide(direction, reduceMotion: reduceMotion))
+
+            // The header stays put; the days scroll inside the card. Pulling down at the top
+            // (or up at the bottom) moves the whole deck instead.
+            ScrollView {
+                // A ZStack, not a stack: during the transition the outgoing and incoming
+                // weeks overlap instead of stacking.
+                ZStack(alignment: .top) {
+                    weekBody(days)
+                        .id(weekStart)
+                        .transition(Motion.slide(direction, reduceMotion: reduceMotion))
+                }
             }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDisabled(focusedKey != nil)
         }
-        .focusableCard(plan.id)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(Color.surface)
     }
 
     private func weekBody(_ days: [Day]) -> some View {
@@ -119,7 +128,10 @@ struct DayRow: View {
                 ) {
                     VStack(alignment: .leading, spacing: Metrics.labelGap) {
                         weekdayLabel(status: status)
-                        itemText(items[0], finished: status == .done || status == .skipped)
+                        // A streak has nothing written: the day and its mark say it all.
+                        if !plan.isStreak {
+                            itemText(items[0], finished: status == .done || status == .skipped)
+                        }
                     }
                     .padding(.horizontal, Metrics.cardPadding)
                     .padding(.vertical, Metrics.rowVertical)
@@ -378,5 +390,13 @@ struct RowPressStyle: ButtonStyle {
                     .allowsHitTesting(false)
             }
             .animation(configuration.isPressed ? nil : .easeOut(duration: 0.2), value: configuration.isPressed)
+    }
+}
+
+// While the deck drags a card, its content doesn't change; comparing the inputs lets SwiftUI
+// skip rebuilding every row on every frame. Store changes still arrive through observation.
+extension WeekCard: Equatable {
+    static func == (lhs: WeekCard, rhs: WeekCard) -> Bool {
+        lhs.plan == rhs.plan && lhs.weekStart == rhs.weekStart
     }
 }

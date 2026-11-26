@@ -30,13 +30,12 @@ struct RoutineTodayCard: View {
         .opacity(1 - 0.28 * Double(max(0, -swipe).clamped(0, 1)))
         .overlay(alignment: .bottom) {
             footer(status: status)
-                .padding(.leading, Metrics.cardPadding)
-                .padding(.trailing, Metrics.checkTrailing)
+                .padding(.horizontal, Metrics.cardPadding)
                 .padding(.bottom, Metrics.cardPadding - 2)
         }
         .overlay(alignment: .bottomTrailing) {
             InkRipple(trigger: ripple)
-                .padding(.trailing, Metrics.checkTrailing)
+                .padding(.trailing, Metrics.cardPadding)
                 .padding(.bottom, Metrics.cardPadding - 2)
         }
         .overlay {
@@ -60,11 +59,12 @@ struct RoutineTodayCard: View {
 
         VStack(alignment: .leading, spacing: Metrics.labelGap) {
             if column == 0 {
-                MonoLabel(text: plan.name.uppercased())
+                PlanLabel(plan: plan)
             }
             Text(isPlanned ? text : "Nothing planned")
-                .font(.cadenceBody)
-                .tracking(-0.2)
+                .font(.cadenceToday)
+                .tracking(-0.5)
+                .lineSpacing(4)
                 .foregroundStyle(finished || !isPlanned ? Color.inkSecondary : Color.ink)
                 .minimumScaleFactor(0.8)
         }
@@ -120,7 +120,8 @@ struct RoutineTodayCard: View {
             if let at = plan.record(on: day).completedAt { return "DONE · \(DayText.time(at))" }
             return "DONE"
         case .skipped:
-            return "SKIPPED"
+            // The ✕ in the check already says it.
+            return ""
         case .partial(let done, let total):
             return "\(done) OF \(total)"
         case .pending:

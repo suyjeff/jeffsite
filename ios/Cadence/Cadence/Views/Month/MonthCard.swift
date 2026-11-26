@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The Month card: progress strip, month navigator and weekday names (pinned while the page
-/// scrolls), a calendar where every day shows its state, then the rest of the selected day's
-/// week as swipeable rows.
+/// The Month card: progress strip, month navigator and weekday names fixed at the top; below,
+/// scrolling inside the card, a calendar where every day shows its state, then the rest of
+/// the selected day's week as swipeable rows.
 struct MonthCard: View {
     let plan: Plan
     @Binding var month: Day
@@ -12,6 +12,7 @@ struct MonthCard: View {
     @Environment(Store.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.focusedKey) private var focusedKey
     @State private var direction = 1
 
     var body: some View {
@@ -20,8 +21,8 @@ struct MonthCard: View {
         let isCurrent = month == store.today.monthStart
         let restOfWeek = (selected.weekdayIndex...6).map { selected.weekStart.adding($0) }
 
-        StickyCard {
-            CardHeaderStrip(title: plan.name) {
+        VStack(spacing: 0) {
+            CardHeaderStrip(title: plan.name, symbol: plan.symbol) {
                 CountPill(done: progress.done, total: progress.planned)
                     .animation(Motion.snappy, value: progress.done)
             }
@@ -48,7 +49,21 @@ struct MonthCard: View {
             .padding(.top, 16)
             .padding(.bottom, 8)
             .accessibilityHidden(true)
-        } content: {
+
+            ScrollView {
+                monthBody(days: days, restOfWeek: restOfWeek)
+            }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDisabled(focusedKey != nil)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(Color.surface)
+    }
+
+    @ViewBuilder
+    private func monthBody(days: [Day], restOfWeek: [Day]) -> some View {
+        VStack(spacing: 0) {
             // Overlap the outgoing and incoming months instead of stacking them.
             ZStack(alignment: .top) {
                 CalendarGrid(plan: plan, month: month, selected: $selected, today: store.today)
@@ -100,7 +115,6 @@ struct MonthCard: View {
             }
             .animation(Motion.page, value: selected)
         }
-        .focusableCard(plan.id)
     }
 
     private func step(by delta: Int) {
@@ -238,5 +252,12 @@ private struct DayCell: View {
         case .pending: isFuture ? "Planned" : "Not done"
         case .empty: "Nothing planned"
         }
+    }
+}
+
+// See WeekCard: a dragged card's rows aren't rebuilt per frame.
+extension MonthCard: Equatable {
+    static func == (lhs: MonthCard, rhs: MonthCard) -> Bool {
+        lhs.plan == rhs.plan && lhs.month == rhs.month && lhs.selected == rhs.selected
     }
 }

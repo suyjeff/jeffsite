@@ -15,15 +15,14 @@ struct RootView: View {
 
     @State private var menu = MenuController()
     @State private var plansRoute: PlansRoute?
-    @State private var showingSettings = false
+    @State private var path: [RootPage] = []
+    @AppStorage(Palette.storageKey) private var palette: Palette = .mauve
     @State private var focus: FocusItem?
     /// Closing has begun: a card lifted in place starts settling home right away.
     @State private var focusReleased = false
     /// Where the header ends, in window coordinates. Below it is where cards scroll, and
     /// where a lifted card's cut in the focus backdrop may reach.
     @State private var headerBottom: CGFloat = 0
-    /// The Week or Month page is scrolled away from its top (the title takes its capsule).
-    @State private var pageScrolled = false
     @State private var dayEdit: DayTarget?
     @State private var valueEdit: DayTarget?
     @State private var celebrating = false
@@ -33,15 +32,30 @@ struct RootView: View {
     // The body is assembled in stages. As one long modifier chain it outgrew what the Swift
     // type checker will solve ("failed to produce diagnostic"); each stage checks on its own.
     var body: some View {
-        withLifecycle(withSheets(withOverlays(screen)))
+        withLifecycle(withSheets(navigation))
             .environment(\.menuController, menu)
     }
 
-    /// The current view, with the header floating over its top edge.
+    /// The main screen, with Settings pushed over it as a full page.
+    private var navigation: some View {
+        NavigationStack(path: $path) {
+            withOverlays(screen)
+                // Colors resolve against the theme when drawn; a new theme redraws the page.
+                .id(palette)
+                .toolbarVisibility(.hidden, for: .navigationBar)
+                .navigationDestination(for: RootPage.self) { page in
+                    switch page {
+                    case .settings: SettingsView()
+                    }
+                }
+        }
+    }
+
+    /// The current view, with the header above it.
     private var screen: some View {
         ZStack {
             if store.plans.isEmpty {
-                EmptyDeck()
+                EmptyDeck(addMenu: addMenu)
                     .padding(.horizontal, Metrics.gutter)
                     .padding(.top, 14)
                     .padding(.bottom, Metrics.deckBottom)
@@ -51,13 +65,12 @@ struct RootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // A bar rather than a stacked header: pages scroll beneath it and blur at its edge.
-        .safeAreaBar(edge: .top) {
+        .safeAreaInset(edge: .top, spacing: 0) {
             HeaderBar(
                 mode: mode,
-                isScrolled: pageScrolled && mode != .today,
                 viewMenu: viewMenu,
-                moreMenu: moreMenu
+                moreMenu: moreMenu,
+                addMenu: addMenu
             )
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.frame(in: .global).maxY
@@ -81,13 +94,6 @@ struct RootView: View {
         return focus.key
     }
 
-    /// Create floats bottom right, over the page, its center level with the Today card's check.
-    private var createButton: some View {
-        CreateButton(menu: addMenu)
-            .padding(.trailing, Metrics.createTrailing)
-            .padding(.bottom, Metrics.createBottom)
-    }
-
     private var contentArea: CGRect {
         CGRect(x: -10_000, y: headerBottom, width: 20_000, height: 20_000)
     }
@@ -97,13 +103,10 @@ struct RootView: View {
         return .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.9, anchor: .top))
     }
 
-    /// Create, the focus layer (held items and their options), the "All done" toast, and
-    /// any open menu above all of them.
+    /// The focus layer (held items and their options), the "All done" toast, and any open
+    /// menu above all of them.
     private func withOverlays(_ base: some View) -> some View {
         base
-            .overlay(alignment: .bottomTrailing) {
-                createButton
-            }
             .overlay {
                 if let focus {
                     FocusLayer(
@@ -139,10 +142,6 @@ struct RootView: View {
         base
             .sheet(item: $plansRoute) { route in
                 PlansSheet(route: route)
-            }
-            .sheet(isPresented: $showingSettings) {
-                SettingsSheet()
-                    .presentationDetents([.medium])
             }
             .sheet(item: $dayEdit) { target in
                 DayEditSheet(planID: target.planID, day: target.day)
@@ -197,7 +196,7 @@ struct RootView: View {
             anchor: anchor,
             placement: .belowLeading,
             sections: [ViewMode.allCases.map { option in
-                MenuItem(id: option.rawValue, title: option.title, systemImage: option.symbol, isChecked: option == mode) {
+                MenuItem(id: option.rawValue, title: option.title, isChecked: option == mode) {
                     selectMode(option)
                 }
             }]
@@ -223,7 +222,7 @@ struct RootView: View {
             // handful the menu would outgrow the screen; All plans lists them instead.
             let front = (store.plan(frontID) ?? store.plans.first)?.id
             sections.append(store.plans.map { plan in
-                MenuItem(id: "show-\(plan.id.uuidString)", title: plan.name.isEmpty ? "Untitled" : plan.name, isChecked: plan.id == front) {
+                MenuItem(id: "show-\(plan.id.uuidString)", title: plan.name.isEmpty ? "Untitled" : plan.name, systemImage: plan.symbol, isChecked: plan.id == front) {
                     selectPlan(plan.id)
                 }
             })
@@ -236,18 +235,19 @@ struct RootView: View {
         }
 
         sections.append([MenuItem(id: "settings", title: "Settings", systemImage: "gearshape") {
-            showingSettings = true
+            path.append(.settings)
         }])
         return MenuRequest(anchor: anchor, placement: .belowTrailing, sections: sections)
     }
 
-    /// Create: what you can add. Choosing one makes the plan, brings it to the front and
-    /// opens it to write.
+    /// +: the three kinds of plan. Choosing one makes it, brings it to the front and opens
+    /// it to name, pick an icon and write.
     private func addMenu(_ anchor: CGRect) -> MenuRequest {
         MenuRequest(
             anchor: anchor,
-            placement: .aboveTrailing,
-            sections: [PlanTemplate.allCases.filter { $0 != .blank }.map(templateItem), [templateItem(.blank)]]
+            // From the header it hangs below +; from the empty card's button it rises above.
+            placement: store.plans.isEmpty && anchor.midY > headerBottom + 40 ? .aboveLeading : .belowTrailing,
+            sections: [PlanTemplate.allCases.map(templateItem)]
         )
     }
 
@@ -285,16 +285,23 @@ struct RootView: View {
     private var content: some View {
         switch mode {
         case .today:
-            TodayDeck(frontID: $frontID)
-                .transition(modeTransition)
+            PlanDeck(frontID: $frontID, swipesToMark: true) { plan, slot in
+                TodayCard(plan: plan, revision: store.revision, day: store.today, isFront: slot.isFront, swipe: slot.swipe)
+                    .equatable()
+                    // Hold anywhere on the card to lift the whole card into focus.
+                    .liftsCardOnHold()
+            }
+            .transition(modeTransition)
         case .week:
-            PageDeck(frontID: $frontID, scrolled: $pageScrolled) { plan in
+            PlanDeck(frontID: $frontID, swipesToMark: false) { plan, _ in
                 WeekCard(plan: plan, weekStart: $weekStart, onEditValue: editValue)
+                    .equatable()
             }
             .transition(modeTransition)
         case .month:
-            PageDeck(frontID: $frontID, scrolled: $pageScrolled) { plan in
+            PlanDeck(frontID: $frontID, swipesToMark: false) { plan, _ in
                 MonthCard(plan: plan, month: $month, selected: $selectedDay, onEditValue: editValue)
+                    .equatable()
             }
             .transition(modeTransition)
         }
@@ -309,7 +316,6 @@ struct RootView: View {
         modeDirection = newMode.order > mode.order ? 1 : -1
         withAnimation(Motion.page) {
             mode = newMode
-            pageScrolled = false
         }
     }
 
@@ -368,6 +374,11 @@ struct RootView: View {
             }
         }
     }
+}
+
+/// Pages pushed over the main screen.
+enum RootPage: Hashable {
+    case settings
 }
 
 struct DayTarget: Identifiable {

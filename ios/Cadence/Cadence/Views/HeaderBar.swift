@@ -14,35 +14,17 @@ enum ViewMode: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
-        switch self {
-        case .today: "rectangle.portrait"
-        case .week: "list.bullet"
-        case .month: "calendar"
-        }
-    }
-
     var order: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 }
 
-/// The header from the design: "Today ⌄" opens the view menu on the left; the round glass
-/// button on the right holds everything else.
-///
-/// It floats over the page. At rest the title sits bare on the canvas, as in the design; once
-/// the page scrolls under it the title gathers into a Liquid Glass capsule (and lets go again
-/// back at the top), so it stays legible over whatever passes behind.
+/// The header from the design: "Today ⌄" opens the view menu on the left. On the right, one
+/// Liquid Glass pill holds ⋯ (everything else) and + (add a plan), the way system toolbars
+/// group related buttons. Each half opens its own menu.
 struct HeaderBar: View {
     let mode: ViewMode
-    var isScrolled: Bool
     var viewMenu: (CGRect) -> MenuRequest
     var moreMenu: (CGRect) -> MenuRequest
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    /// The capsule's padding around the title. At rest the title is pulled back by part of
-    /// it so the text keeps the design's position; in the capsule it moves in by the rest.
-    private let capsulePadding: CGFloat = 14
-    private let restShift: CGFloat = 6
+    var addMenu: (CGRect) -> MenuRequest
 
     var body: some View {
         HStack(spacing: 0) {
@@ -56,54 +38,39 @@ struct HeaderBar: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.inkSecondary)
             }
-            .padding(.horizontal, capsulePadding)
             .frame(height: 44)
-            .glassEffect(isScrolled ? .regular.interactive() : .identity, in: .capsule)
-            .contentShape(.capsule)
-            .offset(x: isScrolled ? 0 : -restShift)
-            .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.34, bounce: 0.18), value: isScrolled)
+            .padding(.trailing, 16)
+            .contentShape(.rect)
             .pressMenu(label: "View: \(mode.title)", viewMenu)
 
             Spacer(minLength: 8)
 
-            Image(systemName: "ellipsis")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color.ink)
-                .frame(width: 44, height: 44)
-                .glassEffect(.regular.interactive(), in: .circle)
-                .contentShape(.circle)
-                .pressMenu(label: "More", moreMenu)
+            HStack(spacing: 0) {
+                PillGlyph(systemName: "ellipsis")
+                    .pressMenu(label: "More", moreMenu)
+                PillGlyph(systemName: "plus")
+                    .pressMenu(label: "New plan", addMenu)
+            }
+            .padding(.horizontal, 4)
+            .glassEffect(.regular.interactive(), in: .capsule)
         }
-        // The title's text lands on the design's 22pt margin at rest.
-        .padding(.leading, Metrics.gutter - 2 - capsulePadding + restShift)
-        .padding(.trailing, Metrics.gutter - 4)
+        .padding(.leading, Metrics.gutter - 2)
+        .padding(.trailing, Metrics.gutter - 6)
         .padding(.top, 8)
         .padding(.bottom, 4)
     }
 }
 
-/// Create, floating bottom right: the one strongly colored control in the app. Custom Liquid
-/// Glass tinted deep plum, its glow on a separate layer underneath (a shadow on the glass
-/// itself rendered as a square and shimmered while the glass reacted to touch). A tap or a
-/// short hold opens a small menu of what you can add.
-struct CreateButton: View {
-    var menu: (CGRect) -> MenuRequest
+/// One button inside the header pill.
+private struct PillGlyph: View {
+    let systemName: String
 
     var body: some View {
-        Image(systemName: "plus")
-            .font(.system(size: 24, weight: .semibold))
-            .foregroundStyle(Color.onPlumStrong)
-            .frame(width: Metrics.createSize, height: Metrics.createSize)
-            .glassEffect(.regular.tint(Color.plumStrong).interactive(), in: .circle)
-            .background {
-                Circle()
-                    .fill(Color.plumStrong.opacity(0.3))
-                    .blur(radius: 12)
-                    .offset(y: 8)
-                    .allowsHitTesting(false)
-            }
-            .contentShape(.circle)
-            .pressMenu(label: "New plan", menu)
+        Image(systemName: systemName)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(Color.ink)
+            .frame(width: 44, height: 44)
+            .contentShape(.rect)
     }
 }
 

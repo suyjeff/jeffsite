@@ -4,35 +4,31 @@ import UIKit
 // MARK: - Color tokens (from the Figma file, with dark-mode counterparts)
 
 extension Color {
-    /// Page background. Figma #F3F1F3.
-    static let canvas = Color(light: 0xF3F1F3, dark: 0x131114)
-    /// Card surface. Figma #FAFAFA.
-    static let surface = Color(light: 0xFAFAFA, dark: 0x1D1A1E)
-    /// Dividers and outlines. Figma #E7E4E7.
-    static let hairline = Color(light: 0xE7E4E7, dark: 0x2D282E)
-    /// Primary text. Figma #463947.
-    static let ink = Color(light: 0x463947, dark: 0xF1ECF2)
-    /// Labels. Figma #79697B.
-    static let inkSecondary = Color(light: 0x79697B, dark: 0xA797A9)
+    /// Page background: one step darker than the design's Mauve 100, for more contrast
+    /// against the cards.
+    static var canvas: Color { .palette(.shade(200), dark: .shade(950)) }
+    /// Card surface. Figma #FAFAFA (Mauve 50).
+    static var surface: Color { .palette(.shade(50), dark: .shade(900)) }
+    /// The grey strip at the top of Week and Month cards (the design's canvas, Mauve 100).
+    static var wash: Color { .palette(.shade(100), dark: .shade(950)) }
+    /// Dividers and outlines. Figma #E7E4E7 (Mauve 200).
+    static var hairline: Color { .palette(.shade(200), dark: .shade(800)) }
+    /// Primary text. Figma #463947 (Mauve 700).
+    static var ink: Color { .palette(.shade(700), dark: .shade(100)) }
+    /// Labels. The design's Mauve 500, darkened just enough to read at 4.5:1 on the canvas.
+    static var inkSecondary: Color { .palette(.secondary, dark: .shade(400)) }
     /// Icons and other glyphs that carry state (✓, ✕, ⋯, rings). Graphics only, never text:
-    /// it clears the 3:1 that meaningful graphics need on both backgrounds, not the 4.5:1
-    /// text needs. (The Figma's #A89EA9 read at 2.5:1, too faint for its finished-row labels;
-    /// text now steps down to `inkSecondary` instead.)
-    static let inkMuted = Color(light: 0x908292, dark: 0x7B6E7D)
-    /// Ruler ticks, disabled controls and decorative marks only. Figma #D7D0D7.
-    static let inkFaint = Color(light: 0xD7D0D7, dark: 0x4B414C)
-    /// The glass tint on buttons. Figma #79697B.
-    static let plum = Color(light: 0x79697B, dark: 0x9A87A0)
+    /// it clears the 3:1 that meaningful graphics need, not the 4.5:1 text needs.
+    static var inkMuted: Color { .palette(.muted, dark: .shade(500)) }
+    /// Ruler ticks, disabled controls and decorative marks only. Figma #D7D0D7 (Mauve 300).
+    static var inkFaint: Color { .palette(.shade(300), dark: .shade(700)) }
+    /// Quiet accents: today's dot, the calendar's done days, links. Figma #79697B (Mauve 500).
+    static var plum: Color { .palette(.shade(500), dark: .shade(400)) }
     /// Glyphs sitting on a plum fill (white clears 3:1 in both appearances).
     static let onPlum = Color.white
     /// Text on a plum fill. White fails 4.5:1 on dark mode's lighter plum, so text flips dark.
-    static let onPlumText = Color(light: 0xFFFFFF, dark: 0x1D1520)
-    /// The one strong accent: the create button. Deeper and more saturated than `plum` so the
-    /// primary action stands apart from the quieter plum controls, without shouting.
-    static let plumStrong = Color(light: 0x56305F, dark: 0xC4A1CB)
-    /// The glyph on `plumStrong`.
-    static let onPlumStrong = Color(light: 0xFFFFFF, dark: 0x1D1520)
-    /// Done. A muted, slightly cool green that sits with the plums; white glyphs on it clear 3:1.
+    static var onPlumText: Color { .palette(.shade(50), dark: .shade(950)) }
+    /// Done. A muted, slightly cool green that sits with the neutrals; white glyphs on it clear 3:1.
     static let success = Color(light: 0x3B8A5A, dark: 0x6DC08C)
     static let onSuccess = Color(light: 0xFFFFFF, dark: 0x0F2417)
     /// Delete. Text-safe on both backgrounds.
@@ -69,6 +65,8 @@ extension UIColor {
 extension Font {
     static let cadenceTitle = Font.custom("PlusJakartaSans-SemiBold", size: 20, relativeTo: .title3)
     static let cadenceBody = Font.custom("PlusJakartaSans-SemiBold", size: 17, relativeTo: .body)
+    /// What's planned today, on the Today card: the one thing on screen to read at a glance.
+    static let cadenceToday = Font.custom("PlusJakartaSans-SemiBold", size: 24, relativeTo: .title2)
     static let cadenceBodyMedium = Font.custom("PlusJakartaSans-Medium", size: 17, relativeTo: .body)
     static let cadenceCallout = Font.custom("PlusJakartaSans-SemiBold", size: 15, relativeTo: .callout)
     static let cadenceSubhead = Font.custom("PlusJakartaSans-Medium", size: 15, relativeTo: .subheadline)
@@ -95,18 +93,8 @@ enum Metrics {
     static let labelGap: CGFloat = 12
     /// How far the next card in the deck peeks above the front one. Figma: 10.
     static let deckPeek: CGFloat = 10
-    /// The floating Create button: its size, and how far it sits from the trailing edge and
-    /// above the bottom safe area. Its center lines up with the Today card's check.
-    static let createSize: CGFloat = 56
-    static let createTrailing: CGFloat = 20
-    static let createBottom: CGFloat = 34
-    /// Room scrolling content leaves under the last row so it can clear the Create button.
-    static let createClearance: CGFloat = createSize + createBottom + 14
-    /// Gap between the bottom of a Today card and the bottom safe area.
+    /// Gap between the bottom of the deck's cards and the bottom safe area.
     static let deckBottom: CGFloat = 16
-    /// A Today card's check sits this far in from the card's trailing edge: just clear of
-    /// Create, which floats over the card's corner.
-    static let checkTrailing: CGFloat = createTrailing + createSize + 12 - gutter
     /// Back card width ÷ front card width. Figma: 348 / 372.
     static let deckScaleStep: CGFloat = 1 - 348.0 / 372.0
 }
@@ -190,10 +178,17 @@ struct CountPill: View {
 /// The grey strip at the top of week and month cards: plan name and progress.
 struct CardHeaderStrip<Trailing: View>: View {
     let title: String
+    var symbol: String?
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.inkSecondary)
+                    .accessibilityHidden(true)
+            }
             MonoLabel(text: title.uppercased())
             Spacer(minLength: 12)
             trailing
@@ -201,7 +196,7 @@ struct CardHeaderStrip<Trailing: View>: View {
         .padding(.horizontal, Metrics.cardPadding)
         .padding(.vertical, 8)
         .frame(minHeight: 41)
-        .background(Color.canvas)
+        .background(Color.wash)
         .overlay(alignment: .bottom) { Hairline() }
         .contentShape(.rect)
     }

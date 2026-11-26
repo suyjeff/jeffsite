@@ -11,6 +11,7 @@ struct PlanEditor: View {
             switch plan.kind {
             case .routine: RoutineEditor(plan: plan, onDelete: onDelete)
             case .metric: MetricEditor(plan: plan, onDelete: onDelete)
+            case .streak: StreakEditor(plan: plan, onDelete: onDelete)
             }
         } else {
             ContentUnavailableView("Plan deleted", systemImage: "trash")
@@ -51,11 +52,7 @@ struct RoutineEditor: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                TextField("Plan name", text: nameBinding)
-                    .font(.cadenceNumber(28))
-                    .tracking(-0.6)
-                    .foregroundStyle(Color.ink)
-                    .submitLabel(.done)
+                PlanTitleField(plan: plan)
                     .padding(.horizontal, 4)
 
                 VStack(spacing: 0) {
@@ -65,7 +62,7 @@ struct RoutineEditor: View {
                         onStep: { step($0) },
                         onReset: { jump(to: store.today.weekStart) }
                     )
-                    .background(Color.canvas)
+                    .background(Color.wash)
 
                     ZStack(alignment: .top) {
                         grid(resolved.plan)
@@ -336,13 +333,6 @@ struct RoutineEditor: View {
             }
             .cardSurface(radius: 16, elevated: false)
         }
-    }
-
-    private var nameBinding: Binding<String> {
-        Binding(
-            get: { plan.name },
-            set: { newValue in store.update(plan.id) { $0.name = newValue } }
-        )
     }
 
     // MARK: Navigation

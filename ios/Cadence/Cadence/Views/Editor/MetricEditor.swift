@@ -1,14 +1,13 @@
 import SwiftUI
 
-/// Settings and history for a daily-number plan.
+/// Setup and history for a scale: what it measures (a unit from a list, the system way) and
+/// how finely (a precision from a list), then everything logged.
 struct MetricEditor: View {
     let plan: Plan
     var onDelete: () -> Void
 
     @Environment(Store.self) private var store
     @State private var confirmingDelete = false
-
-    private let steps: [Double] = [0.1, 0.5, 1]
 
     var body: some View {
         let entries = plan.records
@@ -17,32 +16,40 @@ struct MetricEditor: View {
 
         List {
             Section {
-                LabeledContent("Unit") {
-                    TextField("lb", text: binding(\.unit))
-                        .multilineTextAlignment(.trailing)
-                        .textInputAutocapitalization(.never)
-                }
-                Picker("Ruler step", selection: binding(\.step)) {
-                    ForEach(steps, id: \.self) { step in
-                        Text(step.formatted(.number.precision(.fractionLength(step < 1 ? 1 : 0)))).tag(step)
+                Picker("Unit", selection: binding(\.unit)) {
+                    Text("None").tag("")
+                    // A unit typed in an earlier version stays selectable.
+                    if !plan.unit.isEmpty && !ScaleUnits.contains(plan.unit) {
+                        Text(plan.unit).tag(plan.unit)
+                    }
+                    ForEach(ScaleUnits.groups, id: \.title) { group in
+                        Section(group.title) {
+                            ForEach(group.units, id: \.self) { unit in
+                                Text(unit).tag(unit)
+                            }
+                        }
                     }
                 }
-                .pickerStyle(.segmented)
-                .listRowSeparator(.hidden)
+                Picker("Precision", selection: binding(\.step)) {
+                    ForEach(ScaleUnits.precisions, id: \.self) { step in
+                        Text(ScaleUnits.precisionTitle(step)).tag(step)
+                    }
+                    if !ScaleUnits.precisions.contains(plan.step) {
+                        Text(ScaleUnits.precisionTitle(plan.step)).tag(plan.step)
+                    }
+                }
             } header: {
-                // The name is the page's one title, editable in place like the routine editor.
-                VStack(alignment: .leading, spacing: 20) {
-                    TextField("Name", text: binding(\.name))
-                        .font(.cadenceNumber(28))
-                        .tracking(-0.6)
-                        .foregroundStyle(Color.ink)
-                        .submitLabel(.done)
+                // The icon and name are the page's one title, editable in place.
+                VStack(alignment: .leading, spacing: 24) {
+                    PlanTitleField(plan: plan)
                     SheetSectionHeader(text: "Setup")
                 }
                 .textCase(nil)
             }
+            .pickerStyle(.menu)
             .font(.cadenceBodyMedium)
             .foregroundStyle(Color.ink)
+            .tint(Color.inkSecondary)
             .listRowBackground(Color.surface)
 
             if entries.count >= 2 {
@@ -58,20 +65,20 @@ struct MetricEditor: View {
 
             Section {
                 if entries.isEmpty {
-                    Text("Nothing logged yet. Scrub the ruler on the Today card, then tap the check.")
+                    Text("Nothing logged yet.")
                         .font(.cadenceSubhead)
                         .foregroundStyle(Color.inkSecondary)
                 }
                 ForEach(entries) { entry in
-                    HStack {
-                        Text(DayText.long(entry.day))
-                            .font(.cadenceSubhead)
-                            .foregroundStyle(Color.inkSecondary)
-                        Spacer()
+                    LabeledContent {
                         Text("\(plan.format(entry.value)) \(plan.unit)")
                             .font(.cadenceBody)
                             .monospacedDigit()
                             .foregroundStyle(Color.ink)
+                    } label: {
+                        Text(DayText.long(entry.day))
+                            .font(.cadenceSubhead)
+                            .foregroundStyle(Color.inkSecondary)
                     }
                 }
                 .onDelete { offsets in
@@ -93,6 +100,7 @@ struct MetricEditor: View {
             .listRowBackground(Color.surface)
         }
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.immediately)
         .background(Color.canvas)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -109,6 +117,92 @@ struct MetricEditor: View {
             get: { plan[keyPath: keyPath] },
             set: { newValue in store.update(plan.id) { $0[keyPath: keyPath] = newValue } }
         )
+    }
+}
+
+/// The units a scale can measure in, grouped the way a system picker groups them, and the
+/// precisions its ruler can step by.
+enum ScaleUnits {
+    struct Group {
+        let title: String
+        let units: [String]
+    }
+
+    static let groups = [
+        Group(title: "Weight", units: ["lb", "kg", "st"]),
+        Group(title: "Body", units: ["%", "bpm"]),
+        Group(title: "Time", units: ["min", "hr"]),
+        Group(title: "Distance", units: ["mi", "km"]),
+        Group(title: "Volume", units: ["oz", "cups", "ml", "L"]),
+        Group(title: "Count", units: ["steps", "reps", "pages", "kcal"]),
+    ]
+
+    static func contains(_ unit: String) -> Bool {
+        groups.contains { $0.units.contains(unit) }
+    }
+
+    static let precisions: [Double] = [1, 0.5, 0.25, 0.1, 0.01]
+
+    static func precisionTitle(_ step: Double) -> String {
+        switch step {
+        case 1: "Whole numbers (1)"
+        case 0.5: "Halves (0.5)"
+        case 0.25: "Quarters (0.25)"
+        case 0.1: "Tenths (0.1)"
+        case 0.01: "Hundredths (0.01)"
+        default: step.formatted()
+        }
+    }
+}
+
+/// Setup for a streak: just its icon and name, how it's going, and delete.
+struct StreakEditor: View {
+    let plan: Plan
+    var onDelete: () -> Void
+
+    @Environment(Store.self) private var store
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        let today = store.today
+        let streak = plan.streak(asOf: today)
+        let last30 = (0..<30).map { today.adding(-$0) }
+        let done = last30.filter { plan.status(on: $0) == .done }.count
+
+        List {
+            Section {
+                LabeledContent("Current streak", value: streak == 1 ? "1 day" : "\(streak) days")
+                LabeledContent("Last 30 days", value: "\(done) done")
+            } header: {
+                VStack(alignment: .leading, spacing: 24) {
+                    PlanTitleField(plan: plan)
+                    SheetSectionHeader(text: "Progress")
+                }
+                .textCase(nil)
+            }
+            .font(.cadenceBodyMedium)
+            .foregroundStyle(Color.ink)
+            .listRowBackground(Color.surface)
+
+            Section {
+                Button("Delete plan", systemImage: "trash", role: .destructive) {
+                    confirmingDelete = true
+                }
+                .font(.cadenceCallout)
+            }
+            .listRowBackground(Color.surface)
+        }
+        .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.immediately)
+        .background(Color.canvas)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Delete \(plan.name)?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete plan and its history", role: .destructive) {
+                store.delete(plan.id)
+                onDelete()
+            }
+        }
     }
 }
 

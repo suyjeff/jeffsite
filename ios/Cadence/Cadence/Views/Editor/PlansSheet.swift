@@ -179,51 +179,6 @@ private struct PlansList: View {
     }
 }
 
-/// Sounds and haptics, out of the way of everyday use. Opened from ⋯.
-struct SettingsSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @AppStorage(Prefs.soundsKey) private var soundsOn = true
-    @AppStorage(Prefs.hapticsKey) private var hapticsOn = true
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Toggle(isOn: $soundsOn) {
-                        Label("Sounds", systemImage: "speaker.wave.2")
-                    }
-                    Toggle(isOn: $hapticsOn) {
-                        Label("Haptics", systemImage: "hand.tap")
-                    }
-                } footer: {
-                    Text("Sounds follow the silent switch.")
-                        .font(.cadenceSubhead)
-                        .foregroundStyle(Color.inkSecondary)
-                }
-                .font(.cadenceBodyMedium)
-                .listRowBackground(Color.surface)
-            }
-            .scrollContentBackground(.hidden)
-            .background(Color.canvas)
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", systemImage: "checkmark") { dismiss() }
-                }
-            }
-            // Turning one on plays it, so you know what you've turned on.
-            .onChange(of: soundsOn) { _, isOn in
-                if isOn { Sounds.shared.play(.check) }
-            }
-            .onChange(of: hapticsOn) { _, isOn in
-                if isOn { Haptics.shared.check() }
-            }
-        }
-        .tint(Color.plum)
-    }
-}
-
 struct SheetSectionHeader: View {
     let text: String
 
@@ -240,7 +195,7 @@ private struct PlanListRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: plan.isMetric ? "number" : plan.columnCount > 1 ? "square.split.2x1" : "list.bullet")
+            Image(systemName: plan.symbol)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Color.plum)
                 .frame(width: 30, height: 30)
@@ -262,7 +217,11 @@ private struct PlanListRow: View {
             if let value = plan.latestValue(onOrBefore: today) {
                 return "LAST \(plan.format(value)) \(plan.unit.uppercased())"
             }
-            return "DAILY NUMBER"
+            return "SCALE"
+        }
+        if plan.isStreak {
+            let streak = plan.streak(asOf: today)
+            return streak == 1 ? "1 DAY STREAK" : "\(streak) DAY STREAK"
         }
         let progress = plan.progress(in: today.weekDays)
         let columns = plan.columnCount > 1 ? plan.columns.joined(separator: " / ").uppercased() + " · " : ""

@@ -187,7 +187,13 @@ final class Store {
         switch plan.unit.lowercased() {
         case "lb", "lbs": 170
         case "kg": 75
+        case "st": 12
+        case "%": 20
+        case "bpm": 60
         case "h", "hr", "hrs", "hours": 8
+        case "min": 30
+        case "steps": 8000
+        case "kcal": 2000
         default: 0
         }
     }

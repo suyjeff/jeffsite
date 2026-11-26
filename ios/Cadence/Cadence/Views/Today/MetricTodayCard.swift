@@ -23,7 +23,7 @@ struct MetricTodayCard: View {
         let recent = plan.points(in: (0..<14).map { day.adding($0 - 13) })
 
         VStack(alignment: .leading, spacing: 0) {
-            MonoLabel(text: plan.name.uppercased())
+            PlanLabel(plan: plan)
 
             Spacer(minLength: 12)
 
@@ -88,15 +88,13 @@ struct MetricTodayCard: View {
                 )
             }
             .padding(.top, 14)
-            // Level with Create, which floats over the card's corner.
-            .padding(.trailing, Metrics.checkTrailing - Metrics.cardPadding)
             .padding(.bottom, -2)
         }
         .padding(Metrics.cardPadding)
         .opacity(1 - 0.28 * Double(max(0, -swipe).clamped(0, 1)))
         .overlay(alignment: .bottomTrailing) {
             InkRipple(trigger: ripple)
-                .padding(.trailing, Metrics.checkTrailing)
+                .padding(.trailing, Metrics.cardPadding)
                 .padding(.bottom, Metrics.cardPadding - 2)
         }
         .overlay {
@@ -113,7 +111,7 @@ struct MetricTodayCard: View {
             if let at = plan.record(on: day).completedAt { return "LOGGED · \(DayText.time(at))" }
             return "LOGGED"
         case .skipped:
-            return "SKIPPED"
+            return ""
         default:
             return ""
         }

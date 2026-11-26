@@ -18,6 +18,7 @@ final class Haptics {
     private let notification = UINotificationFeedbackGenerator()
 
     private var lastSelection: CFTimeInterval = 0
+    private var holdPlayer: (any CHHapticAdvancedPatternPlayer)?
 
     private init() {
         makeEngine()
@@ -65,15 +66,56 @@ final class Haptics {
     /// Touch-down on anything that opens a menu: small and crisp, before anything moves.
     func press() {
         guard isEnabled else { return }
-        rigid.impactOccurred(intensity: 0.5)
+        rigid.impactOccurred(intensity: 0.45)
         rigid.prepare()
     }
 
-    /// A menu opening under the finger: rounder and fuller than the touch-down.
+    /// While a press is held toward opening a menu: a faint hum that tightens as the hold
+    /// goes on, like a spring being loaded. Stopped by `endHoldBuild()` or by the release.
+    func holdBuild(duration: TimeInterval) {
+        endHoldBuild()
+        guard isEnabled, let engine else { return }
+        let event = CHHapticEvent(
+            eventType: .hapticContinuous,
+            parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.5),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.25),
+            ],
+            relativeTime: 0,
+            duration: duration
+        )
+        let ramp = CHHapticParameterCurve(
+            parameterID: .hapticIntensityControl,
+            controlPoints: [
+                .init(relativeTime: 0, value: 0.05),
+                .init(relativeTime: duration * 0.6, value: 0.22),
+                .init(relativeTime: duration, value: 0.5),
+            ],
+            relativeTime: 0
+        )
+        do {
+            try engine.start()
+            let pattern = try CHHapticPattern(events: [event], parameterCurves: [ramp])
+            let player = try engine.makeAdvancedPlayer(with: pattern)
+            try player.start(atTime: CHHapticTimeImmediate)
+            holdPlayer = player
+        } catch {
+            holdPlayer = nil
+        }
+    }
+
+    func endHoldBuild() {
+        try? holdPlayer?.stop(atTime: CHHapticTimeImmediate)
+        holdPlayer = nil
+    }
+
+    /// A menu opening under the finger: the hold lets go in one solid, round thunk.
     func menuOpen() {
-        guard isEnabled else { return }
-        soft.impactOccurred(intensity: 0.85)
-        soft.prepare()
+        endHoldBuild()
+        play([
+            transient(at: 0, intensity: 1.0, sharpness: 0.5),
+            continuous(at: 0.005, duration: 0.05, intensity: 0.35, sharpness: 0.2),
+        ], fallback: { self.medium.impactOccurred(intensity: 1) })
     }
 
     /// Moving onto another row of an open menu. Not throttled like `tick`: rows are tall

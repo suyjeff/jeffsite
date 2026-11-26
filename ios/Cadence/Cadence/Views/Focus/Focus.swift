@@ -541,6 +541,7 @@ private struct FocusPill: View {
                         },
                     ]],
                     tailX: box.trash.midX,
+                    showsTail: true,
                     choosesOnRelease: false
                 )
             }
@@ -578,16 +579,19 @@ private struct FocusPill: View {
                 onDone()
             })
         }
-        let editing = [
+        var editing = [
             MenuItem(id: "edit", title: "Edit plan", systemImage: "square.and.pencil") {
                 onDone()
                 actions.editPlan(plan.id)
             },
-            MenuItem(id: "today", title: plan.isMetric ? "Change today's value" : "Edit today", systemImage: "pencil") {
+        ]
+        // A streak has nothing written for a day, so there's no day to edit.
+        if !plan.isStreak {
+            editing.append(MenuItem(id: "today", title: plan.isMetric ? "Change today's value" : "Edit today", systemImage: "pencil") {
                 onDone()
                 plan.isMetric ? actions.editValue(plan.id, today) : actions.editDay(plan.id, today)
-            },
-        ]
+            })
+        }
         let more = [
             MenuItem(id: "duplicate", title: "Duplicate", systemImage: "plus.square.on.square") {
                 var copy = plan
@@ -656,7 +660,7 @@ private struct FocusPill: View {
             })
         }
         var editing: [MenuItem] = []
-        if !plan.isMetric {
+        if !plan.isMetric && !plan.isStreak {
             editing.append(MenuItem(id: "day", title: "Edit this day", systemImage: "pencil") {
                 onDone()
                 actions.editDay(plan.id, day)

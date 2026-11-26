@@ -12,24 +12,22 @@ The project uses a synchronized folder, so any file added under `Cadence/` is pi
 
 ## Using it
 
-**Menus** open from the title ("Today ⌄"), from ⋯, and from Create. Tap to open one, or hold for a moment and slide onto a row: letting go there chooses it. Each press taps on touch-down, again as the menu opens, and ticks as you move across its rows.
+**Header**: "Today ⌄" switches between Today, Week and Month. The glass pill at the top right holds ⋯ (edit the front plan, all plans, switch to any plan, jump to today, Settings) and + (add a plan). Tap any of them, or press and hold: the button sinks as the press loads, then the menu opens with a firm tap, and you can slide onto a row and let go to choose it.
 
-**Views**: "Today ⌄" switches between Today, Week and Month, as in the design.
+**Adding a plan**: + offers three kinds. A **schedule** is a week written like a sheet (training, skincare, habits). A **scale** logs one number a day (weight, sleep). A **streak** is one yes-or-no a day. Each opens straight into its editor, where you name it and choose its icon.
 
-**Moving between plans** works the same in every view: pull down past the top to bring the next plan forward, push up past the bottom (or, on Today, push the card up) to go back, or tap the card peeking behind. ⋯ also lists every plan.
+**Moving between plans** works the same in every view: pull the card down to bring the next plan forward, push it up to go back, or tap the card peeking behind. On Week and Month, the card scrolls first; once it's at its top (or bottom) the same pull moves the deck.
 
 **Today** is a deck, one card per plan.
 - Swipe a card right to mark the day done, left to skip it. The check fills green and draws itself as you drag; past the commit point it pops with a detent, and on release the card is thrown and tucks in at the back.
 - The check does the same as a right swipe ("da-ding"). On AM/PM plans it checks off the next half; each half can also be tapped.
-- Number plans (Weight) show a ruler. Scrub it, then swipe right or tap the check to log.
+- Scales show a ruler: scrub it, then swipe right or tap the check to log. Streaks show the current run and the last two weeks.
 
-**Holding things.** Hold a card (on Today, anywhere on it; on Week and Month, its top strip) and the whole card lifts while everything around it blurs. A pill rises near the bottom: Done in green, Delete in red (confirmed in a panel that rises from the pill), and ⋯ for the rest (undo, skip, edit, duplicate), also in a panel from the pill. Hold a row in Week or Month to lift just that day.
+**Holding things.** Hold a card (on Today, anywhere on it; on Week and Month, its top strip) and the whole card lifts while everything around it blurs. A pill rises near the bottom: Done in green, Delete in red (confirmed in a bubble pointing at it), and ⋯ for the rest (undo, skip, edit, duplicate). Hold a row in Week or Month to lift just that day.
 
-**Create**: the plum + floating bottom right. Tap or hold it for a small menu of what you can add; choosing one makes the plan and opens it to write.
+**Week / Month**: each card keeps its header (name, period, weekday names) fixed and scrolls its days inside. Swipe a row right for done, left to skip. Month shows each day's state in the calendar; tap a day for the rest of its week.
 
-**Week / Month** scroll, with each card's header (name, period, weekday names) pinned while its rows pass beneath. The app header floats over the page; once you scroll, the title gathers into a glass capsule. Swipe a row right for done, left to skip (on AM/PM plans, each column swipes separately). Month shows each day's state in the calendar; tap a day for the rest of its week.
-
-**⋯ menu** (top right): edit the front plan, all plans, switch to any plan, jump to today (Week and Month, when you've moved away), and Settings (sounds and haptics).
+**Settings** (from ⋯) is a full page: the theme (five Tailwind neutrals: Mauve, the design's own, plus Taupe, Olive, Mist and Zinc), sounds and haptics.
 
 **Plans**: editing a plan opens just that plan; ✓ closes it, and **All plans** leads to the list. In the list, tap a plan to open it, swipe right to mark today done, left to delete, or Edit to reorder.
 
@@ -48,7 +46,7 @@ Cadence/
 Tools/          Python scripts that generate the sounds and the app icon (numpy, scipy, pillow)
 ```
 
-- **Design tokens** come straight from the Figma file: canvas `#F3F1F3`, surface `#FAFAFA`, hairline `#E7E4E7`, ink `#463947`, labels `#79697B` / `#A89EA9` / `#D7D0D7`, 20pt cards with the three-layer shadow, Plus Jakarta Sans SemiBold for content and Geist Mono Medium for labels. Dark mode counterparts are defined alongside.
+- **Design tokens** come from the Figma file, which was drawn in Tailwind's Mauve (surface 50, hairline 200, ink 700, labels 500). The canvas sits one step darker (200) for contrast, and every neutral follows the chosen theme (`Design/Palette.swift`). Cards are 20pt with the three-layer shadow, Plus Jakarta Sans SemiBold for content and Geist Mono Medium for labels. Dark mode counterparts are defined alongside.
 - **Motion** follows the skills in `.claude/skills` (`apple-design`, `gestures`, `make-interfaces-feel-better`, and the rest): cards track the finger 1:1, release into springs seeded with the finger's velocity, rubber-band at edges, commit on distance *or* a flick, and stay critically damped unless a gesture threw them. Icon swaps use scale 0.25 → 1, opacity, and a 4px blur on a 0.3s spring with no bounce. Reduce Motion swaps slides and the ink ripple for fades.
 - **Sound and haptics** fire on the same frame as the state change they belong to. Sounds use the ambient audio session, so they follow the silent switch and mix with music. To retune them, edit `Tools/gen_sounds.py` and run `python3 Tools/gen_sounds.py Cadence/Resources/Sounds` (needs numpy).
 - **Data** is one JSON file in Application Support. An unreadable file is set aside, never overwritten.

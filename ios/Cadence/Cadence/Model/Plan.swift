@@ -1,10 +1,12 @@
 import Foundation
 
 enum PlanKind: String, Codable, Sendable {
-    /// A written weekly plan you check off (training, skincare, habits).
+    /// A schedule: a weekly sheet you write and check off (training, skincare, habits).
     case routine
-    /// A number you log once a day (weight, sleep, steps…).
+    /// A scale: a number you log once a day (weight, sleep, steps…).
     case metric
+    /// A streak: one yes-or-no a day ("did I do it?"), nothing to write.
+    case streak
 }
 
 enum Mark: String, Codable, Sendable {
@@ -96,6 +98,8 @@ struct Plan: Identifiable, Codable, Hashable, Sendable {
     var overrides: [String: [String]] = [:]
     /// Day key → marks and values.
     var records: [String: DayRecord] = [:]
+    /// An SF Symbol chosen for the plan. Nil falls back to one for its kind.
+    var icon: String?
 
     init(name: String, kind: PlanKind, columns: [String] = [""], unit: String = "", step: Double = 0.1) {
         self.name = name
@@ -105,8 +109,19 @@ struct Plan: Identifiable, Codable, Hashable, Sendable {
         self.step = step
     }
 
-    var columnCount: Int { max(columns.count, 1) }
+    var columnCount: Int { kind == .streak ? 1 : max(columns.count, 1) }
     var isMetric: Bool { kind == .metric }
+    var isStreak: Bool { kind == .streak }
+
+    /// The plan's icon: the chosen one, or its kind's.
+    var symbol: String {
+        if let icon, !icon.isEmpty { return icon }
+        switch kind {
+        case .routine: return columnCount > 1 ? "square.split.2x1" : "tablecells"
+        case .metric: return "number"
+        case .streak: return "flame"
+        }
+    }
 
     // MARK: Week plans
 
@@ -123,6 +138,8 @@ struct Plan: Identifiable, Codable, Hashable, Sendable {
 
     /// The text planned in each column on `day`, trimmed.
     func items(on day: Day) -> [String] {
+        // A streak is the same single yes-or-no every day.
+        if isStreak { return [name.isEmpty ? "Did it" : name] }
         if let override = overrides[day.key] {
             return (0..<columnCount).map { override.indices.contains($0) ? clean(override[$0]) : "" }
         }
