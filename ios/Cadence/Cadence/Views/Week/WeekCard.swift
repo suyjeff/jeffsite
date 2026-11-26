@@ -266,7 +266,7 @@ struct RowFlash: View {
 
     var body: some View {
         Color.plum
-            .keyframeAnimator(initialValue: 0.0, trigger: trigger) { view, opacity in
+            .keyframeAnimator(initialValue: 0.0, trigger: trigger) { [reduceMotion] view, opacity in
                 view.opacity(reduceMotion ? 0 : opacity)
             } keyframes: { _ in
                 KeyframeTrack {

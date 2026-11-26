@@ -202,7 +202,7 @@ private struct RippleRing: View {
     var body: some View {
         Circle()
             .stroke(Color.plum, lineWidth: 2)
-            .keyframeAnimator(initialValue: RingValues(), trigger: trigger) { view, value in
+            .keyframeAnimator(initialValue: RingValues(), trigger: trigger) { [enabled] view, value in
                 view.scaleEffect(value.scale).opacity(enabled ? value.opacity : 0)
             } keyframes: { _ in
                 KeyframeTrack(\.scale) {

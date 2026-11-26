@@ -25,7 +25,14 @@ struct RootView: View {
     /// +1 when moving right along Today → Week → Month → All, −1 when moving left.
     @State private var modeDirection = 1
 
+    // The body is assembled in stages. As one long modifier chain it outgrew what the Swift
+    // type checker will solve ("failed to produce diagnostic"); each stage checks on its own.
     var body: some View {
+        withLifecycle(withSheets(withOverlays(screen)))
+    }
+
+    /// Header, the current view, and the bottom bar.
+    private var screen: some View {
         VStack(spacing: 0) {
             HeaderBar(
                 plans: store.plans,
@@ -33,7 +40,7 @@ struct RootView: View {
                 frontID: frontID,
                 onSelectPlan: selectPlan,
                 onOpenPlans: { plansRoute = $0 },
-                onJumpToToday: mode == .week || mode == .month ? jumpToToday : nil
+                onJumpToToday: jumpToTodayAction
             )
 
             ZStack {
@@ -50,91 +57,119 @@ struct RootView: View {
         }
         .background(Color.canvas.ignoresSafeArea())
         .safeAreaBar(edge: .bottom) {
-            // Views on the left, the one primary action (Create) floating on the right.
-            HStack(spacing: 12) {
-                ModeBar(mode: mode, onSelect: selectMode)
-                CreateButton { creating = true }
-                    .matchedTransitionSource(id: "create", in: createTransition)
-            }
-            .padding(.horizontal, Metrics.gutter - 4)
-            .padding(.bottom, 4)
+            bottomBar
         }
         .environment(\.focusedKey, focus?.key)
         .environment(\.requestFocus, FocusRequest { item in
             withAnimation(nil) { focus = item }
         })
-        .overlay {
-            if let focus {
-                FocusLayer(
-                    item: focus,
-                    actions: FocusActions(
-                        editPlan: { plansRoute = .edit($0) },
-                        editDay: editDay,
-                        editValue: editValue
-                    ),
-                    onDismiss: { self.focus = nil }
-                )
-                .id(focus.key)
-            }
+    }
+
+    /// Views on the left, the one primary action (Create) floating on the right.
+    private var bottomBar: some View {
+        HStack(spacing: 12) {
+            ModeBar(mode: mode, onSelect: selectMode)
+            CreateButton { creating = true }
+                .matchedTransitionSource(id: "create", in: createTransition)
         }
-        .overlay(alignment: .top) {
-            if celebrating {
-                AllDoneToast()
-                    .padding(.top, 4)
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.9, anchor: .top))
+        .padding(.horizontal, Metrics.gutter - 4)
+        .padding(.bottom, 4)
+    }
+
+    /// "Jump to today" only where it changes something: Week and Month.
+    private var jumpToTodayAction: (() -> Void)? {
+        guard mode == .week || mode == .month else { return nil }
+        return { jumpToToday() }
+    }
+
+    private var toastTransition: AnyTransition {
+        if reduceMotion { return .opacity }
+        return .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.9, anchor: .top))
+    }
+
+    /// The focus layer (held items and their options) and the "All done" toast.
+    private func withOverlays(_ base: some View) -> some View {
+        base
+            .overlay {
+                if let focus {
+                    FocusLayer(
+                        item: focus,
+                        actions: FocusActions(
+                            editPlan: { plansRoute = .edit($0) },
+                            editDay: editDay,
+                            editValue: editValue
+                        ),
+                        onDismiss: { self.focus = nil }
                     )
+                    .id(focus.key)
+                }
             }
-        }
-        .sheet(item: $plansRoute) { route in
-            PlansSheet(route: route)
-        }
-        .sheet(isPresented: $creating, onDismiss: openCreatedPlan) {
-            TemplatePicker { template in
-                let plan = SeedData.template(template, today: store.today)
-                store.add(plan)
-                Feedback.play(.check(step: 0))
-                createdPlan = plan.id
-                creating = false
+            .overlay(alignment: .top) {
+                if celebrating {
+                    AllDoneToast()
+                        .padding(.top, 4)
+                        .transition(toastTransition)
+                }
             }
-            .presentationDetents([.medium, .large])
-            .navigationTransition(.zoom(sourceID: "create", in: createTransition))
-        }
-        .sheet(item: $dayEdit) { target in
-            DayEditSheet(planID: target.planID, day: target.day)
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(item: $valueEdit) { target in
-            MetricEntrySheet(planID: target.planID, day: target.day)
-                .presentationDetents([.height(340)])
-        }
-        .onAppear {
-            Feedback.warmUp()
-            if frontID == nil { frontID = UUID(uuidString: storedFrontID) }
-            repairFront()
-        }
-        .onChange(of: store.plans.map(\.id)) { _, _ in repairFront() }
-        .onChange(of: frontID) { _, newValue in storedFrontID = newValue?.uuidString ?? "" }
-        .onChange(of: scenePhase) { _, phase in
-            switch phase {
-            case .active:
+    }
+
+    private func withSheets(_ base: some View) -> some View {
+        base
+            .sheet(item: $plansRoute) { route in
+                PlansSheet(route: route)
+            }
+            .sheet(isPresented: $creating, onDismiss: openCreatedPlan) {
+                TemplatePicker(onPick: createPlan)
+                    .presentationDetents([.medium, .large])
+                    .navigationTransition(.zoom(sourceID: "create", in: createTransition))
+            }
+            .sheet(item: $dayEdit) { target in
+                DayEditSheet(planID: target.planID, day: target.day)
+                    .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $valueEdit) { target in
+                MetricEntrySheet(planID: target.planID, day: target.day)
+                    .presentationDetents([.height(340)])
+            }
+    }
+
+    private func withLifecycle(_ base: some View) -> some View {
+        base
+            .onAppear {
+                Feedback.warmUp()
+                if frontID == nil { frontID = UUID(uuidString: storedFrontID) }
+                repairFront()
+            }
+            .onChange(of: store.plans.map(\.id)) { _, _ in repairFront() }
+            .onChange(of: frontID) { _, newValue in storedFrontID = newValue?.uuidString ?? "" }
+            .onChange(of: scenePhase) { _, phase in handle(phase) }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
                 rollOverIfNeeded()
-                Haptics.shared.prepare()
-            case .background:
-                store.saveNow()
-            default:
-                break
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
+            .onChange(of: store.allDoneToday) { wasDone, isDone in
+                if isDone && !wasDone { celebrate() }
+            }
+            .tint(Color.plum)
+    }
+
+    private func handle(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
             rollOverIfNeeded()
+            Haptics.shared.prepare()
+        case .background:
+            store.saveNow()
+        default:
+            break
         }
-        .onChange(of: store.allDoneToday) { wasDone, isDone in
-            if isDone && !wasDone { celebrate() }
-        }
-        .tint(Color.plum)
+    }
+
+    private func createPlan(_ template: PlanTemplate) {
+        let plan = SeedData.template(template, today: store.today)
+        store.add(plan)
+        Feedback.play(.check(step: 0))
+        createdPlan = plan.id
+        creating = false
     }
 
     @ViewBuilder
