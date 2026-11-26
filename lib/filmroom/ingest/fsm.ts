@@ -589,7 +589,7 @@ function simulate(
   type Snap = { clock: number; period: number; floor: [Set<number>, Set<number>] };
   let foulFloor: Snap | null = null;
   let techFloor: Snap | null = null;
-  const side = (t: number) => (t === home ? 0 : t === away ? 1 : -1);
+  const side = (t: number): number => (t === home ? 0 : t === away ? 1 : -1);
   const elapse = (to: number) => {
     const d = Math.round((lastClock - to) * 10) / 10;
     if (d > 0) for (const s of floor) for (const p of s) credit(floorSeconds, p, d);
