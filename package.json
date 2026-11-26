@@ -5,21 +5,30 @@
     "start": "next start",
     "export": "next export",
     "test": "vitest run --passWithNoTests",
-    "resume": "node scripts/render-resume.mjs public/SuJeffResume_oct2026.pdf"
+    "resume": "node scripts/render-resume.mjs public/SuJeffResume_oct2026.pdf",
+    "filmroom:ingest": "NODE_USE_ENV_PROXY=1 tsx scripts/filmroom/ingest.ts",
+    "filmroom:golden": "tsx scripts/filmroom/golden.ts",
+    "filmroom:proxies": "bash scripts/filmroom/make-proxies.sh",
+    "filmroom:serve": "node scripts/filmroom/serve-static.cjs out 4173",
+    "filmroom:e2e": "node scripts/filmroom/e2e.cjs http://localhost:4173/filmroom"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@mdx-js/loader": "^3.0.1",
     "@mdx-js/react": "^3.0.1",
     "@next/mdx": "^14.2.8",
+    "@tanstack/react-virtual": "^3.14.28",
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.5",
+    "@xstate/react": "^6.1.0",
     "gray-matter": "^4.0.3",
     "next": "^16.1.6",
     "next-mdx-remote": "^6.0.0",
+    "nuqs": "^2.10.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "xstate": "^5.33.4"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",
@@ -28,6 +37,7 @@
     "jsdom": "^27.0.1",
     "postcss": "^8.4.45",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.15",
     "vitest": "^4.0.0"
   },
   "overrides": {

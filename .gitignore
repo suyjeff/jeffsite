@@ -20,3 +20,6 @@ out/
 
 # Local secrets
 .env*.local
+
+# Film-room ingest cache (raw feed mirrors)
+.cache/
