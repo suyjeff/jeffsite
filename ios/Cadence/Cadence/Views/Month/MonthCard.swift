@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The Month card: progress strip, month navigator, a SUN…SAT calendar where every day
-/// shows its state, then the rest of the selected day's week as swipeable rows.
+/// The Month card: progress strip, month navigator and weekday names (pinned while the page
+/// scrolls), a calendar where every day shows its state, then the rest of the selected day's
+/// week as swipeable rows.
 struct MonthCard: View {
     let plan: Plan
     @Binding var month: Day
@@ -19,13 +20,13 @@ struct MonthCard: View {
         let isCurrent = month == store.today.monthStart
         let restOfWeek = (selected.weekdayIndex...6).map { selected.weekStart.adding($0) }
 
-        VStack(spacing: 0) {
+        StickyCard {
             CardHeaderStrip(title: plan.name) {
                 CountPill(done: progress.done, total: progress.planned)
                     .animation(Motion.snappy, value: progress.done)
             }
             // Hold the top of the card to lift the whole card.
-            .liftsCardOnHold(inScrollView: true)
+            .liftsCardOnHold()
 
             PeriodBar(
                 title: DayText.monthTitle(month),
@@ -47,7 +48,7 @@ struct MonthCard: View {
             .padding(.top, 16)
             .padding(.bottom, 8)
             .accessibilityHidden(true)
-
+        } content: {
             // Overlap the outgoing and incoming months instead of stacking them.
             ZStack(alignment: .top) {
                 CalendarGrid(plan: plan, month: month, selected: $selected, today: store.today)
@@ -57,14 +58,14 @@ struct MonthCard: View {
                     .id(month)
                     .transition(Motion.slide(direction, reduceMotion: reduceMotion))
             }
-                .gesture(HorizontalPan { phase in
-                    if case .ended(let translation, let velocity) = phase,
-                       abs(translation) > 60 || abs(velocity) > 600 {
-                        // Swiping toward the leading edge goes forward in time (mirrors in RTL).
-                        let forward = (translation < 0) == (layoutDirection == .leftToRight)
-                        step(by: forward ? 1 : -1)
-                    }
-                })
+            .gesture(HorizontalPan { phase in
+                if case .ended(let translation, let velocity) = phase,
+                   abs(translation) > 60 || abs(velocity) > 600 {
+                    // Swiping toward the leading edge goes forward in time (mirrors in RTL).
+                    let forward = (translation < 0) == (layoutDirection == .leftToRight)
+                    step(by: forward ? 1 : -1)
+                }
+            })
 
             if plan.isMetric {
                 let points = plan.points(in: days)
@@ -99,7 +100,6 @@ struct MonthCard: View {
             }
             .animation(Motion.page, value: selected)
         }
-        .cardSurface()
         .focusableCard(plan.id)
     }
 
@@ -233,7 +233,7 @@ private struct DayCell: View {
     private func statusText(_ status: DayStatus) -> String {
         switch status {
         case .done: "Done"
-        case .skipped: "Not today"
+        case .skipped: "Skipped"
         case .partial(let done, let total): "\(done) of \(total) done"
         case .pending: isFuture ? "Planned" : "Not done"
         case .empty: "Nothing planned"

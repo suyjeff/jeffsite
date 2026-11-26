@@ -3,15 +3,15 @@ import SwiftUI
 /// The Today view: one card per plan, stacked like a deck with the next card peeking above.
 ///
 /// Gestures (one axis is chosen after ~12pt of movement, then the card tracks the finger 1:1):
-/// - Swipe right: done. Swipe left: not today (skip). Past the commit point the card arms
+/// - Swipe right: done. Swipe left: skip. Past the commit point the card arms
 ///   with a detent; on release it's thrown off with the finger's velocity and tucks behind the deck.
 /// - Pull down: the peeking card comes forward. Push up: the previous card comes back.
 struct TodayDeck: View {
     @Environment(Store.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.focusedKey) private var focusedKey
 
     @Binding var frontID: UUID?
-    var onCreatePlan: () -> Void
 
     @State private var drag: CGSize = .zero
     /// 0…1: how far the card behind has been drawn forward by the current gesture.
@@ -27,9 +27,7 @@ struct TodayDeck: View {
     var body: some View {
         let plans = store.plans
         Group {
-            if plans.isEmpty {
-                EmptyDeck(onCreatePlan: onCreatePlan)
-            } else {
+            if !plans.isEmpty {
                 GeometryReader { proxy in
                     let width = proxy.size.width
                     let frontIndex = store.index(of: frontID) ?? 0
@@ -58,8 +56,8 @@ struct TodayDeck: View {
         }
         .padding(.horizontal, Metrics.gutter)
         .padding(.top, 14)
-        // The card ends just above the floating Create button.
-        .padding(.bottom, Metrics.createClearance)
+        // The card runs nearly to the bottom; Create floats over its corner, level with the check.
+        .padding(.bottom, Metrics.deckBottom)
     }
 
     /// Signed swipe progress for the front card: −1 (skip armed) … 0 … 1 (done armed).
@@ -128,6 +126,11 @@ struct TodayDeck: View {
         DragGesture(minimumDistance: 12)
             .onChanged { value in
                 guard !flying else { return }
+                // A hold lifted the card before the finger moved: leave it where it is.
+                guard focusedKey == nil else {
+                    if drag != .zero { settle(velocity: .zero) }
+                    return
+                }
                 let t = value.translation
                 if axis == nil {
                     axis = abs(t.width) > abs(t.height) ? .horizontal : .vertical
@@ -154,6 +157,11 @@ struct TodayDeck: View {
             }
             .onEnded { value in
                 guard !flying else { return }
+                guard focusedKey == nil else {
+                    axis = nil
+                    armed = false
+                    return
+                }
                 let t = value.translation
                 let v = value.velocity
                 let current = axis
@@ -291,26 +299,14 @@ struct TodayCard: View, Equatable {
     }
 }
 
+/// What Today shows before there are any plans. Create, floating just below, is the way in.
 struct EmptyDeck: View {
-    var onCreatePlan: () -> Void
-
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.labelGap) {
             MonoLabel(text: "NO PLANS YET")
             Text("Write your first week: a training block, a skincare routine, a habit, or a number to log each day.")
                 .font(.cadenceBody)
                 .foregroundStyle(Color.ink)
-            Spacer()
-            HStack {
-                Spacer()
-                Button(action: onCreatePlan) {
-                    Label("New plan", systemImage: "plus")
-                        .font(.cadenceCallout)
-                        .padding(.horizontal, 6)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(Color.plum)
-            }
         }
         .padding(Metrics.cardPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

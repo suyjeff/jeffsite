@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 // MARK: - Model
 
@@ -76,9 +78,8 @@ extension View {
     }
 
     /// The part of a card that answers a long-press by lifting the whole card.
-    /// Pass `inScrollView` when the card scrolls, so the hold never fights the scroll.
-    func liftsCardOnHold(inScrollView: Bool = false) -> some View {
-        modifier(LiftsCardOnHold(inScrollView: inScrollView))
+    func liftsCardOnHold() -> some View {
+        modifier(LiftsCardOnHold())
     }
 }
 
@@ -109,11 +110,12 @@ private struct FocusableCard: ViewModifier {
                     .opacity(focused ? 1 : 0)
             }
             .scaleEffect(scale)
-            // Pressing eases down over the rest of the hold, after a short beat so a tap or the
-            // start of a swipe never dips the card; lifting pops past full size; letting go settles.
+            // Pressing (which starts a beat into the touch, so a tap or the start of a swipe never
+            // dips the card) eases down over the rest of the hold; lifting pops past full size;
+            // letting go settles.
             .animation(
                 pressing && !focused
-                    ? .easeOut(duration: holdDuration - 0.12).delay(0.12)
+                    ? .easeOut(duration: holdDuration - HoldGesture.pressDelay)
                     : .spring(duration: 0.26, bounce: focused ? 0.32 : 0),
                 value: scale
             )
@@ -133,28 +135,119 @@ private struct FocusableCard: ViewModifier {
 }
 
 private struct LiftsCardOnHold: ViewModifier {
-    var inScrollView: Bool
-
     @Environment(\.cardLift) private var cardLift
-    @GestureState private var holding = false
 
     func body(content: Content) -> some View {
-        if inScrollView {
-            content
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: holdDuration, maximumDistance: 10)
-                        .updating($holding) { value, state, _ in state = value }
-                        .onEnded { _ in cardLift.lift() }
-                )
-                .onChange(of: holding) { _, isHolding in cardLift.press(isHolding) }
-        } else {
-            content
-                .onLongPressGesture(minimumDuration: holdDuration, maximumDistance: 10) {
-                    cardLift.lift()
-                } onPressingChanged: { isPressing in
-                    cardLift.press(isPressing)
-                }
+        content.gesture(HoldGesture(
+            onPress: { cardLift.press($0) },
+            onHold: { cardLift.lift() }
+        ))
+    }
+}
+
+/// A hold that never fights scrolling or swiping. It watches the touch without ever
+/// recognizing (it fails when the finger lifts), so it can't take a touch from the scroll
+/// view, the deck's drag, a row's swipe or a tap: they all keep working, and moving more than a
+/// few points before the hold completes cancels it. SwiftUI's long-press, by contrast, holds
+/// the touch and stops a scroll view from scrolling.
+///
+/// `onPress(true)` after `pressDelay` (so a tap or the start of a swipe never dips anything),
+/// then `onHold` once the hold completes.
+struct HoldGesture: UIGestureRecognizerRepresentable {
+    var isEnabled = true
+    var onPress: (Bool) -> Void
+    var onHold: () -> Void
+
+    static let pressDelay: TimeInterval = 0.12
+
+    func makeUIGestureRecognizer(context: Context) -> TouchHoldRecognizer {
+        let recognizer = TouchHoldRecognizer()
+        recognizer.cancelsTouchesInView = false
+        recognizer.delaysTouchesEnded = false
+        return recognizer
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: TouchHoldRecognizer, context: Context) {
+        recognizer.isEnabled = isEnabled
+        recognizer.onPress = onPress
+        recognizer.onHold = onHold
+    }
+
+    /// The recognizer reports through its callbacks; it never changes state on its own.
+    func handleUIGestureRecognizerAction(_ recognizer: TouchHoldRecognizer, context: Context) {}
+}
+
+/// Times a still finger. Stays `.possible` for the whole touch and fails at the end, so no
+/// other gesture ever waits on it or is excluded by it.
+final class TouchHoldRecognizer: UIGestureRecognizer {
+    var onPress: (Bool) -> Void = { _ in }
+    var onHold: () -> Void = {}
+
+    private var start: CGPoint = .zero
+    private var pressTask: Task<Void, Never>?
+    private var holdTask: Task<Void, Never>?
+    private var pressing = false
+    private var tracking = false
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard !tracking, touches.count == 1, let touch = touches.first, event.allTouches?.count == 1 else {
+            cancelHold()
+            return
         }
+        tracking = true
+        start = touch.location(in: nil)
+        pressTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(HoldGesture.pressDelay))
+            guard let self, !Task.isCancelled, self.tracking else { return }
+            self.pressing = true
+            self.onPress(true)
+        }
+        holdTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(holdDuration))
+            guard let self, !Task.isCancelled, self.tracking else { return }
+            self.endPress()
+            self.tracking = false
+            self.onHold()
+        }
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        guard tracking, let point = touches.first?.location(in: nil) else { return }
+        if hypot(point.x - start.x, point.y - start.y) > 10 { cancelHold() }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        cancelHold()
+        state = .failed
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        cancelHold()
+        state = .failed
+    }
+
+    override func reset() {
+        super.reset()
+        cancelHold()
+    }
+
+    private func cancelHold() {
+        tracking = false
+        pressTask?.cancel()
+        holdTask?.cancel()
+        pressTask = nil
+        holdTask = nil
+        endPress()
+    }
+
+    private func endPress() {
+        guard pressing else { return }
+        pressing = false
+        onPress(false)
     }
 }
 
@@ -167,10 +260,9 @@ extension View {
         _ kind: FocusItem.Kind,
         key: String,
         isEnabled: Bool = true,
-        inScrollView: Bool = false,
         @ViewBuilder preview: @escaping () -> Preview
     ) -> some View {
-        modifier(LiftsRowOnHold(kind: kind, key: key, isEnabled: isEnabled, inScrollView: inScrollView, preview: { AnyView(preview()) }))
+        modifier(LiftsRowOnHold(kind: kind, key: key, isEnabled: isEnabled, preview: { AnyView(preview()) }))
     }
 }
 
@@ -178,21 +270,19 @@ private struct LiftsRowOnHold: ViewModifier {
     let kind: FocusItem.Kind
     let key: String
     var isEnabled: Bool
-    var inScrollView: Bool
     var preview: () -> AnyView
 
     @Environment(\.focusedKey) private var focusedKey
     @Environment(\.requestFocus) private var requestFocus
     @State private var box = FrameBox()
     @State private var pressing = false
-    @GestureState private var holding = false
 
     func body(content: Content) -> some View {
-        let lifted = content
+        content
             .overlay {
                 Color.ink
-                    .opacity(pressing || holding ? 0.06 : 0)
-                    .animation(pressing || holding ? .easeOut(duration: holdDuration) : .easeOut(duration: 0.12), value: pressing || holding)
+                    .opacity(pressing ? 0.06 : 0)
+                    .animation(pressing ? .easeOut(duration: holdDuration - HoldGesture.pressDelay) : .easeOut(duration: 0.12), value: pressing)
                     .allowsHitTesting(false)
             }
             // The copy on top stands in for it while lifted.
@@ -202,29 +292,14 @@ private struct LiftsRowOnHold: ViewModifier {
             } action: { [box] frame in
                 box.frame = frame
             }
+            .gesture(HoldGesture(
+                isEnabled: isEnabled,
+                onPress: { pressing = $0 },
+                onHold: lift
+            ))
             .accessibilityAction(named: "Options") {
                 if isEnabled { lift() }
             }
-
-        if inScrollView {
-            lifted.simultaneousGesture(
-                LongPressGesture(minimumDuration: holdDuration, maximumDistance: 10)
-                    .updating($holding) { value, state, _ in state = value }
-                    .onEnded { _ in
-                        guard isEnabled else { return }
-                        lift()
-                    },
-                isEnabled: isEnabled
-            )
-        } else {
-            lifted.onLongPressGesture(minimumDuration: holdDuration, maximumDistance: 10) {
-                guard isEnabled else { return }
-                pressing = false
-                lift()
-            } onPressingChanged: { isPressing in
-                pressing = isEnabled && isPressing
-            }
-        }
     }
 
     private func lift() {
@@ -243,8 +318,8 @@ struct FocusActions {
 }
 
 /// The focus view. Everything except the held item blurs and dims (a cut in the backdrop for a
-/// whole card, which lifts in place; a lifted copy for a row), and the options pill rises from
-/// the bottom of the screen, always in the same place.
+/// whole card, which lifts in place; a lifted copy for a row), and the options pill rises near
+/// the bottom of the screen, always in the same place. Its menus open over it, from it.
 ///
 /// Choreography: the backdrop fades in over 0.18s as the item pops (it starts on the same frame
 /// as the haptic); the pill follows 40ms later, rising 24pt with a little bounce. Closing runs
@@ -274,7 +349,8 @@ struct FocusLayer: View {
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let pillY = size.height - proxy.safeAreaInsets.bottom - 14 - pillHeight / 2
+            // Clear of the home indicator with room to breathe, not pinned to the edge.
+            let pillY = size.height - proxy.safeAreaInsets.bottom - 30 - pillHeight / 2
             let pillTop = pillY - pillHeight / 2
 
             ZStack(alignment: .topLeading) {
@@ -386,8 +462,9 @@ struct FocusLayer: View {
 
 // MARK: - The options pill
 
-/// A Liquid Glass pill: the most likely action named in full, the rest as icons, delete
-/// behind a confirmation popover and anything else under ⋯.
+/// A Liquid Glass pill with the two actions that matter (a green Done, a red Delete for a
+/// plan) and ⋯ for the rest. ⋯ and Delete open panels that rise out of the pill and point
+/// back at their button; the pill itself stays put underneath.
 private struct FocusPill: View {
     let item: FocusItem
     let fallback: Plan?
@@ -395,11 +472,11 @@ private struct FocusPill: View {
     var onDone: () -> Void
 
     @Environment(Store.self) private var store
-    @State private var confirmingDelete = false
+    @State private var box = PillFrameBox()
 
     var body: some View {
         if let plan = store.plan(item.planID) ?? fallback {
-            HStack(spacing: 2) {
+            HStack(spacing: 4) {
                 switch item.kind {
                 case .plan:
                     planActions(plan)
@@ -409,8 +486,13 @@ private struct FocusPill: View {
             }
             .padding(.horizontal, 6)
             .frame(height: 56)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .glassEffect(.regular, in: .capsule)
             .fixedSize()
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .global)
+            } action: { [box] frame in
+                box.frame = frame
+            }
         }
     }
 
@@ -420,47 +502,94 @@ private struct FocusPill: View {
     private func planActions(_ plan: Plan) -> some View {
         let today = store.today
         let status = plan.status(on: today)
+        let done = status == .done
 
-        PillButton(title: "Edit", systemImage: "square.and.pencil") {
-            onDone()
-            actions.editPlan(plan.id)
-        }
-
-        if plan.isMetric || plan.isPlanned(today) {
-            PillButton(
-                systemImage: status == .done ? "arrow.uturn.backward" : "checkmark",
-                label: status == .done ? "Mark today not done" : (plan.isMetric ? "Log today" : "Mark today done")
-            ) {
-                if plan.isMetric && plan.value(on: today) == nil {
+        if plan.isMetric {
+            let changed = store.hasDraftChange(plan)
+            DoneButton(title: done ? (changed ? "Update" : "Logged") : "Log", isDone: done && !changed) {
+                if plan.value(on: today) == nil {
                     onDone()
                     actions.editValue(plan.id, today)
-                    return
+                } else {
+                    let change = withAnimation(Motion.settle) { store.toggleDone(plan.id, on: today) }
+                    Feedback.play(for: change)
+                    onDone()
                 }
+            }
+            .disabled(done && !changed)
+        } else {
+            DoneButton(title: "Done", isDone: done) {
                 let change = withAnimation(Motion.settle) { store.toggleDone(plan.id, on: today) }
                 Feedback.play(for: change)
                 onDone()
             }
+            .disabled(done || !plan.isPlanned(today))
         }
 
-        if plan.isMetric || plan.isPlanned(today) {
-            PillButton(
-                systemImage: status == .skipped ? "arrow.uturn.backward" : "xmark",
-                label: status == .skipped ? "Undo not today" : "Not today"
-            ) {
+        PillIcon(systemName: "trash", tint: .danger)
+            .pressMenu(label: "Delete \(plan.name)") { _ in
+                MenuRequest(
+                    anchor: box.frame,
+                    placement: .aboveCenter,
+                    title: "Delete \(plan.name.isEmpty ? "this plan" : plan.name)?",
+                    message: "Its weeks and check marks go with it.",
+                    sections: [[
+                        MenuItem(id: "delete", title: "Delete plan", role: .destructive) {
+                            onDone()
+                            withAnimation(Motion.deck) { store.delete(plan.id) }
+                            Feedback.play(.skip)
+                        },
+                    ]],
+                    tailX: box.trash.midX,
+                    choosesOnRelease: false
+                )
+            }
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .global)
+            } action: { [box] frame in
+                box.trash = frame
+            }
+
+        PillIcon(systemName: "ellipsis")
+            .pressMenu(label: "More") { frame in
+                MenuRequest(
+                    anchor: box.frame,
+                    placement: .aboveCenter,
+                    sections: planMenu(plan, status: status),
+                    tailX: frame.midX
+                )
+            }
+    }
+
+    private func planMenu(_ plan: Plan, status: DayStatus) -> [[MenuItem]] {
+        let today = store.today
+        var marking: [MenuItem] = []
+        if !plan.record(on: today).isEmpty {
+            marking.append(MenuItem(id: "undo", title: "Undo", systemImage: "arrow.uturn.backward") {
+                let change = withAnimation(Motion.settle) { store.clearDay(plan.id, on: today) }
+                Feedback.play(for: change)
+                onDone()
+            })
+        }
+        if status != .skipped && (plan.isMetric || plan.isPlanned(today)) {
+            marking.append(MenuItem(id: "skip", title: "Skip today", systemImage: "xmark") {
                 let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: today) }
                 Feedback.play(for: change)
                 onDone()
-            }
+            })
         }
-
-        deleteButton(plan)
-
-        Menu {
-            Button(plan.isMetric ? "Edit today's value…" : "Edit today…", systemImage: "pencil") {
+        let editing = [
+            MenuItem(id: "edit", title: "Edit plan", systemImage: "square.and.pencil") {
+                onDone()
+                actions.editPlan(plan.id)
+            },
+            MenuItem(id: "today", title: plan.isMetric ? "Change today's value" : "Edit today", systemImage: "pencil") {
                 onDone()
                 plan.isMetric ? actions.editValue(plan.id, today) : actions.editDay(plan.id, today)
-            }
-            Button("Duplicate", systemImage: "plus.square.on.square") {
+            },
+        ]
+        let more = [
+            MenuItem(id: "duplicate", title: "Duplicate", systemImage: "plus.square.on.square") {
                 var copy = plan
                 copy.id = UUID()
                 copy.name = "\(plan.name) copy"
@@ -468,11 +597,9 @@ private struct FocusPill: View {
                 withAnimation(Motion.standard) { store.add(copy) }
                 Feedback.play(.check(step: 0))
                 onDone()
-            }
-        } label: {
-            PillIcon(systemName: "ellipsis")
-        }
-        .accessibilityLabel("More")
+            },
+        ]
+        return [marking, editing, more].filter { !$0.isEmpty }
     }
 
     // MARK: Day
@@ -483,17 +610,14 @@ private struct FocusPill: View {
         let isFuture = day > store.today
 
         if plan.isMetric {
-            PillButton(title: plan.value(on: day) == nil ? "Log" : "Change", systemImage: "number") {
+            DoneButton(title: plan.value(on: day) == nil ? "Log" : "Change", isDone: false) {
                 onDone()
                 actions.editValue(plan.id, day)
             }
             .disabled(isFuture)
         } else {
             let mark: Mark? = column.map { plan.mark(on: day, column: $0) } ?? (status == .done ? .done : nil)
-            PillButton(
-                title: mark == .done ? "Undo" : "Done",
-                systemImage: mark == .done ? "arrow.uturn.backward" : "checkmark"
-            ) {
+            DoneButton(title: "Done", isDone: mark == .done) {
                 let change = withAnimation(Motion.settle) {
                     if let column { return store.toggleColumn(plan.id, on: day, column: column) }
                     return store.toggleDone(plan.id, on: day)
@@ -501,154 +625,103 @@ private struct FocusPill: View {
                 Feedback.play(for: change, step: column ?? 0)
                 onDone()
             }
-            .disabled(!plan.isPlanned(day))
+            .disabled(mark == .done || !plan.isPlanned(day))
         }
 
-        PillButton(
-            systemImage: status == .skipped ? "arrow.uturn.backward" : "xmark",
-            label: status == .skipped ? "Undo not today" : "Not today"
-        ) {
-            let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: day) }
-            Feedback.play(for: change)
-            onDone()
-        }
-        .disabled(!plan.isMetric && !plan.isPlanned(day))
+        PillIcon(systemName: "ellipsis")
+            .pressMenu(label: "More") { frame in
+                MenuRequest(
+                    anchor: box.frame,
+                    placement: .aboveCenter,
+                    sections: dayMenu(plan, day: day, status: status),
+                    tailX: frame.midX
+                )
+            }
+    }
 
+    private func dayMenu(_ plan: Plan, day: Day, status: DayStatus) -> [[MenuItem]] {
+        var marking: [MenuItem] = []
+        if !plan.record(on: day).isEmpty {
+            marking.append(MenuItem(id: "undo", title: plan.isMetric ? "Clear value" : "Undo", systemImage: "arrow.uturn.backward") {
+                let change = withAnimation(Motion.settle) { store.clearDay(plan.id, on: day) }
+                Feedback.play(for: change)
+                onDone()
+            })
+        }
+        if status != .skipped && (plan.isMetric ? day <= store.today : plan.isPlanned(day)) {
+            marking.append(MenuItem(id: "skip", title: "Skip", systemImage: "xmark") {
+                let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: day) }
+                Feedback.play(for: change)
+                onDone()
+            })
+        }
+        var editing: [MenuItem] = []
         if !plan.isMetric {
-            PillButton(systemImage: "pencil", label: "Edit this day") {
+            editing.append(MenuItem(id: "day", title: "Edit this day", systemImage: "pencil") {
                 onDone()
                 actions.editDay(plan.id, day)
-            }
-        }
-
-        Menu {
-            Button("Edit \(plan.name)…", systemImage: "square.and.pencil") {
-                onDone()
-                actions.editPlan(plan.id)
-            }
-            if plan.isMetric, plan.value(on: day) != nil {
-                Button("Clear value", systemImage: "trash", role: .destructive) {
-                    withAnimation(Motion.settle) { store.setValue(plan.id, on: day, value: nil) }
-                    Feedback.play(.uncheck)
-                    onDone()
-                }
-            }
-            if !plan.isMetric, plan.overrides[day.key] != nil {
-                Button("Use the week's plan", systemImage: "arrow.uturn.backward") {
+            })
+            if plan.overrides[day.key] != nil {
+                editing.append(MenuItem(id: "reset", title: "Use the week's plan", systemImage: "arrow.counterclockwise") {
                     store.setOverride(plan.id, on: day, items: nil)
                     Feedback.play(.uncheck)
                     onDone()
-                }
+                })
             }
-        } label: {
-            PillIcon(systemName: "ellipsis")
         }
-        .accessibilityLabel("More")
-    }
-
-    // MARK: Delete
-
-    private func deleteButton(_ plan: Plan) -> some View {
-        PillButton(systemImage: "trash", label: "Delete \(plan.name)") {
-            Haptics.shared.tick()
-            confirmingDelete = true
-        }
-        .popover(isPresented: $confirmingDelete, arrowEdge: .bottom) {
-            DeleteConfirmation(name: plan.name) {
-                confirmingDelete = false
-                onDone()
-                withAnimation(Motion.deck) { store.delete(plan.id) }
-                Feedback.play(.skip)
-            }
-            .presentationCompactAdaptation(.popover)
-        }
+        editing.append(MenuItem(id: "edit", title: "Edit \(plan.name.isEmpty ? "plan" : plan.name)", systemImage: "square.and.pencil") {
+            onDone()
+            actions.editPlan(plan.id)
+        })
+        return [marking, editing].filter { !$0.isEmpty }
     }
 }
 
-/// The small glass popover that grows out of the trash button.
-private struct DeleteConfirmation: View {
-    let name: String
-    var onDelete: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Delete \(name.isEmpty ? "this plan" : name)?")
-                    .font(.cadenceCallout)
-                    .foregroundStyle(Color.ink)
-                Text("Its weeks and check marks go with it.")
-                    .font(.cadenceSubhead)
-                    .foregroundStyle(Color.inkSecondary)
-            }
-            Button(role: .destructive, action: onDelete) {
-                Text("Delete plan")
-                    .font(.cadenceCallout)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 40)
-            }
-            .buttonStyle(.glassProminent)
-            .tint(.red)
-        }
-        .padding(16)
-        .frame(width: 240)
-    }
+/// Where the pill and its delete button are, for the panels that rise out of them.
+private final class PillFrameBox {
+    var frame: CGRect = .zero
+    var trash: CGRect = .zero
 }
 
-private struct PillButton: View {
-    var title: String?
-    let systemImage: String
-    var label: String?
+/// The pill's main action, in green. Once done it shows that, quietly, instead of offering
+/// to undo (Undo lives under ⋯).
+private struct DoneButton: View {
+    let title: String
+    var isDone: Bool
     let action: () -> Void
-
-    init(title: String, systemImage: String, action: @escaping () -> Void) {
-        self.title = title
-        self.systemImage = systemImage
-        self.label = title
-        self.action = action
-    }
-
-    init(systemImage: String, label: String, action: @escaping () -> Void) {
-        self.title = nil
-        self.systemImage = systemImage
-        self.label = label
-        self.action = action
-    }
 
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Button(action: action) {
-            if let title {
-                // Icon then name, for the one action most likely wanted.
-                HStack(spacing: 8) {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 17, weight: .semibold))
-                    Text(title)
-                        .font(.cadenceBody)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                }
-                .foregroundStyle(isEnabled ? Color.ink : Color.inkFaint)
-                .padding(.horizontal, 14)
-                .frame(height: 44)
-                .contentShape(.rect)
-            } else {
-                PillIcon(systemName: systemImage)
+            HStack(spacing: 8) {
+                Image(systemName: isDone ? "checkmark.circle.fill" : "checkmark")
+                    .font(.system(size: 17, weight: .semibold))
+                    .contentTransition(.symbolEffect(.replace))
+                Text(title)
+                    .font(.cadenceBody)
+                    .lineLimit(1)
             }
+            .foregroundStyle(isEnabled || isDone ? Color.success : Color.inkFaint)
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .background(Color.success.opacity(isEnabled ? 0.14 : 0.07), in: Capsule())
+            .contentShape(.capsule)
         }
         .buttonStyle(PressableStyle())
-        .accessibilityLabel(label ?? "")
+        .accessibilityLabel(isDone ? "\(title), done" : title)
     }
 }
 
 private struct PillIcon: View {
     let systemName: String
+    var tint: Color = .ink
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Image(systemName: systemName)
             .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(isEnabled ? Color.ink : Color.inkFaint)
+            .foregroundStyle(isEnabled ? tint : Color.inkFaint)
             .frame(width: 44, height: 44)
             .contentShape(.rect)
     }

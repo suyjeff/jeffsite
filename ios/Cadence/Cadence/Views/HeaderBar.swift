@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum ViewMode: String, CaseIterable, Identifiable {
-    case today, week, month, scrolling
+    case today, week, month
 
     var id: String { rawValue }
 
@@ -11,7 +11,14 @@ enum ViewMode: String, CaseIterable, Identifiable {
         case .today: "Today"
         case .week: "Week"
         case .month: "Month"
-        case .scrolling: "Scrolling"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .today: "rectangle.portrait"
+        case .week: "list.bullet"
+        case .month: "calendar"
         }
     }
 
@@ -19,128 +26,84 @@ enum ViewMode: String, CaseIterable, Identifiable {
 }
 
 /// The header from the design: "Today ⌄" opens the view menu on the left; the round glass
-/// button on the right holds everything else. Plans aren't listed here: you move between
-/// them on the deck itself.
+/// button on the right holds everything else.
+///
+/// It floats over the page. At rest the title sits bare on the canvas, as in the design; once
+/// the page scrolls under it the title gathers into a Liquid Glass capsule (and lets go again
+/// back at the top), so it stays legible over whatever passes behind.
 struct HeaderBar: View {
     let mode: ViewMode
-    var onSelectMode: (ViewMode) -> Void
-    let plans: [Plan]
-    var frontID: UUID?
-    var onSelectPlan: (UUID) -> Void
-    var onOpenPlans: (PlansRoute) -> Void
-    var onJumpToToday: (() -> Void)?
+    var isScrolled: Bool
+    var viewMenu: (CGRect) -> MenuRequest
+    var moreMenu: (CGRect) -> MenuRequest
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The capsule's padding around the title. At rest the title is pulled back by part of
+    /// it so the text keeps the design's position; in the capsule it moves in by the rest.
+    private let capsulePadding: CGFloat = 14
+    private let restShift: CGFloat = 6
 
     var body: some View {
         HStack(spacing: 0) {
-            Menu {
-                Picker("View", selection: Binding(get: { mode }, set: onSelectMode)) {
-                    ForEach(ViewMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(mode.title)
-                        .font(.cadenceTitle)
-                        .tracking(-0.2)
-                        .foregroundStyle(Color.ink)
-                        .contentTransition(.interpolate)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.inkSecondary)
-                }
-                .padding(.vertical, 10)
-                .padding(.trailing, 20)
-                .contentShape(.rect)
+            HStack(spacing: 6) {
+                Text(mode.title)
+                    .font(.cadenceTitle)
+                    .tracking(-0.2)
+                    .foregroundStyle(Color.ink)
+                    .contentTransition(.interpolate)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.inkSecondary)
             }
-            .accessibilityLabel("View: \(mode.title)")
-            .accessibilityHint("Choose Today, Week, Month or Scrolling")
+            .padding(.horizontal, capsulePadding)
+            .frame(height: 44)
+            .glassEffect(isScrolled ? .regular.interactive() : .identity, in: .capsule)
+            .contentShape(.capsule)
+            .offset(x: isScrolled ? 0 : -restShift)
+            .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.34, bounce: 0.18), value: isScrolled)
+            .pressMenu(label: "View: \(mode.title)", viewMenu)
 
             Spacer(minLength: 8)
 
-            MoreMenu(
-                plans: plans,
-                frontID: frontID,
-                onSelectPlan: onSelectPlan,
-                onOpenPlans: onOpenPlans,
-                onJumpToToday: onJumpToToday
-            )
-        }
-        .padding(.horizontal, Metrics.gutter - 2)
-        .padding(.top, 13)
-    }
-}
-
-/// The round button where the design's edit button sat: neutral glass (the one colored button
-/// on screen is Create), opening a Liquid Glass menu that grows out of it.
-struct MoreMenu: View {
-    let plans: [Plan]
-    var frontID: UUID?
-    var onSelectPlan: (UUID) -> Void
-    var onOpenPlans: (PlansRoute) -> Void
-    /// Nil hides "Jump to today", for views already pinned to today.
-    var onJumpToToday: (() -> Void)?
-
-    @AppStorage(Prefs.soundsKey) private var soundsOn = true
-    @AppStorage(Prefs.hapticsKey) private var hapticsOn = true
-
-    var body: some View {
-        Menu {
-            Section {
-                Button("Edit plan", systemImage: "square.and.pencil") { onOpenPlans(.edit(frontID)) }
-                Button("All plans", systemImage: "list.bullet") { onOpenPlans(.edit(nil)) }
-                Button("Select plans", systemImage: "checkmark.circle") { onOpenPlans(.select) }
-            }
-            if plans.count > 1 {
-                // A way to any plan without the deck gestures (and for VoiceOver).
-                Picker("Show plan", selection: Binding(get: { frontID }, set: { if let id = $0 { onSelectPlan(id) } })) {
-                    ForEach(plans) { plan in
-                        Text(plan.name.isEmpty ? "Untitled" : plan.name).tag(Optional(plan.id))
-                    }
-                }
-                .pickerStyle(.menu)
-            }
-            if let onJumpToToday {
-                Section {
-                    Button("Jump to today", systemImage: "calendar") { onJumpToToday() }
-                }
-            }
-            Section {
-                Toggle(isOn: $soundsOn) { Label("Sounds", systemImage: "speaker.wave.2") }
-                Toggle(isOn: $hapticsOn) { Label("Haptics", systemImage: "hand.tap") }
-            }
-        } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Color.ink)
-                .frame(width: 40, height: 40)
-                .glassEffect(.regular.interactive(), in: .circle)
                 .frame(width: 44, height: 44)
+                .glassEffect(.regular.interactive(), in: .circle)
                 .contentShape(.circle)
+                .pressMenu(label: "More", moreMenu)
         }
-        .accessibilityLabel("More")
+        // The title's text lands on the design's 22pt margin at rest.
+        .padding(.leading, Metrics.gutter - 2 - capsulePadding + restShift)
+        .padding(.trailing, Metrics.gutter - 4)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
     }
 }
 
-/// Create, floating bottom right. The one strongly colored control in the app: prominent
-/// Liquid Glass in deep plum, a little larger than the other round buttons, with a soft
-/// plum glow underneath so it sits above the page rather than on it.
+/// Create, floating bottom right: the one strongly colored control in the app. Custom Liquid
+/// Glass tinted deep plum, its glow on a separate layer underneath (a shadow on the glass
+/// itself rendered as a square and shimmered while the glass reacted to touch). A tap or a
+/// short hold opens a small menu of what you can add.
 struct CreateButton: View {
-    var action: () -> Void
+    var menu: (CGRect) -> MenuRequest
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: "plus")
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(Color.onPlumStrong)
-                .frame(width: 36, height: 36)
-        }
-        .buttonStyle(.glassProminent)
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .tint(Color.plumStrong)
-        .shadow(color: Color.plumStrong.opacity(0.35), radius: 14, x: 0, y: 8)
-        .accessibilityLabel("New plan")
+        Image(systemName: "plus")
+            .font(.system(size: 24, weight: .semibold))
+            .foregroundStyle(Color.onPlumStrong)
+            .frame(width: Metrics.createSize, height: Metrics.createSize)
+            .glassEffect(.regular.tint(Color.plumStrong).interactive(), in: .circle)
+            .background {
+                Circle()
+                    .fill(Color.plumStrong.opacity(0.3))
+                    .blur(radius: 12)
+                    .offset(y: 8)
+                    .allowsHitTesting(false)
+            }
+            .contentShape(.circle)
+            .pressMenu(label: "New plan", menu)
     }
 }
 

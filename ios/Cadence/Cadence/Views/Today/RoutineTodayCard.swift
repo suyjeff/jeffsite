@@ -30,12 +30,14 @@ struct RoutineTodayCard: View {
         .opacity(1 - 0.28 * Double(max(0, -swipe).clamped(0, 1)))
         .overlay(alignment: .bottom) {
             footer(status: status)
-                .padding(.horizontal, Metrics.cardPadding)
+                .padding(.leading, Metrics.cardPadding)
+                .padding(.trailing, Metrics.checkTrailing)
                 .padding(.bottom, Metrics.cardPadding - 2)
         }
         .overlay(alignment: .bottomTrailing) {
             InkRipple(trigger: ripple)
-                .padding(Metrics.cardPadding)
+                .padding(.trailing, Metrics.checkTrailing)
+                .padding(.bottom, Metrics.cardPadding - 2)
         }
         .overlay {
             // The card warms toward plum as a swipe approaches its commit point.
@@ -88,7 +90,7 @@ struct RoutineTodayCard: View {
             if change == .completed { ripple += 1 }
         })
         .accessibilityElement(children: .combine)
-        .accessibilityValue(mark == .done ? "Done" : mark == .skipped ? "Not today" : "")
+        .accessibilityValue(mark == .done ? "Done" : mark == .skipped ? "Skipped" : "")
         .accessibilityHint(isMulti && isPlanned ? "Double tap to check off \(plan.columns[column].isEmpty ? "this half" : plan.columns[column])" : "")
     }
 
@@ -118,7 +120,7 @@ struct RoutineTodayCard: View {
             if let at = plan.record(on: day).completedAt { return "DONE · \(DayText.time(at))" }
             return "DONE"
         case .skipped:
-            return "NOT TODAY"
+            return "SKIPPED"
         case .partial(let done, let total):
             return "\(done) OF \(total)"
         case .pending:
@@ -135,6 +137,8 @@ struct RoutineTodayCard: View {
     }
 
     private func checkTapped() {
+        // The release that ends a hold on the check isn't a tap.
+        guard focusedKey == nil else { return }
         let change = withAnimation(Motion.settle) {
             if plan.status(on: day) == .skipped {
                 return store.toggleSkipped(plan.id, on: day)
@@ -183,7 +187,7 @@ private struct ColumnCheck: View {
     }
 }
 
-/// A soft plum wash that spreads from the check button across the card when a day completes.
+/// A soft green wash that spreads from the check button across the card when a day completes.
 struct InkRipple: View {
     var trigger: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -196,7 +200,7 @@ struct InkRipple: View {
 
     private var ripple: some View {
         Circle()
-            .fill(Color.plum)
+            .fill(Color.success)
             .frame(width: 48, height: 48)
             .keyframeAnimator(initialValue: RippleValues(), trigger: trigger) { content, value in
                 content
@@ -208,7 +212,7 @@ struct InkRipple: View {
                     CubicKeyframe(32, duration: 0.62)
                 }
                 KeyframeTrack(\.opacity) {
-                    LinearKeyframe(0.12, duration: 0.06)
+                    LinearKeyframe(0.1, duration: 0.06)
                     CubicKeyframe(0, duration: 0.56)
                 }
             }

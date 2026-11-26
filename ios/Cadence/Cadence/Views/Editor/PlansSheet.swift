@@ -1,201 +1,226 @@
 import SwiftUI
 
-/// Where the plans sheet opens: straight into one plan's editor, on the list, or in
-/// select mode for bulk changes.
+/// What the plans sheet opens on: one plan's editor, or the list of every plan.
 enum PlansRoute: Identifiable, Equatable {
-    case edit(UUID?)
-    case select
+    case plan(UUID)
+    case list
 
     var id: String {
         switch self {
-        case .edit(let id): "edit-\(id?.uuidString ?? "list")"
-        case .select: "select"
+        case .plan(let id): "plan-\(id.uuidString)"
+        case .list: "list"
         }
     }
 }
 
-/// Every plan in one list, where they can be edited, reordered, removed in bulk, or marked
-/// done together. Opened from the ⋯ menu or the focus pill.
+/// A page inside the plans sheet.
+enum PlansPage: Hashable {
+    case list
+    case plan(UUID)
+}
+
+/// Editing plans. Opened on one plan, its editor is the whole sheet: ✓ closes it, and the
+/// button opposite leads to every plan. Opened on the list, each plan opens its editor.
 struct PlansSheet: View {
-    @Environment(Store.self) private var store
+    let route: PlansRoute
+
     @Environment(\.dismiss) private var dismiss
-
-    @State private var path: [UUID]
-    @State private var editMode: EditMode
-    @State private var selection: Set<UUID> = []
-    @State private var showingTemplates = false
-    @State private var confirmingBulkDelete = false
-    /// A plan swiped to delete, waiting for confirmation (it takes its history with it).
-    @State private var pendingDelete: Plan?
-    @AppStorage(Prefs.soundsKey) private var soundsOn = true
-    @AppStorage(Prefs.hapticsKey) private var hapticsOn = true
-
-    init(route: PlansRoute) {
-        switch route {
-        case .edit(let id):
-            _path = State(initialValue: id.map { [$0] } ?? [])
-            _editMode = State(initialValue: .inactive)
-        case .select:
-            _path = State(initialValue: [])
-            _editMode = State(initialValue: .active)
-        }
-    }
-
-    private var selecting: Bool { editMode.isEditing }
+    @State private var path: [PlansPage] = []
 
     var body: some View {
         NavigationStack(path: $path) {
-            List(selection: $selection) {
-                Section {
-                    ForEach(store.plans) { plan in
-                        NavigationLink(value: plan.id) {
-                            PlanListRow(plan: plan, today: store.today)
-                        }
-                    }
-                    .onMove { store.move(fromOffsets: $0, toOffset: $1) }
-                    .onDelete { offsets in
-                        if let index = offsets.first, store.plans.indices.contains(index) {
-                            pendingDelete = store.plans[index]
-                        }
-                    }
-
-                    if !selecting {
-                        Button {
-                            showingTemplates = true
-                        } label: {
-                            Label("New plan", systemImage: "plus")
-                                .font(.cadenceBody)
-                                .foregroundStyle(Color.plum)
-                        }
-                    }
-                } header: {
-                    SheetSectionHeader(text: "Plans")
-                } footer: {
-                    Text(selecting
-                         ? "Select plans to mark today done or delete them together. Drag to reorder."
-                         : "Pull a card down, or tap the card behind it, to bring the next plan forward. Hold a card for its options.")
-                        .font(.cadenceSubhead)
-                        .foregroundStyle(Color.inkSecondary)
-                }
-                .listRowBackground(Color.surface)
-
-                if !selecting {
-                    Section {
-                        Toggle(isOn: $soundsOn) {
-                            Label("Sounds", systemImage: "speaker.wave.2")
-                        }
-                        Toggle(isOn: $hapticsOn) {
-                            Label("Haptics", systemImage: "hand.tap")
-                        }
-                    } header: {
-                        SheetSectionHeader(text: "Feedback")
-                    } footer: {
-                        Text("Sounds follow the silent switch.")
-                            .font(.cadenceSubhead)
-                            .foregroundStyle(Color.inkSecondary)
-                    }
-                    .font(.cadenceBodyMedium)
-                    .tint(Color.plum)
-                    .listRowBackground(Color.surface)
-                }
-            }
-            .environment(\.editMode, $editMode)
-            .scrollContentBackground(.hidden)
-            .background(Color.canvas)
-            .navigationTitle(selecting ? (selection.isEmpty ? "Select plans" : "\(selection.count) selected") : "Plans")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(selecting ? "Cancel" : "Select") {
-                        withAnimation(Motion.standard) {
-                            editMode = selecting ? .inactive : .active
-                            selection.removeAll()
-                        }
-                    }
-                    .font(.cadenceCallout)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", systemImage: "checkmark") { dismiss() }
-                        .tint(Color.plum)
-                }
-                if selecting {
-                    ToolbarItemGroup(placement: .bottomBar) {
-                        Button("Done today", systemImage: "checkmark.circle") {
-                            markSelectedDone()
-                        }
-                        .disabled(selection.isEmpty)
-                        Spacer()
-                        Button("Delete", systemImage: "trash", role: .destructive) {
-                            confirmingBulkDelete = true
-                        }
-                        .disabled(selection.isEmpty)
-                        .confirmationDialog(
-                            "Delete ^[\(selection.count) plan](inflect: true)?",
-                            isPresented: $confirmingBulkDelete,
-                            titleVisibility: .visible
-                        ) {
-                            Button("Delete ^[\(selection.count) plan](inflect: true)", role: .destructive) { deleteSelected() }
-                        } message: {
-                            Text("Their weeks and check marks are deleted too.")
-                        }
+            root
+                .navigationDestination(for: PlansPage.self) { page in
+                    switch page {
+                    case .list:
+                        PlansList(path: $path, rootPlanID: rootPlanID, onClose: close)
+                    case .plan(let id):
+                        editor(id, isRoot: false)
                     }
                 }
-            }
-            .confirmationDialog(
-                "Delete \(pendingDelete?.name ?? "plan")?",
-                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-                titleVisibility: .visible,
-                presenting: pendingDelete
-            ) { plan in
-                Button("Delete plan", role: .destructive) {
-                    withAnimation(Motion.standard) { store.delete(plan.id) }
-                    Feedback.play(.skip)
-                    pendingDelete = nil
-                }
-            } message: { _ in
-                Text("Its weeks and check marks are deleted too.")
-            }
-            .navigationDestination(for: UUID.self) { id in
-                PlanEditor(planID: id, onDelete: {
-                    path.removeAll()
-                })
-            }
-            .sheet(isPresented: $showingTemplates) {
-                TemplatePicker { template in
-                    let plan = SeedData.template(template, today: store.today)
-                    store.add(plan)
-                    showingTemplates = false
-                    path = [plan.id]
-                }
-                .presentationDetents([.medium, .large])
-            }
         }
         .tint(Color.plum)
     }
 
-    private func markSelectedDone() {
-        var completed = 0
-        for id in store.plans.map(\.id) where selection.contains(id) {
-            guard let plan = store.plan(id), !plan.isMetric, plan.isPlanned(store.today),
-                  plan.status(on: store.today) != .done else { continue }
-            store.update(id) { $0.setDay(.done, on: store.today) }
-            completed += 1
-        }
-        Feedback.play(completed > 0 ? .check(step: 0) : .disarmed)
-        withAnimation(Motion.standard) {
-            selection.removeAll()
-            editMode = .inactive
+    @ViewBuilder
+    private var root: some View {
+        switch route {
+        case .plan(let id):
+            editor(id, isRoot: true)
+        case .list:
+            PlansList(path: $path, rootPlanID: nil, onClose: close)
         }
     }
 
-    private func deleteSelected() {
-        let ids = selection
-        withAnimation(Motion.standard) {
-            for id in ids { store.delete(id) }
-            selection.removeAll()
-            editMode = .inactive
+    private var rootPlanID: UUID? {
+        if case .plan(let id) = route { return id }
+        return nil
+    }
+
+    private func editor(_ id: UUID, isRoot: Bool) -> some View {
+        PlanEditor(planID: id, onDelete: {
+            if isRoot {
+                close()
+            } else if !path.isEmpty {
+                path.removeLast()
+            }
+        })
+        .toolbar {
+            if isRoot {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("All plans", systemImage: "square.stack") {
+                        path.append(.list)
+                    }
+                }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done", systemImage: "checkmark", action: close)
+            }
         }
-        Feedback.play(.skip)
+    }
+
+    private func close() {
+        dismiss()
+    }
+}
+
+/// Every plan, in deck order. Tap one to open it; swipe right to mark today done, left to
+/// delete; Edit to reorder.
+private struct PlansList: View {
+    @Binding var path: [PlansPage]
+    /// The plan the sheet was opened on, if any. Deleting it closes the sheet rather than
+    /// leaving an empty editor underneath.
+    var rootPlanID: UUID?
+    var onClose: () -> Void
+
+    @Environment(Store.self) private var store
+    /// A plan swiped to delete, waiting for confirmation (it takes its history with it).
+    @State private var pendingDelete: Plan?
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(store.plans) { plan in
+                    NavigationLink(value: PlansPage.plan(plan.id)) {
+                        PlanListRow(plan: plan, today: store.today)
+                    }
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        if canMarkDone(plan) {
+                            Button("Done today", systemImage: "checkmark") { markDone(plan) }
+                                .tint(Color.success)
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        // No destructive role: that would remove the row before it's confirmed.
+                        Button("Delete", systemImage: "trash") { pendingDelete = plan }
+                            .tint(Color.danger)
+                    }
+                }
+                .onMove { store.move(fromOffsets: $0, toOffset: $1) }
+
+                Menu {
+                    ForEach(PlanTemplate.allCases) { template in
+                        Button(template.title, systemImage: template.symbol) { create(template) }
+                    }
+                } label: {
+                    Label("New plan", systemImage: "plus")
+                        .font(.cadenceBody)
+                        .foregroundStyle(Color.plum)
+                }
+            }
+            .listRowBackground(Color.surface)
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.canvas)
+        .navigationTitle("Plans")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                EditButton()
+                    .font(.cadenceCallout)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done", systemImage: "checkmark", action: onClose)
+            }
+        }
+        .confirmationDialog(
+            "Delete \(pendingDelete?.name ?? "plan")?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { plan in
+            Button("Delete plan", role: .destructive) {
+                withAnimation(Motion.standard) { store.delete(plan.id) }
+                Feedback.play(.skip)
+                pendingDelete = nil
+                if plan.id == rootPlanID { onClose() }
+            }
+        } message: { _ in
+            Text("Its weeks and check marks are deleted too.")
+        }
+    }
+
+    private func canMarkDone(_ plan: Plan) -> Bool {
+        !plan.isMetric && plan.isPlanned(store.today) && plan.status(on: store.today) != .done
+    }
+
+    private func markDone(_ plan: Plan) {
+        let change = withAnimation(Motion.standard) {
+            store.toggleDone(plan.id, on: store.today)
+        }
+        Feedback.play(for: change)
+    }
+
+    private func create(_ template: PlanTemplate) {
+        let plan = SeedData.template(template, today: store.today)
+        withAnimation(Motion.standard) { store.add(plan) }
+        Feedback.play(.check(step: 0))
+        path.append(.plan(plan.id))
+    }
+}
+
+/// Sounds and haptics, out of the way of everyday use. Opened from ⋯.
+struct SettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(Prefs.soundsKey) private var soundsOn = true
+    @AppStorage(Prefs.hapticsKey) private var hapticsOn = true
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Toggle(isOn: $soundsOn) {
+                        Label("Sounds", systemImage: "speaker.wave.2")
+                    }
+                    Toggle(isOn: $hapticsOn) {
+                        Label("Haptics", systemImage: "hand.tap")
+                    }
+                } footer: {
+                    Text("Sounds follow the silent switch.")
+                        .font(.cadenceSubhead)
+                        .foregroundStyle(Color.inkSecondary)
+                }
+                .font(.cadenceBodyMedium)
+                .listRowBackground(Color.surface)
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.canvas)
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") { dismiss() }
+                }
+            }
+            // Turning one on plays it, so you know what you've turned on.
+            .onChange(of: soundsOn) { _, isOn in
+                if isOn { Sounds.shared.play(.check) }
+            }
+            .onChange(of: hapticsOn) { _, isOn in
+                if isOn { Haptics.shared.check() }
+            }
+        }
+        .tint(Color.plum)
     }
 }
 
@@ -242,44 +267,5 @@ private struct PlanListRow: View {
         let progress = plan.progress(in: today.weekDays)
         let columns = plan.columnCount > 1 ? plan.columns.joined(separator: " / ").uppercased() + " · " : ""
         return "\(columns)\(progress.done)/\(progress.planned) THIS WEEK"
-    }
-}
-
-struct TemplatePicker: View {
-    var onPick: (PlanTemplate) -> Void
-
-    var body: some View {
-        NavigationStack {
-            List(PlanTemplate.allCases) { template in
-                Button {
-                    Haptics.shared.tick()
-                    onPick(template)
-                } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: template.symbol)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(Color.plum)
-                            .frame(width: 36, height: 36)
-                            .background(Color.plum.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(template.title)
-                                .font(.cadenceBody)
-                                .foregroundStyle(Color.ink)
-                            Text(template.detail)
-                                .font(.cadenceSubhead)
-                                .foregroundStyle(Color.inkSecondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(RowPressStyle())
-                .listRowBackground(Color.surface)
-            }
-            .scrollContentBackground(.hidden)
-            .background(Color.canvas)
-            .navigationTitle("New plan")
-            .navigationBarTitleDisplayMode(.inline)
-        }
     }
 }

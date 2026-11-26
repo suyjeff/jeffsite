@@ -51,6 +51,16 @@ enum Motion {
         )
     }
 
+    /// The previous card coming back, pushed up from below the page; the old one fades.
+    static func deckBack(reduceMotion: Bool = false) -> AnyTransition {
+        let exit = AnyTransition.opacity.animation(.easeOut(duration: 0.12))
+        guard !reduceMotion else { return .asymmetric(insertion: .opacity, removal: .opacity) }
+        return .asymmetric(
+            insertion: .offset(y: 36).combined(with: .opacity),
+            removal: exit
+        )
+    }
+
     /// Release of a drag: hands the finger's velocity to the spring so there is no seam.
     /// `velocity` is in points per second along the axis; `distance` is what's left to travel.
     static func release(velocity: CGFloat, distance: CGFloat, duration: Double = 0.42, bounce: Double = 0) -> Animation {

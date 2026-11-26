@@ -149,6 +149,19 @@ final class Store {
         return self.plan(id)?.status(on: day) == .done ? .completed : .progressed
     }
 
+    /// Removes every mark and value from a day. Nil when there was nothing to clear.
+    @discardableResult
+    func clearDay(_ id: UUID, on day: Day) -> Change? {
+        guard let plan = plan(id) else { return nil }
+        guard !plan.record(on: day).isEmpty else { return nil }
+        update(id) { plan in
+            if plan.isMetric { plan.setValue(nil, on: day) }
+            plan.setDay(nil, on: day)
+        }
+        if day == today { drafts[id] = nil }
+        return .cleared
+    }
+
     func setValue(_ id: UUID, on day: Day, value: Double?) {
         update(id) { $0.setValue(value, on: day) }
         if day == today { drafts[id] = nil }

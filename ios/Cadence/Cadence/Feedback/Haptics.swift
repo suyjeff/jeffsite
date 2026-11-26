@@ -62,6 +62,35 @@ final class Haptics {
         medium.prepare()
     }
 
+    /// Touch-down on anything that opens a menu: small and crisp, before anything moves.
+    func press() {
+        guard isEnabled else { return }
+        rigid.impactOccurred(intensity: 0.5)
+        rigid.prepare()
+    }
+
+    /// A menu opening under the finger: rounder and fuller than the touch-down.
+    func menuOpen() {
+        guard isEnabled else { return }
+        soft.impactOccurred(intensity: 0.85)
+        soft.prepare()
+    }
+
+    /// Moving onto another row of an open menu. Not throttled like `tick`: rows are tall
+    /// enough that every change is deliberate.
+    func menuSelection() {
+        guard isEnabled else { return }
+        selection.selectionChanged()
+        selection.prepare()
+    }
+
+    /// Choosing a menu row.
+    func menuChoose() {
+        guard isEnabled else { return }
+        light.impactOccurred(intensity: 0.75)
+        light.prepare()
+    }
+
     /// Backing out of a commit point: lighter than arming it.
     func release() {
         guard isEnabled else { return }
@@ -98,7 +127,7 @@ final class Haptics {
         ], fallback: { self.light.impactOccurred(intensity: 0.6) })
     }
 
-    /// "Not today": two soft, dull thuds falling away. Never sharp, so it never reads as an error.
+    /// Skip: two soft, dull thuds falling away. Never sharp, so it never reads as an error.
     func skip() {
         play([
             transient(at: 0, intensity: 0.62, sharpness: 0.12),

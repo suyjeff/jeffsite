@@ -32,6 +32,12 @@ extension Color {
     static let plumStrong = Color(light: 0x56305F, dark: 0xC4A1CB)
     /// The glyph on `plumStrong`.
     static let onPlumStrong = Color(light: 0xFFFFFF, dark: 0x1D1520)
+    /// Done. A muted, slightly cool green that sits with the plums; white glyphs on it clear 3:1.
+    static let success = Color(light: 0x3B8A5A, dark: 0x6DC08C)
+    static let onSuccess = Color(light: 0xFFFFFF, dark: 0x0F2417)
+    /// Delete. Text-safe on both backgrounds.
+    static let danger = Color(light: 0xC93C38, dark: 0xFF6E66)
+    static let onDanger = Color(light: 0xFFFFFF, dark: 0x2A0B0A)
     /// The 1px ring in the card shadow stack.
     static let cardRing = Color(light: 0x26262B, lightAlpha: 0.05, dark: 0xFFFFFF, darkAlpha: 0.06)
     static let cardShadow = Color(red: 38 / 255, green: 38 / 255, blue: 43 / 255)
@@ -89,8 +95,18 @@ enum Metrics {
     static let labelGap: CGFloat = 12
     /// How far the next card in the deck peeks above the front one. Figma: 10.
     static let deckPeek: CGFloat = 10
-    /// Room the floating Create button needs at the bottom of the page.
-    static let createClearance: CGFloat = 76
+    /// The floating Create button: its size, and how far it sits from the trailing edge and
+    /// above the bottom safe area. Its center lines up with the Today card's check.
+    static let createSize: CGFloat = 56
+    static let createTrailing: CGFloat = 20
+    static let createBottom: CGFloat = 34
+    /// Room scrolling content leaves under the last row so it can clear the Create button.
+    static let createClearance: CGFloat = createSize + createBottom + 14
+    /// Gap between the bottom of a Today card and the bottom safe area.
+    static let deckBottom: CGFloat = 16
+    /// A Today card's check sits this far in from the card's trailing edge: just clear of
+    /// Create, which floats over the card's corner.
+    static let checkTrailing: CGFloat = createTrailing + createSize + 12 - gutter
     /// Back card width ÷ front card width. Figma: 348 / 372.
     static let deckScaleStep: CGFloat = 1 - 348.0 / 372.0
 }

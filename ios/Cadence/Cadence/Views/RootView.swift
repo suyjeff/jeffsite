@@ -13,57 +13,56 @@ struct RootView: View {
     @State private var month: Day = .today.monthStart
     @State private var selectedDay: Day = .today
 
+    @State private var menu = MenuController()
     @State private var plansRoute: PlansRoute?
-    @State private var creating = false
-    /// Set when a new plan is created, so its editor opens once the template sheet is gone.
-    @State private var createdPlan: UUID?
+    @State private var showingSettings = false
     @State private var focus: FocusItem?
     /// Closing has begun: a card lifted in place starts settling home right away.
     @State private var focusReleased = false
-    /// Where the views sit below the header, in window coordinates (for the focus cut).
-    @State private var contentArea: CGRect = .infinite
-    @Namespace private var createTransition
+    /// Where the header ends, in window coordinates. Below it is where cards scroll, and
+    /// where a lifted card's cut in the focus backdrop may reach.
+    @State private var headerBottom: CGFloat = 0
+    /// The Week or Month page is scrolled away from its top (the title takes its capsule).
+    @State private var pageScrolled = false
     @State private var dayEdit: DayTarget?
     @State private var valueEdit: DayTarget?
     @State private var celebrating = false
-    /// +1 when moving down the view menu (Today → Week → Month → Scrolling), −1 when moving up.
+    /// +1 when moving down the view menu (Today → Week → Month), −1 when moving up.
     @State private var modeDirection = 1
 
     // The body is assembled in stages. As one long modifier chain it outgrew what the Swift
     // type checker will solve ("failed to produce diagnostic"); each stage checks on its own.
     var body: some View {
         withLifecycle(withSheets(withOverlays(screen)))
+            .environment(\.menuController, menu)
     }
 
-    /// Header, the current view, and the bottom bar.
+    /// The current view, with the header floating over its top edge.
     private var screen: some View {
-        VStack(spacing: 0) {
+        ZStack {
+            if store.plans.isEmpty {
+                EmptyDeck()
+                    .padding(.horizontal, Metrics.gutter)
+                    .padding(.top, 14)
+                    .padding(.bottom, Metrics.deckBottom)
+                    .transition(modeTransition)
+            } else {
+                content
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // A bar rather than a stacked header: pages scroll beneath it and blur at its edge.
+        .safeAreaBar(edge: .top) {
             HeaderBar(
                 mode: mode,
-                onSelectMode: selectMode,
-                plans: store.plans,
-                frontID: frontID,
-                onSelectPlan: selectPlan,
-                onOpenPlans: { plansRoute = $0 },
-                onJumpToToday: jumpToTodayAction
+                isScrolled: pageScrolled && mode != .today,
+                viewMenu: viewMenu,
+                moreMenu: moreMenu
             )
-
-            ZStack {
-                if store.plans.isEmpty {
-                    EmptyDeck { creating = true }
-                        .matchedTransitionSource(id: "create", in: createTransition)
-                        .padding(.horizontal, Metrics.gutter)
-                        .padding(.vertical, 14)
-                        .transition(modeTransition)
-                } else {
-                    content
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onGeometryChange(for: CGRect.self) { proxy in
-                proxy.frame(in: .global)
-            } action: { frame in
-                contentArea = frame
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.frame(in: .global).maxY
+            } action: { bottom in
+                headerBottom = bottom
             }
         }
         .background(Color.canvas.ignoresSafeArea())
@@ -82,18 +81,15 @@ struct RootView: View {
         return focus.key
     }
 
-    /// Create floats bottom right, over the page.
+    /// Create floats bottom right, over the page, its center level with the Today card's check.
     private var createButton: some View {
-        CreateButton { creating = true }
-            .matchedTransitionSource(id: "create", in: createTransition)
-            .padding(.trailing, Metrics.gutter - 4)
-            .padding(.bottom, 6)
+        CreateButton(menu: addMenu)
+            .padding(.trailing, Metrics.createTrailing)
+            .padding(.bottom, Metrics.createBottom)
     }
 
-    /// "Jump to today" only where it changes something: Week and Month.
-    private var jumpToTodayAction: (() -> Void)? {
-        guard mode == .week || mode == .month else { return nil }
-        return { jumpToToday() }
+    private var contentArea: CGRect {
+        CGRect(x: -10_000, y: headerBottom, width: 20_000, height: 20_000)
     }
 
     private var toastTransition: AnyTransition {
@@ -101,13 +97,12 @@ struct RootView: View {
         return .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.9, anchor: .top))
     }
 
-    /// The focus layer (held items and their options) and the "All done" toast.
+    /// Create, the focus layer (held items and their options), the "All done" toast, and
+    /// any open menu above all of them.
     private func withOverlays(_ base: some View) -> some View {
         base
             .overlay(alignment: .bottomTrailing) {
-                if !store.plans.isEmpty {
-                    createButton
-                }
+                createButton
             }
             .overlay {
                 if let focus {
@@ -115,7 +110,7 @@ struct RootView: View {
                         item: focus,
                         contentArea: contentArea,
                         actions: FocusActions(
-                            editPlan: { plansRoute = .edit($0) },
+                            editPlan: { plansRoute = .plan($0) },
                             editDay: editDay,
                             editValue: editValue
                         ),
@@ -135,6 +130,9 @@ struct RootView: View {
                         .transition(toastTransition)
                 }
             }
+            .overlay {
+                MenuLayer()
+            }
     }
 
     private func withSheets(_ base: some View) -> some View {
@@ -142,10 +140,9 @@ struct RootView: View {
             .sheet(item: $plansRoute) { route in
                 PlansSheet(route: route)
             }
-            .sheet(isPresented: $creating, onDismiss: openCreatedPlan) {
-                TemplatePicker(onPick: createPlan)
-                    .presentationDetents([.medium, .large])
-                    .navigationTransition(.zoom(sourceID: "create", in: createTransition))
+            .sheet(isPresented: $showingSettings) {
+                SettingsSheet()
+                    .presentationDetents([.medium])
             }
             .sheet(item: $dayEdit) { target in
                 DayEditSheet(planID: target.planID, day: target.day)
@@ -167,6 +164,9 @@ struct RootView: View {
             .onChange(of: store.plans.map(\.id)) { _, _ in repairFront() }
             .onChange(of: frontID) { _, newValue in storedFrontID = newValue?.uuidString ?? "" }
             .onChange(of: scenePhase) { _, phase in handle(phase) }
+            .onChange(of: focus == nil) { _, isClosed in
+                if isClosed { menu.close() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
                 rollOverIfNeeded()
             }
@@ -182,42 +182,121 @@ struct RootView: View {
             rollOverIfNeeded()
             Haptics.shared.prepare()
         case .background:
+            menu.close()
             store.saveNow()
         default:
             break
         }
     }
 
+    // MARK: Menus
+
+    /// "Today ⌄": the three views.
+    private func viewMenu(_ anchor: CGRect) -> MenuRequest {
+        MenuRequest(
+            anchor: anchor,
+            placement: .belowLeading,
+            sections: [ViewMode.allCases.map { option in
+                MenuItem(id: option.rawValue, title: option.title, systemImage: option.symbol, isChecked: option == mode) {
+                    selectMode(option)
+                }
+            }]
+        )
+    }
+
+    /// ⋯: the front plan, every plan (to switch to one directly), and settings.
+    private func moreMenu(_ anchor: CGRect) -> MenuRequest {
+        var sections: [[MenuItem]] = []
+        var plans: [MenuItem] = []
+        if let front = store.plan(frontID) ?? store.plans.first {
+            plans.append(MenuItem(id: "edit", title: "Edit plan", systemImage: "square.and.pencil") {
+                plansRoute = .plan(front.id)
+            })
+        }
+        plans.append(MenuItem(id: "plans", title: "All plans", systemImage: "square.stack") {
+            plansRoute = .list
+        })
+        sections.append(plans)
+
+        if (2...6).contains(store.plans.count) {
+            // A way straight to any plan, without the deck gestures (and for VoiceOver). Past a
+            // handful the menu would outgrow the screen; All plans lists them instead.
+            let front = (store.plan(frontID) ?? store.plans.first)?.id
+            sections.append(store.plans.map { plan in
+                MenuItem(id: "show-\(plan.id.uuidString)", title: plan.name.isEmpty ? "Untitled" : plan.name, isChecked: plan.id == front) {
+                    selectPlan(plan.id)
+                }
+            })
+        }
+
+        if mode != .today && !isOnCurrentPeriod {
+            sections.append([MenuItem(id: "jump", title: "Jump to today", systemImage: "calendar.badge.clock") {
+                jumpToToday()
+            }])
+        }
+
+        sections.append([MenuItem(id: "settings", title: "Settings", systemImage: "gearshape") {
+            showingSettings = true
+        }])
+        return MenuRequest(anchor: anchor, placement: .belowTrailing, sections: sections)
+    }
+
+    /// Create: what you can add. Choosing one makes the plan, brings it to the front and
+    /// opens it to write.
+    private func addMenu(_ anchor: CGRect) -> MenuRequest {
+        MenuRequest(
+            anchor: anchor,
+            placement: .aboveTrailing,
+            sections: [PlanTemplate.allCases.filter { $0 != .blank }.map(templateItem), [templateItem(.blank)]]
+        )
+    }
+
+    private func templateItem(_ template: PlanTemplate) -> MenuItem {
+        MenuItem(id: template.rawValue, title: template.title, systemImage: template.symbol) {
+            createPlan(template)
+        }
+    }
+
+    private var isOnCurrentPeriod: Bool {
+        switch mode {
+        case .today: true
+        case .week: weekStart == store.today.weekStart
+        case .month: month == store.today.monthStart && selectedDay == store.today
+        }
+    }
+
+    // MARK: Actions
+
     private func createPlan(_ template: PlanTemplate) {
         let plan = SeedData.template(template, today: store.today)
-        store.add(plan)
+        withAnimation(Motion.deck) {
+            store.add(plan)
+            frontID = plan.id
+        }
         Feedback.play(.check(step: 0))
-        createdPlan = plan.id
-        creating = false
+        // Let the menu finish closing before the sheet rises.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            plansRoute = .plan(plan.id)
+        }
     }
 
     @ViewBuilder
     private var content: some View {
         switch mode {
         case .today:
-            TodayDeck(
-                frontID: $frontID,
-                onCreatePlan: { creating = true }
-            )
-            .transition(modeTransition)
+            TodayDeck(frontID: $frontID)
+                .transition(modeTransition)
         case .week:
-            PageDeck(frontID: $frontID) { plan in
+            PageDeck(frontID: $frontID, scrolled: $pageScrolled) { plan in
                 WeekCard(plan: plan, weekStart: $weekStart, onEditValue: editValue)
             }
             .transition(modeTransition)
         case .month:
-            PageDeck(frontID: $frontID) { plan in
+            PageDeck(frontID: $frontID, scrolled: $pageScrolled) { plan in
                 MonthCard(plan: plan, month: $month, selected: $selectedDay, onEditValue: editValue)
             }
             .transition(modeTransition)
-        case .scrolling:
-            scrollingDeck
-                .transition(modeTransition)
         }
     }
 
@@ -228,44 +307,16 @@ struct RootView: View {
     private func selectMode(_ newMode: ViewMode) {
         guard newMode != mode else { return }
         modeDirection = newMode.order > mode.order ? 1 : -1
-        Haptics.shared.tick()
-        withAnimation(Motion.page) { mode = newMode }
+        withAnimation(Motion.page) {
+            mode = newMode
+            pageScrolled = false
+        }
     }
 
     private func selectPlan(_ id: UUID) {
         guard id != frontID else { return }
         Feedback.play(.cycle)
         withAnimation(Motion.deck) { frontID = id }
-    }
-
-    /// Scrolling mode: one tall card with the next one peeking above, like the deck.
-    private var scrollingDeck: some View {
-        ZStack(alignment: .top) {
-            if store.plans.count > 1 {
-                DeckPeek {
-                    let next = store.plans[((store.index(of: frontID) ?? 0) + 1) % store.plans.count]
-                    selectPlan(next.id)
-                }
-            }
-            if let plan = store.plan(frontID) ?? store.plans.first {
-                ScrollingCard(plan: plan, onEditValue: editValue)
-                    .id(plan.id)
-                    .transition(Motion.deckForward(reduceMotion: reduceMotion))
-            } else {
-                EmptyDeck { creating = true }
-            }
-        }
-        .padding(.horizontal, Metrics.gutter)
-        .padding(.top, 14 + Metrics.deckPeek)
-        .padding(.bottom, Metrics.createClearance)
-    }
-
-    /// After creating, bring the new plan to the front and open its sheet to write it.
-    private func openCreatedPlan() {
-        guard let id = createdPlan else { return }
-        createdPlan = nil
-        withAnimation(Motion.deck) { frontID = id }
-        plansRoute = .edit(id)
     }
 
     private func jumpToToday() {
@@ -332,10 +383,10 @@ private struct AllDoneToast: View {
     var body: some View {
         HStack(spacing: 10) {
             ZStack {
-                Circle().fill(Color.plum)
+                Circle().fill(Color.success)
                 CheckmarkShape()
                     .trim(from: 0, to: drawn ? 1 : 0)
-                    .stroke(Color.onPlum, style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+                    .stroke(Color.onSuccess, style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
                     .frame(width: 12, height: 12)
             }
             .frame(width: 24, height: 24)

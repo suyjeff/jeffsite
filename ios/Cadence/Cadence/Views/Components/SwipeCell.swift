@@ -61,7 +61,7 @@ struct HorizontalPan: UIGestureRecognizerRepresentable {
     }
 }
 
-/// A row (or one column of a row) you swipe to mark: right for done, left for "not today".
+/// A row (or one column of a row) you swipe to mark: right for done, left to skip.
 ///
 /// The content tracks the finger 1:1 with rubber-banding past the commit point. Behind it,
 /// the action icon grows with the drag and snaps solid when armed (with a detent). On release
@@ -75,6 +75,7 @@ struct SwipeCell<Content: View>: View {
     @ViewBuilder var content: Content
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.focusedKey) private var focusedKey
     @State private var offset: CGFloat = 0
     @State private var armed = false
 
@@ -111,12 +112,19 @@ struct SwipeCell<Content: View>: View {
             .accessibilityActions {
                 if isEnabled {
                     Button(isDone ? "Mark not done" : "Mark done") { onCommit(.done) }
-                    Button(isSkipped ? "Undo not today" : "Not today") { onCommit(.skip) }
+                    Button(isSkipped ? "Undo skip" : "Skip") { onCommit(.skip) }
                 }
             }
     }
 
     private func handle(_ phase: HorizontalPan.Phase) {
+        // A hold lifted this row (or its card) before the finger moved: the swipe is over.
+        if focusedKey != nil, offset != 0 || armed {
+            armed = false
+            withAnimation(Motion.standard) { offset = 0 }
+            return
+        }
+        guard focusedKey == nil else { return }
         switch phase {
         case .changed(let translation):
             offset = Motion.rubberband(translation, limit: commitDistance * 1.15)

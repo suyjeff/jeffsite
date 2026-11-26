@@ -2,15 +2,16 @@ import SwiftUI
 
 /// The check button in the corner of a Today card.
 ///
-/// It is the visible half of the swipe: as a card is dragged toward "done", plum fills the
-/// glass radially from the center and the check draws itself in, tracking the finger; toward
-/// "not today" an ✕ draws in instead. Crossing the commit point pops it.
+/// Neutral glass at rest, so it never competes with Create beside it. It is the visible half of
+/// the swipe: as a card is dragged toward "done", green fills the glass radially from the
+/// center and the check draws itself in, tracking the finger; toward
+/// skip an ✕ draws in instead. Crossing the commit point pops it.
 ///
 /// State changes play out as one small sequence, whichever way they were triggered:
 /// - done: a squash (anticipation), an overshoot past full size (bounce), a ring rippling
 ///   outward, the check stroking on;
 /// - cleared: the reverse: the check undraws and the fill drains back into the center;
-/// - not today: the ✕ draws in two strokes and the button settles down a few points.
+/// - skipped: the ✕ draws in two strokes and the button settles down a few points.
 struct CheckButton: View {
     enum Look: Equatable {
         case open
@@ -37,11 +38,11 @@ struct CheckButton: View {
     private var armed: Bool { abs(swipe) >= 1 }
 
     // What each swipe will do on release, previewed as it travels:
-    //   open:    right → done (fill + check draw in)   left → not today (✕ draws in)
-    //   done:    right → undo (fill drains, check undraws)   left → not today (same, ✕ draws in)
+    //   open:    right → done (fill + check draw in)   left → skip (✕ draws in)
+    //   done:    right → undo (fill drains, check undraws)   left → skip (same, ✕ draws in)
     //   skipped: right → done (fill + check in, ✕ out)   left → undo (✕ undraws)
 
-    /// 0…1: how much of the plum fill shows.
+    /// 0…1: how much of the green fill shows.
     private var fill: CGFloat {
         switch look {
         case .open: towardDone
@@ -74,39 +75,47 @@ struct CheckButton: View {
                 // Radial fill: grows from the center rather than fading, so it reads as
                 // something filling up.
                 Circle()
-                    .fill(Color.plum)
+                    .fill(Color.success)
                     .scaleEffect(max(fill, 0.001))
                     .opacity(fill > 0.001 ? 1 : 0)
 
                 // AM / PM progress ring.
                 Circle()
                     .trim(from: 0, to: look == .open ? fraction : 0)
-                    .stroke(Color.onPlum.opacity(0.9), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .stroke(Color.success, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .padding(3)
 
                 // Resting state: a quiet ghost of the check, so the button reads as one.
                 CheckmarkShape()
-                    .stroke(Color.onPlum.opacity(0.55), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+                    .stroke(Color.inkMuted, style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
                     .frame(width: 20, height: 20)
                     .opacity(look == .open && towardDone < 0.05 && towardSkip < 0.05 ? 1 : 0)
 
                 // The live check: drawn by the swipe, or stroked on when the day completes.
-                CheckmarkShape()
+                // Ink where it sits on glass, white where the green has filled in under it.
+                let check = CheckmarkShape()
                     .trim(from: 0, to: checkDrawn)
-                    .stroke(Color.onPlum, style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round))
+                    .stroke(style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round))
                     .frame(width: 20, height: 20)
+                check.foregroundStyle(Color.ink)
+                    // Gone once the green has covered it, so no dark edge rims the white check.
+                    .opacity(fill > 0.98 ? 0 : 1)
+                check.foregroundStyle(Color.onSuccess)
+                    .mask {
+                        Circle().scaleEffect(max(fill, 0.001))
+                    }
 
                 // The ✕, drawn as two strokes one after the other.
                 CrossShape()
                     .trim(from: 0, to: crossDrawn)
-                    .stroke(Color.onPlum, style: StrokeStyle(lineWidth: 2.6, lineCap: .round))
+                    .stroke(fill > 0.5 ? Color.onSuccess : Color.inkSecondary, style: StrokeStyle(lineWidth: 2.6, lineCap: .round))
                     .frame(width: 15, height: 15)
             }
             .frame(width: size, height: size)
             // The fill may overshoot as it springs in; keep it inside the glass.
             .clipShape(.circle)
-            .glassEffect(.regular.tint(Color.plum.opacity(look == .skipped ? 0.32 : 0.6)).interactive(), in: .circle)
+            .glassEffect(.regular.interactive(), in: .circle)
             // Pops when a swipe crosses its commit point: the moment the detent fires.
             .scaleEffect(armed ? 1.14 : 1 + 0.06 * max(towardDone, towardSkip))
             .animation(reduceMotion ? nil : .spring(duration: 0.32, bounce: 0.5), value: armed)
@@ -134,7 +143,7 @@ struct CheckButton: View {
             value: look
         )
         .accessibilityLabel(voiceOverLabel)
-        .accessibilityValue(look == .done ? "Done" : look == .skipped ? "Not today" : "Not done")
+        .accessibilityValue(look == .done ? "Done" : look == .skipped ? "Skipped" : "Not done")
     }
 }
 
@@ -194,14 +203,14 @@ private struct CheckPulses: ViewModifier {
     }
 }
 
-/// A plum ring that ripples out from the button when a day completes.
+/// A green ring that ripples out from the button when a day completes.
 private struct RippleRing: View {
     var trigger: Int
     var enabled: Bool
 
     var body: some View {
         Circle()
-            .stroke(Color.plum, lineWidth: 2)
+            .stroke(Color.success, lineWidth: 2)
             .keyframeAnimator(initialValue: RingValues(), trigger: trigger) { [enabled] view, value in
                 view.scaleEffect(value.scale).opacity(enabled ? value.opacity : 0)
             } keyframes: { _ in

@@ -8,6 +8,7 @@ struct MetricTodayCard: View {
     var swipe: CGFloat
 
     @Environment(Store.self) private var store
+    @Environment(\.focusedKey) private var focusedKey
     @State private var ripple = 0
     /// The ruler is moving. Its readout then tracks the finger directly, without per-step
     /// animation; rolling digits only play for a change that arrives at rest.
@@ -76,7 +77,7 @@ struct MetricTodayCard: View {
             .padding(.horizontal, -Metrics.cardPadding)
 
             HStack(alignment: .center) {
-                MonoLabel(text: footerText(status: status, changed: changed))
+                MonoLabel(text: footerText(status: status))
                     .contentTransition(.opacity)
                 Spacer()
                 CheckButton(
@@ -87,12 +88,16 @@ struct MetricTodayCard: View {
                 )
             }
             .padding(.top, 14)
+            // Level with Create, which floats over the card's corner.
+            .padding(.trailing, Metrics.checkTrailing - Metrics.cardPadding)
+            .padding(.bottom, -2)
         }
         .padding(Metrics.cardPadding)
         .opacity(1 - 0.28 * Double(max(0, -swipe).clamped(0, 1)))
         .overlay(alignment: .bottomTrailing) {
             InkRipple(trigger: ripple)
-                .padding(Metrics.cardPadding)
+                .padding(.trailing, Metrics.checkTrailing)
+                .padding(.bottom, Metrics.cardPadding - 2)
         }
         .overlay {
             Color.plum
@@ -102,20 +107,21 @@ struct MetricTodayCard: View {
         .animation(Motion.standard, value: recent.count >= 2)
     }
 
-    private func footerText(status: DayStatus, changed: Bool) -> String {
-        if changed { return "TAP ✓ TO UPDATE" }
+    private func footerText(status: DayStatus) -> String {
         switch status {
         case .done:
             if let at = plan.record(on: day).completedAt { return "LOGGED · \(DayText.time(at))" }
             return "LOGGED"
         case .skipped:
-            return "NOT TODAY"
+            return "SKIPPED"
         default:
-            return "SCRUB, THEN LOG"
+            return ""
         }
     }
 
     private func logTapped() {
+        // The release that ends a hold on the check isn't a tap.
+        guard focusedKey == nil else { return }
         let change = withAnimation(Motion.settle) {
             if plan.status(on: day) == .skipped {
                 store.toggleSkipped(plan.id, on: day)

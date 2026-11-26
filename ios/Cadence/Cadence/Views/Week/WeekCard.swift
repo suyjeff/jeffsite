@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The Week card: header strip with progress, the week navigator, then one row per day.
+/// The Week card: header strip with progress and the week navigator (both pinned while the
+/// page scrolls), then one row per day.
 struct WeekCard: View {
     let plan: Plan
     @Binding var weekStart: Day
@@ -15,13 +16,13 @@ struct WeekCard: View {
         let progress = plan.progress(in: days)
         let isCurrent = weekStart == store.today.weekStart
 
-        VStack(spacing: 0) {
+        StickyCard {
             CardHeaderStrip(title: plan.name) {
                 CountPill(done: progress.done, total: progress.planned)
                     .animation(Motion.snappy, value: progress.done)
             }
             // Hold the top of the card to lift the whole card.
-            .liftsCardOnHold(inScrollView: true)
+            .liftsCardOnHold()
 
             PeriodBar(
                 title: isCurrent ? "THIS WEEK" : DayText.weekRange(weekStart),
@@ -29,8 +30,8 @@ struct WeekCard: View {
                 onStep: { step(by: $0) },
                 onReset: { jump(to: store.today.weekStart) }
             )
-
-            // A ZStack, not the card's VStack: during the transition the outgoing and
+        } content: {
+            // A ZStack, not the card's stack: during the transition the outgoing and
             // incoming weeks overlap instead of stacking (which doubled the card's height).
             ZStack(alignment: .top) {
                 weekBody(days)
@@ -38,7 +39,6 @@ struct WeekCard: View {
                     .transition(Motion.slide(direction, reduceMotion: reduceMotion))
             }
         }
-        .cardSurface()
         .focusableCard(plan.id)
     }
 
@@ -165,8 +165,8 @@ struct DayRow: View {
         .onChange(of: doneCount) { old, new in
             if new > old { flash += 1 }
         }
-        // Hold a row to lift it with its options (done, not today, edit this day).
-        .liftsOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), inScrollView: true) {
+        // Hold a row to lift it with its options (done, skip, edit this day).
+        .liftsOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil)) {
             [planID = plan.id, day, isToday, showsWeekday] in
             LivePlan(id: planID) { plan in
                 DayRow(plan: plan, day: day, isToday: isToday, showsWeekday: showsWeekday)
@@ -226,7 +226,7 @@ struct DayRow: View {
         let name = DayText.long(day)
         switch status {
         case .done: return "\(name), done"
-        case .skipped: return "\(name), not today"
+        case .skipped: return "\(name), skipped"
         case .partial(let done, let total): return "\(name), \(done) of \(total) done"
         case .pending: return isToday ? "\(name), today" : name
         case .empty: return "\(name), nothing planned"
@@ -311,6 +311,7 @@ struct MetricRow: View {
     var onEdit: (UUID, Day) -> Void
 
     @Environment(Store.self) private var store
+    @Environment(\.focusedKey) private var focusedKey
 
     var body: some View {
         let value = plan.value(on: day)
@@ -340,7 +341,7 @@ struct MetricRow: View {
                         .foregroundStyle(Color.inkSecondary)
                 }
             } else {
-                Text(status == .skipped ? "Not today" : isFuture ? "" : "Log")
+                Text(status == .skipped ? "Skipped" : isFuture ? "" : "Log")
                     .font(.cadenceSubhead)
                     .foregroundStyle(status == .skipped ? Color.inkSecondary : Color.plum)
             }
@@ -350,12 +351,13 @@ struct MetricRow: View {
         .background(Color.surface)
         .contentShape(.rect)
         .onTapGesture {
-            guard !isFuture else { return }
+            // The release that ends a hold isn't a tap.
+            guard !isFuture, focusedKey == nil else { return }
             Haptics.shared.tick()
             onEdit(plan.id, day)
         }
-        // Hold to lift it with its options (log, not today, clear).
-        .liftsOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), isEnabled: !isFuture, inScrollView: true) {
+        // Hold to lift it with its options (log, skip, clear).
+        .liftsOnHold(.day(plan.id, day, column: nil), key: FocusItem.dayKey(plan.id, day, nil), isEnabled: !isFuture) {
             [planID = plan.id, day, isToday, showsWeekday] in
             LivePlan(id: planID) { plan in
                 MetricRow(plan: plan, day: day, isToday: isToday, showsWeekday: showsWeekday, onEdit: { _, _ in })
