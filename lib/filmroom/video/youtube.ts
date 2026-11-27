@@ -130,8 +130,11 @@ export class YouTubeMedia extends EventTarget {
     this.readyState = 0;
     if (this.player && this.videoId === id) {
       this.readyState = 4;
-      this.dispatchEvent(new Event("loadedmetadata"));
-      this.dispatchEvent(new Event("loadeddata"));
+      // Called from the src setter: let the caller attach its listeners first.
+      queueMicrotask(() => {
+        this.dispatchEvent(new Event("loadedmetadata"));
+        this.dispatchEvent(new Event("loadeddata"));
+      });
       return;
     }
     this.videoId = id;

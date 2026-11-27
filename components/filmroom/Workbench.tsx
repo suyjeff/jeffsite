@@ -5,6 +5,7 @@ import s from "./filmroom.module.css";
 import { AppCtx, useAppState } from "./shared";
 import { DEFAULT_QUERY, FilmroomApp, OV, VIEWS, type View } from "../../lib/filmroom/app/app";
 import { chordStep, keyMachine, valueForKey } from "../../lib/filmroom/keys/machine";
+import { parseFilmSource } from "../../lib/filmroom/video/sources";
 import { TopBar } from "./TopBar";
 import { Viewport } from "./Viewport";
 import { Inspector } from "./Inspector";
@@ -120,7 +121,8 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
   useEffect(
     () =>
       app.subscribeFrame((f) => {
-        if (f.playing || f.rel === frame.current) return;
+        // Film view frames are relative to the free-running film, not to a play's t₀: never share them as a play frame.
+        if (f.playing || f.rel === frame.current || app.state.filmView) return;
         frame.current = f.rel;
         void setUrl({ f: f.rel });
       }),
@@ -480,6 +482,7 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
         break;
       case "official": {
         const row = app.row;
+        if (row >= 0 && !confirmReplaceFilm(app, app.gameOfRow(row).id)) break;
         if (row >= 0 && app.attachOfficial(app.gameOfRow(row).id)) {
           app.enterFilmView();
           app.toast("official NBA film attached · find a play, S pins it");
@@ -543,6 +546,7 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
                 send({ type: "CLOSE" });
                 const row = app.row;
                 if (row < 0) return;
+                if (!confirmReplaceFilm(app, app.gameOfRow(row).id, url)) return;
                 const msg = app.attachFilm(url, app.gameOfRow(row).id);
                 const failed = msg.startsWith("Paste");
                 app.toast(msg, failed ? "error" : "info");
@@ -600,6 +604,15 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
       />
     </div>
   );
+}
+
+/** Replacing a game's film drops its pins: ask first, naming what goes. */
+function confirmReplaceFilm(app: FilmroomApp, game: string, nextUrl?: string): boolean {
+  const film = app.films.get(game);
+  const pins = app.pinnedCount(game);
+  if (!film || !pins) return true;
+  if (nextUrl && parseFilmSource(nextUrl)?.url === film.url) return true;
+  return window.confirm(`Replace the film for this game? Its ${pins} pinned ${pins === 1 ? "play" : "plays"} will be deleted.`);
 }
 
 async function copyUrl(app: FilmroomApp) {

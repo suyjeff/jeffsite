@@ -152,7 +152,11 @@ export class ReelController {
     if (k !== this.active) return;
     if (kind === "waiting") this.buffering = true;
     if (kind === "playing") this.buffering = false;
-    if (kind === "ended" && this.rate > 0) this.advance();
+    if (kind === "ended" && this.rate > 0) {
+      // Film view is one free-running film, not a reel of clips: its end is the end.
+      if (this.current?.key.endsWith("@filmview")) this.pause();
+      else this.advance();
+    }
   }
 
   /** Load clip i into slot s and seek to the in-point (or `rel` seconds from t₀). */
@@ -165,7 +169,8 @@ export class ReelController {
       return Promise.resolve();
     }
     const target = clip.t0 + (rel ?? clip.from);
-    if (s.clip?.key === clip.key && s.index === i && s.ready && rel === undefined && Math.abs(s.el.currentTime - target) < 0.5 / clip.fps) return Promise.resolve();
+    if (s.clip?.key === clip.key && s.index === i && s.ready && rel === undefined && s.el.getAttribute("src") === clip.src && Math.abs(s.el.currentTime - target) < 0.5 / clip.fps)
+      return Promise.resolve();
     s.clip = clip;
     s.index = i;
     s.ready = false;
@@ -345,6 +350,7 @@ export class ReelController {
     if (r > 0) {
       this.stopReverse();
       el.playbackRate = r;
+      this.rate = el.playbackRate || r; // YouTube clamps to its own rates (max 2×): show what actually plays
       el.play().catch(() => undefined);
     } else if (r < 0) {
       el.pause();

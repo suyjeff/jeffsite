@@ -475,10 +475,6 @@ export class FilmroomApp {
   pinnedCount(game: string): number {
     return this.films.get(game)?.anchors.filter((a) => !a.provisional).length ?? 0;
   }
-  isPinned(row: number): boolean {
-    const f = this.films.get(this.gameOfRow(row).id);
-    return !!f && f.anchors.some((a) => !a.provisional && Math.abs(a.wall - this.store.p.wall[row]) <= 1);
-  }
   /** Can the attached film place this play (so its clip is real footage)? */
   filmPlaces(row: number): boolean {
     const f = this.films.get(this.gameOfRow(row).id);
@@ -488,7 +484,7 @@ export class FilmroomApp {
   /** Film view on: the game's film plays freely from `media` (default: where the current play sits, or 0). */
   enterFilmView(media?: number) {
     const row = this.row;
-    if (row < 0) return "no play selected";
+    if (row < 0) return null;
     const g = this.gameOfRow(row).id;
     if (!this.films.get(g) && !this.attachOfficial(g)) return null;
     const film = this.films.get(g)!;

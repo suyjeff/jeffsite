@@ -14,6 +14,8 @@ import { decodeBundle, type Store } from "./engine/store";
 import { Engine } from "./engine/query";
 import { Bitset } from "./engine/bitset";
 import type { RawGame } from "./ingest/raw";
+import { decodeFilms, encodeFilms, filmTime, parseFilmSource } from "./video/sources";
+import { youTubeId } from "./video/youtube";
 
 const FIX = join(__dirname, "__fixtures__");
 const DATA = join(__dirname, "../../public/filmroom-assets/data");
@@ -208,9 +210,7 @@ describe("engine", () => {
   });
 });
 
-describe("film sources", async () => {
-  const { filmTime, parseFilmSource, encodeFilms, decodeFilms } = await import("./video/sources");
-  const { youTubeId } = await import("./video/youtube");
+describe("film sources", () => {
   const base = { game: "22300060", name: "f", fps: 30, url: "https://x.test/g.mp4", kind: "url" as const };
 
   it("continuous film maps every play by wall clock from one pin", () => {

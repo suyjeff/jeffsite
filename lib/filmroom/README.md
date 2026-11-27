@@ -105,14 +105,18 @@ into zero-copy typed-array views. Per-game event tapes load on demand.
 Every clip is addressed relative to its sync anchor t₀ (the shot, turnover or whistle), with configurable pre- and
 post-roll.
 
+**Why there are no NBA clips.** Since October 2026 the NBA serves one 869,898-byte "VIDEO NOT AVAILABLE" bumper (same ETag) for every `videos.nba.com/nba/pbp/media/*` path, real or invented. `videoeventsasset` also returns blank URLs (swar/nba_api#762). NBA.com's own player delivers even free clips through MediaKind with OAuth entitlements. The ingest detects all of this and records it per play, and the app does not reach around NBA's access control.
+
 **Sources** (`video/sources.ts`), in order of preference:
-1. **NBA pbp clip.** Used when the ingest has verified the `videoeventsasset` URL is still live. The NBA has retired
-   every 2023-24 clip: all 22,689 URLs now serve one shared "VIDEO NOT AVAILABLE" bumper (same 869,898 bytes, same
-   ETag), and the ingest detects this.
-2. **Your game film.** `⇧O` opens a full-game recording. Every play carries its event's wall-clock time (cdn
-   `timeActual`), so one `⇧A` sync places every play in the game; more anchors make the map piecewise.
-3. **Proxy film.** Six 29.97 fps VP9 clips with each frame's index burned in as a 16-bit barcode, under a telemetry
-   overlay that replays the possession's real events against the playhead.
+1. **NBA pbp clip**, when the ingest has verified the URL serves real footage. None currently do.
+2. **Attached film**: real footage you bring, per game.
+   - Paste a YouTube link (official NBA uploads embed through YouTube's public IFrame API; `video/youtube.ts` presents the player as a media element) or any https MP4/WebM link in ⌘K, drop a recording on the workbench, or press ⇧O.
+   - *Continuous* film (one unbroken broadcast) syncs the whole game from one pin, because every play carries its event's wall-clock time.
+   - *Edited* film (highlight packages, which cut timeouts and reviews) needs one pin per play.
+   - The film-room data has a catalog (`data/films.json`) of official NBA uploads. It currently holds the Kings vs Warriors In-Season Tournament ending (Nov 28, 2023), verified by oEmbed as the NBA channel's upload. ⌘K → "Real NBA film" opens it.
+3. **Proxy film**: six 29.97 fps VP9 clips with each frame's index burned in as a 16-bit barcode, under a telemetry overlay that replays the possession's real events against the playhead.
+
+**Pinning (tap-sync).** Press `F` for film view, where the game's film plays freely and `[`/`]` pick the play. `S` pins the frame on screen as that play's t₀ and moves to the next play while the film keeps rolling. Press `F` again and pinned plays play as clips from the real film. Films and pins are written into the share link (`film=`), so a link you send plays real footage for whoever opens it. Local files are the exception, because they exist only on your disk. `W` opens the game on NBA.com.
 
 ## Tagging
 
@@ -146,7 +150,7 @@ npm run build && npm run filmroom:serve &
 npm run filmroom:e2e         # keyboard-only acceptance against the static export (needs playwright)
 ```
 
-The e2e suite checks the following and is currently 16/16:
+The e2e suite checks the following and is currently 18/18:
 - the golden query returns exactly its two positives;
 - filtering takes under 50 ms;
 - every frame step matches the barcode decoded from the video (±0);
@@ -155,5 +159,7 @@ The e2e suite checks the following and is currently 16/16:
 - chord tagging works and new tags are immediately queryable;
 - all three views render;
 - local film syncs;
+- film attached by URL from another origin pins the on-screen frame and replays from it (frames read back from compositor screenshots);
+- the share link restores that film and its pins in a fresh browser;
 - a shared URL restores the exact frame;
 - CLS is 0 and there are no page errors.
