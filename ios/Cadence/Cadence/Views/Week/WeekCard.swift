@@ -142,33 +142,33 @@ struct DayRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    weekdayLabel(status: status)
-                        .padding(.horizontal, Metrics.cardPadding)
-                        .padding(.top, Metrics.rowVertical)
-                        .padding(.bottom, Metrics.labelGap)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(status == .done || status == .skipped ? Color.settled : Color.surface)
-                    HStack(alignment: .top, spacing: 0) {
-                        ForEach(0..<plan.columnCount, id: \.self) { column in
-                            let mark = plan.mark(on: day, section: column)
-                            let text = items.indices.contains(column) ? items[column] : ""
-                            MarkCell(mark: text.isEmpty ? nil : mark, isEnabled: !text.isEmpty, onTap: { toggle(column: column) }) {
+                // Each column is a whole section of its own: its header (the weekday on the
+                // first, the column's name and its ✓ or ✕ on each), then what's planned, with
+                // the same padding as a single row. A column settles on its own; an empty one
+                // follows the day, so a finished day settles whole.
+                let dayMark = plan.mark(on: day, section: nil)
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(0..<plan.columnCount, id: \.self) { column in
+                        let text = items.indices.contains(column) ? items[column] : ""
+                        let planned = !text.isEmpty
+                        let mark = planned ? plan.mark(on: day, section: column) : dayMark
+                        MarkCell(mark: mark, isEnabled: planned, onTap: { toggle(column: column) }) {
+                            VStack(alignment: .leading, spacing: Metrics.labelGap) {
+                                columnHeader(column, mark: planned ? mark : nil, status: status)
                                 itemText(text, finished: mark != nil)
-                                    .padding(.leading, column == 0 ? Metrics.cardPadding : 16)
-                                    .padding(.trailing, column == plan.columnCount - 1 ? Metrics.cardPadding : 16)
-                                    .padding(.bottom, Metrics.rowVertical)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             }
-                            .accessibilityLabel("\(plan.columns[column].isEmpty ? "Column \(column + 1)" : plan.columns[column]), \(text.isEmpty ? "nothing planned" : text)")
-                            if column < plan.columnCount - 1 {
-                                Hairline(axis: .vertical)
-                            }
+                            .padding(.leading, column == 0 ? Metrics.cardPadding : 16)
+                            .padding(.trailing, column == plan.columnCount - 1 ? Metrics.cardPadding : 16)
+                            .padding(.vertical, Metrics.rowVertical)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        }
+                        .accessibilityLabel("\(DayText.long(day)), \(plan.columns[column].isEmpty ? "column \(column + 1)" : plan.columns[column]), \(planned ? text : "nothing planned")")
+                        if column < plan.columnCount - 1 {
+                            Hairline(axis: .vertical)
                         }
                     }
-                    .fixedSize(horizontal: false, vertical: true)
                 }
-                .background(Color.surface)
+                .fixedSize(horizontal: false, vertical: true)
                 .animation(Motion.settle, value: status)
             }
         }
@@ -187,7 +187,7 @@ struct DayRow: View {
         }
         .accessibilityActions {
             if plan.isPlanned(day) {
-                Button(status == .skipped ? "Undo skip" : "Skip") { skip() }
+                Button(status == .skipped ? "Unskip" : "Skip") { skip() }
             }
         }
         .id(day.key)
@@ -218,6 +218,32 @@ struct DayRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText(status: status))
+    }
+
+    /// A column's header: the weekday (with today's dot) on the first column, then the
+    /// column's name and its mark on every column.
+    private func columnHeader(_ column: Int, mark: Mark?, status: DayStatus) -> some View {
+        let finished = status == .done || status == .skipped
+        return HStack(spacing: 6) {
+            if column == 0 {
+                if isToday {
+                    Circle()
+                        .fill(Color.plum)
+                        .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
+                }
+                MonoLabel(
+                    text: showsWeekday ? DayText.weekdays[day.weekdayIndex] : "\(DayText.shortWeekdays[day.weekdayIndex]) \(day.day)",
+                    color: isToday && !finished ? .ink : .inkSecondary
+                )
+            }
+            Spacer(minLength: 4)
+            if !plan.columns[column].isEmpty {
+                MonoLabel(text: plan.columns[column].uppercased(), style: .cadenceCaption)
+            }
+            StatusBadge(mark: mark, size: 16)
+        }
+        .accessibilityHidden(true)
     }
 
     private func itemText(_ text: String, finished: Bool) -> some View {
@@ -368,14 +394,23 @@ struct MetricRow: View {
         let isFuture = day > store.today
 
         HStack(alignment: .firstTextBaseline) {
-            HStack(spacing: 8) {
-                if isToday {
-                    Circle().fill(Color.plum).frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    if isToday {
+                        Circle().fill(Color.plum).frame(width: 6, height: 6)
+                    }
+                    MonoLabel(
+                        text: showsWeekday ? DayText.weekdays[day.weekdayIndex] : "\(DayText.shortWeekdays[day.weekdayIndex]) \(day.day)",
+                        color: isToday ? .ink : .inkSecondary
+                    )
                 }
-                MonoLabel(
-                    text: showsWeekday ? DayText.weekdays[day.weekdayIndex] : "\(DayText.shortWeekdays[day.weekdayIndex]) \(day.day)",
-                    color: isToday ? .ink : .inkSecondary
-                )
+                // That day's note, if it has one.
+                if let note = plan.note(on: day) {
+                    Text(note)
+                        .font(.cadenceSubhead)
+                        .foregroundStyle(Color.ink)
+                        .lineLimit(2)
+                }
             }
             Spacer()
             if let value {
@@ -418,7 +453,7 @@ struct MetricRow: View {
         }
         .accessibilityAddTraits(isFuture ? [] : .isButton)
         .id(day.key)
-        .accessibilityLabel("\(DayText.long(day)), \(value.map { "\(plan.format($0)) \(plan.unit)" } ?? "not logged")")
+        .accessibilityLabel("\(DayText.long(day)), \(value.map { "\(plan.format($0)) \(plan.unit)" } ?? "not logged")\(plan.note(on: day).map { ", \($0)" } ?? "")")
     }
 }
 

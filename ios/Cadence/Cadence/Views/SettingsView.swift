@@ -88,37 +88,26 @@ struct SettingsView: View {
     }
 }
 
-/// A theme at a glance: its canvas, a card on it, and a line of its ink.
+/// A theme at a glance: the colors it changes, as a row of dots (page, card, label, text).
 private struct Swatch: View {
     let palette: Palette
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let dark = colorScheme == .dark
-        let canvas = Color(uiColor: UIColor(hex: palette.hex(.shade(dark ? 950 : 200))))
-        let surface = Color(uiColor: UIColor(hex: palette.hex(.shade(dark ? 900 : 50))))
-        let ink = Color(uiColor: UIColor(hex: palette.hex(dark ? .shade(100) : .shade(700))))
-        let label = Color(uiColor: UIColor(hex: palette.hex(dark ? .shade(400) : .secondary)))
-
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(canvas)
-            .frame(width: 40, height: 30)
-            .overlay(alignment: .bottomTrailing) {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(surface)
-                    .frame(width: 30, height: 20)
-                    .overlay(alignment: .topLeading) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Capsule().fill(label).frame(width: 10, height: 2)
-                            Capsule().fill(ink).frame(width: 18, height: 3)
-                        }
-                        .padding(5)
-                    }
+        let tones: [Palette.Tone] = dark
+            ? [.shade(950), .shade(900), .shade(400), .shade(100)]
+            : [.shade(200), .shade(50), .secondary, .shade(700)]
+        HStack(spacing: -5) {
+            ForEach(Array(tones.enumerated()), id: \.offset) { _, tone in
+                Circle()
+                    .fill(Color(uiColor: UIColor(hex: palette.hex(tone))))
+                    .frame(width: 18, height: 18)
+                    .overlay(Circle().strokeBorder(Color.cardRing, lineWidth: 1))
+                    // A hairline of the row behind, so overlapping dots stay distinct.
+                    .background(Circle().stroke(Color.surface, lineWidth: 2))
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.cardRing, lineWidth: 1)
-            }
-            .accessibilityHidden(true)
+        }
+        .accessibilityHidden(true)
     }
 }

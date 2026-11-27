@@ -1,18 +1,19 @@
 """Renders Cadence's app icon: a flat white, hand-sketched asterisk on a painted landscape.
 
-The landscape is built in two passes, the way a painting is: first an underpainting (sky,
-far mountains in haze, rolling hills, a near meadow, each with its own light), then thousands
-of short brush strokes laid over it, large to small, each picking up the underpainting's color
-where it lands and following the land's contours. A little canvas grain finishes it.
+The landscape is suggested rather than drawn: soft bands of color (sky, a warm horizon,
+land) laid down first, then loaded brush strokes on top, broad to fine, each a bundle of
+bristle lines that shows the texture of the paint, mostly horizontal with a quick hand's
+drift. A few light and dark accent strokes and some canvas grain finish it.
 
 The asterisk is three uneven strokes drawn like a marker: wobbling a touch along their length,
 thicker in the middle, tapering at the ends, not quite evenly spaced. Flat white, no shadow.
 
 Writes three 1024px variants into the folder given as the first argument:
-  AppIcon.png         golden-hour landscape (default)
-  AppIcon-Dark.png    the same hills at dusk
+  AppIcon.png         golden hour (default)
+  AppIcon-Dark.png    the same at dusk
   AppIcon-Tinted.png  grayscale, for iOS to tint
 Run: python3 Tools/make_icon.py Cadence/Assets.xcassets/AppIcon.appiconset   (numpy, scipy, pillow)
+     python3 Tools/make_icon.py --launch Cadence/Assets.xcassets/LaunchMark.imageset
 """
 import math
 import sys
@@ -33,120 +34,89 @@ def hex_rgb(h):
     return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], dtype=np.float32)
 
 
-def vertical(top, bottom, y0, y1):
-    """A column gradient from `top` at y0 to `bottom` at y1, as an S×S×3 array."""
-    y = np.clip((np.arange(S, dtype=np.float32) - y0) / max(1, y1 - y0), 0, 1)[:, None, None]
-    return np.broadcast_to(lerp(hex_rgb(top), hex_rgb(bottom), y), (S, S, 3)).copy()
+def field(stops, rng):
+    """The underpainting: soft horizontal bands of color (sky, a warm horizon, land) with a
+    gently wavering horizon. No shapes: the brushwork on top does the describing."""
+    y = np.arange(S, dtype=np.float32)[:, None] / S
+    x = np.arange(S, dtype=np.float32)[None, :] / S
+    # The horizon wavers a little across the width, as a quick wash would.
+    wave = 0.018 * np.sin(2 * math.pi * (x * 0.9 + rng.uniform(0, 1))) + 0.01 * np.sin(2 * math.pi * (x * 2.3 + rng.uniform(0, 1)))
+    t = np.clip(y + wave, 0, 1)
+    positions = np.array([p for p, _ in stops], dtype=np.float32)
+    colors = np.stack([hex_rgb(c) for _, c in stops])
+    out = np.zeros((S, S, 3), dtype=np.float32)
+    for channel in range(3):
+        out[..., channel] = np.interp(t.ravel(), positions, colors[:, channel]).reshape(S, S)
+    return out
 
 
-def ridge(rng, base, amplitude, waves):
-    """A hill line across the width: a few soft sine waves plus smoothed noise."""
-    x = np.arange(S, dtype=np.float32) / S
-    y = np.full(S, base, dtype=np.float32)
-    for frequency, weight in waves:
-        y += amplitude * weight * np.sin(2 * math.pi * frequency * x + rng.uniform(0, 2 * math.pi))
-    y += ndimage.gaussian_filter1d(rng.normal(0, amplitude * 0.5, S), 24)
-    return y
+def bristle_stroke(draw, rng, x, y, angle, length, width, color, alpha):
+    """One loaded brush stroke: a bundle of bristle lines across its width, each a slightly
+    different tone and length, so the stroke shows its texture and dry edges."""
+    ux, uy = math.cos(angle), math.sin(angle)
+    nx, ny = -uy, ux
+    bristles = max(4, int(width / 3))
+    for b in range(bristles):
+        across = (b / (bristles - 1) - 0.5) * width
+        start = rng.uniform(0, 0.12) * length
+        stop = length * rng.uniform(0.82, 1.0)
+        tone = np.clip(color + rng.normal(0, 10, 3), 0, 255).astype(int)
+        a = alpha * rng.uniform(0.5, 1.0)
+        # Bristles bow along the stroke, and each lifts off at its ends (paint running dry).
+        bow = rng.normal(0, width * 0.12)
+        w = max(2, int(width / bristles * rng.uniform(1.3, 2.1)))
+        steps = 8
+        previous = None
+        for k in range(steps + 1):
+            f = start + (stop - start) * k / steps
+            curve = bow * math.sin(math.pi * k / steps)
+            px = x + ux * (f - length / 2) + nx * (across + curve)
+            py = y + uy * (f - length / 2) + ny * (across + curve)
+            if previous is not None:
+                edge = min(k, steps + 1 - k) / 2.5
+                fade = int(a * min(1.0, edge))
+                draw.line([previous, (px, py)], fill=(*tone, fade), width=w)
+            previous = (px, py)
 
 
-def underpainting(palette, rng):
-    """Sky, sun glow, haze mountains, hills and meadow, with their outlines for stroke flow."""
-    img = vertical(palette["sky_top"], palette["sky_bottom"], 0, S * 0.62)
-    yy, xx = np.mgrid[0:S, 0:S].astype(np.float32)
-
-    # A low sun behind the hills: a broad warm glow, not a disc.
-    sun = np.exp(-(((xx - S * 0.68) / (S * 0.42)) ** 2 + ((yy - S * 0.56) / (S * 0.3)) ** 2))
-    img = lerp(img, np.broadcast_to(hex_rgb(palette["glow"]), img.shape), (sun * palette["glow_strength"])[..., None])
-
-    # Clouds: a few soft banks of overlapping puffs, flat-bottomed, lit from the sun's side.
-    clouds = np.zeros((S, S), dtype=np.float32)
-    for bank_x, bank_y, spread in ((0.2, 0.2, 0.22), (0.78, 0.13, 0.18), (0.55, 0.32, 0.14)):
-        for _ in range(9):
-            px = S * (bank_x + rng.normal(0, spread * 0.45))
-            py = S * (bank_y + rng.normal(0, 0.02))
-            rx, ry = S * rng.uniform(0.05, 0.1), S * rng.uniform(0.03, 0.05)
-            puff = ((xx - px) / rx) ** 2 + ((yy - py) / ry) ** 2 <= 1
-            clouds = np.maximum(clouds, (puff & (yy <= py + ry * 0.35)).astype(np.float32))
-    clouds = ndimage.gaussian_filter(clouds, 14)
-    img = lerp(img, np.broadcast_to(hex_rgb(palette["cloud"]), img.shape), (clouds * 0.62)[..., None])
-
-    layers = [
-        # (ridge base, amplitude, waves, top color, bottom color)
-        (S * 0.50, S * 0.05, [(1.2, 1.0), (2.7, 0.45)], palette["far_top"], palette["far_bottom"]),
-        (S * 0.60, S * 0.045, [(0.9, 1.0), (2.1, 0.5)], palette["mid_top"], palette["mid_bottom"]),
-        (S * 0.70, S * 0.05, [(0.7, 1.0), (1.9, 0.4)], palette["near_top"], palette["near_bottom"]),
-        (S * 0.83, S * 0.035, [(0.6, 1.0), (1.6, 0.5)], palette["front_top"], palette["front_bottom"]),
-    ]
-    ridges = []
-    for base, amplitude, waves, top, bottom in layers:
-        line = ridge(rng, base, amplitude, waves)
-        ridges.append(line)
-        inside = yy >= line[None, :]
-        # Each band is lit at its crest and darker toward its foot.
-        depth = np.clip((yy - line[None, :]) / (S * 0.22), 0, 1)
-        band = lerp(hex_rgb(top), hex_rgb(bottom), depth[..., None])
-        # Aerial perspective: the light side of each hill catches the sun.
-        lit = np.clip(1 - np.abs(xx - S * 0.68) / (S * 0.9), 0, 1)[..., None] * palette["hill_light"]
-        band = lerp(band, np.broadcast_to(hex_rgb(palette["glow"]), band.shape), lit * (1 - depth[..., None]))
-        img = np.where(inside[..., None], band, img)
-    return np.clip(img, 0, 255), ridges
-
-
-def flow_angle(x, y, ridges):
-    """Strokes follow the slope of the nearest ridge below the sky; in the sky they drift."""
-    xi = int(np.clip(x, 1, S - 2))
-    for line in reversed(ridges):
-        if y >= line[xi] - 6:
-            slope = (line[xi + 1] - line[xi - 1]) / 2
-            return math.atan(slope)
-    return math.radians(-4)
-
-
-def paint(base, ridges, rng, flecks_amount=1.0):
-    """Lays brush strokes over the underpainting, broad to fine, colors picked from beneath."""
+def paint(base, rng, accents):
+    """Lays loaded strokes over the bands, broad to fine, each taking its color from the
+    band beneath it, mostly horizontal with the drift of a quick hand. Then a few light and
+    dark accent strokes, and canvas grain."""
     canvas = Image.fromarray(base.astype(np.uint8), "RGB").convert("RGBA")
-    passes = [  # (stroke length, width, spacing, jitter, opacity)
-        (96, 30, 26, 9, 165),
-        (54, 17, 15, 7, 185),
-        (28, 9, 9, 5, 205),
+    passes = [  # (length, width, spacing, angle spread, alpha)
+        (300, 70, 54, 0.10, 190),
+        (170, 40, 32, 0.14, 205),
+        (80, 18, 18, 0.2, 215),
     ]
-    for length, width, spacing, jitter, alpha in passes:
+    for length, width, spacing, spread, alpha in passes:
         layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
         draw = ImageDraw.Draw(layer)
-        points = [(x, y) for y in range(-spacing, S + spacing, spacing) for x in range(-spacing, S + spacing, spacing)]
+        points = [(x, y) for y in range(-spacing, S + spacing, spacing) for x in range(-spacing * 2, S + spacing * 2, spacing * 2)]
         rng.shuffle(points)
         for x0, y0 in points:
-            x = x0 + rng.uniform(-spacing, spacing) * 0.6
-            y = y0 + rng.uniform(-spacing, spacing) * 0.6
-            color = base[int(np.clip(y, 0, S - 1)), int(np.clip(x, 0, S - 1))]
-            color = np.clip(color + rng.normal(0, jitter, 3), 0, 255).astype(int)
-            angle = flow_angle(x, y, ridges) + rng.normal(0, 0.12)
-            half = length * rng.uniform(0.6, 1.0) / 2
-            dx, dy = math.cos(angle) * half, math.sin(angle) * half
-            w = max(2, int(width * rng.uniform(0.7, 1.1)))
-            draw.line([(x - dx, y - dy), (x + dx, y + dy)], fill=(*color, alpha), width=w, joint="curve")
-            # Round the stroke's ends, as a brush would.
-            r = w / 2
-            for cx, cy in ((x - dx, y - dy), (x + dx, y + dy)):
-                draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*color, alpha))
+            x = x0 + rng.uniform(-spacing, spacing)
+            y = y0 + rng.uniform(-spacing, spacing) * 0.5
+            color = base[int(np.clip(y, 0, S - 1)), int(np.clip(x, 0, S - 1))] + rng.normal(0, 11, 3)
+            # Sky strokes lean a little; land strokes lie flatter.
+            lean = -0.07 if y < S * 0.5 else 0.02
+            angle = lean + rng.normal(0, spread * (1.5 if y < S * 0.45 else 1.0))
+            bristle_stroke(draw, rng, x, y, angle, length * rng.uniform(0.7, 1.15), width * rng.uniform(0.75, 1.1), color, alpha)
         canvas = Image.alpha_composite(canvas, layer)
-    # Wildflower flecks in the near meadow: small warm dabs, sparse.
-    flecks = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    fd = ImageDraw.Draw(flecks)
-    front = ridges[-1]
-    for _ in range(int(110 * flecks_amount)):
-        x = rng.uniform(0, S)
-        top = front[int(np.clip(x, 0, S - 1))] + 40
-        # Denser toward the bottom, like a field running toward you.
-        y = top + (S - top) * math.sqrt(rng.random())
-        r = rng.uniform(1.6, 3.4) * (0.7 + 0.6 * (y - top) / max(1, S - top))
-        tone = [(250, 226, 168), (246, 206, 196), (252, 248, 236)][int(rng.integers(0, 3))]
-        fd.ellipse([x - r * 1.3, y - r, x + r * 1.3, y + r], fill=(*tone, int(200 * flecks_amount)))
-    canvas = Image.alpha_composite(canvas, flecks)
-    painted = canvas.convert("RGB").filter(ImageFilter.GaussianBlur(0.6))
-    # Canvas grain.
-    grain = ndimage.gaussian_filter(rng.normal(0, 1, (S, S)).astype(np.float32), 0.8) * 5
-    out = np.asarray(painted, dtype=np.float32) + grain[..., None]
+
+    layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    for hexcolor, band, count, alpha in accents:
+        for _ in range(count):
+            x = rng.uniform(0, S)
+            y = rng.uniform(band[0], band[1]) * S
+            bristle_stroke(draw, rng, x, y, rng.normal(0, 0.12), rng.uniform(60, 130), rng.uniform(22, 38), hex_rgb(hexcolor), alpha)
+    canvas = Image.alpha_composite(canvas, layer)
+
+    painted = canvas.convert("RGB").filter(ImageFilter.GaussianBlur(0.5))
+    grain = ndimage.gaussian_filter(rng.normal(0, 1, (S, S)).astype(np.float32), 0.7) * 6
+    weave = (np.sin(np.arange(S)[:, None] * 1.9) * np.sin(np.arange(S)[None, :] * 1.9)) * 1.6
+    out = np.asarray(painted, dtype=np.float32) + (grain + weave)[..., None]
     return np.clip(out, 0, 255)
 
 
@@ -192,8 +162,7 @@ def sketched_asterisk(rng):
 
 def compose(palette, seed, gray=False):
     rng = np.random.default_rng(seed)
-    base, ridges = underpainting(palette, rng)
-    painted = paint(base, ridges, rng, palette["flecks"])
+    painted = paint(field(palette["stops"], rng), rng, palette["accents"])
     mark = sketched_asterisk(np.random.default_rng(SEED + 1))[..., None]
     if gray:
         luma = painted @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
@@ -202,29 +171,44 @@ def compose(palette, seed, gray=False):
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
 
 
+# Color stops top to bottom (sky, a warm horizon, land) and accent strokes:
+# (color, band of the height they land in, how many, opacity).
 GOLDEN = {
-    "sky_top": "7FA8CC", "sky_bottom": "F6D3A8", "glow": "FFD9A0", "glow_strength": 0.75,
-    "cloud": "FBF1E4",
-    "far_top": "A9B3C9", "far_bottom": "8E9BB7",
-    "mid_top": "93A77F", "mid_bottom": "6F8A63",
-    "near_top": "7E9A55", "near_bottom": "5C7A41",
-    "front_top": "5F7F3A", "front_bottom": "3E5A2A",
-    "hill_light": 0.35,
-    "flecks": 1.0,
+    "stops": [(0.0, "7FA4C9"), (0.3, "A8C1D7"), (0.47, "F1D3B0"), (0.55, "E2BE92"), (0.63, "A7B47E"), (1.0, "4E6D3A")],
+    "accents": [("FBEBD2", (0.4, 0.55), 7, 120), ("DCE6EE", (0.06, 0.3), 5, 100), ("3F5A2E", (0.76, 1.0), 4, 100)],
 }
 
 DUSK = {
-    "sky_top": "1F2A4A", "sky_bottom": "6A5A7E", "glow": "C98A7A", "glow_strength": 0.55,
-    "cloud": "8C7C9A",
-    "far_top": "4A5170", "far_bottom": "3C4361",
-    "mid_top": "3D4C55", "mid_bottom": "2E3B44",
-    "near_top": "2F4036", "near_bottom": "23322A",
-    "front_top": "22301F", "front_bottom": "161F14",
-    "hill_light": 0.18,
-    "flecks": 0.45,
+    "stops": [(0.0, "1C2442"), (0.32, "3E3F68"), (0.47, "8C6D88"), (0.55, "6F5B76"), (0.63, "3B4B46"), (1.0, "151E17")],
+    "accents": [("C99A9C", (0.42, 0.55), 6, 110), ("5A5F8C", (0.08, 0.3), 5, 100), ("10170F", (0.78, 1.0), 4, 100)],
 }
 
+
+def launch_mark(folder, points=96):
+    """The asterisk alone, white on clear, for the launch screen: 1x, 2x and 3x."""
+    mask = sketched_asterisk(np.random.default_rng(SEED + 1))
+    # The asterisk spans about 62% of the icon; crop to it so `points` is the mark's own size.
+    ys, xs = np.nonzero(mask > 0.02)
+    pad = 8
+    crop = mask[max(0, ys.min() - pad):ys.max() + pad, max(0, xs.min() - pad):xs.max() + pad]
+    side = max(crop.shape)
+    square = np.zeros((side, side), dtype=np.float32)
+    oy, ox = (side - crop.shape[0]) // 2, (side - crop.shape[1]) // 2
+    square[oy:oy + crop.shape[0], ox:ox + crop.shape[1]] = crop
+    alpha = Image.fromarray((square * 255).astype(np.uint8), "L")
+    for scale, suffix in ((1, ""), (2, "@2x"), (3, "@3x")):
+        size = points * scale
+        a = alpha.resize((size, size), Image.LANCZOS)
+        img = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+        img.putalpha(a)
+        img.save(f"{folder}/LaunchMark{suffix}.png")
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "--launch":
+        launch_mark(sys.argv[2])
+        print("wrote launch mark to", sys.argv[2])
+        sys.exit()
     folder = sys.argv[1] if len(sys.argv) > 1 else "."
     compose(GOLDEN, SEED).save(f"{folder}/AppIcon.png")
     compose(DUSK, SEED).save(f"{folder}/AppIcon-Dark.png")

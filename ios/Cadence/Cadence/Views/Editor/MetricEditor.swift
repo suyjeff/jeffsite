@@ -284,7 +284,11 @@ struct MetricEntrySheet: View {
     @Environment(Store.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var value: Double = 0
+    @State private var note = ""
     @State private var loaded = false
+    /// Where the ruler started. Saving a day with no value logs one only if the ruler moved.
+    @State private var startValue: Double?
+    @FocusState private var noteFocused: Bool
 
     var body: some View {
         if let plan = store.plan(planID) {
@@ -310,10 +314,28 @@ struct MetricEntrySheet: View {
                     RulerPicker(value: $value, step: plan.step, range: 0...max(1000, value * 3), label: plan.name)
                 }
 
+                // A note for this day only ("after a long run"); it never repeats to other days.
+                TextField("Add a note", text: $note, axis: .vertical)
+                    .font(.cadenceBodyMedium)
+                    .foregroundStyle(Color.ink)
+                    .lineLimit(1...3)
+                    .focused($noteFocused)
+                    .submitLabel(.done)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.hairline, lineWidth: 1)
+                    }
+                    .padding(.horizontal, Metrics.gutter)
+                    .accessibilityLabel("Note for \(DayText.long(day))")
+
                 HStack(spacing: 12) {
                     if plan.value(on: day) != nil {
                         Button {
                             store.setValue(planID, on: day, value: nil)
+                            store.setNote(planID, on: day, note: note)
                             Feedback.play(.uncheck)
                             dismiss()
                         } label: {
@@ -325,8 +347,15 @@ struct MetricEntrySheet: View {
                         .buttonStyle(.glass)
                     }
                     Button {
-                        store.setValue(planID, on: day, value: value)
-                        Feedback.play(.log)
+                        // Opened just to write a note on an unlogged day: keep it a note.
+                        let moved = startValue.map { abs(value - $0) > plan.step / 2 } ?? true
+                        if plan.value(on: day) != nil || moved {
+                            store.setValue(planID, on: day, value: value)
+                            Feedback.play(.log)
+                        } else {
+                            Haptics.shared.menuChoose()
+                        }
+                        store.setNote(planID, on: day, note: note)
                         dismiss()
                     } label: {
                         Text("Save")
@@ -343,6 +372,8 @@ struct MetricEntrySheet: View {
             .onAppear {
                 guard !loaded else { return }
                 value = store.draft(for: plan, on: day)
+                startValue = value
+                note = plan.note(on: day) ?? ""
                 loaded = true
             }
         }

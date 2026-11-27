@@ -117,14 +117,14 @@ final class Haptics {
         soft.prepare()
     }
 
-    /// A card popping out of the stack and the next one opening: a crisp lift, then the
-    /// weight of the new card landing.
+    /// A card sent to the back: a light lift as it leaves the finger, then the weight of the
+    /// new card landing in front, timed to the moment it visibly settles.
     func pop() {
         play([
-            transient(at: 0, intensity: 0.75, sharpness: 0.7),
-            transient(at: 0.07, intensity: 0.9, sharpness: 0.3),
-            continuous(at: 0.075, duration: 0.06, intensity: 0.3, sharpness: 0.15),
-        ], fallback: { self.medium.impactOccurred(intensity: 0.9) })
+            transient(at: 0, intensity: 0.55, sharpness: 0.45),
+            transient(at: 0.12, intensity: 0.85, sharpness: 0.25),
+            continuous(at: 0.125, duration: 0.05, intensity: 0.25, sharpness: 0.1),
+        ], fallback: { self.soft.impactOccurred(intensity: 0.85) })
     }
 
     /// A card thrown sideways landing in the stack.

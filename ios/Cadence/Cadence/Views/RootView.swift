@@ -26,6 +26,8 @@ struct RootView: View {
     @State private var dayEdit: DayTarget?
     @State private var valueEdit: DayTarget?
     @State private var celebrating = false
+    /// The launch screen's hand-off has finished (once per launch).
+    @State private var launched = false
     /// +1 when moving down the view menu (Today → Week → Month), −1 when moving up.
     @State private var modeDirection = 1
 
@@ -34,6 +36,12 @@ struct RootView: View {
     var body: some View {
         withLifecycle(withSheets(navigation))
             .environment(\.menuController, menu)
+            .overlay {
+                // Outside the themed screen, so changing theme never replays it.
+                if !launched {
+                    LaunchCurtain { launched = true }
+                }
+            }
     }
 
     /// The main screen, with Settings pushed over it as a full page.
@@ -149,7 +157,7 @@ struct RootView: View {
             }
             .sheet(item: $valueEdit) { target in
                 MetricEntrySheet(planID: target.planID, day: target.day)
-                    .presentationDetents([.height(340)])
+                    .presentationDetents([.height(420), .large])
             }
     }
 
@@ -372,6 +380,42 @@ struct RootView: View {
             try? await Task.sleep(for: .seconds(2.4))
             withAnimation(.easeOut(duration: 0.22)) {
                 celebrating = false
+            }
+        }
+    }
+}
+
+/// Picks up exactly where the launch screen leaves off (the same dark field, the same
+/// asterisk, at the same place and size) and hands over to the app: the mark turns a little
+/// and recedes as it fades, then the field lifts a beat later to reveal the page. Once per
+/// launch, so it's allowed a moment of delight; a fade alone under Reduce Motion.
+private struct LaunchCurtain: View {
+    var onFinished: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var markGone = false
+    @State private var fieldGone = false
+
+    var body: some View {
+        ZStack {
+            Color("LaunchBackground")
+                .opacity(fieldGone ? 0 : 1)
+            Image("LaunchMark")
+                .rotationEffect(.degrees(markGone && !reduceMotion ? 22 : 0))
+                .scaleEffect(markGone && !reduceMotion ? 0.82 : 1)
+                .opacity(markGone ? 0 : 1)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(!fieldGone)
+        .accessibilityHidden(true)
+        .task {
+            try? await Task.sleep(for: .milliseconds(140))
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .easeOut(duration: 0.32)) { markGone = true }
+            try? await Task.sleep(for: .milliseconds(reduceMotion ? 0 : 90))
+            withAnimation(.easeOut(duration: 0.36), completionCriteria: .logicallyComplete) {
+                fieldGone = true
+            } completion: {
+                onFinished()
             }
         }
     }

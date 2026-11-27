@@ -87,9 +87,10 @@ enum TrendText {
         let change = value - previous
         let sign = change > 0 ? "+" : change < 0 ? "−" : "±"
         let when = previousDay == day.adding(-1)
-            ? "YESTERDAY"
-            : previousDay.date.formatted(.dateTime.month(.abbreviated).day()).uppercased()
-        return "\(sign)\(plan.format(abs(change))) SINCE \(when)"
+            ? "yesterday"
+            : previousDay.date.formatted(.dateTime.month(.abbreviated).day())
+        let unit = plan.unit.isEmpty ? "" : " \(plan.unit)"
+        return "\(sign)\(plan.format(abs(change)))\(unit) since \(when)"
     }
 
     static func previousLoggedDay(_ plan: Plan, before day: Day) -> Day? {

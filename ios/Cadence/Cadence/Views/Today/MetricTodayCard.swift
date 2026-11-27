@@ -48,7 +48,20 @@ struct MetricTodayCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
 
-                MonoLabel(text: TrendText.delta(plan, value: draft, before: day) ?? "FIRST ENTRY", style: .cadenceCaption)
+                // The trend reads as a sentence, in the content face, not as a label.
+                Text(TrendText.delta(plan, value: draft, before: day) ?? "First entry")
+                    .font(.cadenceSubhead)
+                    .foregroundStyle(Color.inkSecondary)
+                    .contentTransition(.opacity)
+                if let note = plan.note(on: day) {
+                    Text(note)
+                        .font(.cadenceSubhead)
+                        .foregroundStyle(Color.ink)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .padding(.top, 2)
+                        .transition(.opacity)
+                }
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
@@ -79,9 +92,8 @@ struct MetricTodayCard: View {
             )
             .padding(.horizontal, -Metrics.cardPadding)
 
+            // When it was logged shows (muted) only when the card is held.
             HStack(alignment: .center) {
-                MonoLabel(text: footerText(status: status))
-                    .contentTransition(.opacity)
                 Spacer()
                 CheckButton(
                     look: isLogged ? .done : status == .skipped ? .skipped : .open,
@@ -107,17 +119,6 @@ struct MetricTodayCard: View {
         .animation(Motion.standard, value: recent.count >= 2)
     }
 
-    private func footerText(status: DayStatus) -> String {
-        switch status {
-        case .done:
-            if let at = plan.record(on: day).completedAt { return "LOGGED · \(DayText.time(at))" }
-            return "LOGGED"
-        case .skipped:
-            return ""
-        default:
-            return ""
-        }
-    }
 
     private func logTapped() {
         // The release that ends a hold on the check isn't a tap.

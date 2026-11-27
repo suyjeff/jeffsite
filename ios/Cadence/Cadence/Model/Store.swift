@@ -162,6 +162,10 @@ final class Store {
         return .cleared
     }
 
+    func setNote(_ id: UUID, on day: Day, note: String?) {
+        update(id) { $0.setNote(note, on: day) }
+    }
+
     func setValue(_ id: UUID, on day: Day, value: Double?) {
         update(id) { $0.setValue(value, on: day) }
         if day == today { drafts[id] = nil }

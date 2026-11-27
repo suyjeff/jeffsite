@@ -18,18 +18,20 @@ The project uses a synchronized folder, so any file added under `Cadence/` is pi
 
 **Moving between plans** works the same in every view, and the dots under the cards show where you are. Tap a dot to jump there, or press and slide along the dots to page through every plan, a tick for each, with the dots swelling under your finger.
 - **Sideways**: drag the card left for the next plan, right for the previous one. It stays under your finger as long as you hold it, getting heavier the further it goes, with that plan rising behind it. Let go past about a third of the way (or flick) and it's thrown into the stack with one solid tap; otherwise it springs back.
-- **Pull down**: a longer pull. The card fades, darkens and softens as the one behind rises, with an even tick, tick, tick as it loads and a click once it's far enough. Let go and the card pops up out of the stack and sinks to the back, out of focus, as the next one opens. Push up to bring the previous plan back.
+- **Pull down**: a longer pull. The card is drawn off the stack toward you (lifting, a deeper shadow, slipping out of the light) while the one behind rises, with an even tick, tick, tick as it loads and a click once it's far enough. Let go and it drops behind the stack and slides up into the back, in the stack's shade, as the new card lands in front. Push up to bring the previous plan back.
 - On Week and Month the card scrolls first; once it's at its top (or bottom) the same pull moves the deck.
 
 **Status** reads the same everywhere: a finished part of a card, a row or a calendar day settles a step darker, with a green ✓ when done or a red ✕ when skipped.
 
-**Today** is a deck, one card per plan. Tap the check to mark the day done ("da-ding"); on AM/PM plans it checks off the next half, and each half can be tapped on its own. Scales show a ruler: scrub it, then tap the check to log. Streaks show the current run and the last two weeks.
+**Today** is a deck, one card per plan. Tap the check to mark the day done ("da-ding"); on AM/PM plans it checks off the next half, and each half can be tapped on its own. Scales show a ruler: scrub it, then tap the check to log. A scale day can carry its own note (⋯ > Add a note, or tap the row in Week/Month); notes never repeat to other days. Streaks show the current run and the last two weeks.
 
-**Holding things.** Hold a card (on Today, anywhere on it; on Week and Month, its top strip) and it lifts while everything around it blurs. On a two-part Today card, the part you hold lifts on its own. A pill rises near the bottom: **Mark as Done** (a solid green **Done** once it is; tap it again to undo), Delete in red (confirmed in a bubble pointing at it), and ⋯ for the rest (skip, edit, duplicate). Hold a row in Week or Month to lift just that day.
+**Holding things.** Hold a card (on Today, anywhere on it; on Week and Month, its top strip) and it lifts while everything around it blurs; the lifted card stays live, so a scale's ruler can be scrubbed again. On a two-part Today card, the part you hold lifts on its own. When it was done shows quietly above the pill, and only there. A pill rises near the bottom: **Mark as Done** (a solid green **Done** once it is; tap it again to undo), Delete in red (confirmed in a bubble pointing at it), and ⋯ for the rest (skip, edit, duplicate). Hold a row in Week or Month to lift just that day.
 
 **Week / Month**: each card keeps its header (name, period, weekday names) fixed and scrolls its days inside. Tap a day to check it off (with AM/PM, tap each column). Move to another week or month with the arrows; **Back to this week** appears at the bottom of the card when you've moved away. Month shows each day's state in the calendar; tap a day for the rest of its week.
 
-**Settings** (from ⋯) is a full page: the theme (five Tailwind neutrals: Mauve, the design's own, plus Taupe, Olive, Mist and Zinc), sounds and haptics.
+**Settings** (from ⋯) is a full page: the theme (five Tailwind neutrals: Mauve, the design's own, plus Taupe, Olive, Mist and Zinc, each shown as dots of the colors it changes), sounds and haptics.
+
+**Launch**: a dark field with the sketched asterisk, which the app picks up from exactly where the system leaves it: the mark turns a little and recedes, then the field lifts to the page.
 
 **Plans**: editing a plan opens just that plan; ✓ closes it, and **All plans** leads to the list. In the list, tap a plan to open it, swipe right to mark today done, left to delete, or Edit to reorder.
 

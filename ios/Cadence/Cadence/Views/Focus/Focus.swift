@@ -364,9 +364,10 @@ struct FocusLayer: View {
             let pillTop = pillY - pillHeight / 2
 
             ZStack(alignment: .topLeading) {
-                // Tap anywhere outside the pill to close.
+                // Tap anywhere outside the pill to close; but not on a card lifted in place,
+                // which stays live (a scale's ruler can be scrubbed again without closing).
                 Color.clear
-                    .contentShape(.rect)
+                    .contentShape(HoleShape(hole: item.liftsInPlace ? liftedRect : .null), eoFill: true)
                     .onTapGesture { close() }
                     .accessibilityLabel("Close options")
                     .accessibilityAddTraits(.isButton)
@@ -393,6 +394,19 @@ struct FocusLayer: View {
                         .accessibilityHidden(true)
                 }
 
+                if let caption = statusCaption {
+                    // When it was done, quiet, just above the pill; only ever shown here.
+                    Text(caption)
+                        .font(.cadenceSubhead)
+                        .foregroundStyle(Color.inkSecondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Color.surface.opacity(0.7), in: Capsule())
+                        .opacity(pillShown ? 1 : 0)
+                        .position(x: size.width / 2, y: pillTop - 22 + (pillShown || reduceMotion ? 0 : 16))
+                        .allowsHitTesting(false)
+                }
+
                 FocusPill(item: item, fallback: snapshot, actions: actions, onDone: close)
                     .scaleEffect(pillShown || reduceMotion ? 1 : 0.92)
                     .opacity(pillShown ? 1 : 0)
@@ -408,6 +422,38 @@ struct FocusLayer: View {
             withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.3, bounce: 0.22).delay(0.04)) {
                 pillShown = true
             }
+        }
+    }
+
+    /// The lifted card's visible rectangle, at its lifted size, clipped to the content area.
+    private var liftedRect: CGRect {
+        let grow: CGFloat = reduceMotion ? 1 : 1.025
+        let card = CGRect(
+            x: item.frame.midX - item.frame.width * grow / 2 - 1,
+            y: item.frame.midY - item.frame.height * grow / 2 - 1,
+            width: item.frame.width * grow + 2,
+            height: item.frame.height * grow + 2
+        )
+        return card.intersection(contentArea.isInfinite ? card : contentArea)
+    }
+
+    /// "Done at 7:42 AM", "Logged at 7:42 AM" or "Skipped" for the held day.
+    private var statusCaption: String? {
+        guard let plan = store.plan(item.planID) else { return nil }
+        let day: Day
+        switch item.kind {
+        case .plan: day = store.today
+        case .day(_, let held, _): day = held
+        }
+        let record = plan.record(on: day)
+        switch plan.status(on: day) {
+        case .done:
+            guard let at = record.completedAt else { return plan.isMetric ? "Logged" : "Done" }
+            return "\(plan.isMetric ? "Logged" : "Done") at \(DayText.time(at))"
+        case .skipped:
+            return "Skipped"
+        default:
+            return nil
         }
     }
 
@@ -593,11 +639,17 @@ private struct FocusPill: View {
                 actions.editPlan(plan.id)
             },
         ]
-        // A streak has nothing written for a day, so there's no day to edit.
-        if !plan.isStreak {
-            editing.append(MenuItem(id: "today", title: plan.isMetric ? "Change today's value" : "Edit today", systemImage: "pencil") {
+        // A streak has nothing written for a day, so there's no day to edit. A scale's day
+        // holds its value and a note of its own.
+        if plan.isMetric {
+            editing.append(MenuItem(id: "note", title: plan.note(on: today) == nil ? "Add a note" : "Edit note", systemImage: "text.bubble") {
                 onDone()
-                plan.isMetric ? actions.editValue(plan.id, today) : actions.editDay(plan.id, today)
+                actions.editValue(plan.id, today)
+            })
+        } else if !plan.isStreak {
+            editing.append(MenuItem(id: "today", title: "Edit today", systemImage: "pencil") {
+                onDone()
+                actions.editDay(plan.id, today)
             })
         }
         let more = [
@@ -684,6 +736,12 @@ private struct FocusPill: View {
             })
         }
         var editing: [MenuItem] = []
+        if plan.isMetric, day <= store.today {
+            editing.append(MenuItem(id: "note", title: plan.note(on: day) == nil ? "Add a note" : "Edit note", systemImage: "text.bubble") {
+                onDone()
+                actions.editValue(plan.id, day)
+            })
+        }
         if !plan.isMetric && !plan.isStreak {
             editing.append(MenuItem(id: "day", title: "Edit this day", systemImage: "pencil") {
                 onDone()
@@ -702,6 +760,20 @@ private struct FocusPill: View {
             actions.editPlan(plan.id)
         })
         return [marking, editing].filter { !$0.isEmpty }
+    }
+}
+
+/// A full-screen shape with a rounded hole, filled even-odd: hit testing that passes through
+/// the hole to the lifted card below.
+private struct HoleShape: Shape {
+    var hole: CGRect
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path(rect)
+        if !hole.isNull, !hole.isEmpty {
+            path.addRoundedRect(in: hole, cornerSize: CGSize(width: Metrics.cardRadius, height: Metrics.cardRadius), style: .continuous)
+        }
+        return path
     }
 }
 

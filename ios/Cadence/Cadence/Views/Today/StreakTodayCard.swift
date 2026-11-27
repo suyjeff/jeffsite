@@ -48,10 +48,8 @@ struct StreakTodayCard: View {
             .padding(.bottom, 20)
             .accessibilityHidden(true)
 
+            // The green ✓ says done; when it was done shows (muted) only when the card is held.
             HStack(alignment: .center) {
-                MonoLabel(text: footerText(status))
-                    .contentTransition(.opacity)
-                    .animation(Motion.settle, value: footerText(status))
                 Spacer()
                 CheckButton(
                     look: status == .done ? .done : status == .skipped ? .skipped : .open,
@@ -72,13 +70,6 @@ struct StreakTodayCard: View {
                 .padding(.trailing, Metrics.cardPadding)
                 .padding(.bottom, Metrics.cardPadding - 2)
         }
-    }
-
-    private func footerText(_ status: DayStatus) -> String {
-        guard status == .done else { return "" }
-        // The green ✓ above says done; this says when.
-        if let at = plan.record(on: day).completedAt { return "DONE · \(DayText.time(at))" }
-        return "DONE"
     }
 
     private func checkTapped() {

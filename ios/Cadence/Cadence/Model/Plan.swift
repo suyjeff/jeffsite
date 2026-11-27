@@ -57,10 +57,12 @@ struct DayRecord: Codable, Hashable, Sendable {
     var marks: [Int: Mark] = [:]
     /// Metric plans only.
     var value: Double?
-    /// When the day (or the value) was completed, for the "Done 7:42 AM" detail.
+    /// When the day (or the value) was completed, shown (muted) when the day is held.
     var completedAt: Date?
+    /// A note for this one day of a scale ("after a long run"). Never carried to other days.
+    var note: String?
 
-    var isEmpty: Bool { marks.isEmpty && value == nil }
+    var isEmpty: Bool { marks.isEmpty && value == nil && (note ?? "").isEmpty }
 }
 
 /// How a day reads at a glance.
@@ -199,6 +201,15 @@ struct Plan: Identifiable, Codable, Hashable, Sendable {
         record.completedAt = mark == .done ? Date() : nil
         store(record, on: day)
     }
+
+    mutating func setNote(_ note: String?, on day: Day) {
+        var record = record(on: day)
+        let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        record.note = trimmed.isEmpty ? nil : trimmed
+        store(record, on: day)
+    }
+
+    func note(on day: Day) -> String? { records[day.key]?.note }
 
     mutating func setValue(_ value: Double?, on day: Day) {
         var record = record(on: day)

@@ -14,18 +14,21 @@ struct DeckSlot {
 ///   previous). Nothing commits while the finger is down. On release past a third of the
 ///   width, or on a flick, the card is thrown off with the finger's velocity and tucks into the
 ///   stack, with one solid haptic; otherwise it springs back.
-/// - **Pull down** (a longer pull): the card follows with resistance and fades a little as the
-///   one behind it rises into view, with a haptic hum that tightens as the pull loads and a
-///   detent once it's far enough. On release the card pops up out of the stack and drops to the
-///   back as the next one opens, with a second haptic. Pushing up brings the previous plan back.
+/// - **Pull down** (a longer pull): the card is drawn off the stack toward you, close to 1:1
+///   and then heavier, lifting (a touch larger, a deeper shadow) and leaving the stack's light,
+///   while the card behind rises into place, with an even tick for every sixth of the pull and a
+///   detent once it's far enough. On release the card drops behind the stack and slides up into
+///   the back slot in its shade, and the new card lands in front. Pushing up brings the
+///   previous plan back.
 ///
-/// Every value on screen (offset, tilt, fade, the card behind, the hum) derives from the one drag,
-/// so they never drift apart when the finger reverses. On Week and Month the cards scroll inside;
+/// Every value on screen (offset, tilt, lift, shade, the card behind, the ticks) derives from the
+/// one drag, so they never drift apart when the finger reverses. On Week and Month the cards scroll inside;
 /// the deck takes a vertical drag only at the card's scroll edges.
 struct PlanDeck<Card: View>: View {
     @Environment(Store.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.focusedKey) private var focusedKey
+    @Environment(\.menuController) private var menu
 
     @Binding var frontID: UUID?
     /// Today drags with SwiftUI (so the ruler inside a card wins its own drags); Week and Month
@@ -41,10 +44,9 @@ struct PlanDeck<Card: View>: View {
     @State private var axis: Axis?
     @State private var armed = false
     @State private var flying = false
-    @State private var popping: UUID?
     @State private var reentering: UUID?
-    /// The card that just popped, on its way to the back: blurred and dimmed as it sinks.
-    @State private var sinking: UUID?
+    /// The card on its way to the back after a pull: in the stack's shade until it lands.
+    @State private var tucking: UUID?
     /// Which tick of the pull the haptics last played (0 = none).
     @State private var pullStep = 0
     /// Where the deck is headed once a throw or pop lands. The dots move there on release,
@@ -83,6 +85,7 @@ struct PlanDeck<Card: View>: View {
                     .contentShape(.rect)
                     .modifier(DeckGesture(
                         cardsScroll: cardsScroll,
+                        isEnabled: focusedKey == nil && !flying && !(menu?.isOpen ?? false),
                         onChanged: { changed($0, width: width, count: plans.count) },
                         onEnded: { ended($0, velocity: $1, width: width, count: plans.count) },
                         onCancelled: { cancelled() }
@@ -117,13 +120,12 @@ struct PlanDeck<Card: View>: View {
         let effective = isFront ? 0 : max(0, CGFloat(depth) - promote)
         let visibleDepth = min(effective, 2)
         let isReentering = reentering == plan.id
-        // A pull fades, darkens and softens the front card as the one behind rises. Derived
-        // from the animated drag (not the gesture), so it eases back with the card instead of
-        // snapping on release.
-        let pull = isFront && abs(drag.height) > abs(drag.width) ? promote : 0
-        let fade = 1 - 0.22 * Double(pull)
-        // A popped card sinks into the stack: out of focus and in shadow until it lands.
-        let sinks = sinking == plan.id
+        // Pulled down, the front card is drawn off the stack toward you: it lifts (a touch
+        // larger, a deeper shadow) and leaves the stack's light (a touch darker). Derived from
+        // the animated drag, so it all eases back with the card if released early.
+        let lift = isFront && drag.height > 0 && abs(drag.height) > abs(drag.width) ? promote : 0
+        // A card sent to the back passes into the stack's shade, then lightens once it's settled.
+        let tucks = tucking == plan.id && !isFront
 
         Group {
             // Only the front card and the one about to come forward are drawn in full; the
@@ -136,23 +138,28 @@ struct PlanDeck<Card: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
-            // Back cards read as blank paper, as in the design; their content fades up
-            // as they come forward.
+            // Back cards are blank paper, as in the design, all alike so nothing changes color
+            // as they shift. Content shows only over the last half of coming forward, so a
+            // half-made swipe never shows two cards' worth of color mixing.
             Rectangle()
                 .fill(Color.surface)
-                .opacity(Double(min(effective, 1)))
+                .opacity(Double(min(1, effective * 2)))
                 .allowsHitTesting(false)
         }
-        .cardSurface(elevated: depth <= 1)
+        .cardSurface()
+        .background {
+            // The lifted card's shadow, on its own shape so the content isn't shadowed.
+            RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous)
+                .fill(Color.surface)
+                .shadow(color: Color.cardShadow.opacity(0.2 * Double(lift)), radius: 18, x: 0, y: 12)
+        }
         .focusableCard(plan.id)
         .scaleEffect(1 - Metrics.deckScaleStep * visibleDepth, anchor: .top)
         // Only one card peeks: deeper cards sit behind it, fading up as they come forward.
         .offset(y: -Metrics.deckPeek * min(visibleDepth, 1))
         .opacity(effective > 1 ? Double(max(0, 2 - effective)) : 1)
-        .opacity(fade)
-        .brightness(-0.14 * Double(pull) - (sinks ? 0.18 : 0))
-        .blur(radius: reduceMotion ? 0 : 5 * pull + (sinks ? 6 : 0))
-        .scaleEffect(popping == plan.id && !reduceMotion ? 1.06 : 1)
+        .brightness(-0.05 * Double(lift) - (tucks ? 0.1 : 0))
+        .scaleEffect(reduceMotion ? 1 : 1 + 0.025 * lift)
         .scaleEffect(isReentering ? 0.97 : 1, anchor: .top)
         .opacity(isReentering ? 0 : 1)
         .offset(isFront ? drag : .zero)
@@ -201,12 +208,15 @@ struct PlanDeck<Card: View>: View {
                 return
             }
             let pulling = t.height > 0
-            drag = CGSize(width: 0, height: Motion.rubberband(t.height * 0.6, limit: pulling ? 64 : 44))
-            promote = min(1, abs(t.height) / pullDistance)
+            // Close to 1:1 at first, then heavier: the card is held by the stack.
+            drag = CGSize(width: 0, height: Motion.rubberband(t.height * 0.8, limit: pulling ? 96 : 48))
+            // The card behind rises most of the way while the finger is down; the last bit is
+            // the landing on release.
+            promote = min(1, abs(t.height) / pullDistance) * 0.88
             setReveal(pulling ? 1 : -1)
             // Tick, tick, tick: one even tap for every sixth of the way, then the detent when
             // it's far enough. Felt as notches, never a buzz.
-            let step = min(Int(promote * 6), 5)
+            let step = min(Int(abs(t.height) / pullDistance * 6), 5)
             if step > pullStep { Haptics.shared.pullTick() }
             pullStep = step
             setArmed(abs(t.height) >= pullDistance)
@@ -236,8 +246,10 @@ struct PlanDeck<Card: View>: View {
                 settle(velocity: v)
             }
         case .vertical?:
-            if t.height >= pullDistance {
-                popToBack(count: count)
+            // A deliberate pull commits by distance; a fast flick past halfway does too.
+            let flick = v.height > 1100 && t.height > pullDistance * 0.5
+            if t.height >= pullDistance || flick {
+                popToBack(count: count, velocity: v.height)
             } else if t.height <= -pullDistance {
                 cycle(by: -1, count: count, velocity: v.height)
             } else {
@@ -260,8 +272,9 @@ struct PlanDeck<Card: View>: View {
 
     private func setReveal(_ value: Int) {
         guard value != reveal else { return }
-        // The card behind swaps quickly when the drag changes direction.
-        withAnimation(reduceMotion ? nil : Motion.snappy) { reveal = value }
+        // Back cards are identical blank paper, so the one behind can swap in place, at once,
+        // when the drag changes direction: nothing to see but no shuffle to flicker.
+        reveal = value
     }
 
     private func setArmed(_ value: Bool) {
@@ -303,16 +316,20 @@ struct PlanDeck<Card: View>: View {
         }
     }
 
-    /// Pull down: the card pops up out of the stack, then drops to the back as the next card
-    /// opens into view. Two beats, about a third of a second in all.
-    private func popToBack(count: Int) {
+    /// Pull down, released: the card goes to the back in one motion. It drops behind the
+    /// stack at once (its lower edge still showing below the new front card), slides up into
+    /// the back slot in the stack's shade, and lightens once settled; the card that rose behind
+    /// it lands in front with a little give. About a third of a second, with a lift-and-land
+    /// haptic in step.
+    private func popToBack(count: Int, velocity: CGFloat) {
         guard let plan = store.plan(frontID) ?? store.plans.first else { return }
         flying = true
         Feedback.play(.pop)
+        let next = neighbor(of: plan.id, step: 1)
         withAnimation(Motion.snappy) { landing = landingIndex(from: plan.id, step: 1) }
         guard !reduceMotion else {
-            withAnimation(Motion.standard) {
-                frontID = neighbor(of: plan.id, step: 1)
+            withAnimation(.easeOut(duration: 0.2)) {
+                frontID = next
                 landing = nil
                 drag = .zero
                 promote = 0
@@ -321,35 +338,24 @@ struct PlanDeck<Card: View>: View {
             flying = false
             return
         }
-        // Beat one: the card lifts toward you, out of the stack.
-        withAnimation(.spring(duration: 0.1, bounce: 0), completionCriteria: .logicallyComplete) {
-            popping = plan.id
-            promote = 1
-            drag = CGSize(width: 0, height: drag.height * 0.4)
+        // The stack settles on a plain spring; only the thrown card's travel is seeded with the
+        // finger's speed (a flicked card carries on down for a beat before it turns and goes
+        // behind), so the release has no seam and nothing else gets kicked.
+        withAnimation(.spring(duration: 0.34, bounce: 0.14), completionCriteria: .logicallyComplete) {
+            frontID = next
+            landing = nil
+            tucking = plan.id
+            promote = 0
+            reveal = 0
         } completion: {
-            // Beat two: it drops behind, sinking out of focus, as the next card opens.
-            withAnimation(.spring(duration: 0.28, bounce: 0.1), completionCriteria: .logicallyComplete) {
-                frontID = neighbor(of: plan.id, step: 1)
-                landing = nil
-                popping = nil
-                sinking = plan.id
-                drag = .zero
-                promote = 0
-                reveal = 0
-            } completion: {
-                withAnimation(.easeOut(duration: 0.16)) { sinking = nil }
-                flying = false
-            }
+            withAnimation(.easeOut(duration: 0.2)) { tucking = nil }
         }
-    }
-
-    /// The plan `step` places from `id` in the store as it is now (it may have changed during
-    /// an animation), or the first plan if `id` is gone.
-    private func neighbor(of id: UUID, step: Int) -> UUID? {
-        let plans = store.plans
-        guard !plans.isEmpty else { return nil }
-        guard let index = store.index(of: id) else { return plans.first?.id }
-        return plans[((index + step) % plans.count + plans.count) % plans.count].id
+        withAnimation(Motion.release(velocity: velocity, distance: -drag.height, duration: 0.34, bounce: 0.14)) {
+            drag = .zero
+        }
+        // The new card is already in front: it takes the next gesture now, while the old one
+        // is still settling behind.
+        flying = false
     }
 
     private func landingIndex(from id: UUID, step: Int) -> Int? {
@@ -496,9 +502,12 @@ struct DeckDots: View {
 }
 
 /// The deck's drag. Today uses SwiftUI's drag on the whole card, so a drag inside it (the
-/// ruler) keeps precedence. Week and Month use a UIKit pan that defers to the card's scroll.
+/// ruler) keeps precedence. Week and Month cards scroll, and a gesture attached through SwiftUI
+/// loses to the card's own scroll view in SwiftUI's arbitration; their deck drag is a plain
+/// UIKit pan (`DeckPanHost`) that the scroll view is told to wait for.
 private struct DeckGesture: ViewModifier {
     var cardsScroll: Bool
+    var isEnabled: Bool
     var onChanged: (CGSize) -> Void
     var onEnded: (CGSize, CGSize) -> Void
     var onCancelled: () -> Void
@@ -521,73 +530,139 @@ private struct DeckGesture: ViewModifier {
                     if !isDragging { onCancelled() }
                 }
         } else {
-            content.gesture(DeckPan(onChanged: onChanged, onEnded: onEnded))
+            content.background {
+                DeckPanHost(isEnabled: isEnabled, onChanged: onChanged, onEnded: onEnded, onCancelled: onCancelled)
+            }
         }
     }
 }
 
-/// The deck's pan for cards that scroll. Sideways it always wins (that's switching plans).
-/// Vertically it wins over the card's scroll view only at the scroll's edges: pulling down
-/// when scrolled to the top, pushing up at the bottom (or either way when the content fits).
-/// Anywhere else it fails at once and the card scrolls.
-struct DeckPan: UIGestureRecognizerRepresentable {
+/// Hosts the deck's pan for cards that scroll. An invisible view the size of the deck that,
+/// once on screen, adds a plain `UIPanGestureRecognizer` to the window's root view, outside
+/// SwiftUI's gesture arbitration, so UIKit's own rules apply:
+/// - Sideways it always begins (that's switching plans).
+/// - Vertically it begins only at the card's scroll edge it's pulling away from: down at the
+///   top, up at the bottom, either way when the content fits.
+/// - Every scroll view inside the deck waits for it to fail, which happens at once whenever
+///   it shouldn't begin, so scrolling never feels delayed.
+/// Touches outside the deck, or while it's disabled (a card lifted, a menu open), are ignored.
+struct DeckPanHost: UIViewRepresentable {
+    var isEnabled: Bool
     var onChanged: (CGSize) -> Void
     var onEnded: (CGSize, CGSize) -> Void
+    var onCancelled: () -> Void
 
-    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+    func makeUIView(context: Context) -> HostView {
+        let view = HostView()
+        view.isUserInteractionEnabled = false
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ view: HostView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.isEnabled = isEnabled
+        coordinator.onChanged = onChanged
+        coordinator.onEnded = onEnded
+        coordinator.onCancelled = onCancelled
+    }
+
+    static func dismantleUIView(_ view: HostView, coordinator: Coordinator) {
+        coordinator.detach()
+    }
+
+    func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
-    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
-        let pan = UIPanGestureRecognizer()
-        pan.maximumNumberOfTouches = 1
-        pan.delegate = context.coordinator
-        return pan
-    }
+    final class HostView: UIView {
+        weak var coordinator: Coordinator?
 
-    func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
-        let t = pan.translation(in: pan.view)
-        let translation = CGSize(width: t.x, height: t.y)
-        switch pan.state {
-        case .began, .changed:
-            onChanged(translation)
-        case .ended:
-            let v = pan.velocity(in: pan.view)
-            onEnded(translation, CGSize(width: v.x, height: v.y))
-        case .cancelled, .failed:
-            onEnded(.zero, .zero)
-        default:
-            break
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil {
+                coordinator?.attach(to: self)
+            } else {
+                coordinator?.detach()
+            }
         }
     }
 
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var isEnabled = true
+        var onChanged: (CGSize) -> Void = { _ in }
+        var onEnded: (CGSize, CGSize) -> Void = { _, _ in }
+        var onCancelled: () -> Void = {}
+
+        private weak var host: UIView?
+        private var pan: UIPanGestureRecognizer?
+
+        func attach(to host: UIView) {
+            self.host = host
+            // The root view: an ancestor of every scroll view in the deck, and of nothing in a
+            // presented sheet. If the pan is on another root (the window's root changed), move it.
+            guard let root = host.window?.rootViewController?.view else { return }
+            if let pan, pan.view === root { return }
+            detach()
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(handle(_:)))
+            pan.maximumNumberOfTouches = 1
+            pan.delegate = self
+            root.addGestureRecognizer(pan)
+            self.pan = pan
+        }
+
+        func detach() {
+            if let pan { pan.view?.removeGestureRecognizer(pan) }
+            pan = nil
+        }
+
+        @objc private func handle(_ pan: UIPanGestureRecognizer) {
+            let t = pan.translation(in: pan.view)
+            let translation = CGSize(width: t.x, height: t.y)
+            switch pan.state {
+            case .began, .changed:
+                onChanged(translation)
+            case .ended:
+                let v = pan.velocity(in: pan.view)
+                onEnded(translation, CGSize(width: v.x, height: v.y))
+            case .cancelled, .failed:
+                onCancelled()
+            default:
+                break
+            }
+        }
+
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            guard let pan = gestureRecognizer as? UIPanGestureRecognizer, let view = pan.view else { return false }
-            let velocity = pan.velocity(in: view)
+            guard isEnabled, let pan = gestureRecognizer as? UIPanGestureRecognizer, let host, let root = pan.view else {
+                return false
+            }
+            guard host.bounds.contains(pan.location(in: host)) else { return false }
+            let velocity = pan.velocity(in: root)
             if abs(velocity.x) > abs(velocity.y) { return true }
-            guard let scroll = scrollView(at: pan.location(in: view), in: view) else { return true }
+            guard let scroll = scrollView(at: pan.location(in: root), in: root) else { return true }
             let top = -scroll.adjustedContentInset.top
             let bottom = max(top, scroll.contentSize.height + scroll.adjustedContentInset.bottom - scroll.bounds.height)
             let offset = scroll.contentOffset.y
             return velocity.y > 0 ? offset <= top + 1 : offset >= bottom - 1
         }
 
-        /// The card's scroll view waits for this pan to decide, so a pull at the edge never
-        /// starts a scroll first.
+        /// Scroll views inside the deck wait for this pan to decide.
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            otherGestureRecognizer.view is UIScrollView && otherGestureRecognizer is UIPanGestureRecognizer
+            guard let host, let scroll = otherGestureRecognizer.view as? UIScrollView,
+                  otherGestureRecognizer === scroll.panGestureRecognizer else { return false }
+            let frame = scroll.convert(scroll.bounds, to: host)
+            return frame.intersects(host.bounds)
         }
 
         /// The vertically scrolling scroll view under the finger, if any.
-        private func scrollView(at point: CGPoint, in view: UIView) -> UIScrollView? {
-            var candidate = view.hitTest(point, with: nil)
-            while let current = candidate, current !== view {
-                if let scroll = current as? UIScrollView, scroll.contentSize.height > 0, !(scroll.contentSize.width > scroll.bounds.width + 1) {
+        private func scrollView(at point: CGPoint, in root: UIView) -> UIScrollView? {
+            var candidate = root.hitTest(point, with: nil)
+            while let current = candidate, current !== root {
+                if let scroll = current as? UIScrollView, !(scroll.contentSize.width > scroll.bounds.width + 1) {
                     return scroll
                 }
                 candidate = current.superview

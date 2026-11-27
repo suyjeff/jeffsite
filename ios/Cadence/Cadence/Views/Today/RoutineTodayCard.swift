@@ -77,8 +77,8 @@ struct RoutineTodayCard: View {
     private func footerText(_ status: DayStatus) -> String {
         switch status {
         case .done:
-            if let at = plan.record(on: day).completedAt { return "DONE · \(DayText.time(at))" }
-            return "DONE"
+            // When it was done shows (muted) only when the card is held.
+            return ""
         case .skipped:
             // The red ✕ in the corner says it.
             return ""

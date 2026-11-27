@@ -100,11 +100,11 @@ enum Metrics {
     /// Gap between a label and its text. Figma: 12.
     static let labelGap: CGFloat = 12
     /// How far the next card in the deck peeks above the front one. Figma: 10.
-    static let deckPeek: CGFloat = 10
+    static let deckPeek: CGFloat = 7
     /// Gap between the bottom of the deck's cards and the bottom safe area.
     static let deckBottom: CGFloat = 16
     /// Back card width ÷ front card width. Figma: 348 / 372.
-    static let deckScaleStep: CGFloat = 1 - 348.0 / 372.0
+    static let deckScaleStep: CGFloat = 0.045
 }
 
 // MARK: - Card surface
