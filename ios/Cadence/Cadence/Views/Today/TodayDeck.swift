@@ -358,6 +358,15 @@ struct PlanDeck<Card: View>: View {
         flying = false
     }
 
+    /// The plan `step` places from `id` in the store as it is now (it may have changed during
+    /// an animation), or the first plan if `id` is gone.
+    private func neighbor(of id: UUID, step: Int) -> UUID? {
+        let plans = store.plans
+        guard !plans.isEmpty else { return nil }
+        guard let index = store.index(of: id) else { return plans.first?.id }
+        return plans[((index + step) % plans.count + plans.count) % plans.count].id
+    }
+
     private func landingIndex(from id: UUID, step: Int) -> Int? {
         neighbor(of: id, step: step).flatMap { store.index(of: $0) }
     }

@@ -31,9 +31,16 @@ final class Sounds {
     private var lastTick: CFTimeInterval = 0
 
     private init() {
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
-        try? session.setActive(true)
+        // Configuring and activating the audio session can block for a moment; do it off the
+        // main thread so launch never waits on it. The tick engine starts once it's ready.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let session = AVAudioSession.sharedInstance()
+            try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+            try? session.setActive(true)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { Sounds.shared.startTickEngineIfNeeded() }
+            }
+        }
 
         if let url = Bundle.main.url(forResource: Effect.tick.rawValue, withExtension: "wav"),
            let file = try? AVAudioFile(forReading: url),
@@ -42,7 +49,6 @@ final class Sounds {
             tickBuffer = buffer
             engine.attach(tickNode)
             engine.connect(tickNode, to: engine.mainMixerNode, format: buffer.format)
-            startTickEngine()
         }
 
         for effect in Effect.allCases where effect != .tick {
@@ -83,6 +89,11 @@ final class Sounds {
         player.volume = volume
         player.rate = pitch
         player.play()
+    }
+
+    fileprivate func startTickEngineIfNeeded() {
+        guard tickBuffer != nil, !engine.isRunning else { return }
+        startTickEngine()
     }
 
     /// (Re)starts the tick engine; the system stops it on interruptions and route changes.
