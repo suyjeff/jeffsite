@@ -359,6 +359,32 @@
   will-change: opacity;
   transform: translateZ(0);
 }
+.stage :global(.fr-yt) iframe,
+.stage :global(.fr-yt) > div {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+.notice {
+  position: absolute;
+  left: 50%;
+  bottom: 36px;
+  z-index: 6;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 4px 10px;
+  border: 1px solid var(--hair-2);
+  border-radius: 4px;
+  background: rgba(9, 10, 12, 0.86);
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
 .hud {
   position: absolute;
   inset: 0;

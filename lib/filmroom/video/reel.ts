@@ -10,7 +10,12 @@
 // lines up on the release point whatever its source: NBA pbp MP4s, a window into full-game film, or proxy film.
 // Frame identity comes from requestVideoFrameCallback's mediaTime (presented frame), not currentTime.
 
-export type ClipKind = "nba" | "local" | "proxy";
+import { YouTubeMedia } from "./youtube";
+
+export type ClipKind = "nba" | "local" | "youtube" | "proxy";
+
+/** The media surface the reel drives: a <video>, or YouTube's player behind the same interface. */
+type Media = HTMLVideoElement | YouTubeMedia;
 
 export interface Clip {
   key: string;
@@ -47,7 +52,7 @@ export interface FrameState {
 }
 
 interface Slot {
-  el: HTMLVideoElement;
+  el: Media;
   clip: Clip | null;
   index: number;
   ready: boolean;
@@ -100,10 +105,25 @@ export class ReelController {
       el.addEventListener("playing", () => this.slotEvent(k, "playing"));
       el.addEventListener("ended", () => this.slotEvent(k, "ended"));
       host.appendChild(el);
-      return { el, clip: null, index: -1, ready: false, pending: null };
+      return { el, clip: null, index: -1, ready: false, pending: null } as Slot;
     });
     this.loop();
   }
+
+  /** YouTube film lives in its own slot (one player, one video at a time), created on first use. */
+  private ytSlot(): number {
+    let k = this.slots.findIndex((s) => s.el instanceof YouTubeMedia);
+    if (k >= 0) return k;
+    const el = new YouTubeMedia(this.host);
+    k = this.slots.length;
+    const idx = k;
+    el.addEventListener("waiting", () => this.slotEvent(idx, "waiting"));
+    el.addEventListener("playing", () => this.slotEvent(idx, "playing"));
+    el.addEventListener("ended", () => this.slotEvent(idx, "ended"));
+    this.slots.push({ el, clip: null, index: -1, ready: false, pending: null });
+    return k;
+  }
+  private isYt = (k: number) => this.slots[k]?.el instanceof YouTubeMedia;
 
   destroy() {
     this.destroyed = true;
@@ -120,7 +140,7 @@ export class ReelController {
   get current(): Clip | null {
     return this.slots[this.active].clip;
   }
-  get activeElement(): HTMLVideoElement {
+  get activeElement(): Media {
     return this.slots[this.active].el;
   }
 
@@ -190,7 +210,7 @@ export class ReelController {
   private warm(i: number) {
     const n = this.count();
     const want = [i + 1, i - 1].filter((k) => k >= 0 && k < n);
-    const free = this.slots.map((_, k) => k).filter((k) => k !== this.active);
+    const free = this.slots.map((_, k) => k).filter((k) => k !== this.active && !this.isYt(k));
     for (const target of want) {
       const already = this.slots.findIndex((s, k) => k !== this.active && s.index === target && s.clip?.key === this.clipAt(target)?.key);
       if (already >= 0) {
@@ -200,6 +220,7 @@ export class ReelController {
     }
     for (const target of want) {
       if (this.slots.some((s, k) => k !== this.active && s.index === target)) continue;
+      if (this.clipAt(target)?.kind === "youtube") continue; // one YouTube player: it loads when we get there
       const k = free.shift();
       if (k === undefined) break;
       void this.prepare(this.slots[k], target);
@@ -218,9 +239,15 @@ export class ReelController {
     this.xferMs = null;
     const prevRate = this.rate;
     this.stopReverse();
-    let k = this.slots.findIndex((s) => s.index === i && s.clip?.key === this.clipAt(i)?.key);
-    if (k < 0) k = this.slots.findIndex((_, j) => j !== this.active && this.slots[j].index !== this.index + 1 && this.slots[j].index !== this.index - 1);
-    if (k < 0) k = (this.active + 1) % 3;
+    const want = this.clipAt(i);
+    let k: number;
+    if (want?.kind === "youtube") k = this.ytSlot();
+    else {
+      k = this.slots.findIndex((s, j) => !this.isYt(j) && s.index === i && s.clip?.key === want?.key);
+      if (k < 0) k = this.slots.findIndex((_, j) => !this.isYt(j) && j !== this.active && this.slots[j].index !== this.index + 1 && this.slots[j].index !== this.index - 1);
+      if (k < 0) k = (this.active + 1) % 3;
+      if (k === this.active && this.isYt(k)) k = 0;
+    }
     const s = this.slots[k];
     this.index = i;
     this.onIndex(i);
@@ -477,7 +504,7 @@ export function frameTime(t: number, fps: number): number {
 
 const prefetched = new Set<string>();
 function prefetchHead(c: Clip | null) {
-  if (!c || c.kind === "local" || prefetched.has(c.src)) return;
+  if (!c || c.kind === "local" || c.kind === "youtube" || prefetched.has(c.src)) return;
   prefetched.add(c.src);
   try {
     const sameOrigin = c.src.startsWith("/") || c.src.startsWith(location.origin);

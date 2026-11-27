@@ -40,6 +40,65 @@ async function readBarcode(page) {
   });
 }
 
+// Minimal PNG decoder (8-bit, non-interlaced RGB/RGBA) for reading compositor screenshots: cross-origin film taints
+// canvas readback, but what reached the screen can always be read back from a screenshot.
+function decodePng(buf) {
+  const zlib = require("zlib");
+  let w = 0, h = 0, ct = 0;
+  const idat = [];
+  for (let o = 8; o < buf.length; ) {
+    const len = buf.readUInt32BE(o);
+    const type = buf.toString("ascii", o + 4, o + 8);
+    const data = buf.subarray(o + 8, o + 8 + len);
+    if (type === "IHDR") { w = data.readUInt32BE(0); h = data.readUInt32BE(4); ct = data[9]; }
+    else if (type === "IDAT") idat.push(data);
+    o += 12 + len;
+  }
+  const bpp = ct === 6 ? 4 : 3;
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const px = Buffer.alloc(w * h * bpp);
+  const stride = w * bpp;
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)];
+    for (let x = 0; x < stride; x++) {
+      const v = raw[y * (stride + 1) + 1 + x];
+      const a = x >= bpp ? px[y * stride + x - bpp] : 0;
+      const b = y > 0 ? px[(y - 1) * stride + x] : 0;
+      const c = x >= bpp && y > 0 ? px[(y - 1) * stride + x - bpp] : 0;
+      let r = v;
+      if (f === 1) r = v + a;
+      else if (f === 2) r = v + b;
+      else if (f === 3) r = v + ((a + b) >> 1);
+      else if (f === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); r = v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c); }
+      px[y * stride + x] = r & 255;
+    }
+  }
+  return { w, h, lum: (x, y) => { const i = (Math.min(h - 1, y) * w + Math.min(w - 1, x)) * bpp; return (px[i] + px[i + 1] + px[i + 2]) / 3; } };
+}
+
+async function readBarcodeScreen(page) {
+  const r = await page.evaluate(() => {
+    const vids = [...document.querySelectorAll("video.fr-video")];
+    const v = vids.find((x) => x.style.opacity === "1" && x.style.zIndex === "2") || vids.find((x) => x.style.opacity === "1");
+    if (!v || !v.videoWidth) return null;
+    const b = v.getBoundingClientRect();
+    const s = Math.min(b.width / v.videoWidth, b.height / v.videoHeight);
+    const w = v.videoWidth * s, h = v.videoHeight * s;
+    return { x: b.x + (b.width - w) / 2, y: b.y + (b.height - h) / 2, width: w, height: h };
+  });
+  if (!r) return null;
+  const hide = (v) => page.evaluate((v) => document.querySelectorAll("[data-testid=viewport] > :not([class*=stage])").forEach((e) => (e.style.visibility = v)), v);
+  await hide("hidden");
+  const img = decodePng(await page.screenshot({ clip: r }));
+  await hide("");
+  const sx = img.w / 640, sy = img.h / 360;
+  const lum = (x, y) => img.lum(Math.round(x * sx), Math.round(y * sy));
+  if (lum(48, 350) < 50) return null;
+  let n = 0;
+  for (let b = 0; b < 16; b++) n = n * 2 + (lum(64 + b * 32 + 15, 350) > 55 ? 1 : 0);
+  return n;
+}
+
 const hudFrame = async (page) => Number((await page.textContent("[data-testid=hud-frame]")).match(/F (\d+)/)[1]);
 const settle = (page, ms = 250) => page.waitForTimeout(ms);
 
@@ -209,7 +268,62 @@ const settle = (page, ms = 250) => page.waitForTimeout(ms);
   const bar = await readBarcode(page);
   check("local film: GAME FILM source, Shift+A anchors t₀ to the frame on screen", /GAME FILM/.test(badge) && backAt === anchorFrame && bar === anchorFrame, `anchor ${anchorFrame} · t₀ now ${backAt} · decoded ${bar}`);
 
-  // 9 · layout stability
+  // 9 · real film from another origin: attach by URL, pin in film view (S), then every play in the game maps by
+  // wall clock. Frames are read back from the screen, since cross-origin film can't be read through a canvas.
+  const { spawn } = require("child_process");
+  const host = spawn(process.execPath, [require("path").join(__dirname, "serve-static.cjs"), require("path").join(__dirname, "../../public/filmroom-assets/proxy"), "4181"], { stdio: "ignore" });
+  await settle(page, 500);
+  try {
+    await page.keyboard.press("/");
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("game:2023-11-28 side:off", { delay: 0 });
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Enter");
+    await settle(page, 800);
+    await page.keyboard.press("Home");
+    await settle(page, 600);
+    await page.keyboard.press("Control+k");
+    await page.keyboard.type("http://localhost:4181/p2.webm", { delay: 0 });
+    await settle(page, 200);
+    await page.keyboard.press("Enter");
+    await settle(page, 1500);
+    const fv = await page.textContent("[data-testid=film-badge]");
+    await page.keyboard.press("k");
+    await page.keyboard.press("0");
+    for (let i = 0; i < 3; i++) await page.keyboard.press(">");
+    await settle(page, 500);
+    const pinned = await hudFrame(page);
+    const pinnedScreen = await readBarcodeScreen(page);
+    await page.keyboard.press("s");
+    await settle(page, 200);
+    await page.keyboard.press("[");
+    await page.keyboard.press("f");
+    await settle(page, 1200);
+    await page.keyboard.press("0");
+    await settle(page, 500);
+    const clipBadge = await page.textContent("[data-testid=film-badge]");
+    const atT0 = await hudFrame(page);
+    const atT0Screen = await readBarcodeScreen(page);
+    check(
+      "URL film (cross-origin): film view, S pins the frame on screen, the play then plays from real film at t₀",
+      /FILM VIEW/.test(fv) && /GAME FILM/.test(clipBadge) && pinned === pinnedScreen && atT0 === pinned && atT0Screen === pinned,
+      `pinned ${pinned} (screen ${pinnedScreen}) · clip t₀ ${atT0} (screen ${atT0Screen}) · ${fv.trim()} → ${clipBadge.trim()}`,
+    );
+    const shared = page.url();
+    const p3 = await browser.newPage({ viewport: { width: 1600, height: 960 } });
+    await p3.goto(shared, { waitUntil: "networkidle" });
+    await p3.waitForSelector("[data-testid=inspector]");
+    await settle(p3, 1500);
+    await p3.keyboard.press("0");
+    await settle(p3, 600);
+    const again = await hudFrame(p3);
+    check("share link carries the film and its pins to a fresh browser", /film=/.test(shared) && /GAME FILM/.test(await p3.textContent("[data-testid=film-badge]")) && again === pinned, `t₀ frame ${again}`);
+    await p3.close();
+  } finally {
+    host.kill();
+  }
+
+  // 10 · layout stability
   const cls = await page.evaluate(() => window.__cls);
   check("CLS = 0", cls === 0, cls === 0 ? "0" : `${cls} · ${(await page.evaluate(() => window.__shifts)).join(" ;; ")}`);
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

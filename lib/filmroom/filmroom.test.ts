@@ -207,3 +207,50 @@ describe("engine", () => {
     expect(r.ms).toBeLessThan(50);
   });
 });
+
+describe("film sources", async () => {
+  const { filmTime, parseFilmSource, encodeFilms, decodeFilms } = await import("./video/sources");
+  const { youTubeId } = await import("./video/youtube");
+  const base = { game: "22300060", name: "f", fps: 30, url: "https://x.test/g.mp4", kind: "url" as const };
+
+  it("continuous film maps every play by wall clock from one pin", () => {
+    const film = { ...base, mode: "continuous" as const, anchors: [{ wall: 472, media: 1.333 }] };
+    expect(filmTime(film, 472)).toBeCloseTo(1.333);
+    expect(filmTime(film, 1072)).toBeCloseTo(61.333);
+    expect(filmTime(film, 100)).toBeNull(); // 37 s before the recording starts
+  });
+
+  it("edited film places only pinned plays", () => {
+    const film = { ...base, mode: "cut" as const, anchors: [{ wall: 9001, media: 12.5 }] };
+    expect(filmTime(film, 9001)).toBeCloseTo(12.5);
+    expect(filmTime(film, 9002)).toBeCloseTo(12.5); // within a tenth: same event
+    expect(filmTime(film, 9100)).toBeNull();
+  });
+
+  it("a provisional tip-off guess gives way to real pins", () => {
+    const film = { ...base, mode: "continuous" as const, anchors: [{ wall: 0, media: 0, provisional: true }, { wall: 600, media: 100 }] };
+    expect(filmTime(film, 700)).toBeCloseTo(110);
+  });
+
+  it("parses YouTube links and media URLs", () => {
+    for (const u of ["https://www.youtube.com/watch?v=yPqqaXs2wQs&t=30", "https://youtu.be/yPqqaXs2wQs", "youtube.com/embed/yPqqaXs2wQs", "yPqqaXs2wQs"]) expect(youTubeId(u)).toBe("yPqqaXs2wQs");
+    expect(parseFilmSource("https://youtu.be/yPqqaXs2wQs")).toMatchObject({ kind: "youtube", url: "yt:yPqqaXs2wQs", mode: "cut" });
+    expect(parseFilmSource("https://cdn.example.com/games/gsw-sac.mp4")).toMatchObject({ kind: "url", mode: "continuous" });
+    expect(parseFilmSource("javascript:alert(1)")).toBeNull();
+    expect(parseFilmSource("not a link")).toBeNull();
+  });
+
+  it("round-trips films through the share link, never encoding local files", () => {
+    const films = [
+      { ...base, mode: "continuous" as const, url: "https://x.test/a~b;c.mp4", anchors: [{ wall: 472, media: 1.333 }, { wall: 900, media: 44 }] },
+      { ...base, game: "22300062", kind: "youtube" as const, url: "yt:yPqqaXs2wQs", mode: "cut" as const, anchors: [{ wall: 9001, media: 12.5 }] },
+      { ...base, game: "22300087", kind: "file" as const, url: "blob:x", mode: "continuous" as const, anchors: [] },
+    ];
+    const back = decodeFilms(encodeFilms(films));
+    expect(back).toHaveLength(2);
+    expect(back[0]).toMatchObject({ game: "22300060", kind: "url", url: "https://x.test/a~b;c.mp4", mode: "continuous" });
+    expect(back[0].anchors).toEqual([{ wall: 472, media: 1.333 }, { wall: 900, media: 44 }]);
+    expect(back[1]).toMatchObject({ game: "22300062", kind: "youtube", url: "yt:yPqqaXs2wQs", mode: "cut" });
+    expect(decodeFilms("22300060~u~c~javascript%3Aalert(1)~")).toEqual([]);
+  });
+});
