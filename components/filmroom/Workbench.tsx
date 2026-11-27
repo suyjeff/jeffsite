@@ -279,7 +279,7 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
             app.toast(
               name
                 ? `film view · ${name} · find the play, S pins it and moves to the next`
-                : "no film for this game · paste a YouTube or video link into ⌘K, drop a file, or ⇧O",
+                : "No film for this game yet. Paste a YouTube or video link in ⌘K, or drop a recording here",
             );
           }
           break;
@@ -288,7 +288,7 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
         case "S": {
           handled();
           const r = app.syncHere();
-          app.toast(r ?? "nothing to pin");
+          app.toast(r ?? "Nothing to pin: open a play first");
           break;
         }
         case "w":
@@ -495,8 +495,12 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
       }
       case "film-detach": {
         const row = app.row;
-        if (row >= 0) app.detachFilm(app.gameOfRow(row).id);
-        app.toast("film detached");
+        if (row < 0) break;
+        const g = app.gameOfRow(row);
+        const pins = app.pinnedCount(g.id);
+        if (pins && !window.confirm(`Detach the film from ${g.date}? Its ${pins} pinned ${pins === 1 ? "play" : "plays"} will be deleted.`)) break;
+        app.detachFilm(g.id);
+        app.toast("Film detached");
         break;
       }
       case "nba":
@@ -508,7 +512,12 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
     }
   };
 
-  if (st.error) return <div className={s.loading}>failed to load: {st.error}</div>;
+  if (st.error)
+    return (
+      <div className={s.loading} role="alert">
+        Couldn&apos;t load the film room data ({st.error}). Check your connection and reload the page.
+      </div>
+    );
 
   return (
     <div className={s.root} data-view={st.view}>
@@ -535,18 +544,22 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
                 const row = app.row;
                 if (row < 0) return;
                 const msg = app.attachFilm(url, app.gameOfRow(row).id);
-                app.toast(msg);
-                if (!msg.startsWith("not")) app.enterFilmView();
+                const failed = msg.startsWith("Paste");
+                app.toast(msg, failed ? "error" : "info");
+                if (!failed) app.enterFilmView();
               }}
             />
           )}
           {panel === "help" && <Help onClose={() => send({ type: "CLOSE" })} />}
           {panel === "report" && <IntegrityReport onClose={() => setPanel(null)} />}
-          {st.toast && (
-            <div key={st.toast.id} className={s.toast} role="status">
-              {st.toast.text}
-            </div>
-          )}
+          {/* One live region for the session; its content changes, so every message is announced. */}
+          <div className={s.live} role="status" aria-live="polite">
+            {st.toast && (
+              <div key={st.toast.id} className={s.toast} data-tone={st.toast.tone}>
+                {st.toast.text}
+              </div>
+            )}
+          </div>
         </>
       )}
       <input

@@ -64,6 +64,14 @@ export function playInfo(app: FilmroomApp, row: number) {
 }
 
 export const OUTCOME_VAR: Record<string, string> = { make: "var(--make)", miss: "var(--miss)", tov: "var(--tov)", ft: "var(--ft)" };
+/** Shape carries the outcome as well as colour: filled make, open miss, square turnover, FT trip. */
+export const OUTCOME_GLYPH: Record<string, string> = { make: "●", miss: "○", tov: "■", ft: "FT" };
+export const OUTCOME_WORD: Record<string, string> = { make: "make", miss: "miss", tov: "turnover", ft: "free throws" };
+
+/** True when the reader asked for reduced motion (read once per render; the setting rarely changes mid-session). */
+export function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
 
 /** Categorical action colours (validated dark palette, fixed order); actions past eight fold into neutral. */
 const ACTION_COLORS: Record<string, string> = {

@@ -126,11 +126,12 @@ export function Palette({
 
   return (
     <div className={s.scrim} onMouseDown={onClose} data-testid="palette">
-      <div className={s.palette} onMouseDown={(e) => e.stopPropagation()}>
+      <div className={s.palette} role="dialog" aria-modal="true" aria-label="Command palette" onMouseDown={(e) => e.stopPropagation()}>
         <div className={s.palInput}>
           <span className="acc mono">⌘K</span>
           <input
             ref={input}
+            aria-label="Search commands, queries and games, or paste a film link"
             value={q}
             spellCheck={false}
             placeholder="query, command, game date/opponent, or paste a film link…"
@@ -167,7 +168,7 @@ export function Palette({
             return (
               <React.Fragment key={it.id}>
                 {head && <div className={`${s.palGroup} label`}>{it.group}</div>}
-                <div className={s.palRow} data-on={idx === sel}>
+                <div className={s.palRow} data-on={idx === sel} onMouseEnter={() => setSel(idx)} onClick={() => it.run()}>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} className={it.group === "Slate" ? "mono" : ""}>
                     {it.label}
                   </span>

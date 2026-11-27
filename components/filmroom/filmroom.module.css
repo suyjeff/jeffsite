@@ -28,8 +28,8 @@
   --hair-2: #252a31;
   --text: #d9dde2;
   --dim: #8a929c;
-  --faint: #545b65;
-  --ghost: #343941;
+  --faint: #787f89; /* 4.90:1 on --bg, 4.57:1 on --raise: the lowest text tier that still reads */
+  --ghost: #343941; /* non-text only: hairline glyphs, never text */
   --accent: #ffb224;
   --accent-ink: #1a1200;
   --make: #00a888;
@@ -57,8 +57,13 @@
   -webkit-font-smoothing: antialiased;
   font-synthesis: none;
   overflow: hidden;
-  user-select: none;
   color-scheme: dark;
+}
+.root :global(.noselect),
+.nle,
+.hud,
+.top {
+  user-select: none;
 }
 .root[data-view="tape"],
 .root[data-view="map"] {
@@ -68,7 +73,7 @@
 .root :global(.mono) {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "calt" 0;
+  font-variant-ligatures: none;
   letter-spacing: 0;
 }
 .root :global(.dim) {
@@ -166,7 +171,11 @@
   border-radius: 4px;
   overflow: hidden;
 }
-.views span {
+.views button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
   padding: 0 8px;
   height: 22px;
   line-height: 22px;
@@ -175,7 +184,7 @@
   color: var(--faint);
   letter-spacing: 0.04em;
 }
-.views span[data-on="true"] {
+.views button[data-on="true"] {
   background: var(--accent);
   color: var(--accent-ink);
 }
@@ -314,7 +323,7 @@
   color: var(--dim);
 }
 .sugRow .sugCount[data-zero="true"] {
-  color: var(--ghost);
+  color: var(--faint);
 }
 .sugFoot {
   display: flex;
@@ -450,7 +459,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: 16px;
-  padding: 40px 16px 40px 24px;
+  padding: 40px 16px 72px 24px; /* bottom room for the HUD row and the film notice above it */
   pointer-events: none;
 }
 .teleCourt {
@@ -583,7 +592,7 @@
 }
 .bits i {
   font-style: normal;
-  color: var(--ghost);
+  color: var(--faint);
 }
 .bits b {
   font-weight: 500;
@@ -621,7 +630,7 @@
 }
 .badge {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 14px;
   height: 16px;
   padding: 0 4px;
@@ -761,7 +770,7 @@
   flex-direction: column;
   align-items: center;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 10px;
   color: var(--dim);
   white-space: nowrap;
@@ -797,7 +806,7 @@
   height: 15px;
   border-radius: 2px;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 15px;
   padding: 0 4px;
   color: #08090a;
@@ -827,6 +836,7 @@
   display: none;
 }
 .cell {
+  cursor: pointer;
   position: absolute;
   top: 6px;
   bottom: 8px;
@@ -874,7 +884,7 @@
   position: absolute;
   top: 0;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 6px;
   color: var(--faint);
   white-space: nowrap;
@@ -914,6 +924,7 @@
   color: var(--faint);
 }
 .trow {
+  cursor: pointer;
   position: absolute;
   left: 0;
   right: 0;
@@ -1060,7 +1071,6 @@
   justify-content: center;
   align-items: flex-start;
   padding-top: 12vh;
-  animation: fadeIn 120ms var(--ease);
 }
 .palette {
   width: min(640px, calc(100vw - 32px));
@@ -1068,7 +1078,6 @@
   border: 1px solid var(--hair-2);
   border-radius: 6px;
   overflow: hidden;
-  animation: rise 140ms var(--ease);
 }
 .palInput {
   display: flex;
@@ -1098,6 +1107,7 @@
   padding: 8px 12px 4px;
 }
 .palRow {
+  cursor: pointer;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -1119,6 +1129,8 @@
   width: min(880px, calc(100vw - 32px));
   max-height: 76vh;
   overflow: auto;
+  overscroll-behavior: contain;
+  outline: none;
   background: var(--panel);
   border: 1px solid var(--hair-2);
   border-radius: 6px;
@@ -1155,6 +1167,8 @@
   width: min(880px, calc(100vw - 32px));
   max-height: 76vh;
   overflow: auto;
+  overscroll-behavior: contain;
+  outline: none;
   background: var(--panel);
   border: 1px solid var(--hair-2);
   border-radius: 6px;
@@ -1186,7 +1200,18 @@
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text);
-  animation: rise 120ms var(--ease);
+  animation: fadeIn 120ms ease-out;
+}
+.live {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.toast[data-tone="error"] {
+  color: var(--miss);
+  border-color: rgba(235, 98, 99, 0.45);
 }
 .loading {
   position: fixed;
@@ -1233,15 +1258,66 @@
     transition: none !important;
   }
 }
-@media (max-width: 900px) {
+/* Narrow or zoomed: stop fitting everything into one screen. The page scrolls; the film keeps a real 16:9 picture;
+   the inspector and lower pane take their natural height; the status bar scrolls sideways instead of clipping. */
+@media (max-width: 900px), (max-height: 560px) {
   .root {
+    overflow-x: hidden;
+    overflow-y: auto;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 40px minmax(0, 1fr) 30vh var(--lower) 24px;
+    /* The film row is sized from the width (16:9), capped so it never fills a short, zoomed screen. An overflow-hidden
+       item contributes no content height to an auto row, so the size has to be stated here. */
+    grid-template-rows: 40px min(56.25vw, 62vh) auto var(--lower) 24px;
     grid-template-areas: "top" "view" "insp" "lower" "status";
+    --lower: 176px;
+  }
+  .root[data-view="tape"],
+  .root[data-view="map"] {
+    --lower: 360px;
+  }
+  .view {
+    border-right: 0;
+  }
+  .insp {
+    overflow: visible;
+    min-height: auto; /* the desktop grid needs 0; stacked, the row must hold its content */
+    border-top: 1px solid var(--hair);
+  }
+  .status {
+    overflow-x: auto;
+    scrollbar-width: thin; /* the visible cue that more metrics sit past the edge */
+    scrollbar-color: var(--hair-2) transparent;
+  }
+  .hints {
+    display: none;
+  }
+  .telemetry {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 32px 8px 32px 8px;
+  }
+  .ticker {
+    display: none;
+  }
+  .notice {
+    bottom: 32px;
+    white-space: normal;
   }
   .count,
   .views,
   .slate {
     display: none;
+  }
+}
+@media (max-width: 520px) {
+  /* Phone width: keep the picture readable; the inspector below carries the same facts. */
+  .teleHead,
+  .teleFoot,
+  .hudBL,
+  .hud [data-testid="hud-rel"] {
+    display: none;
+  }
+  .notice {
+    font-size: 11px;
+    line-height: 16px;
   }
 }

@@ -38,7 +38,7 @@ export interface AppState {
   marks: { in: number | null; out: number | null };
   tags: Tag[];
   showFixture: boolean;
-  toast: { text: string; id: number } | null;
+  toast: { text: string; id: number; tone: "info" | "error" } | null;
   details: number; // bumps when a game detail arrives
   lastTag: Draft | null;
   films: number; // bumps when the film map or its anchors change
@@ -442,12 +442,12 @@ export class FilmroomApp {
   /** Attach film from a pasted YouTube link or media URL. */
   attachFilm(input: string, game: string): string {
     const src = parseFilmSource(input);
-    if (!src) return "not a YouTube link or an http(s) media URL";
+    if (!src) return "Paste a YouTube link, or an https link to an .mp4 or .webm file";
     const prev = this.films.get(game);
     const sameSource = prev && prev.url === src.url;
     this.films.set(game, { game, kind: src.kind, url: src.url, name: src.name, fps: FILM_FPS, mode: sameSource ? prev.mode : src.mode, anchors: sameSource ? prev.anchors : [] });
     this.filmChanged();
-    return `${src.kind === "youtube" ? "YouTube" : "film"} attached · ${src.mode === "cut" ? "F to find plays, S to pin each" : "S at a play's t₀ syncs the game"}`;
+    return `${src.kind === "youtube" ? "YouTube film" : "Film"} attached · find a play's release and press S to pin it`;
   }
   attachOfficial(game: string): boolean {
     const c = this.catalog.get(game);
@@ -542,7 +542,7 @@ export class FilmroomApp {
     this.anchors.set(c.key, media);
     this.reel.refresh();
     void this.reel.goto(this.state.cursor, { rel: 0 });
-    return `t₀ re-anchored to frame ${f.frame}`;
+    return `t₀ pinned to frame ${f.frame}`;
   }
   /** Kept for the e2e/keyboard path that predates tap-sync. */
   anchorHere(): string | null {
@@ -559,10 +559,11 @@ export class FilmroomApp {
     writeLocal(FILM_KEY, out);
   }
 
-  toast(text: string) {
+  /** Status line. Errors stay long enough to read and act on; the next action replaces either kind. */
+  toast(text: string, tone: "info" | "error" = "info") {
     window.clearTimeout(this.toastTimer);
-    this.set({ toast: { text, id: Date.now() } });
-    this.toastTimer = window.setTimeout(() => this.set({ toast: null }), 1600);
+    this.set({ toast: { text, id: Date.now(), tone } });
+    this.toastTimer = window.setTimeout(() => this.set({ toast: null }), tone === "error" ? 6000 : 2000);
   }
 
   destroy() {

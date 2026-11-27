@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import s from "./filmroom.module.css";
-import { CourtLines, OUTCOME_VAR, fmtSec, playInfo, tri, useApp, useAppState, useFrame } from "./shared";
+import { CourtLines, OUTCOME_GLYPH, OUTCOME_VAR, OUTCOME_WORD, fmtSec, playInfo, prefersReducedMotion, tri, useApp, useAppState, useFrame } from "./shared";
 import { OV } from "../../lib/filmroom/app/app";
 import type { GameDetail } from "../../lib/filmroom/core/format";
 
@@ -67,7 +67,7 @@ function Hud() {
           {info.period} {info.clock}
         </span>
         <span className={s.chip} style={{ color: OUTCOME_VAR[info.outcome] }}>
-          {info.actor?.short || tri(info.off)} · {info.what}
+          {OUTCOME_GLYPH[info.outcome]} {OUTCOME_WORD[info.outcome]} · {info.actor?.short || tri(info.off)} · {info.what}
         </span>
       </div>
       <div className={s.hudBR}>
@@ -216,7 +216,7 @@ function Telemetry() {
             <g style={{ transition: "opacity 120ms", opacity: shown ? 1 : 0.22 }}>
               <line x1={0} y1={0} x2={x} y2={y} stroke="#3a4048" strokeDasharray="4 6" strokeWidth={1.5} />
               <circle cx={x} cy={y} r={9} fill={info.made ? OUTCOME_VAR.make : "#090A0C"} stroke={OUTCOME_VAR[info.outcome]} strokeWidth={3} />
-              {shown && f.sec < 1.2 && <circle cx={x} cy={y} r={9 + f.sec * 26} fill="none" stroke={OUTCOME_VAR[info.outcome]} strokeWidth={1.5} opacity={Math.max(0, 1 - f.sec / 1.2)} />}
+              {shown && f.sec < 1.2 && !prefersReducedMotion() && <circle cx={x} cy={y} r={9 + f.sec * 26} fill="none" stroke={OUTCOME_VAR[info.outcome]} strokeWidth={1.5} opacity={Math.max(0, 1 - f.sec / 1.2)} />}
             </g>
           )}
         </svg>

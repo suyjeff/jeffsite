@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import s from "./filmroom.module.css";
-import { OUTCOME_VAR, actionColor, playInfo, tri, useApp, useAppState } from "./shared";
+import { OUTCOME_GLYPH, OUTCOME_VAR, actionColor, playInfo, tri, useApp, useAppState } from "./shared";
 import { tagSummary } from "../../lib/filmroom/tags/ontology";
 
 const CELL = 96;
@@ -162,6 +162,9 @@ function ReelStrip() {
                 onClick={() => app.goto(it.index)}
               >
                 <div>
+                  <span style={{ color: OUTCOME_VAR[info.outcome] }} title={info.outcome}>
+                    {OUTCOME_GLYPH[info.outcome]}
+                  </span>{" "}
                   <b>
                     {info.period} {info.clock}
                   </b>
