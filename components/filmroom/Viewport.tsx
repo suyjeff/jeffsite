@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import s from "./filmroom.module.css";
-import { CourtLines, OUTCOME_VAR, fmtSec, playInfo, tri, useApp, useAppState, useFrame } from "./shared";
+import { CourtLines, OUTCOME_GLYPH, OUTCOME_VAR, OUTCOME_WORD, fmtSec, playInfo, prefersReducedMotion, tri, useApp, useAppState, useFrame } from "./shared";
 import { OV } from "../../lib/filmroom/app/app";
 import type { GameDetail } from "../../lib/filmroom/core/format";
 
@@ -22,6 +22,7 @@ export function Viewport() {
         </div>
       )}
       {!empty && st.overlays & OV.telemetry ? <Telemetry /> : null}
+      {!empty && <FilmNotice />}
       {!empty && st.overlays & OV.hud ? <Hud /> : null}
     </div>
   );
@@ -43,8 +44,8 @@ function Hud() {
         <span className={s.chip} data-testid="clip-index">
           {String(st.cursor + 1).padStart(String(n).length, "0")}/{n}
         </span>
-        <span className={s.chip} data-tone={kind === "proxy" ? "dim" : "acc"} title={kind === "proxy" ? "NBA has retired this season's clips; proxy film keeps frame-accurate review" : ""}>
-          {kind === "nba" ? "NBA CLIP" : kind === "local" ? "GAME FILM" : "PROXY FILM"}
+        <span className={s.chip} data-tone={kind === "proxy" ? "dim" : "acc"} data-testid="film-badge">
+          {st.filmView ? "FILM VIEW" : kind === "nba" ? "NBA CLIP" : kind === "youtube" ? "YOUTUBE" : kind === "local" ? "GAME FILM" : "PROXY FILM"}
         </span>
         {f?.buffering && (
           <span className={s.chip} data-tone="miss">
@@ -66,7 +67,7 @@ function Hud() {
           {info.period} {info.clock}
         </span>
         <span className={s.chip} style={{ color: OUTCOME_VAR[info.outcome] }}>
-          {info.actor?.short || tri(info.off)} · {info.what}
+          {OUTCOME_GLYPH[info.outcome]} {OUTCOME_WORD[info.outcome]} · {info.actor?.short || tri(info.off)} · {info.what}
         </span>
       </div>
       <div className={s.hudBR}>
@@ -80,6 +81,56 @@ function Hud() {
           xfer {f?.xferMs != null ? `${f.xferMs.toFixed(0)}ms` : "—"}
         </span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * One line, bottom-centre, saying what the picture is and the one key that gets real footage. Over proxy film it
+ * names why there is no NBA clip; in film view it says how pinning works; on real film it says how many plays are
+ * pinned. Never more than one sentence and one key.
+ */
+function FilmNotice() {
+  const app = useApp();
+  const st = useAppState();
+  const f = useFrame();
+  const row = app.row;
+  if (row < 0 || !f?.kind) return null;
+  const g = app.gameOfRow(row);
+  const film = app.films.get(g.id);
+  const official = app.catalog.get(g.id);
+  let text: React.ReactNode = null;
+  if (st.filmView) {
+    text = (
+      <>
+        Film view · find this play&apos;s release, <span className="kbd">S</span> pins it and moves to the next · <span className="kbd">F</span> back to clips
+      </>
+    );
+  } else if (f.kind === "proxy") {
+    if (film)
+      text = (
+        <>
+          {film.mode === "cut" ? "This play isn't pinned to the film yet" : "Film attached but not synced"} · <span className="kbd">F</span> film view, then <span className="kbd">S</span> at the release
+        </>
+      );
+    else if (official)
+      text = (
+        <>
+          Official NBA film covers this game · <span className="kbd">F</span> to watch and pin plays
+        </>
+      );
+    else
+      text = (
+        <>
+          NBA stopped serving play clips in Oct 2026 · paste a film link in <span className="kbd">⌘K</span>, drop a recording, or <span className="kbd">W</span> NBA.com
+        </>
+      );
+  }
+  void st.films;
+  if (!text) return null;
+  return (
+    <div className={s.notice} data-testid="film-notice">
+      {text}
     </div>
   );
 }
@@ -165,7 +216,7 @@ function Telemetry() {
             <g style={{ transition: "opacity 120ms", opacity: shown ? 1 : 0.22 }}>
               <line x1={0} y1={0} x2={x} y2={y} stroke="#3a4048" strokeDasharray="4 6" strokeWidth={1.5} />
               <circle cx={x} cy={y} r={9} fill={info.made ? OUTCOME_VAR.make : "#090A0C"} stroke={OUTCOME_VAR[info.outcome]} strokeWidth={3} />
-              {shown && f.sec < 1.2 && <circle cx={x} cy={y} r={9 + f.sec * 26} fill="none" stroke={OUTCOME_VAR[info.outcome]} strokeWidth={1.5} opacity={Math.max(0, 1 - f.sec / 1.2)} />}
+              {shown && f.sec < 1.2 && !prefersReducedMotion() && <circle cx={x} cy={y} r={9 + f.sec * 26} fill="none" stroke={OUTCOME_VAR[info.outcome]} strokeWidth={1.5} opacity={Math.max(0, 1 - f.sec / 1.2)} />}
             </g>
           )}
         </svg>

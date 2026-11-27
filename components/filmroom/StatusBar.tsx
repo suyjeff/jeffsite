@@ -12,6 +12,8 @@ const HINTS: Record<string, [string, string][]> = {
     ["[ ]", "clip"],
     ["I O", "mark"],
     ["T", "tag"],
+    ["F", "film"],
+    ["S", "pin"],
     ["V", "view"],
     ["Y", "copy link"],
     ["?", "keys"],

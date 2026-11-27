@@ -16,8 +16,10 @@ const KEYS: [string, [string, string][]][] = [
       ["[ ]", "previous / next clip"],
       ["{ }", "previous / next game in reel"],
       ["Home End", "first / last clip"],
-      ["⇧A", "re-anchor t₀ to this frame"],
-      ["⇧O", "open full-game film for this game"],
+      ["F", "film view: play this game's film freely"],
+      ["S", "pin: this frame is the play's t₀ (then next play)"],
+      ["⇧O", "open a game recording (or drop it, or paste a link in ⌘K)"],
+      ["W", "watch this game on NBA.com"],
     ],
   ],
   [
@@ -51,9 +53,11 @@ const KEYS: [string, [string, string][]][] = [
 ];
 
 export function Help({ onClose }: { onClose: () => void }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => ref.current?.focus(), []);
   return (
     <div className={s.scrim} onMouseDown={onClose} data-testid="help">
-      <div className={s.help} data-scroll="help" onMouseDown={(e) => e.stopPropagation()}>
+      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Keys and query fields" className={s.help} data-scroll="help" onMouseDown={(e) => e.stopPropagation()}>
         <div className={s.helpTitle}>Keys</div>
         <div className={s.helpCols}>
           {KEYS.map(([title, rows]) => (
@@ -99,9 +103,11 @@ export function Help({ onClose }: { onClose: () => void }) {
 export function IntegrityReport({ onClose }: { onClose: () => void }) {
   const app = useApp();
   const meta = app.store.meta;
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => ref.current?.focus(), []);
   return (
     <div className={s.scrim} onMouseDown={onClose} data-testid="report">
-      <div className={s.report} onMouseDown={(e) => e.stopPropagation()}>
+      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Reconciliation report" className={s.report} onMouseDown={(e) => e.stopPropagation()}>
         <div className={s.helpTitle}>Reconciliation</div>
         <div className="dim" style={{ marginBottom: 12, maxWidth: 720 }}>
           Every count the parser derives is recounted and compared with sources that never went through it: the official box score

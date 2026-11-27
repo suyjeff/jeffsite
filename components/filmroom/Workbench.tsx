@@ -5,6 +5,7 @@ import s from "./filmroom.module.css";
 import { AppCtx, useAppState } from "./shared";
 import { DEFAULT_QUERY, FilmroomApp, OV, VIEWS, type View } from "../../lib/filmroom/app/app";
 import { chordStep, keyMachine, valueForKey } from "../../lib/filmroom/keys/machine";
+import { parseFilmSource } from "../../lib/filmroom/video/sources";
 import { TopBar } from "./TopBar";
 import { Viewport } from "./Viewport";
 import { Inspector } from "./Inspector";
@@ -25,6 +26,7 @@ const urlKeys = {
   ov: parseAsInteger.withDefault(OV.hud | OV.telemetry | OV.tags),
   pre: parseAsFloat.withDefault(6),
   post: parseAsFloat.withDefault(4),
+  film: parseAsString,
 };
 
 export default function Workbench() {
@@ -53,6 +55,7 @@ export default function Workbench() {
       game: get<string | null>("g", null),
       action: get<number | null>("a", null),
       frame: get<number | null>("f", null),
+      films: get<string | null>("film", null),
     });
     return () => app.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,13 +114,15 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
       ov: st.overlays,
       pre: st.pre,
       post: st.post,
+      film: app.filmsParam() || null,
     });
-  }, [st.ready, st.query, st.cursor, st.view, st.overlays, st.pre, st.post, st.result, app, setUrl]);
+  }, [st.ready, st.query, st.cursor, st.view, st.overlays, st.pre, st.post, st.result, st.films, app, setUrl]);
   // Frame goes to the URL only when the playhead rests (paused / stepped), never at 60 Hz.
   useEffect(
     () =>
       app.subscribeFrame((f) => {
-        if (f.playing || f.rel === frame.current) return;
+        // Film view frames are relative to the free-running film, not to a play's t₀: never share them as a play frame.
+        if (f.playing || f.rel === frame.current || app.state.filmView) return;
         frame.current = f.rel;
         void setUrl({ f: f.rel });
       }),
@@ -132,6 +137,27 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
     if (snap.value === "query") queryRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snap.value]);
+
+  // Drop a game recording anywhere on the workbench: it becomes film for the current play's game.
+  useEffect(() => {
+    const over = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+    };
+    const drop = (e: DragEvent) => {
+      const file = [...(e.dataTransfer?.files ?? [])].find((f) => f.type.startsWith("video/") || /\.(mp4|webm|mov|m4v|mkv)$/i.test(f.name));
+      if (!file || app.row < 0) return;
+      e.preventDefault();
+      const g = app.gameOfRow(app.row);
+      app.openFilm(file, g.id);
+      app.toast(`film loaded for ${g.date} · F for film view, S at a play's t₀ syncs the game`);
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("drop", drop);
+    };
+  }, [app]);
 
   // ── global key router ──
   useEffect(() => {
@@ -236,12 +262,44 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
           break;
         case "[":
           handled();
-          reel?.prev();
+          if (app.state.filmView) app.filmViewStep(-1);
+          else reel?.prev();
           break;
         case "]":
           handled();
-          reel?.next();
+          if (app.state.filmView) app.filmViewStep(1);
+          else reel?.next();
           break;
+        case "f":
+        case "F": {
+          handled();
+          if (app.state.filmView) {
+            app.exitFilmView();
+            app.toast("film view off · pinned plays now play as clips");
+          } else {
+            const name = app.enterFilmView();
+            app.toast(
+              name
+                ? `film view · ${name} · find the play, S pins it and moves to the next`
+                : "No film for this game yet. Paste a YouTube or video link in ⌘K, or drop a recording here",
+            );
+          }
+          break;
+        }
+        case "s":
+        case "S": {
+          handled();
+          const r = app.syncHere();
+          app.toast(r ?? "Nothing to pin: open a play first");
+          break;
+        }
+        case "w":
+        case "W": {
+          handled();
+          const row = app.row;
+          if (row >= 0) window.open(`https://www.nba.com/game/${app.gameOfRow(row).id.padStart(10, "0")}/play-by-play`, "_blank", "noopener");
+          break;
+        }
         case "{":
         case "}": {
           handled();
@@ -333,8 +391,8 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
           break;
         case "A": {
           handled();
-          const r = app.anchorHere();
-          app.toast(r ?? "nothing to anchor");
+          const r = app.syncHere();
+          app.toast(r ?? "nothing to pin");
           break;
         }
         case "h":
@@ -418,13 +476,51 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
       case "view:map":
         app.set({ view: id.slice(5) as View });
         break;
+      case "film-view":
+        if (app.state.filmView) app.exitFilmView();
+        else app.toast(app.enterFilmView() ? "film view · S pins the play on screen" : "no film for this game");
+        break;
+      case "official": {
+        const row = app.row;
+        if (row >= 0 && !confirmReplaceFilm(app, app.gameOfRow(row).id)) break;
+        if (row >= 0 && app.attachOfficial(app.gameOfRow(row).id)) {
+          app.enterFilmView();
+          app.toast("official NBA film attached · find a play, S pins it");
+        }
+        break;
+      }
+      case "film-cut":
+      case "film-continuous": {
+        const row = app.row;
+        if (row >= 0) app.setFilmMode(app.gameOfRow(row).id, id === "film-cut" ? "cut" : "continuous");
+        app.toast(id === "film-cut" ? "edited film: only pinned plays get clips" : "continuous film: one pin syncs the game");
+        break;
+      }
+      case "film-detach": {
+        const row = app.row;
+        if (row < 0) break;
+        const g = app.gameOfRow(row);
+        const pins = app.pinnedCount(g.id);
+        if (pins && !window.confirm(`Detach the film from ${g.date}? Its ${pins} pinned ${pins === 1 ? "play" : "plays"} will be deleted.`)) break;
+        app.detachFilm(g.id);
+        app.toast("Film detached");
+        break;
+      }
+      case "nba":
+        if (app.row >= 0) window.open(`https://www.nba.com/game/${app.gameOfRow(app.row).id.padStart(10, "0")}/play-by-play`, "_blank", "noopener");
+        break;
       case "clear-tags":
         if (window.confirm(`Delete all ${app.state.tags.length} of your tags in this browser?`)) app.importTags([]);
         break;
     }
   };
 
-  if (st.error) return <div className={s.loading}>failed to load: {st.error}</div>;
+  if (st.error)
+    return (
+      <div className={s.loading} role="alert">
+        Couldn&apos;t load the film room data ({st.error}). Check your connection and reload the page.
+      </div>
+    );
 
   return (
     <div className={s.root} data-view={st.view}>
@@ -440,14 +536,34 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
           <Inspector />
           <div className={s.lower}>{st.view === "tl" ? <Timeline /> : st.view === "tape" ? <Tape /> : <ShotMap />}</div>
           <StatusBar />
-          {panel === "palette" && <Palette seed={paletteSeed} onClose={() => send({ type: "CLOSE" })} onCommand={runCommand} onQuery={() => send({ type: "CLOSE" })} />}
+          {panel === "palette" && (
+            <Palette
+              seed={paletteSeed}
+              onClose={() => send({ type: "CLOSE" })}
+              onCommand={runCommand}
+              onQuery={() => send({ type: "CLOSE" })}
+              onFilm={(url) => {
+                send({ type: "CLOSE" });
+                const row = app.row;
+                if (row < 0) return;
+                if (!confirmReplaceFilm(app, app.gameOfRow(row).id, url)) return;
+                const msg = app.attachFilm(url, app.gameOfRow(row).id);
+                const failed = msg.startsWith("Paste");
+                app.toast(msg, failed ? "error" : "info");
+                if (!failed) app.enterFilmView();
+              }}
+            />
+          )}
           {panel === "help" && <Help onClose={() => send({ type: "CLOSE" })} />}
           {panel === "report" && <IntegrityReport onClose={() => setPanel(null)} />}
-          {st.toast && (
-            <div key={st.toast.id} className={s.toast} role="status">
-              {st.toast.text}
-            </div>
-          )}
+          {/* One live region for the session; its content changes, so every message is announced. */}
+          <div className={s.live} role="status" aria-live="polite">
+            {st.toast && (
+              <div key={st.toast.id} className={s.toast} data-tone={st.toast.tone}>
+                {st.toast.text}
+              </div>
+            )}
+          </div>
         </>
       )}
       <input
@@ -461,7 +577,7 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
           if (file && row >= 0) {
             const g = app.store.meta.games[app.store.p.game[row]];
             app.openFilm(file, g.id);
-            app.toast(`film loaded for ${g.date} — find this play's t₀ and press Shift+A to sync`);
+            app.toast(`film loaded for ${g.date} · F for film view, S at a play's t₀ syncs the game`);
           }
           e.target.value = "";
         }}
@@ -488,6 +604,15 @@ function Shell({ setUrl }: { setUrl: SetUrl }) {
       />
     </div>
   );
+}
+
+/** Replacing a game's film drops its pins: ask first, naming what goes. */
+function confirmReplaceFilm(app: FilmroomApp, game: string, nextUrl?: string): boolean {
+  const film = app.films.get(game);
+  const pins = app.pinnedCount(game);
+  if (!film || !pins) return true;
+  if (nextUrl && parseFilmSource(nextUrl)?.url === film.url) return true;
+  return window.confirm(`Replace the film for this game? Its ${pins} pinned ${pins === 1 ? "play" : "plays"} will be deleted.`);
 }
 
 async function copyUrl(app: FilmroomApp) {

@@ -146,6 +146,8 @@ export function Inspector() {
         )}
       </section>
 
+      <FilmSection row={row} />
+
       <section className={s.sec} style={{ borderBottom: 0 }}>
         <span className="label">Integrity · {g.id}</span>
         <div className="mono" style={{ marginTop: 4, fontSize: 11 }} title="bits, high to low: possessions · floor · score · chart · minutes · box">
@@ -203,5 +205,48 @@ function ChordHud() {
         <span className="kbd">Space</span> skip · <span className="kbd">⌫</span> back · <span className="kbd">⏎</span> stamp · <span className="kbd">Esc</span> cancel
       </div>
     </div>
+  );
+}
+
+function FilmSection({ row }: { row: number }) {
+  const app = useApp();
+  const st = useAppState();
+  void st.films;
+  const g = app.gameOfRow(row);
+  const film = app.films.get(g.id);
+  const official = app.catalog.get(g.id);
+  const pinned = app.pinnedCount(g.id);
+  const placed = app.filmPlaces(row);
+  return (
+    <section className={s.sec} data-testid="film-section">
+      <span className="label">Film</span>
+      {film ? (
+        <div className={s.kv} style={{ marginTop: 4 }}>
+          <span>Source</span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={film.name}>
+            {film.kind === "youtube" ? "YouTube" : film.kind === "url" ? "URL" : "File"} · {film.name}
+          </span>
+          <span>Sync</span>
+          <span className="mono">
+            {film.mode === "cut" ? "edited · per-play pins" : "continuous · wall clock"} · {pinned} pinned
+          </span>
+          <span>This play</span>
+          <span className={placed ? "make" : "dim"}>{placed ? "on film" : film.mode === "cut" ? "not pinned · F then S" : "not synced · F then S"}</span>
+        </div>
+      ) : (
+        <div className="dim" style={{ marginTop: 4 }}>
+          {official ? (
+            <>
+              Official NBA film covers this game. <span className="kbd">F</span> to watch and pin plays.
+            </>
+          ) : (
+            <>
+              NBA no longer serves per-play clips. Paste a film link in <span className="kbd">⌘K</span>, drop a game recording here, or open it on NBA.com
+              with <span className="kbd">W</span>.
+            </>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

@@ -7,7 +7,7 @@ import { Engine, type QueryResult } from "../engine/query";
 import type { BundleMeta, GameDetail } from "../core/format";
 import type { Tag } from "../tags/ontology";
 import { ReelController, type FrameState } from "../video/reel";
-import { clipFor, type FilmAnchor, type LocalFilm, type SourceContext } from "../video/sources";
+import { FILM_FPS, clipFor, decodeFilms, encodeFilms, filmTime, parseFilmSource, type FilmAnchor, type FilmMode, type LocalFilm, type SourceContext } from "../video/sources";
 import type { Draft } from "../keys/machine";
 
 export type View = "tl" | "tape" | "map";
@@ -38,10 +38,12 @@ export interface AppState {
   marks: { in: number | null; out: number | null };
   tags: Tag[];
   showFixture: boolean;
-  toast: { text: string; id: number } | null;
+  toast: { text: string; id: number; tone: "info" | "error" } | null;
   details: number; // bumps when a game detail arrives
   lastTag: Draft | null;
-  films: number; // bumps when local film map changes
+  films: number; // bumps when the film map or its anchors change
+  /** Film view: the game's film plays freely (to find and pin plays) instead of per-play clips. */
+  filmView: { game: string; media: number } | null;
 }
 
 const TAG_KEY = "filmroom.tags.v1";
@@ -95,6 +97,7 @@ export class FilmroomApp {
     details: 0,
     lastTag: null,
     films: 0,
+    filmView: null,
   };
   store!: Store;
   engine!: Engine;
@@ -106,6 +109,8 @@ export class FilmroomApp {
   films = new Map<string, LocalFilm>();
   anchors = new Map<string, number>();
   private savedAnchors = new Map<string, FilmAnchor[]>();
+  /** Official NBA uploads known to cover a game (data/films.json), offered when no film is attached. */
+  catalog = new Map<string, LocalFilm & { title: string; note?: string }>();
   private listeners = new Set<() => void>();
   private frameListeners = new Set<(f: FrameState) => void>();
   private undo: string[] = [];
@@ -133,23 +138,35 @@ export class FilmroomApp {
     for (const l of this.listeners) l();
   }
 
-  async load(init: Partial<Pick<AppState, "query" | "view" | "overlays" | "pre" | "post">> & { game?: string | null; action?: number | null; frame?: number | null }) {
+  async load(
+    init: Partial<Pick<AppState, "query" | "view" | "overlays" | "pre" | "post">> & { game?: string | null; action?: number | null; frame?: number | null; films?: string | null },
+  ) {
     const t0 = performance.now();
     try {
-      const [meta, bin, fixture] = await Promise.all([
+      const [meta, bin, fixture, catalog] = await Promise.all([
         fetch(`${this.base}/filmroom-assets/data/meta.json`).then((r) => r.json() as Promise<BundleMeta>),
         fetch(`${this.base}/filmroom-assets/data/plays.bin.gz`).then((r) => r.arrayBuffer()).then(gunzipIfNeeded),
         fetch(`${this.base}/filmroom-assets/data/annotations.fixture.json`).then((r) => (r.ok ? (r.json() as Promise<FixtureFile>) : null)).catch(() => null),
+        fetch(`${this.base}/filmroom-assets/data/films.json`)
+          .then((r) => (r.ok ? (r.json() as Promise<{ films: (LocalFilm & { title: string; note?: string })[] }>) : { films: [] }))
+          .catch(() => ({ films: [] })),
       ]);
+      for (const f of catalog.films) this.catalog.set(f.game, { ...f, official: true });
       this.store = decodeBundle(bin, meta);
       this.engine = new Engine(this.store);
       this.fixture = fixture;
       this.roster = this.computeRoster();
       const tags = readLocal<Tag[]>(TAG_KEY, []);
-      const films = readLocal<Omit<LocalFilm, "url">[]>(FILM_KEY, []);
-      // Film URLs are object URLs and die with the page; keep the anchors so a re-opened file re-syncs at once.
-      for (const f of films) this.savedAnchors.set(f.game, f.anchors);
-      this.state = { ...this.state, ...init, tags };
+      // Saved films: URL and YouTube films come back whole; a file's object URL dies with the page, so only its anchors
+      // are kept and a re-opened file re-syncs at once. A shared link's films override what this browser had.
+      for (const f of readLocal<LocalFilm[]>(FILM_KEY, [])) {
+        if (!f || !f.game || !Array.isArray(f.anchors)) continue;
+        if ((f.kind === "url" || f.kind === "youtube") && f.url) this.films.set(f.game, { ...f, fps: f.fps || FILM_FPS, mode: f.mode ?? "continuous" });
+        else this.savedAnchors.set(f.game, f.anchors);
+      }
+      if (init.films) for (const f of decodeFilms(init.films)) this.films.set(f.game, f);
+      const { game: _g, action: _a, frame: _f, films: _films, ...stateInit } = init;
+      this.state = { ...this.state, ...stateInit, tags };
       this.applyTags();
       this.runQuery(this.state.query, { keepCursor: false });
       // Restore the shared play/frame.
@@ -219,6 +236,7 @@ export class FilmroomApp {
       films: this.films,
       anchors: this.anchors,
       base: this.base,
+      filmView: this.state.filmView,
       nbaUrl: (game, action) => {
         const d = this.details.get(game);
         const u = d?.video[action];
@@ -405,51 +423,143 @@ export class FilmroomApp {
   }
 
   // ── film ──
-  openFilm(file: File, game: string) {
-    const url = URL.createObjectURL(file);
-    const prev = this.films.get(game);
-    this.films.set(game, { game, url, name: file.name, fps: 30000 / 1001, anchors: prev?.anchors ?? this.savedAnchors.get(game) ?? [{ wall: 0, media: 0, provisional: true }] });
+  gameOfRow(row: number) {
+    return this.store.meta.games[this.store.p.game[row]];
+  }
+  private filmChanged() {
     this.persistFilms();
     this.set({ films: this.state.films + 1 });
     this.reel?.refresh();
   }
-  /** Re-anchor: the frame on screen is this play's t₀. For local film it adds a sync anchor for the whole game. */
-  anchorHere(): string | null {
+  openFilm(file: File, game: string) {
+    const url = URL.createObjectURL(file);
+    const prev = this.films.get(game);
+    const anchors = prev?.kind === "file" ? prev.anchors : this.savedAnchors.get(game) ?? [{ wall: 0, media: 0, provisional: true }];
+    this.films.set(game, { game, kind: "file", url, name: file.name, fps: FILM_FPS, mode: prev?.mode ?? "continuous", anchors });
+    this.filmChanged();
+    if (this.state.filmView?.game === game) this.enterFilmView(0);
+  }
+  /** Attach film from a pasted YouTube link or media URL. */
+  attachFilm(input: string, game: string): string {
+    const src = parseFilmSource(input);
+    if (!src) return "Paste a YouTube link, or an https link to an .mp4 or .webm file";
+    const prev = this.films.get(game);
+    const sameSource = prev && prev.url === src.url;
+    this.films.set(game, { game, kind: src.kind, url: src.url, name: src.name, fps: FILM_FPS, mode: sameSource ? prev.mode : src.mode, anchors: sameSource ? prev.anchors : [] });
+    this.filmChanged();
+    return `${src.kind === "youtube" ? "YouTube film" : "Film"} attached · find a play's release and press S to pin it`;
+  }
+  attachOfficial(game: string): boolean {
+    const c = this.catalog.get(game);
+    if (!c) return false;
+    const prev = this.films.get(game);
+    if (prev?.url === c.url) return true;
+    this.films.set(game, { game, kind: c.kind, url: c.url, name: c.title, fps: c.fps || FILM_FPS, mode: c.mode, anchors: c.anchors ?? [], official: true });
+    this.filmChanged();
+    return true;
+  }
+  detachFilm(game: string) {
+    if (this.state.filmView?.game === game) this.set({ filmView: null });
+    this.films.delete(game);
+    this.savedAnchors.delete(game);
+    this.filmChanged();
+    if (this.reel) void this.reel.goto(this.state.cursor);
+  }
+  setFilmMode(game: string, mode: FilmMode) {
+    const f = this.films.get(game);
+    if (!f) return;
+    f.mode = mode;
+    this.filmChanged();
+  }
+  /** Pinned plays for a game's film, for the inspector and status. */
+  pinnedCount(game: string): number {
+    return this.films.get(game)?.anchors.filter((a) => !a.provisional).length ?? 0;
+  }
+  /** Can the attached film place this play (so its clip is real footage)? */
+  filmPlaces(row: number): boolean {
+    const f = this.films.get(this.gameOfRow(row).id);
+    return !!f && filmTime(f, this.store.p.wall[row]) !== null;
+  }
+
+  /** Film view on: the game's film plays freely from `media` (default: where the current play sits, or 0). */
+  enterFilmView(media?: number) {
+    const row = this.row;
+    if (row < 0) return null;
+    const g = this.gameOfRow(row).id;
+    if (!this.films.get(g) && !this.attachOfficial(g)) return null;
+    const film = this.films.get(g)!;
+    const start = media ?? filmTime(film, this.store.p.wall[row]) ?? film.anchors.filter((a) => !a.provisional).slice(-1)[0]?.media ?? 0;
+    this.set({ filmView: { game: g, media: Math.max(0, start) } });
+    this.reel?.refresh();
+    void this.reel?.goto(this.state.cursor, { rel: 0 });
+    return film.name;
+  }
+  exitFilmView() {
+    if (!this.state.filmView) return;
+    this.set({ filmView: null });
+    this.reel?.refresh();
+    void this.reel?.goto(this.state.cursor);
+  }
+  /** In film view, move the play cursor without touching the film: pick which play the next S pins. */
+  filmViewStep(d: number) {
+    const rows = this.state.result?.rows;
+    const fv = this.state.filmView;
+    if (!rows || !fv) return;
+    let i = this.state.cursor + d;
+    while (i >= 0 && i < rows.length && this.gameOfRow(rows[i]).id !== fv.game) i += d;
+    if (i >= 0 && i < rows.length) this.set({ cursor: i });
+  }
+  /**
+   * Pin: the frame on screen is the current play's t₀. In film view this is tap-sync — pin, then move to the next
+   * play of the same game while the film keeps rolling. On a clip it re-anchors that clip.
+   */
+  syncHere(): string | null {
     const f = this.frame;
     const row = this.row;
-    const el = this.reel?.activeElement;
-    if (!f || row < 0 || !el || !this.reel?.current) return null;
+    if (!f || row < 0 || !this.reel?.current) return null;
     const c = this.reel.current;
     const media = f.frame / f.fps;
-    if (c.kind === "local") {
-      const g = this.store.meta.games[this.store.p.game[row]].id;
-      const film = this.films.get(g);
-      if (!film) return null;
+    const g = this.gameOfRow(row).id;
+    const film = this.films.get(g);
+    if (film && (this.state.filmView || c.kind === "local" || c.kind === "youtube")) {
       const wall = this.store.p.wall[row];
-      // The presented frame becomes this play's t₀; the provisional tip-off guess gives way to it.
-      film.anchors = [...film.anchors.filter((a) => a.wall !== wall && !a.provisional), { wall, media }];
-      this.persistFilms();
-      this.reel.refresh();
+      film.anchors = [...film.anchors.filter((a) => Math.abs(a.wall - wall) > 1 && !a.provisional), { wall, media }].sort((a, b) => a.wall - b.wall);
+      this.filmChanged();
+      const pinned = film.anchors.length;
+      if (this.state.filmView) {
+        const before = this.state.cursor;
+        this.filmViewStep(1);
+        if (this.state.cursor === before) return `pinned ${pinned} · t₀ ${media.toFixed(2)}s · that was the last play of this game in the reel`;
+        return `pinned ${pinned} · t₀ ${media.toFixed(2)}s · next: ${this.store.meta.players[this.store.p.actor[this.row]]?.short ?? "team"}`;
+      }
       void this.reel.goto(this.state.cursor, { rel: 0 });
-      return `film anchor ${film.anchors.length} · t₀ = ${media.toFixed(3)}s`;
+      return `pinned ${pinned} · t₀ ${media.toFixed(2)}s`;
     }
     this.anchors.set(c.key, media);
     this.reel.refresh();
     void this.reel.goto(this.state.cursor, { rel: 0 });
-    return `t₀ re-anchored to frame ${f.frame}`;
+    return `t₀ pinned to frame ${f.frame}`;
+  }
+  /** Kept for the e2e/keyboard path that predates tap-sync. */
+  anchorHere(): string | null {
+    return this.syncHere();
+  }
+  filmsParam(): string {
+    return encodeFilms(this.films.values());
   }
   private persistFilms() {
-    for (const f of this.films.values()) this.savedAnchors.set(f.game, f.anchors);
-    writeLocal(
-      FILM_KEY,
-      [...this.savedAnchors.entries()].map(([game, anchors]) => ({ game, name: this.films.get(game)?.name ?? "", fps: 30000 / 1001, anchors })),
-    );
+    for (const f of this.films.values()) if (f.kind === "file") this.savedAnchors.set(f.game, f.anchors);
+    const out: Omit<LocalFilm, "url">[] & { url?: string }[] = [];
+    for (const f of this.films.values()) out.push(f.kind === "file" ? { ...f, url: "" } : f);
+    for (const [game, anchors] of this.savedAnchors) if (!this.films.has(game)) out.push({ game, kind: "file", name: "", fps: FILM_FPS, mode: "continuous", anchors, url: "" } as LocalFilm);
+    writeLocal(FILM_KEY, out);
   }
 
-  toast(text: string) {
+  /** Status line. Errors stay long enough to read and act on; the next action replaces either kind. */
+  toast(text: string, tone: "info" | "error" = "info") {
     window.clearTimeout(this.toastTimer);
-    this.set({ toast: { text, id: Date.now() } });
-    this.toastTimer = window.setTimeout(() => this.set({ toast: null }), 1600);
+    this.set({ toast: { text, id: Date.now(), tone } });
+    this.toastTimer = window.setTimeout(() => this.set({ toast: null }), tone === "error" ? 6000 : 2000);
   }
 
   destroy() {

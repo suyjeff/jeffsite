@@ -39,11 +39,11 @@ export function TopBar({
       <div className={s.count} data-testid="count">
         <b>{st.result?.rows.length.toLocaleString() ?? "—"}</b> plays · {st.result ? st.result.ms.toFixed(2) : "—"} ms
       </div>
-      <div className={s.views} aria-label="View (V)">
+      <div className={s.views} role="group" aria-label="View (V)">
         {VIEWS.map((v) => (
-          <span key={v} data-on={st.view === v}>
+          <button key={v} type="button" tabIndex={-1} aria-pressed={st.view === v} data-on={st.view === v} onClick={() => app.set({ view: v })}>
             {VIEW_LABEL[v]}
-          </span>
+          </button>
         ))}
       </div>
     </div>

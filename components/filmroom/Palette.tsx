@@ -12,6 +12,7 @@ interface Item {
 
 const SAVED: [string, string][] = [
   ["Acceptance: 10-constraint golden query", ""],
+  ["Real NBA film: Kings vs Warriors IST ending (F to watch and pin)", "game:2023-11-28 q:4 clock:<3:40"],
   ["Curry catch-and-shoot threes off Draymond", "shooter:curry shot:3pt ast:green result:make"],
   ["Clutch: last 2:00, within 5, GSW offense", "side:off q:4 clock:<2:00 margin:-5..5 type:fga"],
   ["Opponent corner threes vs GSW", "side:def shot:3pt zone:corner_3"],
@@ -23,7 +24,19 @@ const SAVED: [string, string][] = [
   ["Anything I have tagged", "tagged:true"],
 ];
 
-export function Palette({ seed, onClose, onCommand, onQuery }: { seed: string; onClose: () => void; onCommand: (id: string) => void; onQuery: () => void }) {
+export function Palette({
+  seed,
+  onClose,
+  onCommand,
+  onQuery,
+  onFilm,
+}: {
+  seed: string;
+  onClose: () => void;
+  onCommand: (id: string) => void;
+  onQuery: () => void;
+  onFilm: (url: string) => void;
+}) {
   const app = useApp();
   const st = useAppState();
   const [q, setQ] = useState(seed);
@@ -42,6 +55,23 @@ export function Palette({ seed, onClose, onCommand, onQuery }: { seed: string; o
       const qq = query || app.fixture?.query || "";
       list.push({ id: `q:${label}`, group: "Queries", label, hint: qq, run: runQ(qq) });
     });
+    const row = app.row;
+    const g = row >= 0 ? app.gameOfRow(row) : null;
+    const film = g ? app.films.get(g.id) : undefined;
+    const official = g ? app.catalog.get(g.id) : undefined;
+    // A pasted link is a film to attach, not a search.
+    if (/^(https?:\/\/|www\.|youtu)/i.test(q.trim()) && g)
+      list.push({ id: "attach-url", group: "Film", label: `Attach as film for ${g.date}`, hint: q.trim(), run: () => onFilm(q.trim()) });
+    const filmCmds: [string, string, string][] = [];
+    if (official && film?.url !== official.url) filmCmds.push(["official", `Attach official NBA film: ${official.title}`, "YouTube · NBA"]);
+    if (film) {
+      filmCmds.push(["film-view", st.filmView ? "Leave film view" : "Film view: play the film freely, S pins plays", "F"]);
+      filmCmds.push([film.mode === "cut" ? "film-continuous" : "film-cut", film.mode === "cut" ? "Film is one continuous broadcast (one pin syncs the game)" : "Film is edited (only pinned plays get clips)", film.mode]);
+      filmCmds.push(["film-detach", `Detach film (${film.name})`, ""]);
+    }
+    filmCmds.push(["film", "Open a game recording from disk… (or drop it anywhere)", "⇧O"]);
+    filmCmds.push(["nba", "Watch this game on NBA.com (League Pass)", "W"]);
+    for (const [id, label, hint] of filmCmds) list.push({ id, group: "Film", label, hint, run: () => onCommand(id) });
     const cmds: [string, string, string][] = [
       ["help", "Keyboard map", "?"],
       ["report", "Integrity report · reconciliation vs official box scores", ""],
@@ -49,7 +79,6 @@ export function Palette({ seed, onClose, onCommand, onQuery }: { seed: string; o
       ["view:tl", "View: NLE timeline", "V"],
       ["view:tape", "View: PBP tape", "V"],
       ["view:map", "View: shot map", "V"],
-      ["film", "Open game film for this game… (then Shift+A at t₀ to sync)", "⇧O"],
       ["export", "Export my tags (JSON)", ""],
       ["import", "Import tags (JSON)", ""],
       ["fixture", `${st.showFixture ? "Hide" : "Show"} golden fixture tags`, ""],
@@ -79,7 +108,7 @@ export function Palette({ seed, onClose, onCommand, onQuery }: { seed: string; o
       });
     });
     return list;
-  }, [app, st.showFixture, st.pre, st.post, onCommand, onQuery]);
+  }, [app, q, st.showFixture, st.pre, st.post, st.films, st.filmView, st.cursor, onCommand, onQuery, onFilm]);
 
   const filtered = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -97,14 +126,15 @@ export function Palette({ seed, onClose, onCommand, onQuery }: { seed: string; o
 
   return (
     <div className={s.scrim} onMouseDown={onClose} data-testid="palette">
-      <div className={s.palette} onMouseDown={(e) => e.stopPropagation()}>
+      <div className={s.palette} role="dialog" aria-modal="true" aria-label="Command palette" onMouseDown={(e) => e.stopPropagation()}>
         <div className={s.palInput}>
           <span className="acc mono">⌘K</span>
           <input
             ref={input}
+            aria-label="Search commands, queries and games, or paste a film link"
             value={q}
             spellCheck={false}
-            placeholder="query, command, or game date/opponent…"
+            placeholder="query, command, game date/opponent, or paste a film link…"
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
@@ -138,7 +168,7 @@ export function Palette({ seed, onClose, onCommand, onQuery }: { seed: string; o
             return (
               <React.Fragment key={it.id}>
                 {head && <div className={`${s.palGroup} label`}>{it.group}</div>}
-                <div className={s.palRow} data-on={idx === sel}>
+                <div className={s.palRow} data-on={idx === sel} onMouseEnter={() => setSel(idx)} onClick={() => it.run()}>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} className={it.group === "Slate" ? "mono" : ""}>
                     {it.label}
                   </span>

@@ -1,0 +1,17 @@
+{
+  "note": "Official NBA uploads that cover games in this bundle, embedded through YouTube's IFrame API. Each entry is verified by oEmbed (author_name = NBA). Mode 'cut' = edited footage: plays need their own pin (film view: F, then S at each release). No anchors are shipped that were not read off the film.",
+  "films": [
+    {
+      "game": "22300060",
+      "kind": "youtube",
+      "url": "yt:yPqqaXs2wQs",
+      "title": "INSANE IN-SEASON TOURNAMENT ENDING Kings vs Warriors | November 28, 2023",
+      "name": "NBA · Kings vs Warriors ending",
+      "author": "NBA",
+      "fps": 30,
+      "mode": "cut",
+      "note": "Final 3:30 of regulation, edited: timeouts and the coach's challenge are cut. Scorebug checks: 25% = Q4 3:30 119-114, 50% = Q4 2:50 challenge, 75% = FINAL 123-124.",
+      "anchors": []
+    }
+  ]
+}
