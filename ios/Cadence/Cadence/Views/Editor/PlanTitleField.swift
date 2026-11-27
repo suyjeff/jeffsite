@@ -91,7 +91,7 @@ struct DeletePlanButton: View {
             Label("Delete plan", systemImage: "trash")
                 .font(.cadenceCallout)
                 .frame(maxWidth: .infinity)
-                .frame(height: 48)
+                .frame(minHeight: 48)
         }
         .buttonStyle(.glass)
         .tint(Color.danger)

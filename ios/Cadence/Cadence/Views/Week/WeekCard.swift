@@ -283,7 +283,10 @@ struct StatusGlyph: View {
     }
 }
 
-/// A tappable part of a row: highlights on touch-down, settles a step darker once marked.
+/// A tappable part of a row; it settles a step darker once marked. A tap gesture rather than a
+/// Button: a Button keeps the touch while the finger moves, and SwiftUI makes the deck's
+/// sideways drag wait for it, so a swipe that started on a row would never switch plans. A tap
+/// lets go the moment the finger moves.
 struct MarkCell<Content: View>: View {
     var mark: Mark?
     var isEnabled: Bool
@@ -293,19 +296,23 @@ struct MarkCell<Content: View>: View {
     @Environment(\.focusedKey) private var focusedKey
 
     var body: some View {
-        Button {
-            // The release that ends a hold isn't a tap.
-            guard isEnabled, focusedKey == nil else { return }
-            onTap()
-        } label: {
-            content
-                .background(mark != nil ? Color.settled : Color.surface)
-                .animation(Motion.settle, value: mark)
-                .contentShape(.rect)
-        }
-        .buttonStyle(RowPressStyle())
-        .disabled(!isEnabled)
-        .accessibilityValue(mark == .done ? "Done" : mark == .skipped ? "Skipped" : "Not done")
+        content
+            .background(mark != nil ? Color.settled : Color.surface)
+            .animation(Motion.settle, value: mark)
+            .contentShape(.rect)
+            .onTapGesture {
+                // The release that ends a hold isn't a tap.
+                guard isEnabled, focusedKey == nil else { return }
+                onTap()
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(isEnabled ? .isButton : [])
+            .accessibilityValue(!isEnabled ? "Nothing planned" : mark == .done ? "Done" : mark == .skipped ? "Skipped" : "Not done")
+            .accessibilityActions {
+                if isEnabled {
+                    Button("Check off") { onTap() }
+                }
+            }
     }
 }
 

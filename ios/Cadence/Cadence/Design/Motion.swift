@@ -22,7 +22,7 @@ enum Motion {
 
     /// A completion mark popping in past full size. Reduce Motion gets a short fade instead.
     static func pop(reduceMotion: Bool) -> Animation {
-        reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.4, bounce: 0.55)
+        reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.38, bounce: 0.4)
     }
 
     /// What arrives slides 20pt in from the side it's coming from and fades up; what leaves

@@ -69,18 +69,26 @@ final class MenuController {
     /// Bumps per menu, so each one is a fresh view with its own transition.
     private(set) var generation = 0
 
+    /// Where the finger is while it's down on the menu (or still down on the control that
+    /// opened it). The panel leans and stretches toward it on a spring.
+    private(set) var finger: CGPoint?
+
     @ObservationIgnored var rowFrames: [String: CGRect] = [:]
+    @ObservationIgnored var panelFrame: CGRect = .zero
     @ObservationIgnored private var dragSelects = true
 
     var isOpen: Bool { request != nil }
 
-    func open(_ request: MenuRequest, reduceMotion: Bool = false) {
+    /// - Parameter held: opened by a hold (a fuller haptic) rather than a tap.
+    func open(_ request: MenuRequest, held: Bool = false, reduceMotion: Bool = false) {
         rowFrames = [:]
         highlighted = nil
+        finger = nil
         dragSelects = request.choosesOnRelease
         generation += 1
-        Haptics.shared.menuOpen()
-        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.3, bounce: 0.16)) {
+        Haptics.shared.menuOpen(held: held)
+        // Opened many times a day, so quick: a 0.24s spring with just enough give.
+        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.24, bounce: 0.14)) {
             self.request = request
         }
     }
@@ -88,6 +96,7 @@ final class MenuController {
     /// The finger moved while a press that opened this menu (or a touch on its panel) is down.
     func track(_ point: CGPoint, fromTrigger: Bool) {
         guard let request else { return }
+        finger = point
         if fromTrigger && !dragSelects { return }
         let hit = request.items.first { item in
             item.isEnabled && (rowFrames[item.id]?.contains(point) ?? false)
@@ -100,6 +109,7 @@ final class MenuController {
     /// The finger lifted. Over a row, that row is chosen; anywhere else the menu stays open
     /// for a tap.
     func release(fromTrigger: Bool) {
+        finger = nil
         guard let id = highlighted else { return }
         if fromTrigger && !dragSelects { return }
         choose(id)
@@ -108,6 +118,7 @@ final class MenuController {
     /// A touch on the panel went away without lifting over a row (scrolled, cancelled).
     func clearHighlight() {
         highlighted = nil
+        finger = nil
     }
 
     func choose(_ id: String) {
@@ -120,6 +131,7 @@ final class MenuController {
     func close() {
         guard request != nil else { return }
         highlighted = nil
+        finger = nil
         withAnimation(.easeOut(duration: 0.16)) { request = nil }
     }
 }
@@ -165,14 +177,15 @@ private struct PressMenuTrigger: ViewModifier {
             .gesture(PressGesture(
                 isEnabled: isEnabled,
                 onPress: press,
-                onOpen: open,
+                onOpen: { open(held: $0) },
                 onTrack: { menu?.track($0, fromTrigger: true) },
-                onRelease: { menu?.release(fromTrigger: true) }
+                onRelease: { menu?.release(fromTrigger: true) },
+                onCancel: { menu?.clearHighlight() }
             ))
             .accessibilityElement(children: .combine)
             .accessibilityLabel(label)
             .accessibilityAddTraits(.isButton)
-            .accessibilityAction { open() }
+            .accessibilityAction { open(held: false) }
     }
 
     /// Pressing loads the control like a spring: it sinks slowly at first, then faster as
@@ -186,13 +199,13 @@ private struct PressMenuTrigger: ViewModifier {
     }
 
     /// The menu opens as the control pops back past its size, releasing the tension.
-    private func open() {
+    private func open(held: Bool) {
         guard isEnabled, let menu else {
             withAnimation(.spring(duration: 0.3, bounce: 0.3)) { pressed = false }
             return
         }
         withAnimation(.spring(duration: 0.42, bounce: 0.5)) { pressed = false }
-        menu.open(makeRequest(box.frame), reduceMotion: reduceMotion)
+        menu.open(makeRequest(box.frame), held: held, reduceMotion: reduceMotion)
     }
 }
 
@@ -206,9 +219,12 @@ private final class MenuFrameBox {
 private struct PressGesture: UIGestureRecognizerRepresentable {
     var isEnabled: Bool
     var onPress: (Bool) -> Void
-    var onOpen: () -> Void
+    /// Called with whether the press was held (or slid) rather than tapped.
+    var onOpen: (Bool) -> Void
     var onTrack: (CGPoint) -> Void
     var onRelease: () -> Void
+    /// The touch was taken away after the menu opened: let go of the highlight and the lean.
+    var onCancel: () -> Void
 
     /// Long enough to feel the press load up and to tell a hold from a tap; short enough
     /// that holding never feels like waiting.
@@ -246,19 +262,20 @@ private struct PressGesture: UIGestureRecognizerRepresentable {
                 onTrack(point)
             } else if hypot(point.x - coordinator.start.x, point.y - coordinator.start.y) > 8 {
                 // Sliding away from the control: open now so the slide lands on a row.
-                coordinator.openNow()
+                coordinator.openNow(held: true)
                 onTrack(point)
             }
         case .ended:
             if coordinator.opened {
                 onRelease()
             } else {
-                coordinator.openNow()
+                coordinator.openNow(held: false)
             }
             coordinator.reset()
         case .cancelled, .failed:
             Haptics.shared.endHoldBuild()
             onPress(false)
+            if coordinator.opened { onCancel() }
             coordinator.reset()
         default:
             break
@@ -269,7 +286,7 @@ private struct PressGesture: UIGestureRecognizerRepresentable {
     final class Coordinator {
         var start: CGPoint = .zero
         var opened = false
-        var onOpen: () -> Void = {}
+        var onOpen: (Bool) -> Void = { _ in }
         private var pending: Task<Void, Never>?
 
         func scheduleOpen(after delay: TimeInterval) {
@@ -277,16 +294,16 @@ private struct PressGesture: UIGestureRecognizerRepresentable {
             pending = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(delay))
                 guard !Task.isCancelled else { return }
-                self?.openNow()
+                self?.openNow(held: true)
             }
         }
 
-        func openNow() {
+        func openNow(held: Bool) {
             pending?.cancel()
             pending = nil
             guard !opened else { return }
             opened = true
-            onOpen()
+            onOpen(held)
         }
 
         func reset() {
@@ -353,7 +370,7 @@ struct MenuLayer: View {
             .animation(.easeOut(duration: 0.14))
         guard !reduceMotion else { return .opacity }
         return .asymmetric(
-            insertion: .scale(scale: 0.82, anchor: anchor).combined(with: .opacity),
+            insertion: .scale(scale: 0.94, anchor: anchor).combined(with: .opacity),
             removal: exit
         )
     }
@@ -384,6 +401,9 @@ private struct MenuPanel: View {
     let panelMinX: CGFloat
 
     @Environment(\.menuController) private var menu
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var highlightSpace
+    @GestureState private var touching = false
 
     private let radius: CGFloat = 22
     private let tail: CGFloat = 9
@@ -428,11 +448,28 @@ private struct MenuPanel: View {
         .padding(.bottom, isConfirmation ? 10 : 0)
         .padding(.bottom, hasTail ? tail : 0)
         .glassEffect(.regular, in: BubbleShape(radius: radius, tail: hasTail ? tail : 0, tailX: tailOffset))
+        .onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: .global)
+        } action: { frame in
+            // Only the resting frame: once the panel leans, its measured frame moves with it,
+            // and leaning from that would feed back on itself.
+            if menu?.finger == nil { menu?.panelFrame = frame }
+        }
+        // While the finger is down, the panel leans toward it and stretches a touch along that
+        // axis, on a loose spring, so it feels like something held rather than drawn.
+        .modifier(Lean(isEnabled: !reduceMotion))
+        // The highlight glides from row to row instead of jumping.
+        .animation(.spring(duration: 0.24, bounce: 0.22), value: menu?.highlighted)
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                .updating($touching) { _, state, _ in state = true }
                 .onChanged { value in menu?.track(value.location, fromTrigger: false) }
                 .onEnded { _ in menu?.release(fromTrigger: false) }
         )
+        .onChange(of: touching) { _, isTouching in
+            // A touch on the panel that was taken away rather than lifted.
+            if !isTouching { menu?.clearHighlight() }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape) { menu?.close() }
@@ -474,22 +511,24 @@ private struct MenuPanel: View {
         .foregroundStyle(color)
         .frame(maxWidth: .infinity, alignment: prominent ? .center : .leading)
         .padding(.horizontal, 16)
-        .frame(height: prominent ? 46 : 44)
+        // A floor, not a fixed height, so larger text sizes get taller rows.
+        .padding(.vertical, 4)
+        .frame(minHeight: prominent ? 46 : 44)
         .background {
             if prominent {
                 Capsule()
                     .fill(Color.danger)
                     .brightness(highlighted ? -0.08 : 0)
                     .padding(.horizontal, 10)
-            } else {
+            } else if highlighted {
                 // Concentric with the panel: its radius less the inset.
                 RoundedRectangle(cornerRadius: radius - 6, style: .continuous)
-                    .fill(Color.ink.opacity(highlighted ? 0.08 : 0))
+                    .fill(Color.ink.opacity(0.08))
                     .padding(.horizontal, 6)
+                    .matchedGeometryEffect(id: "highlight", in: highlightSpace)
             }
         }
         .scaleEffect(prominent && highlighted ? 0.97 : 1)
-        .animation(.easeOut(duration: 0.08), value: highlighted)
         .contentShape(.rect)
         .onGeometryChange(for: CGRect.self) { proxy in
             proxy.frame(in: .global)
@@ -503,6 +542,50 @@ private struct MenuPanel: View {
         .accessibilityAction {
             if item.isEnabled { menu?.choose(item.id) }
         }
+    }
+}
+
+/// The panel's give under the finger. Inside the panel it drifts a few points toward the
+/// finger; past its edge it follows with rubber-band resistance and stretches up to 4% along
+/// that axis, anchored on the far side. A loose spring (it trails and settles with a little
+/// wobble) makes the motion read as weight. Lifting the finger springs it back.
+private struct Lean: ViewModifier {
+    var isEnabled: Bool
+
+    /// Read here, not in the panel, so a moving finger re-renders only this modifier and not
+    /// every row of the menu.
+    @Environment(\.menuController) private var menu
+
+    private var finger: CGPoint? { isEnabled ? menu?.finger : nil }
+    private var frame: CGRect { menu?.panelFrame ?? .zero }
+
+    func body(content: Content) -> some View {
+        let lean = lean
+        content
+            .scaleEffect(x: lean.scale.width, y: lean.scale.height, anchor: lean.anchor)
+            .offset(lean.offset)
+            .animation(
+                finger == nil ? .spring(duration: 0.45, bounce: 0.4) : .interactiveSpring(response: 0.28, dampingFraction: 0.6),
+                value: finger
+            )
+    }
+
+    private var lean: (offset: CGSize, scale: CGSize, anchor: UnitPoint) {
+        guard let finger, frame.width > 0, frame.height > 0 else { return (.zero, CGSize(width: 1, height: 1), .center) }
+        // How far past each edge the finger is (zero inside).
+        let overX = finger.x < frame.minX ? finger.x - frame.minX : finger.x > frame.maxX ? finger.x - frame.maxX : 0
+        let overY = finger.y < frame.minY ? finger.y - frame.minY : finger.y > frame.maxY ? finger.y - frame.maxY : 0
+        // Inside: a gentle drift toward the finger from the center.
+        let driftX = (finger.x - frame.midX) / frame.width * 4
+        let driftY = (finger.y - frame.midY) / frame.height * 4
+        let offset = CGSize(
+            width: driftX + Motion.resist(overX, dimension: 160) * 0.22,
+            height: driftY + Motion.resist(overY, dimension: 220) * 0.22
+        )
+        let stretchX = 1 + min(abs(overX) / 1500, 0.04)
+        let stretchY = 1 + min(abs(overY) / 2000, 0.04)
+        let anchor = UnitPoint(x: overX > 0 ? 0 : overX < 0 ? 1 : 0.5, y: overY > 0 ? 0 : overY < 0 ? 1 : 0.5)
+        return (offset, CGSize(width: stretchX, height: stretchY), anchor)
     }
 }
 

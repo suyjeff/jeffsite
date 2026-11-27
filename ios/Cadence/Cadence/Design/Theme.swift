@@ -79,7 +79,8 @@ extension Font {
     static let cadenceSubhead = Font.custom("PlusJakartaSans-Medium", size: 15, relativeTo: .subheadline)
     static let cadenceLabel = Font.custom("GeistMono-Medium", size: 14, relativeTo: .footnote)
     static let cadenceCaption = Font.custom("GeistMono-Medium", size: 12, relativeTo: .caption)
-    static let cadenceMicro = Font.custom("GeistMono-Regular", size: 11, relativeTo: .caption2)
+    /// Chart axes, ruler numbers, dates under weekdays: the floor of the scale.
+    static let cadenceMicro = Font.custom("GeistMono-Regular", size: 12, relativeTo: .caption2)
 
     static func cadenceNumber(_ size: CGFloat) -> Font {
         .custom("PlusJakartaSans-Bold", size: size, relativeTo: .largeTitle)

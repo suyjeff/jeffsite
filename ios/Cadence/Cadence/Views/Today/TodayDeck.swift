@@ -43,7 +43,13 @@ struct PlanDeck<Card: View>: View {
     @State private var flying = false
     @State private var popping: UUID?
     @State private var reentering: UUID?
-    @State private var tension = false
+    /// The card that just popped, on its way to the back: blurred and dimmed as it sinks.
+    @State private var sinking: UUID?
+    /// Which tick of the pull the haptics last played (0 = none).
+    @State private var pullStep = 0
+    /// Where the deck is headed once a throw or pop lands. The dots move there on release,
+    /// in step with the card, instead of waiting for the card to finish flying.
+    @State private var landing: Int?
 
     /// How far a pull has to go before it commits. Deliberately longer than a scroll's bounce.
     private let pullDistance: CGFloat = 128
@@ -86,9 +92,11 @@ struct PlanDeck<Card: View>: View {
                 .padding(.top, 14)
             }
 
-            DeckDots(count: plans.count, index: frontIndex) { target in
+            DeckDots(count: plans.count, index: landing ?? frontIndex) { target in
                 guard target != frontIndex else { return }
                 cycle(by: target - frontIndex, count: plans.count)
+            } onScrub: { target in
+                scrub(to: target)
             }
         }
     }
@@ -109,9 +117,13 @@ struct PlanDeck<Card: View>: View {
         let effective = isFront ? 0 : max(0, CGFloat(depth) - promote)
         let visibleDepth = min(effective, 2)
         let isReentering = reentering == plan.id
-        // A pull fades the front card a little. Derived from the animated drag (not the
-        // gesture), so the fade eases back with the card instead of snapping on release.
-        let fade = isFront && abs(drag.height) > abs(drag.width) ? 1 - 0.28 * Double(promote) : 1
+        // A pull fades, darkens and softens the front card as the one behind rises. Derived
+        // from the animated drag (not the gesture), so it eases back with the card instead of
+        // snapping on release.
+        let pull = isFront && abs(drag.height) > abs(drag.width) ? promote : 0
+        let fade = 1 - 0.22 * Double(pull)
+        // A popped card sinks into the stack: out of focus and in shadow until it lands.
+        let sinks = sinking == plan.id
 
         Group {
             // Only the front card and the one about to come forward are drawn in full; the
@@ -138,7 +150,9 @@ struct PlanDeck<Card: View>: View {
         .offset(y: -Metrics.deckPeek * min(visibleDepth, 1))
         .opacity(effective > 1 ? Double(max(0, 2 - effective)) : 1)
         .opacity(fade)
-        .scaleEffect(popping == plan.id && !reduceMotion ? 1.04 : 1)
+        .brightness(-0.14 * Double(pull) - (sinks ? 0.18 : 0))
+        .blur(radius: reduceMotion ? 0 : 5 * pull + (sinks ? 6 : 0))
+        .scaleEffect(popping == plan.id && !reduceMotion ? 1.06 : 1)
         .scaleEffect(isReentering ? 0.97 : 1, anchor: .top)
         .opacity(isReentering ? 0 : 1)
         .offset(isFront ? drag : .zero)
@@ -190,11 +204,11 @@ struct PlanDeck<Card: View>: View {
             drag = CGSize(width: 0, height: Motion.rubberband(t.height * 0.6, limit: pulling ? 64 : 44))
             promote = min(1, abs(t.height) / pullDistance)
             setReveal(pulling ? 1 : -1)
-            if !tension {
-                tension = true
-                Haptics.shared.beginTension()
-            }
-            Haptics.shared.setTension(Double(promote))
+            // Tick, tick, tick: one even tap for every sixth of the way, then the detent when
+            // it's far enough. Felt as notches, never a buzz.
+            let step = min(Int(promote * 6), 5)
+            if step > pullStep { Haptics.shared.pullTick() }
+            pullStep = step
             setArmed(abs(t.height) >= pullDistance)
         case nil:
             break
@@ -205,10 +219,7 @@ struct PlanDeck<Card: View>: View {
         let current = axis
         axis = nil
         armed = false
-        if tension {
-            tension = false
-            Haptics.shared.endTension()
-        }
+        pullStep = 0
         guard !flying else { return }
         guard focusedKey == nil, count > 1 else {
             settle(velocity: v)
@@ -237,16 +248,13 @@ struct PlanDeck<Card: View>: View {
         }
     }
 
-    /// The drag was taken away (a call, Control Center) without ending: stop the hum and put
-    /// the card back.
+    /// The drag was taken away (a call, Control Center) without ending: reset the pull's
+    /// ticks and put the card back.
     private func cancelled() {
         guard axis != nil else { return }
         axis = nil
         armed = false
-        if tension {
-            tension = false
-            Haptics.shared.endTension()
-        }
+        pullStep = 0
         if !flying { settle(velocity: .zero) }
     }
 
@@ -271,6 +279,7 @@ struct PlanDeck<Card: View>: View {
         let step = direction < 0 ? 1 : -1
         flying = true
         Feedback.play(.toss)
+        withAnimation(Motion.snappy) { landing = landingIndex(from: plan.id, step: step) }
         let target = direction * (width + 160)
         let animation: Animation = reduceMotion
             ? .easeOut(duration: 0.18)
@@ -283,6 +292,7 @@ struct PlanDeck<Card: View>: View {
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 frontID = neighbor(of: plan.id, step: step)
+                landing = nil
                 drag = .zero
                 promote = 0
                 reveal = 0
@@ -299,9 +309,11 @@ struct PlanDeck<Card: View>: View {
         guard let plan = store.plan(frontID) ?? store.plans.first else { return }
         flying = true
         Feedback.play(.pop)
+        withAnimation(Motion.snappy) { landing = landingIndex(from: plan.id, step: 1) }
         guard !reduceMotion else {
             withAnimation(Motion.standard) {
                 frontID = neighbor(of: plan.id, step: 1)
+                landing = nil
                 drag = .zero
                 promote = 0
                 reveal = 0
@@ -309,18 +321,23 @@ struct PlanDeck<Card: View>: View {
             flying = false
             return
         }
-        withAnimation(.spring(duration: 0.09, bounce: 0), completionCriteria: .logicallyComplete) {
+        // Beat one: the card lifts toward you, out of the stack.
+        withAnimation(.spring(duration: 0.1, bounce: 0), completionCriteria: .logicallyComplete) {
             popping = plan.id
             promote = 1
-            drag = CGSize(width: 0, height: drag.height * 0.5)
+            drag = CGSize(width: 0, height: drag.height * 0.4)
         } completion: {
-            withAnimation(.spring(duration: 0.26, bounce: 0.12), completionCriteria: .logicallyComplete) {
+            // Beat two: it drops behind, sinking out of focus, as the next card opens.
+            withAnimation(.spring(duration: 0.28, bounce: 0.1), completionCriteria: .logicallyComplete) {
                 frontID = neighbor(of: plan.id, step: 1)
+                landing = nil
                 popping = nil
+                sinking = plan.id
                 drag = .zero
                 promote = 0
                 reveal = 0
             } completion: {
+                withAnimation(.easeOut(duration: 0.16)) { sinking = nil }
                 flying = false
             }
         }
@@ -333,6 +350,23 @@ struct PlanDeck<Card: View>: View {
         guard !plans.isEmpty else { return nil }
         guard let index = store.index(of: id) else { return plans.first?.id }
         return plans[((index + step) % plans.count + plans.count) % plans.count].id
+    }
+
+    private func landingIndex(from id: UUID, step: Int) -> Int? {
+        neighbor(of: id, step: step).flatMap { store.index(of: $0) }
+    }
+
+    /// Scrubbing the dots: the deck follows the finger page by page, a light tick for each.
+    private func scrub(to target: Int) {
+        let plans = store.plans
+        guard !flying, plans.indices.contains(target), plans[target].id != frontID else { return }
+        Haptics.shared.tick()
+        withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .spring(duration: 0.2, bounce: 0)) {
+            frontID = plans[target].id
+            drag = .zero
+            promote = 0
+            reveal = 0
+        }
     }
 
     private func settle(velocity: CGSize, bounce: Double = 0.14) {
@@ -370,31 +404,52 @@ struct PlanDeck<Card: View>: View {
     }
 }
 
-/// The page dots under the deck: how many plans there are and which is in front. Tap a dot to
-/// go to that plan; VoiceOver adjusts it like a page control.
+/// The page dots under the deck: how many plans there are and which is in front.
+///
+/// Tap a dot to go to that plan, or press and slide along them to page through the deck: the
+/// row swells into a glass capsule, the dots nearest the finger grow like a dock, and every
+/// plan you pass comes to the front with a tick. VoiceOver adjusts it like a page control.
 struct DeckDots: View {
     let count: Int
     let index: Int
     var onSelect: (Int) -> Void
+    var onScrub: (Int) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The finger's x within the dots while scrubbing (once it has moved; a tap isn't a scrub).
+    @State private var finger: CGFloat?
+    @State private var touchStart: CGFloat?
+
+    private var pitch: CGFloat { count > 9 ? 12 : 18 }
 
     var body: some View {
+        let scrubbing = finger != nil
         HStack(spacing: 0) {
             if count > 1 {
                 ForEach(0..<count, id: \.self) { dot in
                     let current = dot == index
                     Circle()
-                        .fill(current ? Color.ink : Color.inkMuted.opacity(0.55))
+                        .fill(current ? Color.ink : Color.inkMuted.opacity(0.6))
                         .frame(width: 7, height: 7)
-                        .scaleEffect(current ? 1 : 0.86)
-                        .frame(width: count > 9 ? 12 : 16, height: 28)
-                        .contentShape(.rect)
-                        .onTapGesture { onSelect(dot) }
+                        .scaleEffect((current ? 1 : 0.86) * magnification(dot))
+                        .frame(width: pitch, height: 28)
                 }
             }
         }
-        .frame(height: 28)
-        .padding(.top, 6)
-        .animation(Motion.snappy, value: index)
+        .padding(.horizontal, 10)
+        .background {
+            Capsule()
+                .fill(.clear)
+                .glassEffect(scrubbing ? .regular : .identity, in: .capsule)
+                .scaleEffect(scrubbing || reduceMotion ? 1 : 0.9)
+        }
+        // A 44pt-tall hit area around the 28pt row.
+        .padding(.vertical, 8)
+        .contentShape(.rect)
+        .gesture(scrubGesture)
+        .animation(.spring(duration: 0.2, bounce: 0), value: index)
+        .animation(.spring(duration: 0.28, bounce: 0.25), value: scrubbing)
+        .animation(.interactiveSpring(duration: 0.18), value: finger)
         .accessibilityElement()
         .accessibilityLabel("Plan")
         .accessibilityValue(count > 1 ? "\(index + 1) of \(count)" : "")
@@ -406,6 +461,37 @@ struct DeckDots: View {
             }
         }
         .accessibilityHidden(count < 2)
+    }
+
+    /// Dots swell near the finger, up to 1.7× right under it, falling off over two dots.
+    private func magnification(_ dot: Int) -> CGFloat {
+        guard let finger, !reduceMotion else { return 1 }
+        let center = 10 + pitch * (CGFloat(dot) + 0.5)
+        let distance = abs(finger - center) / pitch
+        return 1 + 0.7 * max(0, 1 - distance / 2)
+    }
+
+    private func dot(at x: CGFloat) -> Int {
+        min(max(Int(((x - 10) / pitch).rounded(.down)), 0), count - 1)
+    }
+
+    private var scrubGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard count > 1 else { return }
+                if touchStart == nil { touchStart = value.location.x }
+                // Scrubbing starts once the finger slides; a tap goes through onSelect below.
+                guard finger != nil || abs(value.location.x - (touchStart ?? 0)) > 6 else { return }
+                if finger == nil { Haptics.shared.press() }
+                finger = value.location.x
+                onScrub(dot(at: value.location.x))
+            }
+            .onEnded { value in
+                let wasScrubbing = finger != nil
+                finger = nil
+                touchStart = nil
+                if !wasScrubbing { onSelect(dot(at: value.location.x)) }
+            }
     }
 }
 

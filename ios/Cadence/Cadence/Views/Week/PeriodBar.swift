@@ -23,7 +23,7 @@ struct PeriodBar: View {
             stepButton("chevron.forward", label: "Next \(unit)", delta: 1)
         }
         .padding(.horizontal, 8)
-        .frame(height: 44)
+        .frame(minHeight: 44)
         .overlay(alignment: .bottom) { Hairline() }
     }
 
@@ -63,7 +63,8 @@ struct BackToToday: View {
                 .font(.cadenceCallout)
                 .foregroundStyle(Color.ink)
                 .padding(.horizontal, 16)
-                .frame(height: 40)
+                .padding(.vertical, 4)
+                .frame(minHeight: 40)
                 .glassEffect(.regular.interactive(), in: .capsule)
                 .contentShape(.capsule)
         }

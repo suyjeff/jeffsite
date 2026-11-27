@@ -19,7 +19,6 @@ final class Haptics {
 
     private var lastSelection: CFTimeInterval = 0
     private var holdPlayer: (any CHHapticAdvancedPatternPlayer)?
-    private var tensionPlayer: (any CHHapticAdvancedPatternPlayer)?
 
     private init() {
         makeEngine()
@@ -67,8 +66,8 @@ final class Haptics {
     /// Touch-down on anything that opens a menu: small and crisp, before anything moves.
     func press() {
         guard isEnabled else { return }
-        rigid.impactOccurred(intensity: 0.45)
-        rigid.prepare()
+        soft.impactOccurred(intensity: 0.5)
+        soft.prepare()
     }
 
     /// While a press is held toward opening a menu: a faint hum that tightens as the hold
@@ -110,51 +109,17 @@ final class Haptics {
         holdPlayer = nil
     }
 
-    /// A drag loading up toward a commit (pulling a card down): a low hum whose strength
-    /// follows `progress` 0…1, set every frame by `setTension`. Silent until the first update.
-    func beginTension() {
-        endTension()
-        guard isEnabled, let engine else { return }
-        let event = CHHapticEvent(
-            eventType: .hapticContinuous,
-            parameters: [
-                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.6),
-                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.18),
-            ],
-            relativeTime: 0,
-            duration: 30
-        )
-        do {
-            try engine.start()
-            let player = try engine.makeAdvancedPlayer(with: CHHapticPattern(events: [event], parameters: []))
-            try player.sendParameters([CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: 0, relativeTime: 0)], atTime: CHHapticTimeImmediate)
-            try player.start(atTime: CHHapticTimeImmediate)
-            tensionPlayer = player
-        } catch {
-            tensionPlayer = nil
-        }
-    }
-
-    /// 0…1. Eased in, so the first stretch of a pull is barely felt and the last is firm.
-    func setTension(_ progress: Double) {
-        guard let tensionPlayer else { return }
-        let p = min(max(progress, 0), 1)
-        let value = Float(0.04 + 0.6 * p * p)
-        try? tensionPlayer.sendParameters(
-            [CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: value, relativeTime: 0)],
-            atTime: CHHapticTimeImmediate
-        )
-    }
-
-    func endTension() {
-        try? tensionPlayer?.stop(atTime: CHHapticTimeImmediate)
-        tensionPlayer = nil
+    /// One notch of a pull: an even, soft tap. A pull plays a few of these as it loads, so it
+    /// reads as ticks you count rather than a buzz.
+    func pullTick() {
+        guard isEnabled else { return }
+        soft.impactOccurred(intensity: 0.55)
+        soft.prepare()
     }
 
     /// A card popping out of the stack and the next one opening: a crisp lift, then the
     /// weight of the new card landing.
     func pop() {
-        endTension()
         play([
             transient(at: 0, intensity: 0.75, sharpness: 0.7),
             transient(at: 0.07, intensity: 0.9, sharpness: 0.3),
@@ -171,12 +136,20 @@ final class Haptics {
     }
 
     /// A menu opening under the finger: the hold lets go in one solid, round thunk.
-    func menuOpen() {
+    /// A held press opens with a round, full thunk (the hold let go); a tap opens with a light
+    /// soft tap, since the touch-down already answered the finger.
+    func menuOpen(held: Bool) {
         endHoldBuild()
+        guard held else {
+            guard isEnabled else { return }
+            soft.impactOccurred(intensity: 0.45)
+            soft.prepare()
+            return
+        }
         play([
-            transient(at: 0, intensity: 1.0, sharpness: 0.5),
-            continuous(at: 0.005, duration: 0.05, intensity: 0.35, sharpness: 0.2),
-        ], fallback: { self.medium.impactOccurred(intensity: 1) })
+            transient(at: 0, intensity: 0.8, sharpness: 0.25),
+            continuous(at: 0.005, duration: 0.05, intensity: 0.3, sharpness: 0.12),
+        ], fallback: { self.soft.impactOccurred(intensity: 0.85) })
     }
 
     /// Moving onto another row of an open menu. Not throttled like `tick`: rows are tall
@@ -190,8 +163,8 @@ final class Haptics {
     /// Choosing a menu row.
     func menuChoose() {
         guard isEnabled else { return }
-        light.impactOccurred(intensity: 0.75)
-        light.prepare()
+        soft.impactOccurred(intensity: 0.6)
+        soft.prepare()
     }
 
     /// Backing out of a commit point: lighter than arming it.

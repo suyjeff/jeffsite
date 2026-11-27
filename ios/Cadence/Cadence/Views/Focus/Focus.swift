@@ -461,7 +461,7 @@ struct FocusLayer: View {
         guard !closing else { return }
         closing = true
         onRelease()
-        withAnimation(.easeIn(duration: 0.12)) { pillShown = false }
+        withAnimation(.easeOut(duration: 0.12)) { pillShown = false }
         withAnimation(.easeOut(duration: 0.16)) { shown = false }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(170))
@@ -526,14 +526,13 @@ private struct FocusPill: View {
                     onDone()
                 }
             }
-            .disabled(done && !changed)
         } else {
             DoneButton(title: done ? "Done" : "Mark as Done", isDone: done) {
                 let change = withAnimation(Motion.settle) { store.toggleDone(plan.id, on: today) }
                 Feedback.play(for: change)
                 onDone()
             }
-            .disabled(done || !plan.isPlanned(today))
+            .disabled(!plan.isPlanned(today))
         }
 
         PillIcon(systemName: "trash", tint: .danger)
@@ -574,16 +573,15 @@ private struct FocusPill: View {
 
     private func planMenu(_ plan: Plan, status: DayStatus) -> [[MenuItem]] {
         let today = store.today
+        // Done undoes itself (tap it again), so the only marking here is skipping, which
+        // also toggles.
         var marking: [MenuItem] = []
-        if !plan.record(on: today).isEmpty {
-            marking.append(MenuItem(id: "undo", title: "Undo", systemImage: "arrow.uturn.backward") {
-                let change = withAnimation(Motion.settle) { store.clearDay(plan.id, on: today) }
-                Feedback.play(for: change)
-                onDone()
-            })
+        // A day that's part done and part skipped can't be reset by either toggle alone.
+        if plan.isMixed(on: today) {
+            marking.append(clearDayItem(plan, day: today))
         }
-        if status != .skipped && (plan.isMetric || plan.isPlanned(today)) {
-            marking.append(MenuItem(id: "skip", title: "Skip today", systemImage: "xmark") {
+        if plan.isMetric || plan.isPlanned(today) {
+            marking.append(MenuItem(id: "skip", title: status == .skipped ? "Unskip today" : "Skip today", systemImage: status == .skipped ? "arrow.uturn.backward" : "xmark") {
                 let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: today) }
                 Feedback.play(for: change)
                 onDone()
@@ -639,7 +637,7 @@ private struct FocusPill: View {
                 Feedback.play(for: change, step: column ?? 0)
                 onDone()
             }
-            .disabled(mark == .done || !plan.isPlanned(day))
+            .disabled(!plan.isPlanned(day))
         }
 
         PillIcon(systemName: "ellipsis")
@@ -653,34 +651,33 @@ private struct FocusPill: View {
             }
     }
 
+    private func clearDayItem(_ plan: Plan, day: Day) -> MenuItem {
+        MenuItem(id: "clear", title: "Clear day", systemImage: "eraser") {
+            let change = withAnimation(Motion.settle) { store.clearDay(plan.id, on: day) }
+            Feedback.play(for: change)
+            onDone()
+        }
+    }
+
     private func dayMenu(_ plan: Plan, day: Day, status: DayStatus, column: Int?) -> [[MenuItem]] {
         var marking: [MenuItem] = []
-        // A held part of a two-part day (AM or PM) is undone and skipped on its own.
+        // A held part of a two-part day (AM or PM) is skipped on its own. Skip toggles, and
+        // Done undoes itself, so there's no separate Undo.
         if let column, plan.columnCount > 1 {
             let mark = plan.mark(on: day, column: column)
-            if let mark {
-                marking.append(MenuItem(id: "undo", title: "Undo", systemImage: "arrow.uturn.backward") {
-                    let change = withAnimation(Motion.settle) { store.toggleColumn(plan.id, on: day, column: column, mark: mark) }
-                    Feedback.play(for: change)
-                    onDone()
-                })
-            }
-            if mark != .skipped && plan.plannedColumns(on: day).contains(column) {
-                marking.append(MenuItem(id: "skip", title: "Skip", systemImage: "xmark") {
+            if plan.plannedColumns(on: day).contains(column) {
+                marking.append(MenuItem(id: "skip", title: mark == .skipped ? "Unskip" : "Skip", systemImage: mark == .skipped ? "arrow.uturn.backward" : "xmark") {
                     let change = withAnimation(Motion.settle) { store.toggleColumn(plan.id, on: day, column: column, mark: .skipped) }
                     Feedback.play(for: change)
                     onDone()
                 })
             }
-        } else if !plan.record(on: day).isEmpty {
-            marking.append(MenuItem(id: "undo", title: plan.isMetric ? "Clear value" : "Undo", systemImage: "arrow.uturn.backward") {
-                let change = withAnimation(Motion.settle) { store.clearDay(plan.id, on: day) }
-                Feedback.play(for: change)
-                onDone()
-            })
         }
-        if column == nil || plan.columnCount <= 1, status != .skipped && (plan.isMetric ? day <= store.today : plan.isPlanned(day)) {
-            marking.append(MenuItem(id: "skip", title: "Skip", systemImage: "xmark") {
+        if column == nil, plan.isMixed(on: day) {
+            marking.append(clearDayItem(plan, day: day))
+        }
+        if column == nil || plan.columnCount <= 1, plan.isMetric ? day <= store.today : plan.isPlanned(day) {
+            marking.append(MenuItem(id: "skip", title: status == .skipped ? "Unskip" : "Skip", systemImage: status == .skipped ? "arrow.uturn.backward" : "xmark") {
                 let change = withAnimation(Motion.settle) { store.toggleSkipped(plan.id, on: day) }
                 Feedback.play(for: change)
                 onDone()
@@ -736,7 +733,7 @@ private struct DoneButton: View {
                     .lineLimit(1)
             }
             .padding(.horizontal, 16)
-            .frame(height: 44)
+            .frame(minHeight: 44)
             .background(
                 isDone ? Color.success : Color.success.opacity(isEnabled ? 0.14 : 0.06),
                 in: Capsule()

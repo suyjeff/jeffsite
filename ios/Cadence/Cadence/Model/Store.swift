@@ -94,8 +94,10 @@ final class Store {
         guard let plan = plan(id) else { return nil }
         if plan.isMetric {
             // A logged value with an unsaved ruler change means "update", not "undo".
-            if plan.value(on: day) != nil && !(day == today && hasDraftChange(plan)) {
+            if let logged = plan.value(on: day), !(day == today && hasDraftChange(plan)) {
                 update(id) { $0.setValue(nil, on: day) }
+                // Undoing a log keeps the number on the ruler, so logging it again is one tap.
+                if day == today { drafts[id] = logged }
                 return .cleared
             }
             let value = draft(for: plan, on: day)
@@ -152,13 +154,11 @@ final class Store {
     /// Removes every mark and value from a day. Nil when there was nothing to clear.
     @discardableResult
     func clearDay(_ id: UUID, on day: Day) -> Change? {
-        guard let plan = plan(id) else { return nil }
-        guard !plan.record(on: day).isEmpty else { return nil }
+        guard let plan = plan(id), !plan.record(on: day).isEmpty else { return nil }
         update(id) { plan in
             if plan.isMetric { plan.setValue(nil, on: day) }
             plan.setDay(nil, on: day)
         }
-        if day == today { drafts[id] = nil }
         return .cleared
     }
 

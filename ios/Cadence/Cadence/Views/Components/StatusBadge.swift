@@ -31,6 +31,12 @@ struct StatusBadge: View {
 }
 
 extension Plan {
+    /// Some of the day done and some skipped: neither Done nor Skip alone resets it.
+    func isMixed(on day: Day) -> Bool {
+        let marks = record(on: day).marks.values
+        return marks.contains(.done) && marks.contains(.skipped)
+    }
+
     /// How a part of a day reads: one column of a multi-column day, or the whole day.
     func mark(on day: Day, section column: Int?) -> Mark? {
         let status = status(on: day)

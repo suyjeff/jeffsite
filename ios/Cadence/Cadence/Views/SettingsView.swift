@@ -83,8 +83,8 @@ struct SettingsView: View {
         guard option != palette else { return }
         Haptics.shared.menuChoose()
         Palette.current = option
-        // Ease the change rather than cutting to it.
-        withAnimation(.easeInOut(duration: 0.25)) { palette = option }
+        // A theme swaps at once: animating it would cross-fade every color on screen at once.
+        palette = option
     }
 }
 
